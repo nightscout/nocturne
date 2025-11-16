@@ -1,5 +1,5 @@
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy central package management file
@@ -35,7 +35,7 @@ RUN dotnet publish "Nocturne.API.csproj" -c Release -o /app/publish /p:UseAppHos
 # Root appsettings.json files are copied via project references
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 # Install curl for health checks

@@ -4,52 +4,53 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Aspire packages -->
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="9.5.2" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.0.0" />
     <PackageVersion Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="9.5.2" />
-    <PackageVersion Include="Aspire.Hosting.Docker" Version="9.5.2-preview.1.25522.3" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="9.10.0" />
-    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="9.5.2" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.10" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.0.0" />
+    <PackageVersion Include="Aspire.Hosting.Docker" Version="13.0.0-preview.1.25560.3" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.0" />
     <!-- Entity Framework packages -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="9.0.10" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
-    <PackageVersion Include="Npgsql" Version="9.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0-rc.2" />
+    <PackageVersion Include="Npgsql" Version="10.0.0-rc.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
     <!-- ASP.NET Core packages -->
     <PackageVersion Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.0" />
     <!-- Infrastructure packages -->
     <!-- MongoDB packages kept for migration tool only -->
     <PackageVersion Include="MongoDB.Driver" Version="3.5.0" />
     <PackageVersion Include="MongoDB.Bson" Version="3.5.0" />
     <PackageVersion Include="SignalRSwaggerGen" Version="4.8.0" />
     <PackageVersion Include="StackExchange.Redis" Version="2.9.32" />
-    <PackageVersion Include="System.Text.Json" Version="9.0.10" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.0" />
     <PackageVersion Include="Polly" Version="8.6.4" />
     <PackageVersion Include="Polly.Extensions.Http" Version="3.0.0" />
     <!-- Health Check packages -->
@@ -94,17 +95,17 @@
     <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
     <PackageVersion Include="System.Threading.Tasks.Dataflow" Version="9.0.0" />
     <!-- ASP.NET Core additional packages -->
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.HttpsPolicy" Version="2.3.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Polly" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Polly" Version="10.0.0" />
     <PackageVersion Include="NSwag.AspNetCore" Version="14.6.2" />
     <PackageVersion Include="NSwag.MSBuild" Version="14.6.2" />
     <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.13.1" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.10.3" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
     <!-- Extension packages -->
-    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.0" />
     <!-- MCP (Model Context Protocol) packages -->
     <PackageVersion Include="ModelContextProtocol" Version="0.4.0-preview.3" />
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="0.4.0-preview.3" />

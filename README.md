@@ -50,20 +50,17 @@ Nocturne/
 .NET Aspire orchestrates all services with a single command:
 
 ```bash
-# Interactive mode - guided configuration wizard
-dotnet run --project src/Aspire/Nocturne.Aspire.Host -- --interactive
-
-# Or use default configuration
-dotnet run --project src/Aspire/Nocturne.Aspire.Host
+dotnet aspire run
 ```
 
 Aspire will automatically:
+
 - Start PostgreSQL in a container
 - Run database migrations
 - Start the Nocturne API
 - Launch any configured data connectors
 - Set up service discovery and health checks
-- Open the Aspire dashboard at `http://localhost:15888`
+- Open the Aspire dashboard at `http://localhost:17257`
 
 ### Access the API
 
@@ -107,14 +104,14 @@ ASPNETCORE_ENVIRONMENT=Production
 
 Nocturne includes native connectors for popular diabetes platforms:
 
-| Connector | Description | Status |
-|-----------|-------------|--------|
-| **Dexcom Share** | Dexcom CGM data via Share API | Supported |
-| **Glooko** | Comprehensive diabetes data platform | Supported |
-| **LibreLinkUp** | FreeStyle Libre glucose readings | Supported |
-| **MiniMed CareLink** | Medtronic pump and sensor data | Supported |
-| **MyFitnessPal** | Food and nutrition tracking | Supported |
-| **Nightscout** | Nightscout-to-Nightscout sync | Supported |
+| Connector            | Description                          | Status    |
+| -------------------- | ------------------------------------ | --------- |
+| **Dexcom Share**     | Dexcom CGM data via Share API        | Supported |
+| **Glooko**           | Comprehensive diabetes data platform | Supported |
+| **LibreLinkUp**      | FreeStyle Libre glucose readings     | Supported |
+| **MiniMed CareLink** | Medtronic pump and sensor data       | Supported |
+| **MyFitnessPal**     | Food and nutrition tracking          | Supported |
+| **Nightscout**       | Nightscout-to-Nightscout sync        | Supported |
 
 ### Using Connectors
 
@@ -159,6 +156,7 @@ dotnet ef database update
 ## Tools
 
 ### Nocturne Connect
+
 Data connector management and synchronization.
 
 ```bash
@@ -166,6 +164,7 @@ dotnet run --project src/Tools/Nocturne.Tools.Connect -- --help
 ```
 
 ### Migration Tool
+
 Migrate data from MongoDB or Nightscout API to PostgreSQL.
 
 ```bash
@@ -175,6 +174,7 @@ dotnet run --project src/Tools/Nocturne.Tools.Migration -- copy \
 ```
 
 ### Configuration Generator
+
 Generate example configuration files.
 
 ```bash
@@ -183,6 +183,7 @@ dotnet run --project src/Tools/Nocturne.Tools.Config -- generate \
 ```
 
 ### MCP Server
+
 Model Context Protocol server for AI integration.
 
 ```bash
