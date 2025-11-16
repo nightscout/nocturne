@@ -2,15 +2,15 @@ name: Build and Publish Docker Images
 
 on:
   push:
-    branches: [ master, main ]
-    tags: [ 'v*' ]
+    branches: [master, main]
+    tags: ['v*']
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
   workflow_dispatch:
 
 env:
-  REGISTRY: docker.io
-  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  REGISTRY: ghcr.io
+  IMAGE_REPOSITORY: ${{ github.repository }}
   DOTNET_VERSION: '9.0.x'
 
 jobs:
@@ -18,70 +18,70 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 9
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'pnpm'
-        cache-dependency-path: src/Web/pnpm-lock.yaml
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: src/Web/pnpm-lock.yaml
 
-    - name: Install dependencies
-      working-directory: src/Web
-      run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Log in to Docker Hub
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Determine version tag
-      id: version
-      run: |
-        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-          VERSION=${GITHUB_REF#refs/tags/v}
-        elif [[ "${{ github.ref }}" == refs/heads/master ]] || [[ "${{ github.ref }}" == refs/heads/main ]]; then
-          VERSION=latest
-        else
-          VERSION=${GITHUB_REF#refs/heads/}
-        fi
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Determine version tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          elif [[ "${{ github.ref }}" == refs/heads/master ]] || [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            VERSION=latest
+          else
+            VERSION=${GITHUB_REF#refs/heads/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Publish Aspire manifest
-      working-directory: src/Aspire/Nocturne.Aspire.Host
-      run: |
-        dotnet publish \
-          --os linux \
-          --arch x64 \
-          -c Release \
-          -p:PublishProfile=DefaultContainer \
-          -p:ContainerRegistry=${{ env.REGISTRY }} \
-          -p:ContainerRepository=${{ env.DOCKER_USERNAME }} \
-          -p:ContainerImageTag=${{ steps.version.outputs.version }}
+      - name: Publish Aspire manifest
+        working-directory: src/Aspire/Nocturne.Aspire.Host
+        run: |
+          dotnet publish \
+            --os linux \
+            --arch x64 \
+            -c Release \
+            -p:PublishProfile=DefaultContainer \
+            -p:ContainerRegistry=${{ env.REGISTRY }} \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }} \
+            -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
-    - name: Push images to Docker Hub
-      if: github.event_name != 'pull_request'
-      run: |
-        # Aspire publish generates and pushes images automatically when authenticated
-        echo "Images published via Aspire manifest"
+      - name: Push images to GitHub Packages
+        if: github.event_name != 'pull_request'
+        run: |
+          # Aspire publish generates and pushes images automatically when authenticated
+          echo "Images published via Aspire manifest"
 
   publish-manifest:
     needs: build-and-push
@@ -89,35 +89,35 @@ jobs:
     if: github.event_name != 'pull_request'
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Generate deployment manifest
-      working-directory: src/Aspire/Nocturne.Aspire.Host
-      run: |
-        mkdir -p ../../../release
-        dotnet run --project . -- \
-          --publisher manifest \
-          --output-path ../../../release/aspire-manifest.json
+      - name: Generate deployment manifest
+        working-directory: src/Aspire/Nocturne.Aspire.Host
+        run: |
+          mkdir -p ../../../release
+          dotnet run --project . -- \
+            --publisher manifest \
+            --output-path ../../../release/aspire-manifest.json
 
-    - name: Create release artifacts
-      run: |
-        cp .env.example release/
-        echo "# Aspire Deployment for Nocturne" > release/README.md
-        echo "" >> release/README.md
-        echo "Version: ${{ github.ref_name }}" >> release/README.md
-        echo "Registry: ${{ env.REGISTRY }}/${{ env.DOCKER_USERNAME }}" >> release/README.md
+      - name: Create release artifacts
+        run: |
+          cp .env.example release/
+          echo "# Aspire Deployment for Nocturne" > release/README.md
+          echo "" >> release/README.md
+          echo "Version: ${{ github.ref_name }}" >> release/README.md
+          echo "Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}" >> release/README.md
 
-    - name: Upload release artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: nocturne-aspire-manifest
-        path: release/
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nocturne-aspire-manifest
+          path: release/
 
   security-scan:
     needs: build-and-push
@@ -128,15 +128,15 @@ jobs:
         image-name: [nocturne-api, nocturne-web]
 
     steps:
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: '${{ env.REGISTRY }}/${{ env.DOCKER_USERNAME }}/${{ matrix.image-name }}:latest'
-        format: 'sarif'
-        output: 'trivy-results-${{ matrix.image-name }}.sarif'
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.image-name }}:latest'
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.image-name }}.sarif'
 
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results-${{ matrix.image-name }}.sarif'
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.image-name }}.sarif'
