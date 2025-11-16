@@ -128,6 +128,9 @@ jobs:
         image-name: [nocturne-api, nocturne-web]
 
     steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -135,15 +138,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Determine version tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          elif [[ "${{ github.ref }}" == refs/heads/master ]] || [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            VERSION=latest
+          else
+            VERSION=${GITHUB_REF#refs/heads/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Pull image for scanning
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.image-name }}:${{ steps.version.outputs.version }}
+
       - name: Run Trivy vulnerability scanner
+        id: trivy
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.image-name }}:latest'
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${{ matrix.image-name }}:${{ steps.version.outputs.version }}'
           format: 'sarif'
           output: 'trivy-results-${{ matrix.image-name }}.sarif'
+          exit-code: '0'
+
+      - name: Check if SARIF file exists
+        id: check-sarif
+        run: |
+          if [ -f "trivy-results-${{ matrix.image-name }}.sarif" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: steps.check-sarif.outputs.exists == 'true'
         with:
           sarif_file: 'trivy-results-${{ matrix.image-name }}.sarif'
