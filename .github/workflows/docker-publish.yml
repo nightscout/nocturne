@@ -65,7 +65,7 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Publish Aspire manifest and push images
+      - name: Publish Aspire manifest
         working-directory: src/Aspire/Nocturne.Aspire.Host
         run: |
           dotnet publish \
@@ -75,8 +75,65 @@ jobs:
             -p:PublishProfile=DefaultContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }} \
-            -p:ContainerImageTag=${{ steps.version.outputs.version }} \
-            -p:ContainerRegistryPushEnabled=${{ github.event_name != 'pull_request' }}
+            -p:ContainerImageTag=${{ steps.version.outputs.version }}
+
+      - name: Push images to GitHub Packages
+        if: github.event_name != 'pull_request'
+        run: |
+          # dotnet publish builds images locally but doesn't push them
+          # We need to manually push the images after they're built
+          IMAGE_TAG=${{ steps.version.outputs.version }}
+          REGISTRY=${{ env.REGISTRY }}
+          REPO=${{ env.IMAGE_REPOSITORY }}
+
+          # List all images to see what was built
+          echo "All Docker images:"
+          docker images --format "{{.Repository}}:{{.Tag}}"
+
+          # Find images that match our repository and tag
+          # Aspire may tag them as ${REPO}/${service-name}:${IMAGE_TAG} or ${REGISTRY}/${REPO}/${service-name}:${IMAGE_TAG}
+          echo "Looking for images matching ${REPO} with tag ${IMAGE_TAG}..."
+
+          # Push nocturne-api - try both naming patterns
+          if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${REGISTRY}/${REPO}/nocturne-api:${IMAGE_TAG}$"; then
+            echo "Pushing ${REGISTRY}/${REPO}/nocturne-api:${IMAGE_TAG}"
+            docker push ${REGISTRY}/${REPO}/nocturne-api:${IMAGE_TAG}
+          elif docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${REPO}/nocturne-api:${IMAGE_TAG}$"; then
+            echo "Retagging and pushing ${REPO}/nocturne-api:${IMAGE_TAG} -> ${REGISTRY}/${REPO}/nocturne-api:${IMAGE_TAG}"
+            docker tag ${REPO}/nocturne-api:${IMAGE_TAG} ${REGISTRY}/${REPO}/nocturne-api:${IMAGE_TAG}
+            docker push ${REGISTRY}/${REPO}/nocturne-api:${IMAGE_TAG}
+          else
+            echo "ERROR: nocturne-api image not found!"
+            exit 1
+          fi
+
+          # Push nocturne-web - try both naming patterns
+          if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${REGISTRY}/${REPO}/nocturne-web:${IMAGE_TAG}$"; then
+            echo "Pushing ${REGISTRY}/${REPO}/nocturne-web:${IMAGE_TAG}"
+            docker push ${REGISTRY}/${REPO}/nocturne-web:${IMAGE_TAG}
+          elif docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${REPO}/nocturne-web:${IMAGE_TAG}$"; then
+            echo "Retagging and pushing ${REPO}/nocturne-web:${IMAGE_TAG} -> ${REGISTRY}/${REPO}/nocturne-web:${IMAGE_TAG}"
+            docker tag ${REPO}/nocturne-web:${IMAGE_TAG} ${REGISTRY}/${REPO}/nocturne-web:${IMAGE_TAG}
+            docker push ${REGISTRY}/${REPO}/nocturne-web:${IMAGE_TAG}
+          else
+            echo "ERROR: nocturne-web image not found!"
+            exit 1
+          fi
+
+          # Push any connector images that were built
+          docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "^(${REGISTRY}/)?${REPO}/" | grep ":${IMAGE_TAG}$" | while read image; do
+            if [[ "$image" != *"nocturne-api:${IMAGE_TAG}" ]] && [[ "$image" != *"nocturne-web:${IMAGE_TAG}" ]]; then
+              if [[ "$image" == ${REGISTRY}/* ]]; then
+                echo "Pushing $image"
+                docker push "$image"
+              else
+                TARGET_IMAGE="${REGISTRY}/${image}"
+                echo "Retagging and pushing $image -> $TARGET_IMAGE"
+                docker tag "$image" "$TARGET_IMAGE"
+                docker push "$TARGET_IMAGE"
+              fi
+            fi
+          done
 
   publish-manifest:
     needs: build-and-push
