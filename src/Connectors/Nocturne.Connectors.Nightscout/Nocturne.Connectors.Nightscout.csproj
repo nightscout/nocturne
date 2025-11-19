@@ -13,10 +13,4 @@
     <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
     <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
-    <PackageReference Include="System.Text.Json" />
-  </ItemGroup>
 </Project>

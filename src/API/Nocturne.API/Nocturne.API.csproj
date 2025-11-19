@@ -15,7 +15,6 @@
     <PackageReference Include="dotAPNS" />
     <PackageReference Include="HtmlSanitizer" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="Microsoft.AspNetCore.HttpsPolicy" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Http.Polly" />
     <PackageReference Include="NSwag.AspNetCore" />

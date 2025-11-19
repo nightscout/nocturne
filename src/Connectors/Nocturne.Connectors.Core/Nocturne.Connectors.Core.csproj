@@ -13,7 +13,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="System.Text.Json" />
     <PackageReference Include="DotNetEnv" />
     <PackageReference Include="Polly" />
   </ItemGroup>
