@@ -20,3 +20,4 @@ TestResults/
 .claude/*
 .cursor
 cloudflared-config.yml
+appsettings.json
