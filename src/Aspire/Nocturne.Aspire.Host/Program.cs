@@ -1,22 +1,10 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Nocturne.Aspire.Host.Services;
-using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
 
 class Program
 {
-    public record ConnectorSetup(
-        ConnectSource ConnectSource,
-        string ServiceName,
-        string EnvironmentPrefix,
-        Dictionary<string, string> RequiredProperties,
-        Dictionary<string, string> OptionalProperties
-    );
-
     static async Task Main(string[] args)
     {
         var builder = DistributedApplication.CreateBuilder(args);
@@ -41,22 +29,6 @@ class Program
             reloadOnChange: true
         );
 
-        // Initialize configuration services
-        var configService = new ConfigurationService(solutionRoot);
-        var interactiveConfigService = new InteractiveConfigurationService(builder, configService);
-
-        // Check for interactive mode (default: non-interactive)
-        var isInteractive =
-            args.Contains(ServiceNames.ConfigKeys.InteractiveArg)
-            || args.Contains(ServiceNames.ConfigKeys.InteractiveShort)
-            || Environment
-                .GetEnvironmentVariable(ServiceNames.ConfigKeys.NocturneInteractive)
-                ?.ToLowerInvariant() == ServiceNames.ConfigKeys.TrueValue;
-
-        // Get configuration parameters (interactive or default)
-        var configParameters = isInteractive
-            ? await interactiveConfigService.ConfigureServicesAsync()
-            : interactiveConfigService.GetDefaultConfiguration();
 
         // Add PostgreSQL database - use remote database connection or local container
         var useRemoteDb = builder.Configuration.GetValue<bool>("UseRemoteDatabase", false);
@@ -89,26 +61,14 @@ class Program
             // Use local PostgreSQL container
             var postgresUsername = builder.AddParameter(
                 ServiceNames.Parameters.PostgresUsername,
-                value: configParameters.GetValueOrDefault(
-                    ServiceNames.Parameters.PostgresUsername,
-                    ServiceNames.Defaults.PostgresUser
-                ),
                 secret: false
             );
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
-                value: configParameters.GetValueOrDefault(
-                    ServiceNames.Parameters.PostgresPassword,
-                    ServiceNames.Defaults.PostgresPassword
-                ),
                 secret: true
             );
             var postgresDbName = builder.AddParameter(
                 ServiceNames.Parameters.PostgresDbName,
-                value: configParameters.GetValueOrDefault(
-                    ServiceNames.Parameters.PostgresDbName,
-                    ServiceNames.Defaults.PostgresDatabase
-                ),
                 secret: false
             );
             var postgres = builder
@@ -126,7 +86,7 @@ class Program
             postgres.WithDataVolume(ServiceNames.Volumes.PostgresData);
 
             nocturnedb = postgres.AddDatabase(
-                configParameters[ServiceNames.Parameters.PostgresDbName]
+                builder.Configuration["Parameters:postgres-database"] ?? ServiceNames.Defaults.PostgresDatabase
             );
             postgresUsername.WithParentRelationship(postgres);
             postgresPassword.WithParentRelationship(postgres);
@@ -160,195 +120,198 @@ class Program
             api.WaitFor(nocturnedb).WithReference(nocturnedb);
         }
 
-        // Add connector services as independent services
-        var enabledConnectorConfigs = configService.GetAllEnabledConnectorConfigurations().ToList();
+        // Add connector services as independent services based on Parameters configuration
+        var connectors = builder.Configuration.GetSection("Parameters:Connectors");
 
-        // Helper method to check if config is of specific type
-        static bool IsConnectorType(IConnectorConfiguration config, ConnectSource expectedSource)
-        {
-            return config.ConnectSource == expectedSource;
-        }
+        // Shared Nightscout configuration parameters
+        var nightscoutUrl = builder.AddParameter(
+            "nightscout-url",
+            secret: false
+        );
+        var nightscoutApiSecret = builder.AddParameter(
+            "nightscout-api-secret",
+            secret: true
+        );
 
         // Dexcom Connector Service
-        var dexcomConfig = enabledConnectorConfigs.FirstOrDefault(c =>
-            IsConnectorType(c, ConnectSource.Dexcom)
-        );
-        if (dexcomConfig != null)
+        var dexcomEnabled = connectors.GetValue<bool>("Dexcom:Enabled", false);
+        if (dexcomEnabled)
         {
-            var dexcomSetup = new ConnectorSetup(
-                ConnectSource.Dexcom,
-                ServiceNames.DexcomConnector,
-                ServiceNames.ConnectorEnvironment.DexcomPrefix,
-                new Dictionary<string, string>
-                {
-                    ["DexcomUsername"] = "DexcomUsername",
-                    ["DexcomPassword"] = "DexcomPassword",
-                    ["DexcomRegion"] = "DexcomRegion",
-                },
-                new Dictionary<string, string> { ["DexcomServer"] = "DexcomServer" }
-            );
+            var dexcomUsername = builder.AddParameter("dexcom-username",
+                value: builder.Configuration["Parameters:Connectors:Dexcom:Username"], secret: true);
+            var dexcomPassword = builder.AddParameter("dexcom-password",
+                value: builder.Configuration["Parameters:Connectors:Dexcom:Password"], secret: true);
+            var dexcomRegion = builder.AddParameter("dexcom-region",
+                value: builder.Configuration["Parameters:Connectors:Dexcom:Region"], secret: false);
+            var dexcomServer = builder.AddParameter("dexcom-server",
+                value: builder.Configuration["Parameters:Connectors:Dexcom:Server"], secret: false);
+            var dexcomSyncInterval = builder.AddParameter("dexcom-sync-interval",
+                value: builder.Configuration["Parameters:Connectors:Dexcom:SyncIntervalMinutes"], secret: false);
 
-            AddConnectorService<Projects.Nocturne_Connectors_Dexcom>(
-                builder,
-                dexcomConfig,
-                dexcomSetup
-            );
+            var dexcom = builder
+                .AddProject<Projects.Nocturne_Connectors_Dexcom>(ServiceNames.DexcomConnector)
+                .WithExternalHttpEndpoints()
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}DexcomUsername", dexcomUsername)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}DexcomPassword", dexcomPassword)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}DexcomRegion", dexcomRegion)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}DexcomServer", dexcomServer)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}SyncIntervalMinutes", dexcomSyncInterval)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}NightscoutUrl", nightscoutUrl)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}NightscoutApiSecret", nightscoutApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.DexcomPrefix}ConnectSource", ConnectSource.Dexcom.ToString());
         }
 
         // Glooko Connector Service
-        var glookoConfig = enabledConnectorConfigs.FirstOrDefault(c =>
-            IsConnectorType(c, ConnectSource.Glooko)
-        );
-        if (glookoConfig != null)
+        var glookoEnabled = connectors.GetValue<bool>("Glooko:Enabled", false);
+        if (glookoEnabled)
         {
-            var glookoSetup = new ConnectorSetup(
-                ConnectSource.Glooko,
-                ServiceNames.GlookoConnector,
-                ServiceNames.ConnectorEnvironment.GlookoPrefix,
-                new Dictionary<string, string>
-                {
-                    ["GlookoEmail"] = "GlookoEmail",
-                    ["GlookoPassword"] = "GlookoPassword",
-                    ["GlookoTimezoneOffset"] = "GlookoTimezoneOffset",
-                },
-                new Dictionary<string, string> { ["GlookoServer"] = "GlookoServer" }
-            );
+            var glookoEmail = builder.AddParameter("glooko-email",
+                value: builder.Configuration["Parameters:Connectors:Glooko:Email"], secret: true);
+            var glookoPassword = builder.AddParameter("glooko-password",
+                value: builder.Configuration["Parameters:Connectors:Glooko:Password"], secret: true);
+            var glookoServer = builder.AddParameter("glooko-server",
+                value: builder.Configuration["Parameters:Connectors:Glooko:Server"], secret: false);
+            var glookoTimezoneOffset = builder.AddParameter("glooko-timezone-offset",
+                value: builder.Configuration["Parameters:Connectors:Glooko:TimezoneOffset"], secret: false);
+            var glookoSyncInterval = builder.AddParameter("glooko-sync-interval",
+                value: builder.Configuration["Parameters:Connectors:Glooko:SyncIntervalMinutes"], secret: false);
 
-            AddConnectorService<Projects.Nocturne_Connectors_Glooko>(
-                builder,
-                glookoConfig,
-                glookoSetup
-            );
+            var glooko = builder
+                .AddProject<Projects.Nocturne_Connectors_Glooko>(ServiceNames.GlookoConnector)
+                .WithExternalHttpEndpoints()
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}GlookoEmail", glookoEmail)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}GlookoPassword", glookoPassword)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}GlookoServer", glookoServer)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}GlookoTimezoneOffset", glookoTimezoneOffset)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}SyncIntervalMinutes", glookoSyncInterval)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}NightscoutUrl", nightscoutUrl)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}NightscoutApiSecret", nightscoutApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.GlookoPrefix}ConnectSource", ConnectSource.Glooko.ToString());
         }
 
         // FreeStyle LibreLink Connector Service
-        var libreConfig = enabledConnectorConfigs.FirstOrDefault(c =>
-            IsConnectorType(c, ConnectSource.LibreLinkUp)
-        );
-        if (libreConfig != null)
+        var libreEnabled = connectors.GetValue<bool>("LibreLinkUp:Enabled", false);
+        if (libreEnabled)
         {
-            var libreSetup = new ConnectorSetup(
-                ConnectSource.LibreLinkUp,
-                ServiceNames.LibreConnector,
-                ServiceNames.ConnectorEnvironment.FreeStylePrefix,
-                new Dictionary<string, string>
-                {
-                    ["LibreUsername"] = "LibreUsername",
-                    ["LibrePassword"] = "LibrePassword",
-                    ["LibreRegion"] = "LibreRegion",
-                },
-                new Dictionary<string, string>
-                {
-                    ["LibrePatientId"] = "LibrePatientId",
-                    ["LibreServer"] = "LibreServer",
-                }
-            );
+            var libreUsername = builder.AddParameter("librelinkup-username",
+                value: builder.Configuration["Parameters:Connectors:LibreLinkUp:Username"], secret: true);
+            var librePassword = builder.AddParameter("librelinkup-password",
+                value: builder.Configuration["Parameters:Connectors:LibreLinkUp:Password"], secret: true);
+            var libreRegion = builder.AddParameter("librelinkup-region",
+                value: builder.Configuration["Parameters:Connectors:LibreLinkUp:Region"], secret: false);
+            var librePatientId = builder.AddParameter("librelinkup-patient-id",
+                value: builder.Configuration["Parameters:Connectors:LibreLinkUp:PatientId"], secret: false);
+            var libreServer = builder.AddParameter("librelinkup-server",
+                value: builder.Configuration["Parameters:Connectors:LibreLinkUp:Server"], secret: false);
+            var libreSyncInterval = builder.AddParameter("librelinkup-sync-interval",
+                value: builder.Configuration["Parameters:Connectors:LibreLinkUp:SyncIntervalMinutes"], secret: false);
 
-            AddConnectorService<Projects.Nocturne_Connectors_FreeStyle>(
-                builder,
-                libreConfig,
-                libreSetup
-            );
+            var libre = builder
+                .AddProject<Projects.Nocturne_Connectors_FreeStyle>(ServiceNames.LibreConnector)
+                .WithExternalHttpEndpoints()
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}LibreUsername", libreUsername)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}LibrePassword", librePassword)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}LibreRegion", libreRegion)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}LibrePatientId", librePatientId)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}LibreServer", libreServer)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}SyncIntervalMinutes", libreSyncInterval)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}NightscoutUrl", nightscoutUrl)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}NightscoutApiSecret", nightscoutApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}ConnectSource", ConnectSource.LibreLinkUp.ToString());
         }
 
         // MiniMed CareLink Connector Service
-        var carelinkConfig = enabledConnectorConfigs.FirstOrDefault(c =>
-            IsConnectorType(c, ConnectSource.CareLink)
-        );
-        if (carelinkConfig != null)
+        var carelinkEnabled = connectors.GetValue<bool>("CareLink:Enabled", false);
+        if (carelinkEnabled)
         {
-            var carelinkSetup = new ConnectorSetup(
-                ConnectSource.CareLink,
-                ServiceNames.MiniMedConnector,
-                ServiceNames.ConnectorEnvironment.MiniMedPrefix,
-                new Dictionary<string, string>
-                {
-                    ["CarelinkUsername"] = "CarelinkUsername",
-                    ["CarelinkPassword"] = "CarelinkPassword",
-                    ["CarelinkRegion"] = "CarelinkRegion",
-                },
-                new Dictionary<string, string>
-                {
-                    ["CarelinkCountryCode"] = "CarelinkCountryCode",
-                    ["CarelinkPatientUsername"] = "CarelinkPatientUsername",
-                }
-            );
+            var carelinkUsername = builder.AddParameter("carelink-username",
+                value: builder.Configuration["Parameters:Connectors:CareLink:Username"], secret: true);
+            var carelinkPassword = builder.AddParameter("carelink-password",
+                value: builder.Configuration["Parameters:Connectors:CareLink:Password"], secret: true);
+            var carelinkRegion = builder.AddParameter("carelink-region",
+                value: builder.Configuration["Parameters:Connectors:CareLink:Region"], secret: false);
+            var carelinkCountryCode = builder.AddParameter("carelink-country-code",
+                value: builder.Configuration["Parameters:Connectors:CareLink:CountryCode"], secret: false);
+            var carelinkPatientUsername = builder.AddParameter("carelink-patient-username",
+                value: builder.Configuration["Parameters:Connectors:CareLink:PatientUsername"], secret: false);
+            var carelinkSyncInterval = builder.AddParameter("carelink-sync-interval",
+                value: builder.Configuration["Parameters:Connectors:CareLink:SyncIntervalMinutes"], secret: false);
 
-            AddConnectorService<Projects.Nocturne_Connectors_MiniMed>(
-                builder,
-                carelinkConfig,
-                carelinkSetup
-            );
+            var carelink = builder
+                .AddProject<Projects.Nocturne_Connectors_MiniMed>(ServiceNames.MiniMedConnector)
+                .WithExternalHttpEndpoints()
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}CarelinkUsername", carelinkUsername)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}CarelinkPassword", carelinkPassword)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}CarelinkRegion", carelinkRegion)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}CarelinkCountryCode", carelinkCountryCode)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}CarelinkPatientUsername", carelinkPatientUsername)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}SyncIntervalMinutes", carelinkSyncInterval)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}NightscoutUrl", nightscoutUrl)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}NightscoutApiSecret", nightscoutApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}ConnectSource", ConnectSource.CareLink.ToString());
         }
 
         // Nightscout Connector Service
-        var nightscoutConfig = enabledConnectorConfigs.FirstOrDefault(c =>
-            IsConnectorType(c, ConnectSource.Nightscout)
-        );
-        if (nightscoutConfig != null)
+        var nightscoutConnectorEnabled = connectors.GetValue<bool>("Nightscout:Enabled", false);
+        if (nightscoutConnectorEnabled)
         {
-            var nightscoutSetup = new ConnectorSetup(
-                ConnectSource.Nightscout,
-                ServiceNames.NightscoutConnector,
-                ServiceNames.ConnectorEnvironment.NightscoutPrefix,
-                new Dictionary<string, string> { ["SourceEndpoint"] = "SourceEndpoint" },
-                new Dictionary<string, string> { ["SourceApiSecret"] = "SourceApiSecret" }
-            );
+            var nightscoutSourceEndpoint = builder.AddParameter("nightscout-source-endpoint",
+                value: builder.Configuration["Parameters:Connectors:Nightscout:SourceEndpoint"], secret: false);
+            var nightscoutSourceApiSecret = builder.AddParameter("nightscout-source-api-secret",
+                value: builder.Configuration["Parameters:Connectors:Nightscout:SourceApiSecret"], secret: true);
+            var nightscoutSyncInterval = builder.AddParameter("nightscout-sync-interval",
+                value: builder.Configuration["Parameters:Connectors:Nightscout:SyncIntervalMinutes"], secret: false);
 
-            AddConnectorService<Projects.Nocturne_Connectors_Nightscout>(
-                builder,
-                nightscoutConfig,
-                nightscoutSetup
-            );
+            var nightscoutConnector = builder
+                .AddProject<Projects.Nocturne_Connectors_Nightscout>(ServiceNames.NightscoutConnector)
+                .WithExternalHttpEndpoints()
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.NightscoutPrefix}SourceEndpoint", nightscoutSourceEndpoint)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.NightscoutPrefix}SourceApiSecret", nightscoutSourceApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.NightscoutPrefix}SyncIntervalMinutes", nightscoutSyncInterval)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.NightscoutPrefix}NightscoutUrl", nightscoutUrl)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.NightscoutPrefix}NightscoutApiSecret", nightscoutApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.NightscoutPrefix}ConnectSource", ConnectSource.Nightscout.ToString());
         }
 
         // MyFitnessPal Connector Service
-        var myFitnessPalConfig = enabledConnectorConfigs.FirstOrDefault(c =>
-            IsConnectorType(c, ConnectSource.MyFitnessPal)
-        );
-        if (myFitnessPalConfig != null)
+        var myFitnessPalEnabled = connectors.GetValue<bool>("MyFitnessPal:Enabled", false);
+        if (myFitnessPalEnabled)
         {
-            var myFitnessPalSetup = new ConnectorSetup(
-                ConnectSource.MyFitnessPal,
-                ServiceNames.MyFitnessPalConnector,
-                ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix,
-                new Dictionary<string, string>
-                {
-                    ["MyFitnessPalUsername"] = "MyFitnessPalUsername",
-                    ["MyFitnessPalPassword"] = "MyFitnessPalPassword",
-                },
-                new Dictionary<string, string> { ["MyFitnessPalApiKey"] = "MyFitnessPalApiKey" }
-            );
+            var myFitnessPalUsername = builder.AddParameter("myfitnesspal-username",
+                value: builder.Configuration["Parameters:Connectors:MyFitnessPal:Username"], secret: true);
+            var myFitnessPalPassword = builder.AddParameter("myfitnesspal-password",
+                value: builder.Configuration["Parameters:Connectors:MyFitnessPal:Password"], secret: true);
+            var myFitnessPalSyncDays = builder.AddParameter("myfitnesspal-sync-days",
+                value: builder.Configuration["Parameters:Connectors:MyFitnessPal:SyncDays"], secret: false);
+            var myFitnessPalSyncInterval = builder.AddParameter("myfitnesspal-sync-interval",
+                value: builder.Configuration["Parameters:Connectors:MyFitnessPal:SyncIntervalMinutes"], secret: false);
 
-            AddConnectorService<Projects.Nocturne_Connectors_MyFitnessPal>(
-                builder,
-                myFitnessPalConfig,
-                myFitnessPalSetup
-            );
+            var myFitnessPal = builder
+                .AddProject<Projects.Nocturne_Connectors_MyFitnessPal>(ServiceNames.MyFitnessPalConnector)
+                .WithExternalHttpEndpoints()
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}MyFitnessPalUsername", myFitnessPalUsername)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}MyFitnessPalPassword", myFitnessPalPassword)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}SyncDays", myFitnessPalSyncDays)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}SyncIntervalMinutes", myFitnessPalSyncInterval)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}NightscoutUrl", nightscoutUrl)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}NightscoutApiSecret", nightscoutApiSecret)
+                .WithEnvironment($"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}ConnectSource", ConnectSource.MyFitnessPal.ToString());
         }
 
         // Add API_SECRET parameter for authentication
         var apiSecret = builder.AddParameter(
             ServiceNames.Parameters.ApiSecret,
-            value: configParameters.GetValueOrDefault(
-                ServiceNames.Parameters.ApiSecret,
-                ServiceNames.Defaults.DefaultApiSecret
-            ),
             secret: true
         );
 
         // Add SignalR Hub URL parameter for the web app's integrated WebSocket bridge
         var signalrHubUrl = builder.AddParameter(
-            "SignalRHubUrl",
-            value: configParameters.GetValueOrDefault(
-                "SignalRHubUrl",
-                "http://localhost:1612/hubs/data"
-            ),
+            "signalr-hub-url",
             secret: false
         );
 
         // Add the SvelteKit web application (with integrated WebSocket bridge)
-        // For Azure deployment, use container. For local dev, use npm app.
+        // For Azure deployment, use container. For local dev, use JavaScript app with pnpm.
         IResourceBuilder<IResourceWithEndpoints> web;
         if (builder.ExecutionContext.IsPublishMode)
         {
@@ -368,11 +331,12 @@ class Program
         }
         else
         {
-            // Use npm app for local development
+            // Use Vite app for local development with pnpm workspace support
+            // AddViteApp automatically creates an HTTP endpoint and configures Vite-specific optimizations
             var webRootPath = Path.Combine(solutionRoot, "src", "Web");
             web = builder
-                .AddNpmApp(ServiceNames.NocturneWeb, webRootPath, "dev")
-                .WithHttpEndpoint(port: 5173, targetPort: 5173, name: "http", isProxied: false)
+                .AddViteApp(ServiceNames.NocturneWeb, webRootPath)
+                .WithPnpm() // Automatically run pnpm install before dev with frozen lockfile in production
                 .WithExternalHttpEndpoints()
                 .WaitFor(api)
                 .WithReference(api)
@@ -383,124 +347,18 @@ class Program
         apiSecret.WithParentRelationship(web);
         signalrHubUrl.WithParentRelationship(web);
 
-        // Add conditional notification services
-        if (
-            configParameters.GetValueOrDefault(
-                ServiceNames.ConfigKeys.NotificationsConfigured,
-                ServiceNames.ConfigKeys.FalseValue
-            ) == ServiceNames.ConfigKeys.TrueValue
-        )
-        {
-            if (configParameters.ContainsKey(ServiceNames.Parameters.PushoverApiToken))
-            {
-                var pushoverApiToken = builder.AddParameter(
-                    ServiceNames.Parameters.PushoverApiToken,
-                    value: configParameters[ServiceNames.Parameters.PushoverApiToken],
-                    secret: true
-                );
-                var pushoverUserKey = builder.AddParameter(
-                    ServiceNames.Parameters.PushoverUserKey,
-                    value: configParameters[ServiceNames.Parameters.PushoverUserKey],
-                    secret: true
-                );
+        // Add conditional notification services (if configured in appsettings.json)
+        // Note: Actual notification service projects would be added here when they exist
 
-                // Note: Actual notification service projects would be added here when they exist
-            }
-        }
-
-        // Add conditional OpenTelemetry services
-        if (
-            configParameters.GetValueOrDefault(
-                ServiceNames.ConfigKeys.TelemetryConfigured,
-                ServiceNames.ConfigKeys.FalseValue
-            ) == ServiceNames.ConfigKeys.TrueValue
-        )
-        {
-            var otlpEndpoint = builder.AddParameter(
-                ServiceNames.Parameters.OtlpEndpoint,
-                value: configParameters.GetValueOrDefault(
-                    ServiceNames.Parameters.OtlpEndpoint,
-                    ServiceNames.Defaults.DefaultOtlpEndpoint
-                ),
-                secret: false
-            );
-
-            // Note: OTEL collector or Jaeger could be added here
-            // builder.AddContainer("jaeger", "jaegertracing/all-in-one")
-            //     .WithEndpoint(16686, targetPort: 16686, name: "jaeger-ui")
-            //     .WithEndpoint(14268, targetPort: 14268, name: "jaeger-collector");
-        }
+        // Add conditional OpenTelemetry services (if configured in appsettings.json)
+        // Note: OTEL collector or Jaeger could be added here
+        // builder.AddContainer("jaeger", "jaegertracing/all-in-one")
+        //     .WithEndpoint(16686, targetPort: 16686, name: "jaeger-ui")
+        //     .WithEndpoint(14268, targetPort: 14268, name: "jaeger-collector");
 
         var app = builder.Build();
 
         app.Run();
     }
 
-    // Helper method to get property value as string (handles both string and non-string types)
-    static string GetPropertyValueAsString(IConnectorConfiguration config, string propertyName)
-    {
-        try
-        {
-            var property = config.GetType().GetProperty(propertyName);
-            if (property != null && property.CanRead)
-            {
-                var value = property.GetValue(config);
-                if (value != null)
-                {
-                    return value.ToString() ?? "";
-                }
-            }
-        }
-        catch
-        {
-            // Ignore reflection errors and return empty string
-        }
-        return "";
-    }
-
-    // Generic method to add a connector service
-    static IResourceBuilder<ProjectResource> AddConnectorService<TProject>(
-        IDistributedApplicationBuilder builder,
-        IConnectorConfiguration config,
-        ConnectorSetup setup
-    )
-        where TProject : IProjectMetadata, new()
-    {
-        var connector = builder.AddProject<TProject>(setup.ServiceName).WithExternalHttpEndpoints();
-
-        // Add common environment variables
-        connector
-            .WithEnvironment($"{setup.EnvironmentPrefix}NightscoutUrl", config.NightscoutUrl)
-            .WithEnvironment(
-                $"{setup.EnvironmentPrefix}NightscoutApiSecret",
-                config.NightscoutApiSecret ?? ""
-            )
-            .WithEnvironment(
-                $"{setup.EnvironmentPrefix}SyncIntervalMinutes",
-                config.SyncIntervalMinutes.ToString()
-            )
-            .WithEnvironment(
-                $"{setup.EnvironmentPrefix}ConnectSource",
-                config.ConnectSource.ToString()
-            );
-
-        // Add required properties
-        foreach (var (envVar, propName) in setup.RequiredProperties)
-        {
-            var value = GetPropertyValueAsString(config, propName);
-            connector.WithEnvironment($"{setup.EnvironmentPrefix}{envVar}", value);
-        }
-
-        // Add optional properties
-        foreach (var (envVar, propName) in setup.OptionalProperties)
-        {
-            var value = GetPropertyValueAsString(config, propName);
-            if (!string.IsNullOrEmpty(value))
-            {
-                connector.WithEnvironment($"{setup.EnvironmentPrefix}{envVar}", value);
-            }
-        }
-
-        return connector;
-    }
 }
