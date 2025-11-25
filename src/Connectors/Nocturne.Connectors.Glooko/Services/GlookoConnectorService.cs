@@ -144,6 +144,29 @@ namespace Nocturne.Connectors.Glooko.Services
             );
         }
 
+        public GlookoConnectorService(
+            GlookoConnectorConfiguration config,
+            ILogger<GlookoConnectorService> logger,
+            HttpClient httpClient,
+            IApiDataSubmitter apiDataSubmitter
+        )
+            : base(httpClient, apiDataSubmitter, logger)
+        {
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _retryDelayStrategy = new ProductionRetryDelayStrategy();
+            _rateLimitingStrategy = new ProductionRateLimitingStrategy(
+                LoggerFactory
+                    .Create(builder => builder.AddConsole())
+                    .CreateLogger<ProductionRateLimitingStrategy>()
+            );
+            _fileService = new ConnectorFileService<GlookoBatchData>(
+                LoggerFactory
+                    .Create(builder => builder.AddConsole())
+                    .CreateLogger<ConnectorFileService<GlookoBatchData>>()
+            );
+        }
+
         public override async Task<bool> AuthenticateAsync()
         {
             try
@@ -211,8 +234,25 @@ namespace Nocturne.Connectors.Glooko.Services
                 var response = await _httpClient.SendAsync(request);
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseJson = await response.Content.ReadAsStringAsync();
-                    _logger.LogDebug("GLOOKO AUTH response received");
+                    // Read response as bytes first to handle compression properly
+                    var responseBytes = await response.Content.ReadAsByteArrayAsync();
+
+                    // Decompress if needed (check for gzip magic number 0x1F 0x8B)
+                    string responseJson;
+                    if (responseBytes.Length >= 2 && responseBytes[0] == 0x1F && responseBytes[1] == 0x8B)
+                    {
+                        using var compressedStream = new MemoryStream(responseBytes);
+                        using var gzipStream = new System.IO.Compression.GZipStream(compressedStream, System.IO.Compression.CompressionMode.Decompress);
+                        using var decompressedStream = new MemoryStream();
+                        await gzipStream.CopyToAsync(decompressedStream);
+                        responseJson = Encoding.UTF8.GetString(decompressedStream.ToArray());
+                    }
+                    else
+                    {
+                        responseJson = Encoding.UTF8.GetString(responseBytes);
+                    }
+
+                    _logger.LogDebug("GLOOKO AUTH response received and decompressed");
 
                     // Extract session cookie from response headers
                     if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
@@ -222,6 +262,7 @@ namespace Nocturne.Connectors.Glooko.Services
                             if (cookie.StartsWith("_logbook-web_session="))
                             {
                                 _sessionCookie = cookie.Split(';')[0]; // Get just the session part
+                                _logger.LogInformation("Session cookie extracted successfully");
                                 break;
                             }
                         }
@@ -231,10 +272,19 @@ namespace Nocturne.Connectors.Glooko.Services
                     try
                     {
                         _userData = JsonSerializer.Deserialize<GlookoUserData>(responseJson);
+                        if (_userData?.UserLogin?.GlookoCode != null)
+                        {
+                            _logger.LogInformation("User data parsed successfully. Glooko code: {GlookoCode}", _userData.UserLogin.GlookoCode);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("User data parsed but GlookoCode is missing");
+                        }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning($"Could not parse user data: {ex.Message}");
+                        _logger.LogDebug("Response JSON: {ResponseJson}", responseJson.Substring(0, Math.Min(500, responseJson.Length)));
                     }
 
                     if (!string.IsNullOrEmpty(_sessionCookie))
@@ -245,8 +295,31 @@ namespace Nocturne.Connectors.Glooko.Services
                 }
 
                 _logger.LogError($"Glooko authentication failed: {response.StatusCode}");
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogError($"Error response: {errorContent}");
+
+                // Try to read error response with decompression
+                try
+                {
+                    var errorBytes = await response.Content.ReadAsByteArrayAsync();
+                    string errorContent;
+                    if (errorBytes.Length >= 2 && errorBytes[0] == 0x1F && errorBytes[1] == 0x8B)
+                    {
+                        using var compressedStream = new MemoryStream(errorBytes);
+                        using var gzipStream = new System.IO.Compression.GZipStream(compressedStream, System.IO.Compression.CompressionMode.Decompress);
+                        using var decompressedStream = new MemoryStream();
+                        await gzipStream.CopyToAsync(decompressedStream);
+                        errorContent = Encoding.UTF8.GetString(decompressedStream.ToArray());
+                    }
+                    else
+                    {
+                        errorContent = Encoding.UTF8.GetString(errorBytes);
+                    }
+                    _logger.LogError($"Error response: {errorContent}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Could not read error response: {ex.Message}");
+                }
+
                 return false;
             }
             catch (Exception ex)
@@ -897,7 +970,24 @@ namespace Nocturne.Connectors.Glooko.Services
                 var response = await _httpClient.SendAsync(request);
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseJson = await response.Content.ReadAsStringAsync();
+                    // Read response as bytes first to handle compression properly
+                    var responseBytes = await response.Content.ReadAsByteArrayAsync();
+
+                    // Decompress if needed (check for gzip magic number 0x1F 0x8B)
+                    string responseJson;
+                    if (responseBytes.Length >= 2 && responseBytes[0] == 0x1F && responseBytes[1] == 0x8B)
+                    {
+                        using var compressedStream = new MemoryStream(responseBytes);
+                        using var gzipStream = new System.IO.Compression.GZipStream(compressedStream, System.IO.Compression.CompressionMode.Decompress);
+                        using var decompressedStream = new MemoryStream();
+                        await gzipStream.CopyToAsync(decompressedStream);
+                        responseJson = Encoding.UTF8.GetString(decompressedStream.ToArray());
+                    }
+                    else
+                    {
+                        responseJson = Encoding.UTF8.GetString(responseBytes);
+                    }
+
                     return JsonSerializer.Deserialize<JsonElement>(responseJson);
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity) // 422
@@ -1076,6 +1166,18 @@ namespace Nocturne.Connectors.Glooko.Services
                     "Starting Glooko health data sync using {Mode} mode",
                     config.UseAsyncProcessing ? "asynchronous" : "direct API"
                 );
+
+                // Authenticate first if we don't have a session cookie
+                if (string.IsNullOrEmpty(_sessionCookie))
+                {
+                    _logger.LogInformation("Authenticating with Glooko...");
+                    var authSuccess = await AuthenticateAsync();
+                    if (!authSuccess)
+                    {
+                        _logger.LogError("Failed to authenticate with Glooko");
+                        return false;
+                    }
+                }
 
                 if (config.UseAsyncProcessing && _apiDataSubmitter != null)
                 {

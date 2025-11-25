@@ -47,7 +47,10 @@ public class Program
         {
             var config = sp.GetRequiredService<IOptions<GlookoConnectorConfiguration>>().Value;
             var logger = sp.GetRequiredService<ILogger<GlookoConnectorService>>();
-            return new GlookoConnectorService(config, logger);
+            var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+            var apiDataSubmitter = sp.GetRequiredService<IApiDataSubmitter>();
+
+            return new GlookoConnectorService(config, logger, httpClient, apiDataSubmitter);
         });
         builder.Services.AddHostedService<GlookoHostedService>();
 

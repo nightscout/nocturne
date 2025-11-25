@@ -227,7 +227,11 @@ class Program
                 .WithEnvironment(
                     $"{ServiceNames.ConnectorEnvironment.DexcomPrefix}ConnectSource",
                     ConnectSource.Dexcom.ToString()
-                );
+                )
+                .WithEnvironment("NocturneApiUrl", api.GetEndpoint("http"))
+                .WithEnvironment("ApiSecret", apiSecret)
+                .WaitFor(api)
+                .WithReference(api);
         }
 
         // Glooko Connector Service
@@ -287,7 +291,11 @@ class Program
                 .WithEnvironment(
                     $"{ServiceNames.ConnectorEnvironment.GlookoPrefix}ConnectSource",
                     ConnectSource.Glooko.ToString()
-                );
+                )
+                .WithEnvironment("NocturneApiUrl", api.GetEndpoint("http"))
+                .WithEnvironment("ApiSecret", apiSecret)
+                .WaitFor(api)
+                .WithReference(api);
         }
 
         // FreeStyle LibreLink Connector Service
@@ -357,7 +365,11 @@ class Program
                 .WithEnvironment(
                     $"{ServiceNames.ConnectorEnvironment.FreeStylePrefix}ConnectSource",
                     ConnectSource.LibreLinkUp.ToString()
-                );
+                )
+                .WithEnvironment("NocturneApiUrl", api.GetEndpoint("http"))
+                .WithEnvironment("ApiSecret", apiSecret)
+                .WaitFor(api)
+                .WithReference(api);
         }
 
         // MiniMed CareLink Connector Service
@@ -427,7 +439,11 @@ class Program
                 .WithEnvironment(
                     $"{ServiceNames.ConnectorEnvironment.MiniMedPrefix}ConnectSource",
                     ConnectSource.CareLink.ToString()
-                );
+                )
+                .WithEnvironment("NocturneApiUrl", api.GetEndpoint("http"))
+                .WithEnvironment("ApiSecret", apiSecret)
+                .WaitFor(api)
+                .WithReference(api);
         }
 
         // Nightscout Connector Service
@@ -537,7 +553,11 @@ class Program
                 .WithEnvironment(
                     $"{ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix}ConnectSource",
                     ConnectSource.MyFitnessPal.ToString()
-                );
+                )
+                .WithEnvironment("NocturneApiUrl", api.GetEndpoint("http"))
+                .WithEnvironment("ApiSecret", apiSecret)
+                .WaitFor(api)
+                .WithReference(api);
         }
 
         // Compatibility Proxy parameters (for "try before you buy" migration testing)

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
@@ -31,6 +33,16 @@ public static class Extensions
             // Turn on service discovery by default
             http.AddServiceDiscovery();
         });
+
+        // Configure Kestrel to use dynamic ports from Aspire
+        // This prevents port conflicts when running multiple connectors
+        // If Aspire hasn't set ASPNETCORE_URLS, we'll use a random port
+        if (string.IsNullOrEmpty(builder.Configuration["ASPNETCORE_URLS"]))
+        {
+            // Set ASPNETCORE_URLS to bind to a random port on localhost
+            // Port 0 tells Kestrel to pick any available port
+            Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://127.0.0.1:0");
+        }
 
         // Uncomment the following to restrict the allowed schemes for service discovery.
         // builder.Services.Configure<ServiceDiscoveryOptions>(options =>
