@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Nocturne.Aspire.Host.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
-using Nocturne.Aspire.Host.Extensions;
 
 class Program
 {
@@ -207,38 +207,50 @@ class Program
             // The parameters above are defined for visibility in Aspire dashboard and secret management
         }
 
-
         // Add SignalR Hub URL parameter for the web app's integrated WebSocket bridge
         var signalrHubUrl = builder.AddParameter("signalr-hub-url", secret: false);
 
         // Build the bridge package synchronously to ensure artifacts exist
-        var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
-        Console.WriteLine("[Aspire] Building @nocturne/bridge...");
-
-        var buildProcess = new System.Diagnostics.Process
+        // Only build in development mode; in publish mode, assume it's already built by the CI/CD pipeline
+        // @TODO in future it would be better to have Aspire handle building multi-project repos more elegantly
+        if (!builder.ExecutionContext.IsPublishMode)
         {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
+            var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
+            Console.WriteLine("[Aspire] Building @nocturne/bridge...");
+
+            // Use platform-appropriate shell
+            var isWindows = OperatingSystem.IsWindows();
+            var buildProcess = new System.Diagnostics.Process
             {
-                FileName = "cmd",
-                Arguments = "/c pnpm run build",
-                WorkingDirectory = bridgePackagePath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = isWindows ? "cmd" : "/bin/sh",
+                    Arguments = isWindows ? "/c pnpm run build" : "-c \"pnpm run build\"",
+                    WorkingDirectory = bridgePackagePath,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+
+            buildProcess.Start();
+            buildProcess.WaitForExit();
+
+            if (buildProcess.ExitCode != 0)
+            {
+                var error = buildProcess.StandardError.ReadToEnd();
+                throw new InvalidOperationException($"Failed to build @nocturne/bridge: {error}");
             }
-        };
 
-        buildProcess.Start();
-        buildProcess.WaitForExit();
-
-        if (buildProcess.ExitCode != 0)
-        {
-            var error = buildProcess.StandardError.ReadToEnd();
-            throw new InvalidOperationException($"Failed to build @nocturne/bridge: {error}");
+            Console.WriteLine("[Aspire] @nocturne/bridge built successfully");
         }
-
-        Console.WriteLine("[Aspire] @nocturne/bridge built successfully");
+        else
+        {
+            Console.WriteLine(
+                "[Aspire] Skipping @nocturne/bridge build (publish mode - assuming pre-built)"
+            );
+        }
 
         // Add the SvelteKit web application (with integrated WebSocket bridge)
         var webPackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "app");
