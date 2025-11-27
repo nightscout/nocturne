@@ -95,7 +95,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       # Build connector containers using .NET's built-in container support
@@ -109,7 +109,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/dexcom-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/dexcom-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       - name: Build and push Glooko connector
@@ -122,7 +122,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/glooko-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/glooko-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       - name: Build and push FreeStyle connector
@@ -135,7 +135,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/freestyle-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/freestyle-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       - name: Build and push MiniMed connector
@@ -148,7 +148,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/minimed-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/minimed-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       - name: Build and push Nightscout connector
@@ -161,7 +161,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/nightscout-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nightscout-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       - name: Build and push MyFitnessPal connector
@@ -174,7 +174,7 @@ jobs:
             -c Release \
             /t:PublishContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerImageName=${{ env.IMAGE_REPOSITORY }}/myfitnespal-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/myfitnespal-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       # Build web app using standard Docker build (Node.js/Vite apps don't use .NET container publishing)
@@ -191,8 +191,13 @@ jobs:
           COPY src/Web/package.json src/Web/pnpm-lock.yaml src/Web/pnpm-workspace.yaml ./
           COPY src/Web/packages ./packages
 
-          # Install dependencies and build
+          # Install dependencies
           RUN pnpm install --frozen-lockfile
+
+          # Build bridge package first (required by app)
+          RUN pnpm --filter @nocturne/bridge run build
+
+          # Build the app
           RUN pnpm --filter @nocturne/app run build
 
           FROM node:20-alpine

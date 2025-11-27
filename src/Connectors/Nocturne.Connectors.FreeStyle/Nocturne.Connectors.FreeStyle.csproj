@@ -10,7 +10,7 @@
 
     <!-- Container publishing configuration for Aspire -->
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
-    <ContainerImageName>freestyle-connector</ContainerImageName>
+    <ContainerRepository>freestyle-connector</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <ContainerWorkingDirectory>/app</ContainerWorkingDirectory>
   </PropertyGroup>

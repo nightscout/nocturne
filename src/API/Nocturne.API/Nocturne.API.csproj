@@ -12,7 +12,7 @@
 
     <!-- Container publishing configuration for Aspire -->
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
-    <ContainerImageName>nocturne-api</ContainerImageName>
+    <ContainerRepository>nocturne-api</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <ContainerWorkingDirectory>/app</ContainerWorkingDirectory>
   </PropertyGroup>
