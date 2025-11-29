@@ -35,7 +35,7 @@
   {#snippet pending()}
     Loading...
   {/snippet}
-  {#snippet failed()}
-    Error loading entries
+  {#snippet failed(e)}
+    Error loading entries: {JSON.stringify(e)}
   {/snippet}
 </svelte:boundary>

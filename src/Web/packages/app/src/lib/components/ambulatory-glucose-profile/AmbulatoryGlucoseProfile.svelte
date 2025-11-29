@@ -3,8 +3,10 @@
   import { ApiClient, type AveragedStats } from "$lib/api";
   import { PUBLIC_API_URL } from "$env/static/public";
   import { DEFAULT_THRESHOLDS } from "$lib/constants";
-  import { AreaChart, Tooltip } from "layerchart";
+  import { AreaChart } from "layerchart";
   import { onMount } from "svelte";
+  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { BarChart3 } from "lucide-svelte";
 
   let {
     entries,
@@ -14,29 +16,61 @@
     averagedStats?: AveragedStats[];
   } = $props();
 
-  let data = $state(averagedStats || []);
-  let loading = $state(false);
+  let data = $state<AveragedStats[]>(averagedStats || []);
+  let loading = $state(true);
+  let error = $state<string | null>(null);
 
   onMount(() => {
-    if (!data.length && entries?.length) {
+    // If we already have averaged stats, use them
+    if (averagedStats?.length) {
+      data = averagedStats;
+      loading = false;
+      return;
+    }
+
+    // If we have entries but no stats, calculate them
+    if (entries?.length) {
       const apiClient = new ApiClient(PUBLIC_API_URL);
-      loading = true;
-      apiClient.statistics.calculateAveragedStats(entries).then((stats) => {
-        data = stats;
-        loading = false;
-      });
+      apiClient.statistics
+        .calculateAveragedStats(entries)
+        .then((stats) => {
+          data = stats;
+          loading = false;
+        })
+        .catch((err) => {
+          console.error("Failed to calculate averaged stats:", err);
+          error = err.message || "Failed to load data";
+          loading = false;
+        });
+    } else {
+      // No data to work with
+      loading = false;
     }
   });
 
   $effect(() => {
     if (averagedStats?.length) {
       data = averagedStats;
+      loading = false;
     }
   });
 </script>
 
 {#if loading}
-  <div>Loading...</div>
+  <div class="flex h-full w-full flex-col items-center justify-center gap-3">
+    <Skeleton class="h-3/4 w-full rounded-lg" />
+    <div class="flex items-center gap-2 text-sm text-muted-foreground">
+      <BarChart3 class="h-4 w-4 animate-pulse" />
+      <span>Calculating glucose patterns...</span>
+    </div>
+  </div>
+{:else if error}
+  <div class="flex h-full w-full items-center justify-center">
+    <div class="text-center">
+      <p class="text-sm font-medium text-destructive">Failed to load chart</p>
+      <p class="mt-1 text-xs text-muted-foreground">{error}</p>
+    </div>
+  </div>
 {:else if data.length > 0}
   <AreaChart
     {data}
@@ -132,10 +166,11 @@
     padding={{ top: 20, right: 20, bottom: 40, left: 20 }}
   ></AreaChart>
 {:else}
-  <div class="flex items-center justify-center text-muted-foreground">
+  <div class="flex h-full w-full items-center justify-center text-muted-foreground">
     <div class="text-center">
-      <p class="text-lg font-medium">No data available</p>
-      <p class="text-sm">No glucose data found for the selected time period</p>
+      <BarChart3 class="mx-auto h-10 w-10 opacity-30" />
+      <p class="mt-2 font-medium">No pattern data</p>
+      <p class="text-sm">Need more readings to show your typical day</p>
     </div>
   </div>
 {/if}
