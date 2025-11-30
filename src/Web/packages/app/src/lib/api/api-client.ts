@@ -25,7 +25,7 @@ import {
   TimeQueryClient,
   NotificationsClient,
   IobClient,
-  CompatibilityProxyClient,
+  CompatibilityClient,
 } from "./generated/nocturne-api-client";
 
 /**
@@ -60,7 +60,7 @@ export class ApiClient {
   public readonly v1Notifications: NotificationsClient;
   public readonly timeQuery: TimeQueryClient;
   public readonly iob: IobClient;
-  public readonly compatibility: CompatibilityProxyClient;
+  public readonly compatibility: CompatibilityClient ;
 
   constructor(
     baseUrl: string,
@@ -102,7 +102,7 @@ export class ApiClient {
     this.v1Notifications = new NotificationsClient(apiBaseUrl, http);
     this.timeQuery = new TimeQueryClient(apiBaseUrl, http);
     this.iob = new IobClient(apiBaseUrl, http);
-    this.compatibility = new CompatibilityProxyClient(apiBaseUrl, http);
+    this.compatibility = new CompatibilityClient (apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */

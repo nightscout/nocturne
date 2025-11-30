@@ -52,32 +52,29 @@ export const load: LayoutServerLoad = async ({ url, locals }) => {
   // Build find query for entries and treatments
   const entriesQuery = `find[date][$gte]=${startDate.toISOString()}&find[date][$lte]=${endDate.toISOString()}`;
   const treatmentsQuery = `find[created_at][$gte]=${startDate.toISOString()}&find[created_at][$lte]=${endDate.toISOString()}`;
-  const numberOfEntries = Math.ceil(
-    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 5)
-  );
-  console.log("expected", numberOfEntries);
-  const [treatments, entries] = await Promise.all([
-    locals.apiClient.treatments.getTreatments2(
-      treatmentsQuery,
-      numberOfEntries,
-      0
-    ),
-    locals.apiClient.entries.getEntries2(entriesQuery),
-  ]);
+  // API has a max count of 1000, so cap the number of treatments to fetch
+  // For longer date ranges, we still filter by date in the query so this is fine
+  const maxTreatmentCount = 1000;
+
+  // Fetch entries and treatments sequentially to avoid DbContext threading issues
+  const entries = await locals.apiClient.entries.getEntries2(entriesQuery);
+  const treatments = await locals.apiClient.treatments.getTreatments2(treatmentsQuery, maxTreatmentCount, 0);
 
   console.log("Fetched entries:", entries.length);
   return {
     treatments,
     entries,
     summary: locals.apiClient.statistics.getMultiPeriodStatistics(),
-    analysis: locals.apiClient.statistics.analyzeGlucoseData({
+    // Extended analytics includes base GlucoseAnalytics plus GMI, GRI, clinical assessment, and pattern analysis
+    analysis: locals.apiClient.statistics.analyzeGlucoseDataExtended({
       entries,
       treatments,
+      population: 0, // Default to Type1 - can be made configurable via user settings
     }),
     /** All ISO strings */
     dateRange: {
-      from: startDate.toISOString(),
-      to: endDate.toISOString(),
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
       lastUpdated: new Date().toISOString(),
     },
     rawParams,

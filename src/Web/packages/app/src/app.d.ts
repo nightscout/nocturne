@@ -16,7 +16,9 @@ export interface ServerSettings {
 declare global {
 	namespace App {
 		interface Error {
-
+			message: string;
+			details?: string;
+			errorId?: string;
 		}
 		interface Locals {
 			apiClient: ApiClient;

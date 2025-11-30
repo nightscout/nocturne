@@ -97,8 +97,31 @@ export const handleError: HandleServerError = async ({ error, event }) => {
   console.log(
     `Error occurred during request: ${event.request.method} ${event.request.url}`
   );
+
+  // Extract meaningful error message
+  let message = "An unexpected error occurred";
+  let details: string | undefined;
+
+  if (error instanceof Error) {
+    message = error.message;
+
+    // Check for ApiException-style errors with response property
+    const apiError = error as Error & { response?: string; status?: number };
+    if (apiError.response) {
+      try {
+        const parsed = JSON.parse(apiError.response);
+        details = parsed.error || parsed.message || apiError.response;
+      } catch {
+        details = apiError.response;
+      }
+    }
+  } else if (typeof error === "string") {
+    message = error;
+  }
+
   return {
-    message: "Whoops!",
+    message,
+    details,
     errorId,
   };
 };

@@ -5,7 +5,6 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { LoaderCircle } from "lucide-svelte";
 
   import { page } from "$app/state";
 </script>
@@ -16,10 +15,19 @@
   </CardHeader>
   <CardContent>
     <p class="text-lg">An error occurred while processing your request.</p>
-    <p class="text-sm text-muted-foreground mt-2">{page.error.message}</p>
-    <p class="text-xs text-red-500 mt-4">Error ID: {page.errorId}</p>
-    <pre>
-            <code>{JSON.stringify(page, null, 2)}</code>
-        </pre>
+    {#if page.error}
+      <p class="text-sm text-muted-foreground mt-2">{page.error.message}</p>
+      {#if page.error.details}
+        <p class="text-sm text-muted-foreground mt-2 p-2 bg-muted rounded">
+          <strong>Details:</strong>
+          {page.error.details}
+        </p>
+      {/if}
+      {#if page.error.errorId}
+        <p class="text-xs text-muted-foreground mt-4">
+          Error ID: {page.error.errorId}
+        </p>
+      {/if}
+    {/if}
   </CardContent>
 </Card>

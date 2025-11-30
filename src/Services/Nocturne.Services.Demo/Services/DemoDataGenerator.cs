@@ -105,7 +105,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     public (List<Entry> Entries, List<Treatment> Treatments) GenerateHistoricalData()
     {
         var endDate = DateTime.UtcNow;
-        var startDate = endDate.AddMonths(-_config.HistoryMonths);
+        var startDate = endDate.AddDays(-_config.HistoryDays);
 
         var entries = new List<Entry>();
         var treatments = new List<Treatment>();

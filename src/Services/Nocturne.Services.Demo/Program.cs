@@ -61,8 +61,11 @@ public class Program
 
         var app = builder.Build();
 
-        // Map default health check endpoints
+        // Map default health check endpoints (only works in Development)
         app.MapDefaultEndpoints();
+
+        // Always expose health endpoint for monitoring (regardless of environment)
+        app.MapHealthChecks("/health");
 
         // Map demo service control endpoints
         app.MapGet(

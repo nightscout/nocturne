@@ -777,3 +777,776 @@ public class AveragedStats : BasicGlucoseStats
     /// </summary>
     public int Hour { get; set; }
 }
+
+/// <summary>
+/// Diabetes population types for clinical target assessment
+/// </summary>
+public enum DiabetesPopulation
+{
+    /// <summary>Type 1 diabetes adult</summary>
+    Type1Adult,
+
+    /// <summary>Type 2 diabetes adult</summary>
+    Type2Adult,
+
+    /// <summary>Type 1 diabetes pediatric (under 18)</summary>
+    Type1Pediatric,
+
+    /// <summary>Elderly or high-risk individuals (over 65 or significant comorbidities)</summary>
+    Elderly,
+
+    /// <summary>Pregnancy with gestational diabetes</summary>
+    Pregnancy,
+
+    /// <summary>Pregnancy with pre-existing Type 1 diabetes</summary>
+    PregnancyType1,
+}
+
+/// <summary>
+/// Clinical targets based on international consensus (2019 TIR Consensus, 2023 GRI)
+/// </summary>
+public class ClinicalTargets
+{
+    /// <summary>Target time in range percentage (70-180 mg/dL)</summary>
+    public double TargetTIR { get; set; }
+
+    /// <summary>Maximum time below range percentage (&lt;70 mg/dL)</summary>
+    public double MaxTBR { get; set; }
+
+    /// <summary>Maximum time very low percentage (&lt;54 mg/dL)</summary>
+    public double MaxTBRVeryLow { get; set; }
+
+    /// <summary>Maximum time above range percentage (&gt;180 mg/dL)</summary>
+    public double MaxTAR { get; set; }
+
+    /// <summary>Maximum time very high percentage (&gt;250 mg/dL)</summary>
+    public double MaxTARVeryHigh { get; set; }
+
+    /// <summary>Target coefficient of variation percentage</summary>
+    public double TargetCV { get; set; }
+
+    /// <summary>Target range lower bound (mg/dL)</summary>
+    public double TargetLow { get; set; }
+
+    /// <summary>Target range upper bound (mg/dL)</summary>
+    public double TargetHigh { get; set; }
+
+    /// <summary>
+    /// Get clinical targets for a specific diabetes population
+    /// Based on International Consensus on Time in Range (2019) and subsequent updates
+    /// </summary>
+    public static ClinicalTargets ForPopulation(DiabetesPopulation population)
+    {
+        return population switch
+        {
+            DiabetesPopulation.Type1Adult or DiabetesPopulation.Type2Adult => new ClinicalTargets
+            {
+                TargetTIR = 70,
+                MaxTBR = 4,
+                MaxTBRVeryLow = 1,
+                MaxTAR = 25,
+                MaxTARVeryHigh = 5,
+                TargetCV = 36,
+                TargetLow = 70,
+                TargetHigh = 180,
+            },
+            DiabetesPopulation.Type1Pediatric => new ClinicalTargets
+            {
+                TargetTIR = 70,
+                MaxTBR = 4,
+                MaxTBRVeryLow = 1,
+                MaxTAR = 25,
+                MaxTARVeryHigh = 5,
+                TargetCV = 36,
+                TargetLow = 70,
+                TargetHigh = 180,
+            },
+            DiabetesPopulation.Elderly => new ClinicalTargets
+            {
+                TargetTIR = 50,
+                MaxTBR = 1,
+                MaxTBRVeryLow = 0,
+                MaxTAR = 50,
+                MaxTARVeryHigh = 10,
+                TargetCV = 36,
+                TargetLow = 70,
+                TargetHigh = 180,
+            },
+            DiabetesPopulation.Pregnancy => new ClinicalTargets
+            {
+                TargetTIR = 70,
+                MaxTBR = 4,
+                MaxTBRVeryLow = 1,
+                MaxTAR = 25,
+                MaxTARVeryHigh = 5,
+                TargetCV = 36,
+                TargetLow = 63,
+                TargetHigh = 140,
+            },
+            DiabetesPopulation.PregnancyType1 => new ClinicalTargets
+            {
+                TargetTIR = 70,
+                MaxTBR = 4,
+                MaxTBRVeryLow = 1,
+                MaxTAR = 25,
+                MaxTARVeryHigh = 5,
+                TargetCV = 36,
+                TargetLow = 63,
+                TargetHigh = 140,
+            },
+            _ => ForPopulation(DiabetesPopulation.Type1Adult),
+        };
+    }
+}
+
+/// <summary>
+/// Glucose Management Indicator (GMI) - modern replacement for estimated A1c
+/// Based on: GMI (%) = 3.31 + (0.02392 × mean glucose in mg/dL)
+/// </summary>
+public class GlucoseManagementIndicator
+{
+    /// <summary>GMI value as percentage (e.g., 7.0 for 7.0%)</summary>
+    public double Value { get; set; }
+
+    /// <summary>Mean glucose used for calculation (mg/dL)</summary>
+    public double MeanGlucose { get; set; }
+
+    /// <summary>Interpretation of the GMI value</summary>
+    public string Interpretation { get; set; } = string.Empty;
+
+    /// <summary>
+    /// GMI interpretation categories based on ADA Standards
+    /// </summary>
+    public static string GetInterpretation(double gmi)
+    {
+        return gmi switch
+        {
+            < 5.7 => "Non-diabetic range",
+            < 6.5 => "Prediabetes range",
+            < 7.0 => "Well-controlled diabetes",
+            < 8.0 => "Moderate control",
+            < 9.0 => "Suboptimal control",
+            _ => "Poor control - intervention recommended",
+        };
+    }
+}
+
+/// <summary>
+/// Glycemic Risk Index (GRI) - composite risk score from 0-100
+/// Based on 2023 International Consensus
+/// GRI = (3.0 × VLow%) + (2.4 × Low%) + (1.6 × VHigh%) + (0.8 × High%)
+/// </summary>
+public class GlycemicRiskIndex
+{
+    /// <summary>Overall GRI score (0-100, lower is better)</summary>
+    public double Score { get; set; }
+
+    /// <summary>Hypoglycemia component of the score</summary>
+    public double HypoglycemiaComponent { get; set; }
+
+    /// <summary>Hyperglycemia component of the score</summary>
+    public double HyperglycemiaComponent { get; set; }
+
+    /// <summary>Risk zone classification</summary>
+    public GRIZone Zone { get; set; }
+
+    /// <summary>Interpretation of the GRI score</summary>
+    public string Interpretation { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// GRI Zone classifications based on the GRI grid
+/// </summary>
+public enum GRIZone
+{
+    /// <summary>Zone A: Lowest risk (GRI 0-20)</summary>
+    A,
+
+    /// <summary>Zone B: Low risk (GRI 21-40)</summary>
+    B,
+
+    /// <summary>Zone C: Moderate risk (GRI 41-60)</summary>
+    C,
+
+    /// <summary>Zone D: High risk (GRI 61-80)</summary>
+    D,
+
+    /// <summary>Zone E: Very high risk (GRI 81-100)</summary>
+    E,
+}
+
+/// <summary>
+/// Period-specific glucose metrics for time-of-day analysis
+/// </summary>
+public class PeriodMetrics
+{
+    /// <summary>Name of the period (e.g., "Overnight", "Morning")</summary>
+    public string PeriodName { get; set; } = string.Empty;
+
+    /// <summary>Start hour of the period (0-23)</summary>
+    public int StartHour { get; set; }
+
+    /// <summary>End hour of the period (0-23)</summary>
+    public int EndHour { get; set; }
+
+    /// <summary>Number of readings in this period</summary>
+    public int ReadingCount { get; set; }
+
+    /// <summary>Mean glucose (mg/dL)</summary>
+    public double Mean { get; set; }
+
+    /// <summary>Median glucose (mg/dL)</summary>
+    public double Median { get; set; }
+
+    /// <summary>Standard deviation (mg/dL)</summary>
+    public double StandardDeviation { get; set; }
+
+    /// <summary>Coefficient of variation (%)</summary>
+    public double CoefficientOfVariation { get; set; }
+
+    /// <summary>Time in range percentage (%)</summary>
+    public double TimeInRange { get; set; }
+
+    /// <summary>Time below range percentage (%)</summary>
+    public double TimeBelowRange { get; set; }
+
+    /// <summary>Time very low percentage (%)</summary>
+    public double TimeVeryLow { get; set; }
+
+    /// <summary>Time above range percentage (%)</summary>
+    public double TimeAboveRange { get; set; }
+
+    /// <summary>Time very high percentage (%)</summary>
+    public double TimeVeryHigh { get; set; }
+
+    /// <summary>Number of hypoglycemic events in this period</summary>
+    public int HypoglycemiaEvents { get; set; }
+
+    /// <summary>Number of hyperglycemic events in this period</summary>
+    public int HyperglycemiaEvents { get; set; }
+
+    /// <summary>Minimum glucose value (mg/dL)</summary>
+    public double Min { get; set; }
+
+    /// <summary>Maximum glucose value (mg/dL)</summary>
+    public double Max { get; set; }
+}
+
+/// <summary>
+/// Analysis of glucose patterns by time of day
+/// </summary>
+public class TimeOfDayAnalysis
+{
+    /// <summary>Overnight period metrics (12:00 AM - 6:00 AM)</summary>
+    public PeriodMetrics Overnight { get; set; } =
+        new()
+        {
+            PeriodName = "Overnight",
+            StartHour = 0,
+            EndHour = 6,
+        };
+
+    /// <summary>Morning period metrics (6:00 AM - 12:00 PM)</summary>
+    public PeriodMetrics Morning { get; set; } =
+        new()
+        {
+            PeriodName = "Morning",
+            StartHour = 6,
+            EndHour = 12,
+        };
+
+    /// <summary>Afternoon period metrics (12:00 PM - 6:00 PM)</summary>
+    public PeriodMetrics Afternoon { get; set; } =
+        new()
+        {
+            PeriodName = "Afternoon",
+            StartHour = 12,
+            EndHour = 18,
+        };
+
+    /// <summary>Evening period metrics (6:00 PM - 12:00 AM)</summary>
+    public PeriodMetrics Evening { get; set; } =
+        new()
+        {
+            PeriodName = "Evening",
+            StartHour = 18,
+            EndHour = 24,
+        };
+
+    /// <summary>Dawn phenomenon detected (rising glucose 3-6 AM)</summary>
+    public bool DawnPhenomenonDetected { get; set; }
+
+    /// <summary>Magnitude of dawn phenomenon rise (mg/dL)</summary>
+    public double DawnPhenomenonMagnitude { get; set; }
+
+    /// <summary>Period with highest variability</summary>
+    public string HighestVariabilityPeriod { get; set; } = string.Empty;
+
+    /// <summary>Period with lowest time in range</summary>
+    public string LowestTIRPeriod { get; set; } = string.Empty;
+
+    /// <summary>Period with most hypoglycemia events</summary>
+    public string MostHypoglycemiaPeriod { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Day-specific metrics for day-of-week analysis
+/// </summary>
+public class DayMetrics : PeriodMetrics
+{
+    /// <summary>Day of week (0 = Sunday, 6 = Saturday)</summary>
+    public DayOfWeek DayOfWeek { get; set; }
+}
+
+/// <summary>
+/// Analysis of glucose patterns by day of week
+/// </summary>
+public class DayOfWeekAnalysis
+{
+    /// <summary>Metrics for each day of the week</summary>
+    public Dictionary<DayOfWeek, DayMetrics> DayMetrics { get; set; } = new();
+
+    /// <summary>Average weekday metrics (Monday-Friday)</summary>
+    public PeriodMetrics WeekdayAverage { get; set; } = new() { PeriodName = "Weekday Average" };
+
+    /// <summary>Average weekend metrics (Saturday-Sunday)</summary>
+    public PeriodMetrics WeekendAverage { get; set; } = new() { PeriodName = "Weekend Average" };
+
+    /// <summary>Day with highest variability</summary>
+    public DayOfWeek? HighestVariabilityDay { get; set; }
+
+    /// <summary>Day with lowest time in range</summary>
+    public DayOfWeek? LowestTIRDay { get; set; }
+
+    /// <summary>Significant difference between weekday and weekend patterns</summary>
+    public bool WeekdayWeekendDifference { get; set; }
+
+    /// <summary>Description of weekday vs weekend pattern</summary>
+    public string PatternDescription { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Individual hypoglycemia episode details
+/// </summary>
+public class HypoglycemiaEpisode
+{
+    /// <summary>Start time of the episode (Unix milliseconds)</summary>
+    public long StartTime { get; set; }
+
+    /// <summary>End time of the episode (Unix milliseconds)</summary>
+    public long EndTime { get; set; }
+
+    /// <summary>Duration of the episode in minutes</summary>
+    public double DurationMinutes { get; set; }
+
+    /// <summary>Lowest glucose value during the episode (mg/dL)</summary>
+    public double NadirValue { get; set; }
+
+    /// <summary>Time of nadir (Unix milliseconds)</summary>
+    public long NadirTime { get; set; }
+
+    /// <summary>Whether this was a severe episode (&lt;54 mg/dL)</summary>
+    public bool IsSevere { get; set; }
+
+    /// <summary>Hour of day when episode started (0-23)</summary>
+    public int HourOfDay { get; set; }
+
+    /// <summary>Day of week when episode occurred</summary>
+    public DayOfWeek DayOfWeek { get; set; }
+
+    /// <summary>Time to recover to >70 mg/dL in minutes</summary>
+    public double RecoveryTimeMinutes { get; set; }
+
+    /// <summary>Glucose value before the episode (mg/dL, if available)</summary>
+    public double? PreEpisodeGlucose { get; set; }
+}
+
+/// <summary>
+/// Comprehensive hypoglycemia analysis
+/// </summary>
+public class HypoglycemiaAnalysis
+{
+    /// <summary>Total number of hypoglycemia episodes (&lt;70 mg/dL)</summary>
+    public int TotalEpisodes { get; set; }
+
+    /// <summary>Number of severe hypoglycemia episodes (&lt;54 mg/dL)</summary>
+    public int SevereEpisodes { get; set; }
+
+    /// <summary>Average episodes per day</summary>
+    public double EpisodesPerDay { get; set; }
+
+    /// <summary>Average duration of episodes in minutes</summary>
+    public double AverageDurationMinutes { get; set; }
+
+    /// <summary>Average nadir (lowest) glucose during episodes</summary>
+    public double AverageNadir { get; set; }
+
+    /// <summary>Lowest glucose recorded</summary>
+    public double LowestGlucose { get; set; }
+
+    /// <summary>Average time to recover above 70 mg/dL</summary>
+    public double AverageRecoveryTimeMinutes { get; set; }
+
+    /// <summary>Time of day distribution of episodes (hour -> count)</summary>
+    public Dictionary<int, int> HourlyDistribution { get; set; } = new();
+
+    /// <summary>Day of week distribution of episodes</summary>
+    public Dictionary<DayOfWeek, int> DayOfWeekDistribution { get; set; } = new();
+
+    /// <summary>Most common hour for hypoglycemia</summary>
+    public int? PeakHour { get; set; }
+
+    /// <summary>Most common day for hypoglycemia</summary>
+    public DayOfWeek? PeakDay { get; set; }
+
+    /// <summary>Whether there's a recurring pattern</summary>
+    public bool HasRecurringPattern { get; set; }
+
+    /// <summary>Description of the recurring pattern if detected</summary>
+    public string PatternDescription { get; set; } = string.Empty;
+
+    /// <summary>List of individual episodes</summary>
+    public List<HypoglycemiaEpisode> Episodes { get; set; } = new();
+
+    /// <summary>Nocturnal hypoglycemia episodes (12 AM - 6 AM)</summary>
+    public int NocturnalEpisodes { get; set; }
+
+    /// <summary>Percentage of total hypos that are nocturnal</summary>
+    public double NocturnalPercentage { get; set; }
+
+    /// <summary>Clinical risk assessment</summary>
+    public string RiskAssessment { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Individual hyperglycemia episode details
+/// </summary>
+public class HyperglycemiaEpisode
+{
+    /// <summary>Start time of the episode (Unix milliseconds)</summary>
+    public long StartTime { get; set; }
+
+    /// <summary>End time of the episode (Unix milliseconds)</summary>
+    public long EndTime { get; set; }
+
+    /// <summary>Duration of the episode in minutes</summary>
+    public double DurationMinutes { get; set; }
+
+    /// <summary>Peak glucose value during the episode (mg/dL)</summary>
+    public double PeakValue { get; set; }
+
+    /// <summary>Time of peak (Unix milliseconds)</summary>
+    public long PeakTime { get; set; }
+
+    /// <summary>Whether this was a severe episode (&gt;250 mg/dL)</summary>
+    public bool IsSevere { get; set; }
+
+    /// <summary>Whether this was a prolonged episode (&gt;2 hours)</summary>
+    public bool IsProlonged { get; set; }
+
+    /// <summary>Hour of day when episode started (0-23)</summary>
+    public int HourOfDay { get; set; }
+
+    /// <summary>Day of week when episode occurred</summary>
+    public DayOfWeek DayOfWeek { get; set; }
+
+    /// <summary>Time to return to target range in minutes</summary>
+    public double TimeToTargetMinutes { get; set; }
+
+    /// <summary>Average glucose during the episode</summary>
+    public double AverageGlucose { get; set; }
+}
+
+/// <summary>
+/// Comprehensive hyperglycemia analysis
+/// </summary>
+public class HyperglycemiaAnalysis
+{
+    /// <summary>Total number of hyperglycemia episodes (&gt;180 mg/dL)</summary>
+    public int TotalEpisodes { get; set; }
+
+    /// <summary>Number of severe hyperglycemia episodes (&gt;250 mg/dL)</summary>
+    public int SevereEpisodes { get; set; }
+
+    /// <summary>Number of prolonged episodes (&gt;2 hours above 180)</summary>
+    public int ProlongedEpisodes { get; set; }
+
+    /// <summary>Average episodes per day</summary>
+    public double EpisodesPerDay { get; set; }
+
+    /// <summary>Average duration of episodes in minutes</summary>
+    public double AverageDurationMinutes { get; set; }
+
+    /// <summary>Average peak glucose during episodes</summary>
+    public double AveragePeak { get; set; }
+
+    /// <summary>Highest glucose recorded</summary>
+    public double HighestGlucose { get; set; }
+
+    /// <summary>Average time to return to target range</summary>
+    public double AverageTimeToTargetMinutes { get; set; }
+
+    /// <summary>Time of day distribution of episodes (hour -> count)</summary>
+    public Dictionary<int, int> HourlyDistribution { get; set; } = new();
+
+    /// <summary>Day of week distribution of episodes</summary>
+    public Dictionary<DayOfWeek, int> DayOfWeekDistribution { get; set; } = new();
+
+    /// <summary>Most common hour for hyperglycemia</summary>
+    public int? PeakHour { get; set; }
+
+    /// <summary>Most common day for hyperglycemia</summary>
+    public DayOfWeek? PeakDay { get; set; }
+
+    /// <summary>Whether there's a post-meal pattern</summary>
+    public bool HasPostMealPattern { get; set; }
+
+    /// <summary>Description of the pattern if detected</summary>
+    public string PatternDescription { get; set; } = string.Empty;
+
+    /// <summary>List of individual episodes</summary>
+    public List<HyperglycemiaEpisode> Episodes { get; set; } = new();
+
+    /// <summary>Nocturnal hyperglycemia episodes (12 AM - 6 AM)</summary>
+    public int NocturnalEpisodes { get; set; }
+
+    /// <summary>Percentage of total episodes that are nocturnal</summary>
+    public double NocturnalPercentage { get; set; }
+}
+
+/// <summary>
+/// Trend direction indicator
+/// </summary>
+public enum TrendDirection
+{
+    /// <summary>Significant improvement</summary>
+    Improving,
+
+    /// <summary>Slight improvement</summary>
+    SlightlyImproving,
+
+    /// <summary>No significant change</summary>
+    Stable,
+
+    /// <summary>Slight decline</summary>
+    SlightlyDeclining,
+
+    /// <summary>Significant decline</summary>
+    Declining,
+}
+
+/// <summary>
+/// Comparison between two time periods
+/// </summary>
+public class TrendComparison
+{
+    /// <summary>Current period analytics</summary>
+    public GlucoseAnalytics CurrentPeriod { get; set; } = new();
+
+    /// <summary>Previous period analytics</summary>
+    public GlucoseAnalytics PreviousPeriod { get; set; } = new();
+
+    /// <summary>Change in GMI (current - previous)</summary>
+    public double GMIDelta { get; set; }
+
+    /// <summary>Change in time in range (current - previous)</summary>
+    public double TIRDelta { get; set; }
+
+    /// <summary>Change in time below range (current - previous)</summary>
+    public double TBRDelta { get; set; }
+
+    /// <summary>Change in time above range (current - previous)</summary>
+    public double TARDelta { get; set; }
+
+    /// <summary>Change in coefficient of variation (current - previous)</summary>
+    public double CVDelta { get; set; }
+
+    /// <summary>Change in GRI score (current - previous)</summary>
+    public double GRIDelta { get; set; }
+
+    /// <summary>Overall trend direction for GMI</summary>
+    public TrendDirection GMITrend { get; set; }
+
+    /// <summary>Overall trend direction for TIR</summary>
+    public TrendDirection TIRTrend { get; set; }
+
+    /// <summary>Overall trend direction for TBR (improvement = decreasing)</summary>
+    public TrendDirection TBRTrend { get; set; }
+
+    /// <summary>Overall trend direction for CV</summary>
+    public TrendDirection CVTrend { get; set; }
+
+    /// <summary>Overall trend direction for GRI (improvement = decreasing)</summary>
+    public TrendDirection GRITrend { get; set; }
+
+    /// <summary>Number of days in current period with TIR >70%</summary>
+    public int DaysInRangeCurrent { get; set; }
+
+    /// <summary>Number of days in previous period with TIR >70%</summary>
+    public int DaysInRangePrevious { get; set; }
+
+    /// <summary>Summary interpretation of overall trend</summary>
+    public string TrendSummary { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Target achievement status
+/// </summary>
+public enum TargetStatus
+{
+    /// <summary>Target met</summary>
+    Met,
+
+    /// <summary>Close to target (within 10%)</summary>
+    Close,
+
+    /// <summary>Target not met</summary>
+    NotMet,
+}
+
+/// <summary>
+/// Individual target assessment
+/// </summary>
+public class TargetAssessment
+{
+    /// <summary>Name of the metric</summary>
+    public string MetricName { get; set; } = string.Empty;
+
+    /// <summary>Current value</summary>
+    public double CurrentValue { get; set; }
+
+    /// <summary>Target value</summary>
+    public double TargetValue { get; set; }
+
+    /// <summary>Whether target is a maximum (true) or minimum (false)</summary>
+    public bool IsMaximumTarget { get; set; }
+
+    /// <summary>Status of target achievement</summary>
+    public TargetStatus Status { get; set; }
+
+    /// <summary>Difference from target</summary>
+    public double DifferenceFromTarget { get; set; }
+
+    /// <summary>Percentage progress toward target</summary>
+    public double ProgressPercentage { get; set; }
+}
+
+/// <summary>
+/// Comprehensive clinical target assessment
+/// </summary>
+public class ClinicalTargetAssessment
+{
+    /// <summary>Population type used for targets</summary>
+    public DiabetesPopulation Population { get; set; }
+
+    /// <summary>Clinical targets used for assessment</summary>
+    public ClinicalTargets Targets { get; set; } = new();
+
+    /// <summary>Time in range assessment</summary>
+    public TargetAssessment TIRAssessment { get; set; } = new();
+
+    /// <summary>Time below range assessment</summary>
+    public TargetAssessment TBRAssessment { get; set; } = new();
+
+    /// <summary>Time very low assessment</summary>
+    public TargetAssessment VeryLowAssessment { get; set; } = new();
+
+    /// <summary>Time above range assessment</summary>
+    public TargetAssessment TARAssessment { get; set; } = new();
+
+    /// <summary>Time very high assessment</summary>
+    public TargetAssessment VeryHighAssessment { get; set; } = new();
+
+    /// <summary>Coefficient of variation assessment</summary>
+    public TargetAssessment CVAssessment { get; set; } = new();
+
+    /// <summary>Number of targets met</summary>
+    public int TargetsMet { get; set; }
+
+    /// <summary>Total number of targets assessed</summary>
+    public int TotalTargets { get; set; }
+
+    /// <summary>Overall assessment category</summary>
+    public string OverallAssessment { get; set; } = string.Empty;
+
+    /// <summary>List of actionable insights/recommendations</summary>
+    public List<string> ActionableInsights { get; set; } = new();
+
+    /// <summary>Priority areas for improvement</summary>
+    public List<string> PriorityAreas { get; set; } = new();
+
+    /// <summary>Strengths/achievements to acknowledge</summary>
+    public List<string> Strengths { get; set; } = new();
+}
+
+/// <summary>
+/// Data sufficiency assessment for reporting
+/// </summary>
+public class DataSufficiencyAssessment
+{
+    /// <summary>Whether there is sufficient data for a valid report</summary>
+    public bool IsSufficient { get; set; }
+
+    /// <summary>Number of days in the period</summary>
+    public int TotalDays { get; set; }
+
+    /// <summary>Number of days with any data</summary>
+    public int DaysWithData { get; set; }
+
+    /// <summary>Expected number of readings (based on sensor type)</summary>
+    public int ExpectedReadings { get; set; }
+
+    /// <summary>Actual number of readings</summary>
+    public int ActualReadings { get; set; }
+
+    /// <summary>Data completeness percentage</summary>
+    public double CompletenessPercentage { get; set; }
+
+    /// <summary>Minimum required completeness for valid report (typically 70%)</summary>
+    public double MinimumRequiredCompleteness { get; set; } = 70;
+
+    /// <summary>Average readings per day</summary>
+    public double AverageReadingsPerDay { get; set; }
+
+    /// <summary>Longest data gap in hours</summary>
+    public double LongestGapHours { get; set; }
+
+    /// <summary>Warning message if data is insufficient</summary>
+    public string WarningMessage { get; set; } = string.Empty;
+
+    /// <summary>Recommendation for improving data collection</summary>
+    public string Recommendation { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Extended glucose analytics with all new metrics
+/// </summary>
+public class ExtendedGlucoseAnalytics : GlucoseAnalytics
+{
+    /// <summary>Glucose Management Indicator (modern replacement for eA1c)</summary>
+    public GlucoseManagementIndicator GMI { get; set; } = new();
+
+    /// <summary>Glycemic Risk Index (composite risk score)</summary>
+    public GlycemicRiskIndex GRI { get; set; } = new();
+
+    /// <summary>Time-of-day pattern analysis</summary>
+    public TimeOfDayAnalysis TimeOfDayPatterns { get; set; } = new();
+
+    /// <summary>Day-of-week pattern analysis</summary>
+    public DayOfWeekAnalysis DayOfWeekPatterns { get; set; } = new();
+
+    /// <summary>Hypoglycemia event analysis</summary>
+    public HypoglycemiaAnalysis HypoglycemiaAnalysis { get; set; } = new();
+
+    /// <summary>Hyperglycemia event analysis</summary>
+    public HyperglycemiaAnalysis HyperglycemiaAnalysis { get; set; } = new();
+
+    /// <summary>Clinical target assessment</summary>
+    public ClinicalTargetAssessment ClinicalAssessment { get; set; } = new();
+
+    /// <summary>Data sufficiency assessment</summary>
+    public DataSufficiencyAssessment DataSufficiency { get; set; } = new();
+
+    /// <summary>Treatment summary if treatment data is available</summary>
+    public TreatmentSummary? TreatmentSummary { get; set; }
+}

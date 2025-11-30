@@ -43,9 +43,9 @@ public class DemoModeConfiguration
     public string Device { get; set; } = "demo-cgm";
 
     /// <summary>
-    /// Number of months of historical data to generate on startup.
+    /// Number of days of historical data to generate on startup.
     /// </summary>
-    public int HistoryMonths { get; set; } = 3;
+    public int HistoryDays { get; set; } = 90;
 
     /// <summary>
     /// Base basal rate for insulin calculations.

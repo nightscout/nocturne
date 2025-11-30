@@ -119,6 +119,447 @@ public class StatisticsService : IStatisticsService
         },
     };
 
+    #region Modern Glycemic Indicators
+
+    /// <summary>
+    /// Calculate Glucose Management Indicator (GMI) - modern replacement for estimated A1c
+    /// Based on: Bergenstal RM, et al. Diabetes Care. 2018
+    /// Formula: GMI (%) = 3.31 + (0.02392 × mean glucose in mg/dL)
+    /// </summary>
+    /// <param name="meanGlucose">Mean glucose in mg/dL</param>
+    /// <returns>GMI with value, interpretation, and source mean glucose</returns>
+    public GlucoseManagementIndicator CalculateGMI(double meanGlucose)
+    {
+        if (meanGlucose <= 0)
+        {
+            return new GlucoseManagementIndicator
+            {
+                Value = 0,
+                MeanGlucose = 0,
+                Interpretation = "Insufficient data",
+            };
+        }
+
+        // GMI formula: 3.31 + (0.02392 × mean glucose in mg/dL)
+        var gmiValue = 3.31 + (0.02392 * meanGlucose);
+        gmiValue = Math.Round(gmiValue * 10) / 10; // Round to 1 decimal
+
+        return new GlucoseManagementIndicator
+        {
+            Value = gmiValue,
+            MeanGlucose = meanGlucose,
+            Interpretation = GlucoseManagementIndicator.GetInterpretation(gmiValue),
+        };
+    }
+
+    /// <summary>
+    /// Calculate Glycemic Risk Index (GRI) - composite risk score from 0-100
+    /// Based on: Klonoff DC, et al. J Diabetes Sci Technol. 2023
+    /// Formula: GRI = (3.0 × VLow%) + (2.4 × Low%) + (1.6 × VHigh%) + (0.8 × High%)
+    /// </summary>
+    /// <param name="timeInRange">Time in range metrics with percentage breakdowns</param>
+    /// <returns>GRI with score, zone classification, and component breakdown</returns>
+    public GlycemicRiskIndex CalculateGRI(TimeInRangeMetrics timeInRange)
+    {
+        var percentages = timeInRange.Percentages;
+
+        // GRI component weights per 2023 consensus
+        const double veryLowWeight = 3.0;
+        const double lowWeight = 2.4;
+        const double highWeight = 0.8;
+        const double veryHighWeight = 1.6;
+
+        var hypoComponent = (veryLowWeight * percentages.SevereLow) + (lowWeight * percentages.Low);
+        var hyperComponent =
+            (veryHighWeight * percentages.SevereHigh) + (highWeight * percentages.High);
+
+        var gri = hypoComponent + hyperComponent;
+
+        // Cap at 100
+        gri = Math.Min(100, Math.Round(gri * 10) / 10);
+
+        var zone = gri switch
+        {
+            <= 20 => GRIZone.A,
+            <= 40 => GRIZone.B,
+            <= 60 => GRIZone.C,
+            <= 80 => GRIZone.D,
+            _ => GRIZone.E,
+        };
+
+        var interpretation = zone switch
+        {
+            GRIZone.A => "Excellent glycemic control - lowest risk",
+            GRIZone.B => "Good glycemic control - low risk",
+            GRIZone.C => "Moderate glycemic control - moderate risk",
+            GRIZone.D => "Suboptimal glycemic control - high risk",
+            GRIZone.E => "Poor glycemic control - very high risk",
+            _ => "Unknown",
+        };
+
+        return new GlycemicRiskIndex
+        {
+            Score = gri,
+            HypoglycemiaComponent = Math.Round(hypoComponent * 10) / 10,
+            HyperglycemiaComponent = Math.Round(hyperComponent * 10) / 10,
+            Zone = zone,
+            Interpretation = interpretation,
+        };
+    }
+
+    /// <summary>
+    /// Assess glucose data against clinical targets for a specific diabetes population
+    /// Based on International Consensus on Time in Range (2019) and subsequent updates
+    /// </summary>
+    public ClinicalTargetAssessment AssessAgainstTargets(
+        GlucoseAnalytics analytics,
+        DiabetesPopulation population = DiabetesPopulation.Type1Adult
+    )
+    {
+        var targets = ClinicalTargets.ForPopulation(population);
+        var tir = analytics.TimeInRange.Percentages;
+        var cv = analytics.GlycemicVariability.CoefficientOfVariation;
+
+        var assessment = new ClinicalTargetAssessment
+        {
+            Population = population,
+            Targets = targets,
+            TotalTargets = 6,
+        };
+
+        // Time in Range Assessment (minimum target)
+        assessment.TIRAssessment = AssessMinimumTarget(
+            "Time in Range",
+            tir.Target,
+            targets.TargetTIR
+        );
+
+        // Time Below Range Assessment (maximum target - lower is better)
+        var totalTBR = tir.SevereLow + tir.Low;
+        assessment.TBRAssessment = AssessMaximumTarget(
+            "Time Below Range",
+            totalTBR,
+            targets.MaxTBR
+        );
+
+        // Very Low Assessment (maximum target)
+        assessment.VeryLowAssessment = AssessMaximumTarget(
+            "Time Very Low (<54)",
+            tir.SevereLow,
+            targets.MaxTBRVeryLow
+        );
+
+        // Time Above Range Assessment (maximum target)
+        var totalTAR = tir.SevereHigh + tir.High;
+        assessment.TARAssessment = AssessMaximumTarget(
+            "Time Above Range",
+            totalTAR,
+            targets.MaxTAR
+        );
+
+        // Very High Assessment (maximum target)
+        assessment.VeryHighAssessment = AssessMaximumTarget(
+            "Time Very High (>250)",
+            tir.SevereHigh,
+            targets.MaxTARVeryHigh
+        );
+
+        // CV Assessment (maximum target)
+        assessment.CVAssessment = AssessMaximumTarget(
+            "Coefficient of Variation",
+            cv,
+            targets.TargetCV
+        );
+
+        // Count targets met
+        var assessments = new[]
+        {
+            assessment.TIRAssessment,
+            assessment.TBRAssessment,
+            assessment.VeryLowAssessment,
+            assessment.TARAssessment,
+            assessment.VeryHighAssessment,
+            assessment.CVAssessment,
+        };
+
+        assessment.TargetsMet = assessments.Count(a => a.Status == TargetStatus.Met);
+
+        // Determine overall assessment
+        assessment.OverallAssessment = assessment.TargetsMet switch
+        {
+            6 => "Excellent",
+            >= 4 => "Good",
+            >= 2 => "Needs Attention",
+            _ => "Needs Significant Improvement",
+        };
+
+        // Generate actionable insights
+        GenerateActionableInsights(assessment, tir, cv, targets);
+
+        return assessment;
+    }
+
+    private TargetAssessment AssessMinimumTarget(string name, double current, double target)
+    {
+        var status =
+            current >= target ? TargetStatus.Met
+            : current >= target * 0.9 ? TargetStatus.Close
+            : TargetStatus.NotMet;
+
+        return new TargetAssessment
+        {
+            MetricName = name,
+            CurrentValue = Math.Round(current * 10) / 10,
+            TargetValue = target,
+            IsMaximumTarget = false,
+            Status = status,
+            DifferenceFromTarget = Math.Round((current - target) * 10) / 10,
+            ProgressPercentage =
+                target > 0 ? Math.Min(100, Math.Round(current / target * 100 * 10) / 10) : 0,
+        };
+    }
+
+    private TargetAssessment AssessMaximumTarget(string name, double current, double target)
+    {
+        var status =
+            current <= target ? TargetStatus.Met
+            : current <= target * 1.1 ? TargetStatus.Close
+            : TargetStatus.NotMet;
+
+        return new TargetAssessment
+        {
+            MetricName = name,
+            CurrentValue = Math.Round(current * 10) / 10,
+            TargetValue = target,
+            IsMaximumTarget = true,
+            Status = status,
+            DifferenceFromTarget = Math.Round((current - target) * 10) / 10,
+            ProgressPercentage =
+                target > 0
+                    ? Math.Max(0, Math.Round((1 - (current - target) / target) * 100 * 10) / 10)
+                    : (current == 0 ? 100 : 0),
+        };
+    }
+
+    private void GenerateActionableInsights(
+        ClinicalTargetAssessment assessment,
+        TimeInRangePercentages tir,
+        double cv,
+        ClinicalTargets targets
+    )
+    {
+        // Strengths
+        if (assessment.TIRAssessment.Status == TargetStatus.Met)
+            assessment.Strengths.Add(
+                $"Time in range is excellent at {tir.Target:F1}% (target: ≥{targets.TargetTIR}%)"
+            );
+
+        if (assessment.VeryLowAssessment.Status == TargetStatus.Met && tir.SevereLow == 0)
+            assessment.Strengths.Add("No severe hypoglycemia detected - great job staying safe!");
+
+        if (assessment.CVAssessment.Status == TargetStatus.Met)
+            assessment.Strengths.Add($"Glucose variability is well-controlled at {cv:F1}% CV");
+
+        // Priority areas for improvement
+        if (assessment.VeryLowAssessment.Status == TargetStatus.NotMet)
+        {
+            assessment.PriorityAreas.Add("Reducing severe hypoglycemia (<54 mg/dL)");
+            assessment.ActionableInsights.Add(
+                $"⚠️ Time very low is {tir.SevereLow:F1}% (target: <{targets.MaxTBRVeryLow}%). Review overnight basal rates and consider CGM alerts."
+            );
+        }
+
+        if (assessment.TBRAssessment.Status == TargetStatus.NotMet)
+        {
+            assessment.PriorityAreas.Add("Reducing overall hypoglycemia (<70 mg/dL)");
+            assessment.ActionableInsights.Add(
+                $"Time below range is {tir.SevereLow + tir.Low:F1}% (target: <{targets.MaxTBR}%). Consider adjusting correction factors or meal timing."
+            );
+        }
+
+        if (assessment.TIRAssessment.Status == TargetStatus.NotMet)
+        {
+            assessment.PriorityAreas.Add("Increasing time in target range");
+            assessment.ActionableInsights.Add(
+                $"Time in range is {tir.Target:F1}% (target: ≥{targets.TargetTIR}%). Focus on post-meal management and consistent timing."
+            );
+        }
+
+        if (assessment.VeryHighAssessment.Status == TargetStatus.NotMet)
+        {
+            assessment.PriorityAreas.Add("Reducing severe hyperglycemia (>250 mg/dL)");
+            assessment.ActionableInsights.Add(
+                $"Time very high is {tir.SevereHigh:F1}% (target: <{targets.MaxTARVeryHigh}%). Review carb counting and correction doses."
+            );
+        }
+
+        if (assessment.CVAssessment.Status == TargetStatus.NotMet)
+        {
+            assessment.PriorityAreas.Add("Reducing glucose variability");
+            assessment.ActionableInsights.Add(
+                $"Glucose variability is {cv:F1}% (target: <{targets.TargetCV}%). Consider more consistent meal timing and composition."
+            );
+        }
+
+        // If everything is good
+        if (assessment.TargetsMet == assessment.TotalTargets)
+        {
+            assessment.ActionableInsights.Add("🎉 All targets met! Keep up the excellent work.");
+        }
+    }
+
+    /// <summary>
+    /// Check if there is sufficient data for a valid clinical report
+    /// Per international guidelines, minimum 70% data coverage is required
+    /// </summary>
+    public DataSufficiencyAssessment AssessDataSufficiency(
+        IEnumerable<Entry> entries,
+        int days = 14,
+        int expectedReadingsPerDay = 288 // 5-minute intervals = 288/day
+    )
+    {
+        var entriesList = entries.ToList();
+        var expectedTotal = days * expectedReadingsPerDay;
+
+        if (!entriesList.Any())
+        {
+            return new DataSufficiencyAssessment
+            {
+                IsSufficient = false,
+                TotalDays = days,
+                DaysWithData = 0,
+                ExpectedReadings = expectedTotal,
+                ActualReadings = 0,
+                CompletenessPercentage = 0,
+                WarningMessage = "No glucose data available for the selected period.",
+                Recommendation = "Ensure your CGM is connected and uploading data.",
+            };
+        }
+
+        // Group by date to count days with data
+        var entriesByDate = entriesList
+            .Where(e => e.Mills > 0 || e.Date.HasValue)
+            .GroupBy(e =>
+            {
+                var dt =
+                    e.Mills > 0
+                        ? DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).Date
+                        : e.Date?.Date ?? DateTime.MinValue;
+                return dt;
+            })
+            .Where(g => g.Key != DateTime.MinValue)
+            .ToList();
+
+        var daysWithData = entriesByDate.Count;
+        var actualReadings = entriesList.Count;
+        var completeness = expectedTotal > 0 ? (double)actualReadings / expectedTotal * 100 : 0;
+        var avgPerDay = daysWithData > 0 ? (double)actualReadings / daysWithData : 0;
+
+        // Calculate longest gap
+        var sortedEntries = entriesList.Where(e => e.Mills > 0).OrderBy(e => e.Mills).ToList();
+
+        double longestGapHours = 0;
+        if (sortedEntries.Count > 1)
+        {
+            for (int i = 1; i < sortedEntries.Count; i++)
+            {
+                var gapMs = sortedEntries[i].Mills - sortedEntries[i - 1].Mills;
+                var gapHours = gapMs / (1000.0 * 60 * 60);
+                if (gapHours > longestGapHours)
+                    longestGapHours = gapHours;
+            }
+        }
+
+        var isSufficient = completeness >= 70;
+
+        string warningMessage = "";
+        string recommendation = "";
+
+        if (!isSufficient)
+        {
+            warningMessage =
+                $"Data coverage is {completeness:F0}%, below the recommended 70% minimum for reliable analysis.";
+            recommendation =
+                completeness < 50
+                    ? "Consider extending the date range or checking sensor connectivity."
+                    : "Results may be less reliable. Try to maintain consistent sensor wear.";
+        }
+        else if (longestGapHours > 12)
+        {
+            warningMessage = $"A data gap of {longestGapHours:F1} hours was detected.";
+            recommendation = "Large gaps may affect the accuracy of pattern analysis.";
+        }
+
+        return new DataSufficiencyAssessment
+        {
+            IsSufficient = isSufficient,
+            TotalDays = days,
+            DaysWithData = daysWithData,
+            ExpectedReadings = expectedTotal,
+            ActualReadings = actualReadings,
+            CompletenessPercentage = Math.Round(completeness * 10) / 10,
+            AverageReadingsPerDay = Math.Round(avgPerDay),
+            LongestGapHours = Math.Round(longestGapHours * 10) / 10,
+            WarningMessage = warningMessage,
+            Recommendation = recommendation,
+        };
+    }
+
+    /// <summary>
+    /// Calculate extended glucose analytics including GMI, GRI, and clinical assessment
+    /// </summary>
+    public ExtendedGlucoseAnalytics AnalyzeGlucoseDataExtended(
+        IEnumerable<Entry> entries,
+        IEnumerable<Treatment> treatments,
+        DiabetesPopulation population = DiabetesPopulation.Type1Adult,
+        ExtendedAnalysisConfig? config = null
+    )
+    {
+        var entriesList = entries.ToList();
+        var treatmentsList = treatments.ToList();
+
+        // Get base analytics
+        var baseAnalytics = AnalyzeGlucoseData(entriesList, treatmentsList, config);
+
+        // Calculate GMI
+        var gmi = CalculateGMI(baseAnalytics.BasicStats.Mean);
+
+        // Calculate GRI
+        var gri = CalculateGRI(baseAnalytics.TimeInRange);
+
+        // Assess against clinical targets
+        var clinicalAssessment = AssessAgainstTargets(baseAnalytics, population);
+
+        // Assess data sufficiency (default 14 days)
+        var dataSufficiency = AssessDataSufficiency(entriesList, 14);
+
+        // Calculate treatment summary if treatments available
+        TreatmentSummary? treatmentSummary = null;
+        if (treatmentsList.Any())
+        {
+            treatmentSummary = CalculateTreatmentSummary(treatmentsList);
+        }
+
+        return new ExtendedGlucoseAnalytics
+        {
+            // Base analytics properties
+            Time = baseAnalytics.Time,
+            BasicStats = baseAnalytics.BasicStats,
+            TimeInRange = baseAnalytics.TimeInRange,
+            GlycemicVariability = baseAnalytics.GlycemicVariability,
+            DataQuality = baseAnalytics.DataQuality,
+
+            // Extended metrics
+            GMI = gmi,
+            GRI = gri,
+            ClinicalAssessment = clinicalAssessment,
+            DataSufficiency = dataSufficiency,
+            TreatmentSummary = treatmentSummary,
+        };
+    }
+
+    #endregion
+
     #region Basic Statistics
 
     /// <summary>

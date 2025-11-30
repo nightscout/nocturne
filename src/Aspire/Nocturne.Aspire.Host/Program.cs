@@ -217,8 +217,8 @@ class Program
                     builder.Configuration["Parameters:DemoMode:RegenerateOnStartup"] ?? "true"
                 )
                 .WithEnvironment(
-                    "DemoMode__HistoryMonths",
-                    builder.Configuration["Parameters:DemoMode:HistoryMonths"] ?? "3"
+                    "DemoMode__HistoryDays",
+                    builder.Configuration["Parameters:DemoMode:HistoryDays"] ?? "90"
                 )
                 .WithEnvironment(
                     "DemoMode__IntervalMinutes",
@@ -277,12 +277,15 @@ class Program
             var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
             Console.WriteLine("[Aspire] Building @nocturne/bridge...");
 
+            // On Windows, pnpm is a .cmd file that requires shell execution
+            // Use cmd.exe /c to properly resolve the command
+            var isWindows = OperatingSystem.IsWindows();
             var buildProcess = new System.Diagnostics.Process
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = "pnpm",
-                    Arguments = "run build",
+                    FileName = isWindows ? "cmd.exe" : "pnpm",
+                    Arguments = isWindows ? "/c pnpm run build" : "run build",
                     WorkingDirectory = bridgePackagePath,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,

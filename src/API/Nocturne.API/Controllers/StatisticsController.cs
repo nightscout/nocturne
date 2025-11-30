@@ -18,19 +18,16 @@ public class StatisticsController : ControllerBase
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
     private readonly IPostgreSqlService _postgreSqlService;
-    private readonly IServiceProvider _serviceProvider;
 
     public StatisticsController(
         IStatisticsService statisticsService,
         ICacheService cacheService,
-        IPostgreSqlService postgreSqlService,
-        IServiceProvider serviceProvider
+        IPostgreSqlService postgreSqlService
     )
     {
         _statisticsService = statisticsService;
         _cacheService = cacheService;
         _postgreSqlService = postgreSqlService;
-        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
@@ -217,6 +214,138 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Extended glucose analytics including GMI, GRI, and clinical target assessment
+    /// </summary>
+    /// <param name="request">Request containing entries, treatments, population type, and configuration</param>
+    /// <returns>Extended glucose analytics with modern clinical metrics</returns>
+    [HttpPost("extended-analytics")]
+    public ActionResult<ExtendedGlucoseAnalytics> AnalyzeGlucoseDataExtended(
+        [FromBody] ExtendedGlucoseAnalyticsRequest request
+    )
+    {
+        try
+        {
+            var result = _statisticsService.AnalyzeGlucoseDataExtended(
+                request.Entries,
+                request.Treatments ?? Enumerable.Empty<Treatment>(),
+                request.Population,
+                request.Config
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Calculate Glucose Management Indicator (GMI)
+    /// </summary>
+    /// <param name="meanGlucose">Mean glucose in mg/dL</param>
+    /// <returns>GMI with value and interpretation</returns>
+    [HttpGet("gmi/{meanGlucose:double}")]
+    public ActionResult<GlucoseManagementIndicator> CalculateGMI(double meanGlucose)
+    {
+        try
+        {
+            var result = _statisticsService.CalculateGMI(meanGlucose);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Calculate Glycemic Risk Index (GRI) from time in range metrics
+    /// </summary>
+    /// <param name="timeInRange">Time in range metrics</param>
+    /// <returns>GRI with score, zone, and interpretation</returns>
+    [HttpPost("gri")]
+    public ActionResult<GlycemicRiskIndex> CalculateGRI([FromBody] TimeInRangeMetrics timeInRange)
+    {
+        try
+        {
+            var result = _statisticsService.CalculateGRI(timeInRange);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Assess glucose data against clinical targets for a specific population
+    /// </summary>
+    /// <param name="request">Request containing analytics and population type</param>
+    /// <returns>Clinical target assessment with actionable insights</returns>
+    [HttpPost("clinical-assessment")]
+    public ActionResult<ClinicalTargetAssessment> AssessAgainstTargets(
+        [FromBody] ClinicalAssessmentRequest request
+    )
+    {
+        try
+        {
+            var result = _statisticsService.AssessAgainstTargets(
+                request.Analytics,
+                request.Population
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Assess data sufficiency for a valid clinical report
+    /// </summary>
+    /// <param name="request">Request containing entries and optional period settings</param>
+    /// <returns>Data sufficiency assessment</returns>
+    [HttpPost("data-sufficiency")]
+    public ActionResult<DataSufficiencyAssessment> AssessDataSufficiency(
+        [FromBody] DataSufficiencyRequest request
+    )
+    {
+        try
+        {
+            var result = _statisticsService.AssessDataSufficiency(
+                request.Entries,
+                request.Days,
+                request.ExpectedReadingsPerDay
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get clinical targets for a specific diabetes population
+    /// </summary>
+    /// <param name="population">Population type (Type1Adult, Type2Adult, Elderly, Pregnancy, etc.)</param>
+    /// <returns>Clinical targets for the specified population</returns>
+    [HttpGet("clinical-targets/{population}")]
+    public ActionResult<ClinicalTargets> GetClinicalTargets(DiabetesPopulation population)
+    {
+        try
+        {
+            var result = ClinicalTargets.ForPopulation(population);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Calculate estimated A1C from average glucose
     /// </summary>
     /// <param name="averageGlucose">Average glucose in mg/dL</param>
@@ -381,22 +510,17 @@ public class StatisticsController : ControllerBase
             var now = DateTime.UtcNow;
             var result = new MultiPeriodStatistics { LastUpdated = now };
 
-            // Calculate statistics for each period
-            // Create a new scope for each period to avoid DbContext concurrency issues
-            var tasks = periods.Select(async days =>
-            {
-                // Create a new scope to get a fresh DbContext instance for this parallel task
-                using var scope = _serviceProvider.CreateScope();
-                var postgreSqlService =
-                    scope.ServiceProvider.GetRequiredService<IPostgreSqlService>();
-                var statisticsService =
-                    scope.ServiceProvider.GetRequiredService<IStatisticsService>();
+            // Calculate statistics for each period sequentially to avoid DbContext threading issues
+            // DbContext is not thread-safe, so we cannot run multiple queries in parallel
+            var periodResults = new List<(int Days, PeriodStatistics Statistics)>();
 
+            foreach (var days in periods)
+            {
                 var startDate = now.AddDays(-days);
                 var endDate = now;
 
                 // Get entries for this period
-                var entries = await postgreSqlService.GetEntriesWithAdvancedFilterAsync(
+                var entries = await _postgreSqlService.GetEntriesWithAdvancedFilterAsync(
                     type: "sgv",
                     count: 10000, // Large number to get all entries in period
                     dateString: startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
@@ -409,7 +533,7 @@ public class StatisticsController : ControllerBase
                     .ToList();
 
                 // Get treatments for this period
-                var treatments = await postgreSqlService.GetTreatmentsAsync(
+                var treatments = await _postgreSqlService.GetTreatmentsAsync(
                     count: 10000,
                     cancellationToken: cancellationToken
                 );
@@ -432,37 +556,36 @@ public class StatisticsController : ControllerBase
 
                 if (hasSufficientData)
                 {
-                    analytics = statisticsService.AnalyzeGlucoseData(
+                    analytics = _statisticsService.AnalyzeGlucoseData(
                         filteredEntries,
                         filteredTreatments
                     );
 
                     if (filteredTreatments.Any())
                     {
-                        treatmentSummary = statisticsService.CalculateTreatmentSummary(
+                        treatmentSummary = _statisticsService.CalculateTreatmentSummary(
                             filteredTreatments
                         );
                     }
                 }
 
-                return new
-                {
-                    Days = days,
-                    Statistics = new PeriodStatistics
-                    {
-                        PeriodDays = days,
-                        StartDate = startDate,
-                        EndDate = endDate,
-                        Analytics = analytics,
-                        TreatmentSummary = treatmentSummary,
-                        HasSufficientData = hasSufficientData,
-                        EntryCount = filteredEntries.Count,
-                        TreatmentCount = filteredTreatments.Count,
-                    },
-                };
-            });
-
-            var periodResults = await Task.WhenAll(tasks);
+                periodResults.Add(
+                    (
+                        days,
+                        new PeriodStatistics
+                        {
+                            PeriodDays = days,
+                            StartDate = startDate,
+                            EndDate = endDate,
+                            Analytics = analytics,
+                            TreatmentSummary = treatmentSummary,
+                            HasSufficientData = hasSufficientData,
+                            EntryCount = filteredEntries.Count,
+                            TreatmentCount = filteredTreatments.Count,
+                        }
+                    )
+                );
+            }
 
             // Map results to the response object
             foreach (var periodResult in periodResults)
@@ -567,4 +690,67 @@ public class GlucoseAnalyticsRequest
     /// Optional extended analysis configuration
     /// </summary>
     public ExtendedAnalysisConfig? Config { get; set; }
+}
+
+/// <summary>
+/// Request model for extended glucose analytics with GMI, GRI, and clinical assessment
+/// </summary>
+public class ExtendedGlucoseAnalyticsRequest
+{
+    /// <summary>
+    /// Collection of glucose entries
+    /// </summary>
+    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+
+    /// <summary>
+    /// Optional collection of treatments
+    /// </summary>
+    public IEnumerable<Treatment>? Treatments { get; set; }
+
+    /// <summary>
+    /// Diabetes population type for clinical target assessment
+    /// </summary>
+    public DiabetesPopulation Population { get; set; } = DiabetesPopulation.Type1Adult;
+
+    /// <summary>
+    /// Optional extended analysis configuration
+    /// </summary>
+    public ExtendedAnalysisConfig? Config { get; set; }
+}
+
+/// <summary>
+/// Request model for clinical assessment
+/// </summary>
+public class ClinicalAssessmentRequest
+{
+    /// <summary>
+    /// Glucose analytics to assess
+    /// </summary>
+    public GlucoseAnalytics Analytics { get; set; } = new();
+
+    /// <summary>
+    /// Diabetes population type for clinical target assessment
+    /// </summary>
+    public DiabetesPopulation Population { get; set; } = DiabetesPopulation.Type1Adult;
+}
+
+/// <summary>
+/// Request model for data sufficiency assessment
+/// </summary>
+public class DataSufficiencyRequest
+{
+    /// <summary>
+    /// Collection of glucose entries
+    /// </summary>
+    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+
+    /// <summary>
+    /// Number of days to assess (default: 14)
+    /// </summary>
+    public int Days { get; set; } = 14;
+
+    /// <summary>
+    /// Expected readings per day based on sensor type (default: 288 for 5-minute intervals)
+    /// </summary>
+    public int ExpectedReadingsPerDay { get; set; } = 288;
 }

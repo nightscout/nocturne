@@ -34,9 +34,6 @@ jobs:
       - name: Install Aspire CLI
         run: dotnet tool install --global aspire.cli
 
-      - name: Install Aspire workload
-        run: dotnet workload install aspire
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -233,9 +230,6 @@ jobs:
 
       - name: Install Aspire CLI
         run: dotnet tool install --global aspire.cli
-
-      - name: Install Aspire workload
-        run: dotnet workload install aspire
 
       - name: Restore .NET dependencies
         run: dotnet restore

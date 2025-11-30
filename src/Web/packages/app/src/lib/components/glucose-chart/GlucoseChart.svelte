@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ScatterChart } from "layerchart";
+  import { LineChart, ScatterChart } from "layerchart";
   import { scaleTime, scaleThreshold, scaleLinear } from "d3-scale";
   import { chartConfig, TIR_COLORS_CSS } from "$lib/constants";
   import * as ChartC from "$lib/components/ui/chart/index.js";
@@ -94,7 +94,7 @@
 
 <!-- <ChartC.Container config={chartConfig} class="h-fit w-full grid grid-stack"> -->
 <!-- <div bind:this={ref} class={cn("w-full", className)} {...restProps}> -->
-<ScatterChart
+<LineChart
   data={entries}
   x={(d) => getDateString(d)}
   y={"sgv"}
@@ -159,7 +159,7 @@
     },
   ]}
   padding={{ top: 20, right: 30, bottom: 40, left: 50 }}
-></ScatterChart>
+></LineChart>
 <!-- <Bar x={(d) => getDateString(d)} y={"carbs"} data={scaledTreatments} /> -->
 <!-- </div> -->
 <!-- </ChartC.Container> -->

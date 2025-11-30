@@ -12,10 +12,6 @@ export const load: PageServerLoad = async ({ parent }) => {
   // You can compute additional derived metrics here if needed
 
   return {
-    analysis: parentData.analysis,
-    summary: parentData.summary,
-    entries: parentData.entries,
-    treatments: parentData.treatments,
-    dateRange: parentData.dateRange,
+    ...parentData
   };
 };

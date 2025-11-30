@@ -66,10 +66,7 @@ public class DemoServiceHealthMonitor : BackgroundService
     {
         if (!_config.Enabled)
         {
-            _logger.LogInformation("Demo service integration is disabled");
-
-            // Clean up any leftover demo data when demo mode is disabled
-            await CleanupDemoDataAsync(stoppingToken);
+            _logger.LogInformation("Demo service integration is disabled, health monitoring will not run");
             return;
         }
 
