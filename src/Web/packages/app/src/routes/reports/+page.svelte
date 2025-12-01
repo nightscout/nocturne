@@ -92,6 +92,8 @@
     Stethoscope,
     ArrowRight,
     Printer,
+    Layers,
+    PieChart,
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
@@ -286,6 +288,28 @@
             "Comprehensive treatment log with bolus/basal breakdown, IOB tracking, and dosing patterns.",
           href: "/reports/treatments",
           icon: FileText,
+          status: "available",
+          forClinic: true,
+        },
+        {
+          title: "Basal Rate Analysis",
+          userDescription:
+            "See how your basal insulin delivery varies throughout the day and across days.",
+          clinicalDescription:
+            "Basal rate percentile chart (10th-90th), temp basal frequency, and hourly basal patterns.",
+          href: "/reports/basal-analysis",
+          icon: Layers,
+          status: "available",
+          forClinic: true,
+        },
+        {
+          title: "Insulin Delivery",
+          userDescription:
+            "Understand how your insulin is split between background (basal) and mealtime (bolus) doses.",
+          clinicalDescription:
+            "Basal/bolus ratio analysis, TDD trends, insulin distribution by time of day, and dosing patterns.",
+          href: "/reports/insulin-delivery",
+          icon: PieChart,
           status: "available",
           forClinic: true,
         },

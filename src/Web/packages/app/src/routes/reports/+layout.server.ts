@@ -52,15 +52,39 @@ export const load: LayoutServerLoad = async ({ url, locals }) => {
   // Build find query for entries and treatments
   const entriesQuery = `find[date][$gte]=${startDate.toISOString()}&find[date][$lte]=${endDate.toISOString()}`;
   const treatmentsQuery = `find[created_at][$gte]=${startDate.toISOString()}&find[created_at][$lte]=${endDate.toISOString()}`;
-  // API has a max count of 1000, so cap the number of treatments to fetch
-  // For longer date ranges, we still filter by date in the query so this is fine
-  const maxTreatmentCount = 1000;
+
+  // API has a max count of 1000 per request, so we need to paginate
+  const pageSize = 1000;
 
   // Fetch entries and treatments sequentially to avoid DbContext threading issues
   const entries = await locals.apiClient.entries.getEntries2(entriesQuery);
-  const treatments = await locals.apiClient.treatments.getTreatments2(treatmentsQuery, maxTreatmentCount, 0);
 
-  console.log("Fetched entries:", entries.length);
+  // Fetch all treatments by paginating through results
+  let allTreatments: Awaited<ReturnType<typeof locals.apiClient.treatments.getTreatments2>> = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const batch = await locals.apiClient.treatments.getTreatments2(treatmentsQuery, pageSize, offset);
+    allTreatments = allTreatments.concat(batch);
+
+    // If we got fewer than pageSize, we've reached the end
+    if (batch.length < pageSize) {
+      hasMore = false;
+    } else {
+      offset += pageSize;
+    }
+
+    // Safety limit to prevent infinite loops (max 50,000 treatments)
+    if (offset >= 50000) {
+      console.warn("Treatment fetch reached safety limit of 50,000 records");
+      hasMore = false;
+    }
+  }
+
+  const treatments = allTreatments;
+
+  console.log(`Fetched ${entries.length} entries, ${treatments.length} treatments`);
   return {
     treatments,
     entries,
