@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using Nocturne.Connectors.Core.Interfaces;
 
 #nullable enable
@@ -11,12 +12,34 @@ namespace Nocturne.Connectors.Core.Models
     /// </summary>
     public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     {
+        private string _dataDirectory = "data";
+        private string? _contentRootPath;
+
         [Required]
         public ConnectSource ConnectSource { get; set; }
 
         public bool SaveRawData { get; set; } = false;
 
-        public string DataDirectory { get; set; } = "./data";
+        /// <summary>
+        /// Gets or sets the data directory path. Can be relative or absolute.
+        /// Relative paths are resolved against the content root path.
+        /// Default is "data" (resolved to {ContentRootPath}/data).
+        /// </summary>
+        public string DataDirectory
+        {
+            get => GetResolvedDataDirectory();
+            set => _dataDirectory = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the content root path used to resolve relative DataDirectory paths.
+        /// Set automatically during configuration binding.
+        /// </summary>
+        public string? ContentRootPath
+        {
+            get => _contentRootPath;
+            set => _contentRootPath = value;
+        }
 
         public bool LoadFromFile { get; set; } = false;
 
@@ -83,5 +106,24 @@ namespace Nocturne.Connectors.Core.Models
         /// Override this method to validate connector-specific configuration
         /// </summary>
         protected abstract void ValidateSourceSpecificConfiguration();
+
+        /// <summary>
+        /// Resolves the data directory to an absolute path.
+        /// If DataDirectory is relative, it is resolved against ContentRootPath.
+        /// If ContentRootPath is not set, falls back to AppContext.BaseDirectory.
+        /// </summary>
+        private string GetResolvedDataDirectory()
+        {
+            // If already absolute, return as-is
+            if (Path.IsPathRooted(_dataDirectory))
+            {
+                return _dataDirectory;
+            }
+
+            // Determine the base path to resolve against
+            var basePath = _contentRootPath ?? AppContext.BaseDirectory;
+
+            return Path.GetFullPath(Path.Combine(basePath, _dataDirectory));
+        }
     }
 }

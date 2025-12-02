@@ -25,13 +25,21 @@ public class Program
         // Configure services
         // Bind configuration for HttpClient setup
         var libreConfig = new LibreLinkUpConnectorConfiguration();
-        builder.Configuration.BindConnectorConfiguration(libreConfig, "FreeStyle");
+        builder.Configuration.BindConnectorConfiguration(
+            libreConfig,
+            "FreeStyle",
+            builder.Environment.ContentRootPath
+        );
 
         // Register the fully bound configuration instance
-        builder.Services.AddSingleton<IOptions<LibreLinkUpConnectorConfiguration>>(new OptionsWrapper<LibreLinkUpConnectorConfiguration>(libreConfig));
+        builder.Services.AddSingleton<IOptions<LibreLinkUpConnectorConfiguration>>(
+            new OptionsWrapper<LibreLinkUpConnectorConfiguration>(libreConfig)
+        );
 
         // Map region to server endpoint
-        var region = libreConfig.LibreRegion?.ToUpperInvariant() ?? LibreLinkUpConstants.Configuration.DefaultRegion;
+        var region =
+            libreConfig.LibreRegion?.ToUpperInvariant()
+            ?? LibreLinkUpConstants.Configuration.DefaultRegion;
         var server = region switch
         {
             "AE" => LibreLinkUpConstants.Endpoints.AE,
@@ -44,11 +52,10 @@ public class Program
             "FR" => LibreLinkUpConstants.Endpoints.FR,
             "JP" => LibreLinkUpConstants.Endpoints.JP,
             "US" => LibreLinkUpConstants.Endpoints.US,
-            _ => LibreLinkUpConstants.Endpoints.EU // Default to EU if unknown
+            _ => LibreLinkUpConstants.Endpoints.EU, // Default to EU if unknown
         };
 
-        builder.Services.AddHttpClient<LibreConnectorService>()
-            .ConfigureLibreLinkUpClient(server);
+        builder.Services.AddHttpClient<LibreConnectorService>().ConfigureLibreLinkUpClient(server);
 
         // Register strategies
         builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();

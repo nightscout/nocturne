@@ -3,11 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Connectors.MyFitnessPal.Services;
 
@@ -25,12 +25,19 @@ public class Program
         // Configure services
         // Bind configuration for HttpClient setup
         var mfpConfig = new MyFitnessPalConnectorConfiguration();
-        builder.Configuration.BindConnectorConfiguration(mfpConfig, "MyFitnessPal");
+        builder.Configuration.BindConnectorConfiguration(
+            mfpConfig,
+            "MyFitnessPal",
+            builder.Environment.ContentRootPath
+        );
 
         // Register the fully bound configuration instance
-        builder.Services.AddSingleton<IOptions<MyFitnessPalConnectorConfiguration>>(new OptionsWrapper<MyFitnessPalConnectorConfiguration>(mfpConfig));
+        builder.Services.AddSingleton<IOptions<MyFitnessPalConnectorConfiguration>>(
+            new OptionsWrapper<MyFitnessPalConnectorConfiguration>(mfpConfig)
+        );
 
-        builder.Services.AddHttpClient<MyFitnessPalConnectorService>()
+        builder
+            .Services.AddHttpClient<MyFitnessPalConnectorService>()
             .ConfigureMyFitnessPalClient();
 
         // Configure API data submitter for HTTP-based data submission

@@ -3,11 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 
 namespace Nocturne.Connectors.Nightscout;
@@ -24,15 +24,23 @@ public class Program
         // Configure services
         // Bind configuration for HttpClient setup
         var nightscoutConfig = new NightscoutConnectorConfiguration();
-        builder.Configuration.BindConnectorConfiguration(nightscoutConfig, "Nightscout");
+        builder.Configuration.BindConnectorConfiguration(
+            nightscoutConfig,
+            "Nightscout",
+            builder.Environment.ContentRootPath
+        );
 
         // Register the fully bound configuration instance
-        builder.Services.AddSingleton<IOptions<NightscoutConnectorConfiguration>>(new OptionsWrapper<NightscoutConnectorConfiguration>(nightscoutConfig));
+        builder.Services.AddSingleton<IOptions<NightscoutConnectorConfiguration>>(
+            new OptionsWrapper<NightscoutConnectorConfiguration>(nightscoutConfig)
+        );
 
-        builder.Services.AddHttpClient<NightscoutConnectorService>()
+        builder
+            .Services.AddHttpClient<NightscoutConnectorService>()
             .ConfigureNightscoutClient(
                 nightscoutConfig.SourceEndpoint,
-                nightscoutConfig.SourceApiSecret);
+                nightscoutConfig.SourceApiSecret
+            );
 
         // Register strategies
         builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();

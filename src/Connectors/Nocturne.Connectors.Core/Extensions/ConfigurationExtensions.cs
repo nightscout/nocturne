@@ -1,6 +1,6 @@
+using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Nocturne.Connectors.Core.Models;
-using System.Reflection;
 
 #nullable enable
 
@@ -45,6 +45,33 @@ namespace Nocturne.Connectors.Core.Extensions
         )
             where T : BaseConnectorConfiguration
         {
+            BindConnectorConfiguration(configuration, config, connectorName, contentRootPath: null);
+        }
+
+        /// <summary>
+        /// Binds connector configuration from multiple sources in order of precedence:
+        /// 1. Environment variables (highest priority)
+        /// 2. Parameters:Connectors:{ConnectorName} section
+        /// 3. Connectors:{ConnectorName} section (fallback)
+        /// </summary>
+        /// <typeparam name="T">The configuration type</typeparam>
+        /// <param name="configuration">The IConfiguration instance</param>
+        /// <param name="config">The configuration object to bind to</param>
+        /// <param name="connectorName">The connector name (e.g., "Glooko", "Dexcom")</param>
+        /// <param name="contentRootPath">The content root path for resolving relative data directories</param>
+        public static void BindConnectorConfiguration<T>(
+            this IConfiguration configuration,
+            T config,
+            string connectorName,
+            string? contentRootPath
+        )
+            where T : BaseConnectorConfiguration
+        {
+            // Set the content root path first so DataDirectory can be resolved properly
+            if (!string.IsNullOrEmpty(contentRootPath))
+            {
+                config.ContentRootPath = contentRootPath;
+            }
             // Try primary configuration path
             var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
 

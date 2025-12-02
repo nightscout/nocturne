@@ -94,7 +94,11 @@ public static class ConnectorDefaults
     public const int AuthFailDelay = 50;
 
     // Data directory defaults
-    public const string DataDirectory = "./data";
+    /// <summary>
+    /// Default data directory name. This is relative to the content root path.
+    /// Files will be saved to {ContentRootPath}/data by default.
+    /// </summary>
+    public const string DataDirectory = "data";
 
     // Glooko defaults
     public const string GlookoServer = "eu.api.glooko.com";

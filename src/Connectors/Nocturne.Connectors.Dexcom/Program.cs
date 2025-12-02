@@ -3,11 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
 
 namespace Nocturne.Connectors.Dexcom;
@@ -24,22 +24,30 @@ public class Program
         // Configure services
         // Bind configuration for HttpClient setup
         var dexcomConfig = new DexcomConnectorConfiguration();
-        builder.Configuration.BindConnectorConfiguration(dexcomConfig, "Dexcom");
+        builder.Configuration.BindConnectorConfiguration(
+            dexcomConfig,
+            "Dexcom",
+            builder.Environment.ContentRootPath
+        );
 
         // Register the fully bound configuration instance
-        builder.Services.AddSingleton<IOptions<DexcomConnectorConfiguration>>(new OptionsWrapper<DexcomConnectorConfiguration>(dexcomConfig));
+        builder.Services.AddSingleton<IOptions<DexcomConnectorConfiguration>>(
+            new OptionsWrapper<DexcomConnectorConfiguration>(dexcomConfig)
+        );
 
         // Configure typed HttpClient for DexcomConnectorService
         string serverUrl;
         if (dexcomConfig.DexcomServer.Equals("US", StringComparison.OrdinalIgnoreCase))
             serverUrl = "share2.dexcom.com";
-        else if (dexcomConfig.DexcomServer.Equals("EU", StringComparison.OrdinalIgnoreCase) || dexcomConfig.DexcomServer.Equals("ous", StringComparison.OrdinalIgnoreCase))
+        else if (
+            dexcomConfig.DexcomServer.Equals("EU", StringComparison.OrdinalIgnoreCase)
+            || dexcomConfig.DexcomServer.Equals("ous", StringComparison.OrdinalIgnoreCase)
+        )
             serverUrl = "shareous1.dexcom.com";
         else
             serverUrl = dexcomConfig.DexcomServer;
 
-        builder.Services.AddHttpClient<DexcomConnectorService>()
-            .ConfigureDexcomClient(serverUrl);
+        builder.Services.AddHttpClient<DexcomConnectorService>().ConfigureDexcomClient(serverUrl);
 
         // Register strategies
         builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();

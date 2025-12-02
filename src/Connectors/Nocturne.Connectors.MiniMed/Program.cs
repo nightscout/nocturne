@@ -3,11 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.MiniMed.Services;
 
 namespace Nocturne.Connectors.MiniMed;
@@ -24,17 +24,22 @@ public class Program
         // Configure services
         // Bind configuration for HttpClient setup
         var careLinkConfig = new CareLinkConnectorConfiguration();
-        builder.Configuration.BindConnectorConfiguration(careLinkConfig, "MiniMed");
+        builder.Configuration.BindConnectorConfiguration(
+            careLinkConfig,
+            "MiniMed",
+            builder.Environment.ContentRootPath
+        );
 
         var server = careLinkConfig.CareLinkCountry.Equals("US", StringComparison.OrdinalIgnoreCase)
             ? "carelink.minimed.com"
             : "carelink.minimed.eu";
 
         // Register the fully bound configuration instance
-        builder.Services.AddSingleton<IOptions<CareLinkConnectorConfiguration>>(new OptionsWrapper<CareLinkConnectorConfiguration>(careLinkConfig));
+        builder.Services.AddSingleton<IOptions<CareLinkConnectorConfiguration>>(
+            new OptionsWrapper<CareLinkConnectorConfiguration>(careLinkConfig)
+        );
 
-        builder.Services.AddHttpClient<CareLinkConnectorService>()
-            .ConfigureCareLinkClient(server);
+        builder.Services.AddHttpClient<CareLinkConnectorService>().ConfigureCareLinkClient(server);
 
         // Register strategies
         builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();

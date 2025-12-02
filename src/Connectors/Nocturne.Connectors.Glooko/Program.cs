@@ -3,13 +3,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Constants;
 using Nocturne.Connectors.Glooko.Models;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 
 namespace Nocturne.Connectors.Glooko;
@@ -26,25 +26,33 @@ public class Program
         // Configure services
         // Bind configuration for HttpClient setup
         var glookoConfig = new GlookoConnectorConfiguration();
-        builder.Configuration.BindConnectorConfiguration(glookoConfig, "Glooko");
+        builder.Configuration.BindConnectorConfiguration(
+            glookoConfig,
+            "Glooko",
+            builder.Environment.ContentRootPath
+        );
 
         // Register the fully bound configuration instance
-        builder.Services.AddSingleton<IOptions<GlookoConnectorConfiguration>>(new OptionsWrapper<GlookoConnectorConfiguration>(glookoConfig));
+        builder.Services.AddSingleton<IOptions<GlookoConnectorConfiguration>>(
+            new OptionsWrapper<GlookoConnectorConfiguration>(glookoConfig)
+        );
 
         var server = glookoConfig.GlookoServer?.ToUpperInvariant() switch
         {
             "US" => GlookoConstants.Servers.US,
             "EU" => GlookoConstants.Servers.EU,
-            _ => GlookoConstants.Configuration.DefaultServer
+            _ => GlookoConstants.Configuration.DefaultServer,
         };
 
-        builder.Services.AddHttpClient<GlookoConnectorService>()
-            .ConfigureGlookoClient(server);
+        builder.Services.AddHttpClient<GlookoConnectorService>().ConfigureGlookoClient(server);
 
         // Register strategies
         builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
         builder.Services.AddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
-        builder.Services.AddSingleton(typeof(IConnectorFileService<>), typeof(ConnectorFileService<>));
+        builder.Services.AddSingleton(
+            typeof(IConnectorFileService<>),
+            typeof(ConnectorFileService<>)
+        );
 
         // Configure API data submitter for HTTP-based data submission
         var apiUrl = builder.Configuration["NocturneApiUrl"];
