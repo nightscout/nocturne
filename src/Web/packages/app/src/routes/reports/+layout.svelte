@@ -80,9 +80,9 @@
   {#if page.url.pathname !== "/reports"}
     <!-- Report Header -->
     <div
-      class="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60"
+      class="sticky top-14 z-10 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60"
     >
-      <div class="px-6 py-4">
+      <div class="px-6 py-3">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
             <Button href="/reports" variant="ghost" size="icon">

@@ -58,9 +58,11 @@
   }))}
   legend
   seriesLayout="stack"
+  padding={{ top: 0, bottom: 0, left: 2, right: 2 }}
   props={{
     bars: {
       motion: { type: "tween", duration: 200 },
+      strokeWidth: 0,
     },
 
     tooltip: {

@@ -17,6 +17,7 @@
     HeartHandshake,
     ChevronRight,
     Settings,
+    User,
   } from "lucide-svelte";
 
   type SettingsSection = {
@@ -29,6 +30,13 @@
   };
 
   const settingsSections: SettingsSection[] = [
+    {
+      id: "account",
+      title: "Account",
+      description: "View your profile, roles, and session information",
+      icon: User,
+      href: "/settings/account",
+    },
     {
       id: "devices",
       title: "Devices",

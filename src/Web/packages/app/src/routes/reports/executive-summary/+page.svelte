@@ -17,12 +17,10 @@
     AlertTriangle,
     CheckCircle2,
     Info,
-    ArrowRight,
     Activity,
     Zap,
     BarChart3,
     Calendar,
-    Printer,
     BookOpen,
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
@@ -134,43 +132,6 @@
     </p>
   </div>
 
-  <!-- Interactive Header -->
-  <div class="print:hidden space-y-4">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
-        <h1 class="text-3xl font-bold">Executive Summary</h1>
-        <p class="text-muted-foreground">
-          Your key metrics at a glance — perfect for appointments
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          class="gap-2"
-          onclick={() => window.print()}
-        >
-          <Printer class="w-4 h-4" />
-          Print Report
-        </Button>
-        <Button href="/reports/agp" variant="outline" size="sm" class="gap-2">
-          Full AGP
-          <ArrowRight class="w-4 h-4" />
-        </Button>
-      </div>
-    </div>
-
-    <!-- Report Period Badge -->
-    <div class="flex items-center gap-2 text-sm text-muted-foreground">
-      <Calendar class="w-4 h-4" />
-      <span>
-        {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
-      </span>
-      <span class="text-muted-foreground/50">•</span>
-      <span>{entries.length.toLocaleString()} readings</span>
-    </div>
-  </div>
-
   {#await data.analysis then analysis}
     {@const tir = analysis?.timeInRange?.percentages}
     {@const durations = analysis?.timeInRange?.durations}
@@ -231,19 +192,19 @@
           <!-- Quick Stats -->
           <div class="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div class="text-2xl font-bold text-green-600">
+              <div class="text-2xl font-bold {(tir?.target ?? 0) >= 70 ? 'text-green-600' : (tir?.target ?? 0) >= 50 ? 'text-yellow-600' : 'text-orange-600'}">
                 {tir?.target?.toFixed(0) ?? "–"}%
               </div>
               <div class="text-xs text-muted-foreground">TIR</div>
             </div>
             <div>
-              <div class="text-2xl font-bold text-purple-600">
+              <div class="text-2xl font-bold {(variability?.coefficientOfVariation ?? 40) <= 33 ? 'text-green-600' : (variability?.coefficientOfVariation ?? 40) <= 36 ? 'text-yellow-600' : 'text-orange-600'}">
                 {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}%
               </div>
               <div class="text-xs text-muted-foreground">CV</div>
             </div>
             <div>
-              <div class="text-2xl font-bold text-red-600">
+              <div class="text-2xl font-bold {(variability?.estimatedA1c ?? 8) < 7 ? 'text-green-600' : (variability?.estimatedA1c ?? 8) < 7.5 ? 'text-yellow-600' : 'text-orange-600'}">
                 {variability?.estimatedA1c?.toFixed(1) ?? "–"}%
               </div>
               <div class="text-xs text-muted-foreground">eA1C</div>
@@ -268,45 +229,24 @@
         </CardHeader>
         <CardContent class="space-y-6">
           <!-- Stacked Bar Chart -->
-          <div class="h-16">
+          <div class="h-32 w-full overflow-hidden">
             <TIRStackedChart {entries} />
           </div>
 
-          <!-- Target Comparison -->
-          <div class="space-y-3 pt-4 border-t">
-            <div class="flex items-center justify-between text-sm">
-              <span>Your TIR</span>
-              <span class="font-bold text-green-600">
-                {tir?.target?.toFixed(1)}%
-              </span>
-            </div>
-            <Progress value={tir?.target ?? 0} max={100} class="h-3" />
-            <div
-              class="flex items-center justify-between text-xs text-muted-foreground"
-            >
-              <span>Target: ≥70%</span>
-              <span>
-                {(tir?.target ?? 0) >= 70
-                  ? "✓ Met"
-                  : `${(70 - (tir?.target ?? 0)).toFixed(0)}% to go`}
-              </span>
-            </div>
-          </div>
-
           <!-- Duration Breakdown -->
-          <div class="space-y-2 text-xs">
+          <div class="space-y-2 text-xs pt-4 border-t">
             <h4 class="font-medium text-sm">Time Breakdown (per day avg)</h4>
-            <div class="grid grid-cols-2 gap-2">
-              <div class="flex justify-between">
-                <span class="text-green-600">In Range:</span>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="flex flex-col">
+                <span class="text-green-600 font-medium">In Range</span>
                 <span>
                   {formatDuration(
                     (durations?.target ?? 0) / Math.max(1, dayCount)
                   )}
                 </span>
               </div>
-              <div class="flex justify-between">
-                <span class="text-red-600">Low:</span>
+              <div class="flex flex-col">
+                <span class="text-red-600 font-medium">Low</span>
                 <span>
                   {formatDuration(
                     ((durations?.low ?? 0) + (durations?.severeLow ?? 0)) /
@@ -314,8 +254,8 @@
                   )}
                 </span>
               </div>
-              <div class="flex justify-between">
-                <span class="text-orange-500">High:</span>
+              <div class="flex flex-col">
+                <span class="text-orange-500 font-medium">High</span>
                 <span>
                   {formatDuration(
                     ((durations?.high ?? 0) + (durations?.severeHigh ?? 0)) /
@@ -332,13 +272,13 @@
       <Card class="border-2">
         <CardHeader class="pb-2">
           <CardTitle class="flex items-center gap-2 text-base">
-            <Gauge class="w-5 h-5 text-red-600" />
+            <Gauge class="w-5 h-5" />
             Estimated A1C
           </CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
           <div class="text-center">
-            <div class="text-5xl font-bold text-red-600">
+            <div class="text-5xl font-bold {(variability?.estimatedA1c ?? 8) < 7 ? 'text-green-600' : (variability?.estimatedA1c ?? 8) < 7.5 ? 'text-yellow-600' : 'text-orange-600'}">
               {variability?.estimatedA1c?.toFixed(1) ?? "–"}%
             </div>
             <p class="text-sm text-muted-foreground mt-1">
@@ -376,13 +316,13 @@
       <Card class="border-2">
         <CardHeader class="pb-2">
           <CardTitle class="flex items-center gap-2 text-base">
-            <TrendingUp class="w-5 h-5 text-purple-600" />
+            <TrendingUp class="w-5 h-5" />
             Glucose Stability
           </CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
           <div class="text-center">
-            <div class="text-5xl font-bold text-purple-600">
+            <div class="text-5xl font-bold {(variability?.coefficientOfVariation ?? 40) <= 33 ? 'text-green-600' : (variability?.coefficientOfVariation ?? 40) <= 36 ? 'text-yellow-600' : 'text-orange-600'}">
               {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}%
             </div>
             <p class="text-sm text-muted-foreground mt-1">
