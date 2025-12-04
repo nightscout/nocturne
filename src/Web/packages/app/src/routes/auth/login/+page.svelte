@@ -8,9 +8,24 @@
     loginForm,
     getOidcProviders,
     getLocalAuthConfig,
+    getAuthState,
   } from "../auth.remote";
-  import { page } from "$app/stores";
-  import { goto, invalidateAll } from "$app/navigation";
+  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
+
+  // Check auth state and redirect if already logged in
+  const authStateQuery = getAuthState();
+  const authState = $derived(await authStateQuery);
+
+  // Get return URL from query params
+  const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
+
+  // Redirect if already authenticated
+  $effect(() => {
+    if (authState?.isAuthenticated && authState?.user) {
+      goto(returnUrl, { replaceState: true });
+    }
+  });
 
   // Queries for auth configuration
   const oidcQuery = getOidcProviders();
@@ -20,15 +35,13 @@
   let isRedirecting = $state(false);
 
   // Get return URL from query params
-  const returnUrl = $derived($page.url.searchParams.get("returnUrl") || "/");
+  const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
 
   // Check if user just registered
   const justRegistered = $derived(
-    $page.url.searchParams.get("registered") === "true"
+    page.url.searchParams.get("registered") === "true"
   );
-  const passwordReset = $derived(
-    $page.url.searchParams.get("reset") === "true"
-  );
+  const passwordReset = $derived(page.url.searchParams.get("reset") === "true");
 
   /** Initiate login with the specified OIDC provider */
   function loginWithProvider(providerId: string) {

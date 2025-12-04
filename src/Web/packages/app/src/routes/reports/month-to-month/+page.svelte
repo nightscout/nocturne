@@ -7,8 +7,16 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Calendar } from "lucide-svelte";
   import type { DayStats } from "$lib/data/month-to-month.remote";
+  import { page } from "$app/state";
+  import { getReportsData } from "$lib/data/reports.remote";
+  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
 
-  let { data } = $props();
+  // Build date range input from URL parameters
+  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url, 90));
+
+  // Query for reports data
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  const data = $derived(await reportsQuery);
 
   // Size mode options
   type SizeMode = "difference" | "carbs" | "insulin";
@@ -49,8 +57,8 @@
 
   // Calculate months data from entries and treatments
   const monthsData = $derived.by(() => {
-    const entries = data.entries as Entry[];
-    const treatments = data.treatments as Treatment[];
+    const entries = (data?.entries ?? []) as Entry[];
+    const treatments = (data?.treatments ?? []) as Treatment[];
 
     // Group by month
     const monthsMap = new Map<

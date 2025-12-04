@@ -2,9 +2,9 @@
  * Remote functions for compatibility/discrepancy analysis
  */
 import { z } from 'zod';
-import { query } from '$app/server';
+import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
+
 import type { ResponseMatchType } from '$lib/api/generated/nocturne-api-client';
 
 const CompatibilityFiltersSchema = z.object({

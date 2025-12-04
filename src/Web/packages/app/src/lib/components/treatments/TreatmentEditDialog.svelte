@@ -44,6 +44,7 @@
     onSave,
   }: Props = $props();
 
+  $inspect(treatment);
   // Combobox state
   let eventTypePopoverOpen = $state(false);
 

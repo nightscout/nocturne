@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
   import { goto } from "$app/navigation";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import {
     Card,
     CardContent,
@@ -62,25 +61,21 @@
   } from "lucide-svelte";
   import type { Profile, TimeValue } from "$lib/api";
   import { formatDateDetailed } from "$lib/utils/date-formatting";
+  import {
+    getProfiles,
+    createProfile,
+    updateProfile,
+    deleteProfile,
+  } from "./data.remote";
 
-  interface Props {
-    data: {
-      profiles: Profile[];
-      currentProfile: Profile | null;
-      selectedProfile: Profile | null;
-      selectedProfileId: string | null;
-      totalProfiles: number;
-    };
-    form?: {
-      message?: string;
-      error?: string;
-      createdProfile?: Profile;
-      updatedProfile?: Profile;
-      deletedProfileId?: string;
-    } | null;
-  }
+  // Get the selected profile ID from URL
+  const urlProfileId = $derived(page.url.searchParams.get("id"));
 
-  let { data, form }: Props = $props();
+  // Query for profiles data - passes selectedProfileId as argument
+  const profilesQuery = $derived(getProfiles(urlProfileId ?? undefined));
+
+  // Unwrap the data from the query
+  const data = $derived(await profilesQuery);
 
   // Icon component map
   const iconComponents: Record<string, typeof Icon> = {
@@ -123,43 +118,8 @@
 
   // Currently selected profile ID - derived from URL or default
   let selectedProfileId = $derived.by(() => {
-    const urlId = $page.url.searchParams.get("id");
+    const urlId = page.url.searchParams.get("id");
     return urlId ?? data.selectedProfileId ?? data.currentProfile?._id ?? null;
-  });
-
-  // Handle form results
-  $effect(() => {
-    if (form?.message) {
-      // Show success toast/notification
-      console.log("Success:", form.message);
-
-      if (form.createdProfile) {
-        showCreateDialog = false;
-        // Navigate to the new profile
-        selectProfile(form.createdProfile._id ?? null);
-      }
-
-      if (form.updatedProfile) {
-        showEditDialog = false;
-      }
-
-      if (form.deletedProfileId) {
-        showDeleteDialog = false;
-        profileToDelete = null;
-        // Navigate to another profile if we deleted the selected one
-        if (form.deletedProfileId === selectedProfileId) {
-          const remaining = data.profiles.filter(
-            (p) => p._id !== form.deletedProfileId
-          );
-          selectProfile(remaining[0]?._id ?? null);
-        }
-      }
-    }
-
-    if (form?.error) {
-      console.error("Error:", form.error);
-      isLoading = false;
-    }
   });
 
   // Derived: get selected profile
@@ -189,13 +149,7 @@
   let editStoreName = $state<string | null>(null);
   let isLoading = $state(false);
 
-  // Hidden form references
-  let createFormEl = $state<HTMLFormElement | null>(null);
-  let updateFormEl = $state<HTMLFormElement | null>(null);
-  let deleteFormEl = $state<HTMLFormElement | null>(null);
-
   function selectProfile(profileId: string | null) {
-    selectedProfileId = profileId;
     // Update URL without full navigation
     const url = new URL(window.location.href);
     if (profileId) {
@@ -235,47 +189,69 @@
     showDeleteDialog = true;
   }
 
-  // Form submission handlers
-  function handleCreateProfile(profileData: CreateProfileData) {
-    if (!createFormEl) return;
+  // Command handlers using remote functions
+  async function handleCreateProfile(profileData: CreateProfileData) {
     isLoading = true;
+    try {
+      const result = await createProfile({
+        defaultProfile: profileData.defaultProfile,
+        dia: profileData.dia,
+        carbs_hr: profileData.carbs_hr,
+        timezone: profileData.timezone,
+        units: profileData.units,
+        icon: profileData.icon,
+      });
 
-    const input = createFormEl.querySelector(
-      'input[name="profileData"]'
-    ) as HTMLInputElement;
-    if (input) {
-      input.value = JSON.stringify(profileData);
-      createFormEl.requestSubmit();
+      showCreateDialog = false;
+      // Navigate to the new profile
+      if (result.createdProfile?._id) {
+        selectProfile(result.createdProfile._id);
+      }
+    } catch (error) {
+      console.error("Error creating profile:", error);
+    } finally {
+      isLoading = false;
     }
   }
 
-  function handleSaveProfile(profile: Profile) {
-    if (!updateFormEl || !profile._id) return;
+  async function handleSaveProfile(profile: Profile) {
+    if (!profile._id) return;
     isLoading = true;
 
-    const idInput = updateFormEl.querySelector(
-      'input[name="profileId"]'
-    ) as HTMLInputElement;
-    const dataInput = updateFormEl.querySelector(
-      'input[name="profileData"]'
-    ) as HTMLInputElement;
-    if (idInput && dataInput) {
-      idInput.value = profile._id;
-      dataInput.value = JSON.stringify(profile);
-      updateFormEl.requestSubmit();
+    try {
+      await updateProfile({
+        profileId: profile._id,
+        profileData: profile,
+      });
+
+      showEditDialog = false;
+    } catch (error) {
+      console.error("Error updating profile:", error);
+    } finally {
+      isLoading = false;
     }
   }
 
-  function handleDeleteProfile() {
-    if (!deleteFormEl || !profileToDelete?._id) return;
+  async function handleDeleteProfile() {
+    if (!profileToDelete?._id) return;
     isLoading = true;
 
-    const input = deleteFormEl.querySelector(
-      'input[name="profileId"]'
-    ) as HTMLInputElement;
-    if (input) {
-      input.value = profileToDelete._id;
-      deleteFormEl.requestSubmit();
+    try {
+      const deletedId = profileToDelete._id;
+      await deleteProfile(deletedId);
+
+      showDeleteDialog = false;
+      profileToDelete = null;
+
+      // Navigate to another profile if we deleted the selected one
+      if (deletedId === selectedProfileId) {
+        const remaining = data.profiles.filter((p) => p._id !== deletedId);
+        selectProfile(remaining[0]?._id ?? null);
+      }
+    } catch (error) {
+      console.error("Error deleting profile:", error);
+    } finally {
+      isLoading = false;
     }
   }
 </script>
@@ -288,445 +264,430 @@
   />
 </svelte:head>
 
-<!-- Hidden forms for server actions -->
-<form
-  bind:this={createFormEl}
-  method="POST"
-  action="?/createProfile"
-  use:enhance={() => {
-    return async ({ update }) => {
-      await update();
-      isLoading = false;
-    };
-  }}
-  class="hidden"
->
-  <input type="hidden" name="profileData" value="" />
-</form>
-
-<form
-  bind:this={updateFormEl}
-  method="POST"
-  action="?/updateProfile"
-  use:enhance={() => {
-    return async ({ update }) => {
-      await update();
-      isLoading = false;
-    };
-  }}
-  class="hidden"
->
-  <input type="hidden" name="profileId" value="" />
-  <input type="hidden" name="profileData" value="" />
-</form>
-
-<form
-  bind:this={deleteFormEl}
-  method="POST"
-  action="?/deleteProfile"
-  use:enhance={() => {
-    return async ({ update }) => {
-      await update();
-      isLoading = false;
-    };
-  }}
-  class="hidden"
->
-  <input type="hidden" name="profileId" value="" />
-</form>
-
-<div class="container mx-auto p-6 max-w-5xl space-y-6">
-  <!-- Header -->
-  <div class="flex items-start justify-between">
-    <div class="flex items-center gap-3">
-      <div
-        class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
-      >
-        <User class="h-6 w-6 text-primary" />
-      </div>
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Profile</h1>
-        <p class="text-muted-foreground">
-          Your therapy settings and insulin parameters
-        </p>
-      </div>
-    </div>
-    <div class="flex items-center gap-2">
-      <Button onclick={() => (showCreateDialog = true)}>
-        <Plus class="h-4 w-4 mr-2" />
-        New Profile
-      </Button>
-      <Badge variant="secondary" class="gap-1">
-        <History class="h-3 w-3" />
-        {data.totalProfiles} profile{data.totalProfiles !== 1 ? "s" : ""}
-      </Badge>
-    </div>
-  </div>
-
-  {#if !data.currentProfile}
-    <!-- Empty State -->
-    <Card class="border-dashed">
-      <CardContent class="py-12">
-        <div class="text-center space-y-4">
-          <div
-            class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted"
-          >
-            <User class="h-8 w-8 text-muted-foreground" />
-          </div>
-          <div>
-            <h3 class="text-lg font-semibold">No Profile Found</h3>
-            <p class="text-sm text-muted-foreground max-w-md mx-auto mt-1">
-              Profiles are typically uploaded from your diabetes management app
-              (like AAPS, Loop, or xDrip+). They contain your basal rates,
-              insulin sensitivity factors, and carb ratios.
-            </p>
-          </div>
-          <div class="flex items-center justify-center gap-2">
-            <Button onclick={() => (showCreateDialog = true)}>
-              <Plus class="h-4 w-4 mr-2" />
-              Create Profile
-            </Button>
-            <Button variant="outline" href="/settings/services">
-              <Settings class="h-4 w-4 mr-2" />
-              Configure Data Sources
-            </Button>
-          </div>
+<svelte:boundary>
+  {#snippet pending()}
+    <div class="container mx-auto p-6 max-w-5xl">
+      <div class="flex items-center justify-center h-64">
+        <div class="animate-pulse text-muted-foreground">
+          Loading profiles...
         </div>
-      </CardContent>
-    </Card>
-  {:else}
-    <!-- Profile Selector (if multiple profiles) -->
-    {#if data.profiles.length > 1}
-      <Card>
-        <CardHeader class="pb-3">
-          <CardTitle class="text-lg flex items-center gap-2">
-            <History class="h-5 w-5" />
-            Profile History
-          </CardTitle>
-          <CardDescription>
-            Select a profile to view its settings. The most recently used
-            profile is shown first.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {#each data.profiles as profile}
-              {@const ProfileIcon = getProfileIcon(profile)}
-              {@const isSelected = selectedProfileId === profile._id}
-              {@const isActive = profile._id === data.currentProfile?._id}
-              <button
-                class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors
-                       {isSelected
-                  ? 'border-primary bg-primary/5'
-                  : 'hover:bg-accent/50'}"
-                onclick={() => selectProfile(profile._id ?? null)}
-              >
-                <div
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
-                         {isSelected ? 'bg-primary/10' : 'bg-muted'}"
-                >
-                  <ProfileIcon
-                    class="h-5 w-5 {isSelected
-                      ? 'text-primary'
-                      : 'text-muted-foreground'}"
-                  />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="font-medium truncate">
-                      {profile.defaultProfile ?? "Unnamed Profile"}
-                    </span>
-                    {#if isActive}
-                      <Badge
-                        variant="default"
-                        class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
-                      >
-                        Active
-                      </Badge>
-                    {/if}
-                  </div>
-                  <p class="text-xs text-muted-foreground truncate">
-                    {formatRelativeTime(profile.created_at)} • {formatDateDetailed(
-                      profile.created_at
-                    ).split(",")[0]}
-                  </p>
-                </div>
-                <ChevronRight
-                  class="h-4 w-4 text-muted-foreground shrink-0 {isSelected
-                    ? 'text-primary'
-                    : ''}"
-                />
-              </button>
-            {/each}
-          </div>
-        </CardContent>
-      </Card>
-    {/if}
+      </div>
+    </div>
+  {/snippet}
 
-    <!-- Selected Profile Details -->
-    {#if selectedProfile}
-      <!-- Profile Overview Card -->
-      <Card>
-        <CardHeader>
-          <div class="flex items-start justify-between">
-            <div>
-              <CardTitle class="flex items-center gap-2">
-                {selectedProfile.defaultProfile ?? "Profile"}
-                {#if selectedProfile._id === data.currentProfile?._id}
-                  <Badge
-                    variant="default"
-                    class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                  >
-                    Active
-                  </Badge>
-                {/if}
-              </CardTitle>
-              <CardDescription>
-                Created {formatDateDetailed(selectedProfile.created_at)}
-              </CardDescription>
-            </div>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                <Button variant="outline" size="icon">
-                  <MoreVertical class="h-4 w-4" />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="end">
-                <DropdownMenu.Item onclick={() => openEditDialog()}>
-                  <Edit class="h-4 w-4 mr-2" />
-                  Edit Profile
-                </DropdownMenu.Item>
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item
-                  class="text-destructive focus:text-destructive"
-                  onclick={() => openDeleteDialog(selectedProfile!)}
-                >
-                  <Trash2 class="h-4 w-4 mr-2" />
-                  Delete Profile
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div class="space-y-1">
-              <span class="text-xs text-muted-foreground">Units</span>
-              <p class="font-medium">
-                {selectedProfile.units ?? "mg/dL"}
-              </p>
-            </div>
-            <div class="space-y-1">
-              <span class="text-xs text-muted-foreground">Timezone</span>
-              <p class="font-medium">
-                {defaultStore?.timezone ?? "Not set"}
-              </p>
-            </div>
-            <div class="space-y-1">
-              <span class="text-xs text-muted-foreground">DIA</span>
-              <p class="font-medium">
-                {defaultStore?.dia ?? "–"} hours
-              </p>
-            </div>
-            <div class="space-y-1">
-              <span class="text-xs text-muted-foreground">Carbs/hr</span>
-              <p class="font-medium">
-                {defaultStore?.carbs_hr ?? "–"} g/hr
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <!-- Profile Stores -->
-      {#if profileStoreNames.length > 0}
-        <Tabs.Root value={defaultStoreName || profileStoreNames[0]}>
-          <div class="flex items-center justify-between">
-            <Tabs.List class="justify-start">
-              {#each profileStoreNames as storeName}
-                <Tabs.Trigger value={storeName} class="gap-2">
-                  <User class="h-4 w-4" />
-                  {storeName}
-                  {#if storeName === defaultStoreName}
-                    <Badge variant="secondary" class="text-xs ml-1">
-                      Default
-                    </Badge>
-                  {/if}
-                </Tabs.Trigger>
-              {/each}
-            </Tabs.List>
-            <Button
-              variant="outline"
-              size="sm"
-              onclick={() => openEditDialog()}
-            >
-              <Edit class="h-4 w-4 mr-2" />
-              Edit
+  {#snippet failed(error)}
+    <div class="container mx-auto p-6 max-w-5xl">
+      <Card class="border-destructive">
+        <CardContent class="py-8">
+          <div class="text-center space-y-2">
+            <p class="text-destructive font-medium">Failed to load profiles</p>
+            <p class="text-sm text-muted-foreground">{error.message}</p>
+            <Button variant="outline" onclick={() => getProfiles().refresh()}>
+              Try again
             </Button>
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  {/snippet}
 
-          {#each profileStoreNames as storeName}
-            {@const store = selectedProfile.store?.[storeName]}
-            <Tabs.Content value={storeName} class="mt-4 space-y-4">
-              {#if store}
-                <!-- Time-based Settings Grid -->
-                <div class="grid gap-4 md:grid-cols-2">
-                  <!-- Basal Rates -->
-                  {#if store.basal && store.basal.length > 0}
-                    {@render ProfileTimeValueCard({
-                      title: "Basal Rates",
-                      description: "Background insulin delivery rates",
-                      unit: "U/hr",
-                      icon: Activity,
-                      values: store.basal,
-                      colorClass: "text-blue-600",
-                    })}
-                  {/if}
+  <div class="container mx-auto p-6 max-w-5xl space-y-6">
+    <!-- Header -->
+    <div class="flex items-start justify-between">
+      <div class="flex items-center gap-3">
+        <div
+          class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
+        >
+          <User class="h-6 w-6 text-primary" />
+        </div>
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">Profile</h1>
+          <p class="text-muted-foreground">
+            Your therapy settings and insulin parameters
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <Button onclick={() => (showCreateDialog = true)}>
+          <Plus class="h-4 w-4 mr-2" />
+          New Profile
+        </Button>
+        <Badge variant="secondary" class="gap-1">
+          <History class="h-3 w-3" />
+          {data.totalProfiles} profile{data.totalProfiles !== 1 ? "s" : ""}
+        </Badge>
+      </div>
+    </div>
 
-                  <!-- Carb Ratios -->
-                  {#if store.carbratio && store.carbratio.length > 0}
-                    {@render ProfileTimeValueCard({
-                      title: "Carb Ratios (I:C)",
-                      description: "Grams of carbs per unit of insulin",
-                      unit: "g/U",
-                      icon: Droplet,
-                      values: store.carbratio,
-                      colorClass: "text-green-600",
-                    })}
-                  {/if}
-
-                  <!-- Insulin Sensitivity -->
-                  {#if store.sens && store.sens.length > 0}
-                    {@render ProfileTimeValueCard({
-                      title: "Insulin Sensitivity (ISF)",
-                      description: "BG drop per unit of insulin",
-                      unit:
-                        selectedProfile.units === "mmol"
-                          ? "mmol/L/U"
-                          : "mg/dL/U",
-                      icon: TrendingUp,
-                      values: store.sens,
-                      colorClass: "text-purple-600",
-                    })}
-                  {/if}
-
-                  <!-- Target Range -->
-                  {#if (store.target_low && store.target_low.length > 0) || (store.target_high && store.target_high.length > 0)}
-                    <Card>
-                      <CardHeader class="pb-3">
-                        <div class="flex items-center gap-3">
-                          <div
-                            class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
-                          >
-                            <Target class="h-5 w-5 text-amber-600" />
-                          </div>
-                          <div>
-                            <CardTitle class="text-base">
-                              Target Range
-                            </CardTitle>
-                            <CardDescription class="text-xs">
-                              Desired blood glucose range
-                            </CardDescription>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <Table.Root>
-                          <Table.Header>
-                            <Table.Row>
-                              <Table.Head>Time</Table.Head>
-                              <Table.Head class="text-right">Low</Table.Head>
-                              <Table.Head class="text-right">High</Table.Head>
-                            </Table.Row>
-                          </Table.Header>
-                          <Table.Body>
-                            {@const lowValues = store.target_low ?? []}
-                            {@const highValues = store.target_high ?? []}
-                            {@const maxLen = Math.max(
-                              lowValues.length,
-                              highValues.length
-                            )}
-                            {#each Array(maxLen) as _, i}
-                              <Table.Row>
-                                <Table.Cell class="font-mono text-sm">
-                                  {lowValues[i]?.time ??
-                                    highValues[i]?.time ??
-                                    "–"}
-                                </Table.Cell>
-                                <Table.Cell class="text-right font-mono">
-                                  {lowValues[i]?.value ?? "–"}
-                                </Table.Cell>
-                                <Table.Cell class="text-right font-mono">
-                                  {highValues[i]?.value ?? "–"}
-                                </Table.Cell>
-                              </Table.Row>
-                            {/each}
-                          </Table.Body>
-                        </Table.Root>
-                      </CardContent>
-                    </Card>
-                  {/if}
-                </div>
-
-                <!-- Additional Store Metadata -->
-                <Card class="bg-muted/30">
-                  <CardHeader class="pb-3">
-                    <CardTitle class="text-sm font-medium">
-                      Profile Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <span class="text-muted-foreground">DIA</span>
-                        <p class="font-medium">{store.dia ?? "–"} hours</p>
-                      </div>
-                      <div>
-                        <span class="text-muted-foreground">Carbs/hr</span>
-                        <p class="font-medium">{store.carbs_hr ?? "–"} g/hr</p>
-                      </div>
-                      <div>
-                        <span class="text-muted-foreground">Timezone</span>
-                        <p class="font-medium">{store.timezone ?? "–"}</p>
-                      </div>
-                      <div>
-                        <span class="text-muted-foreground">Units</span>
-                        <p class="font-medium">{store.units ?? "–"}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              {:else}
-                <div class="text-center py-8 text-muted-foreground">
-                  <p>No data available for this profile store.</p>
-                </div>
-              {/if}
-            </Tabs.Content>
-          {/each}
-        </Tabs.Root>
-      {:else}
-        <Card class="border-dashed">
-          <CardContent class="py-8">
-            <div class="text-center text-muted-foreground">
-              <p>
-                This profile doesn't contain any therapy settings (basal, carb
-                ratios, etc.)
+    {#if !data.currentProfile}
+      <!-- Empty State -->
+      <Card class="border-dashed">
+        <CardContent class="py-12">
+          <div class="text-center space-y-4">
+            <div
+              class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted"
+            >
+              <User class="h-8 w-8 text-muted-foreground" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold">No Profile Found</h3>
+              <p class="text-sm text-muted-foreground max-w-md mx-auto mt-1">
+                Profiles are typically uploaded from your diabetes management
+                app (like AAPS, Loop, or xDrip+). They contain your basal rates,
+                insulin sensitivity factors, and carb ratios.
               </p>
-              <Button
-                variant="outline"
-                class="mt-4"
-                onclick={() => openEditDialog()}
-              >
-                <Edit class="h-4 w-4 mr-2" />
-                Add Settings
+            </div>
+            <div class="flex items-center justify-center gap-2">
+              <Button onclick={() => (showCreateDialog = true)}>
+                <Plus class="h-4 w-4 mr-2" />
+                Create Profile
               </Button>
+              <Button variant="outline" href="/settings/services">
+                <Settings class="h-4 w-4 mr-2" />
+                Configure Data Sources
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    {:else}
+      <!-- Profile Selector (if multiple profiles) -->
+      {#if data.profiles.length > 1}
+        <Card>
+          <CardHeader class="pb-3">
+            <CardTitle class="text-lg flex items-center gap-2">
+              <History class="h-5 w-5" />
+              Profile History
+            </CardTitle>
+            <CardDescription>
+              Select a profile to view its settings. The most recently used
+              profile is shown first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {#each data.profiles as profile}
+                {@const ProfileIcon = getProfileIcon(profile)}
+                {@const isSelected = selectedProfileId === profile._id}
+                {@const isActive = profile._id === data.currentProfile?._id}
+                <button
+                  class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors
+                       {isSelected
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-accent/50'}"
+                  onclick={() => selectProfile(profile._id ?? null)}
+                >
+                  <div
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg
+                         {isSelected ? 'bg-primary/10' : 'bg-muted'}"
+                  >
+                    <ProfileIcon
+                      class="h-5 w-5 {isSelected
+                        ? 'text-primary'
+                        : 'text-muted-foreground'}"
+                    />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium truncate">
+                        {profile.defaultProfile ?? "Unnamed Profile"}
+                      </span>
+                      {#if isActive}
+                        <Badge
+                          variant="default"
+                          class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+                        >
+                          Active
+                        </Badge>
+                      {/if}
+                    </div>
+                    <p class="text-xs text-muted-foreground truncate">
+                      {formatRelativeTime(profile.created_at)} • {formatDateDetailed(
+                        profile.created_at
+                      ).split(",")[0]}
+                    </p>
+                  </div>
+                  <ChevronRight
+                    class="h-4 w-4 text-muted-foreground shrink-0 {isSelected
+                      ? 'text-primary'
+                      : ''}"
+                  />
+                </button>
+              {/each}
             </div>
           </CardContent>
         </Card>
       {/if}
+
+      <!-- Selected Profile Details -->
+      {#if selectedProfile}
+        <!-- Profile Overview Card -->
+        <Card>
+          <CardHeader>
+            <div class="flex items-start justify-between">
+              <div>
+                <CardTitle class="flex items-center gap-2">
+                  {selectedProfile.defaultProfile ?? "Profile"}
+                  {#if selectedProfile._id === data.currentProfile?._id}
+                    <Badge
+                      variant="default"
+                      class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                    >
+                      Active
+                    </Badge>
+                  {/if}
+                </CardTitle>
+                <CardDescription>
+                  Created {formatDateDetailed(selectedProfile.created_at)}
+                </CardDescription>
+              </div>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  <Button variant="outline" size="icon">
+                    <MoreVertical class="h-4 w-4" />
+                  </Button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item onclick={() => openEditDialog()}>
+                    <Edit class="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item
+                    class="text-destructive focus:text-destructive"
+                    onclick={() => openDeleteDialog(selectedProfile!)}
+                  >
+                    <Trash2 class="h-4 w-4 mr-2" />
+                    Delete Profile
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div class="space-y-1">
+                <span class="text-xs text-muted-foreground">Units</span>
+                <p class="font-medium">
+                  {selectedProfile.units ?? "mg/dL"}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span class="text-xs text-muted-foreground">Timezone</span>
+                <p class="font-medium">
+                  {defaultStore?.timezone ?? "Not set"}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span class="text-xs text-muted-foreground">DIA</span>
+                <p class="font-medium">
+                  {defaultStore?.dia ?? "–"} hours
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span class="text-xs text-muted-foreground">Carbs/hr</span>
+                <p class="font-medium">
+                  {defaultStore?.carbs_hr ?? "–"} g/hr
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Profile Stores -->
+        {#if profileStoreNames.length > 0}
+          <Tabs.Root value={defaultStoreName || profileStoreNames[0]}>
+            <div class="flex items-center justify-between">
+              <Tabs.List class="justify-start">
+                {#each profileStoreNames as storeName}
+                  <Tabs.Trigger value={storeName} class="gap-2">
+                    <User class="h-4 w-4" />
+                    {storeName}
+                    {#if storeName === defaultStoreName}
+                      <Badge variant="secondary" class="text-xs ml-1">
+                        Default
+                      </Badge>
+                    {/if}
+                  </Tabs.Trigger>
+                {/each}
+              </Tabs.List>
+              <Button
+                variant="outline"
+                size="sm"
+                onclick={() => openEditDialog()}
+              >
+                <Edit class="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            </div>
+
+            {#each profileStoreNames as storeName}
+              {@const store = selectedProfile.store?.[storeName]}
+              <Tabs.Content value={storeName} class="mt-4 space-y-4">
+                {#if store}
+                  <!-- Time-based Settings Grid -->
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <!-- Basal Rates -->
+                    {#if store.basal && store.basal.length > 0}
+                      {@render ProfileTimeValueCard({
+                        title: "Basal Rates",
+                        description: "Background insulin delivery rates",
+                        unit: "U/hr",
+                        icon: Activity,
+                        values: store.basal,
+                        colorClass: "text-blue-600",
+                      })}
+                    {/if}
+
+                    <!-- Carb Ratios -->
+                    {#if store.carbratio && store.carbratio.length > 0}
+                      {@render ProfileTimeValueCard({
+                        title: "Carb Ratios (I:C)",
+                        description: "Grams of carbs per unit of insulin",
+                        unit: "g/U",
+                        icon: Droplet,
+                        values: store.carbratio,
+                        colorClass: "text-green-600",
+                      })}
+                    {/if}
+
+                    <!-- Insulin Sensitivity -->
+                    {#if store.sens && store.sens.length > 0}
+                      {@render ProfileTimeValueCard({
+                        title: "Insulin Sensitivity (ISF)",
+                        description: "BG drop per unit of insulin",
+                        unit:
+                          selectedProfile.units === "mmol"
+                            ? "mmol/L/U"
+                            : "mg/dL/U",
+                        icon: TrendingUp,
+                        values: store.sens,
+                        colorClass: "text-purple-600",
+                      })}
+                    {/if}
+
+                    <!-- Target Range -->
+                    {#if (store.target_low && store.target_low.length > 0) || (store.target_high && store.target_high.length > 0)}
+                      <Card>
+                        <CardHeader class="pb-3">
+                          <div class="flex items-center gap-3">
+                            <div
+                              class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
+                            >
+                              <Target class="h-5 w-5 text-amber-600" />
+                            </div>
+                            <div>
+                              <CardTitle class="text-base">
+                                Target Range
+                              </CardTitle>
+                              <CardDescription class="text-xs">
+                                Desired blood glucose range
+                              </CardDescription>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <Table.Root>
+                            <Table.Header>
+                              <Table.Row>
+                                <Table.Head>Time</Table.Head>
+                                <Table.Head class="text-right">Low</Table.Head>
+                                <Table.Head class="text-right">High</Table.Head>
+                              </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                              {@const lowValues = store.target_low ?? []}
+                              {@const highValues = store.target_high ?? []}
+                              {@const maxLen = Math.max(
+                                lowValues.length,
+                                highValues.length
+                              )}
+                              {#each Array(maxLen) as _, i}
+                                <Table.Row>
+                                  <Table.Cell class="font-mono text-sm">
+                                    {lowValues[i]?.time ??
+                                      highValues[i]?.time ??
+                                      "–"}
+                                  </Table.Cell>
+                                  <Table.Cell class="text-right font-mono">
+                                    {lowValues[i]?.value ?? "–"}
+                                  </Table.Cell>
+                                  <Table.Cell class="text-right font-mono">
+                                    {highValues[i]?.value ?? "–"}
+                                  </Table.Cell>
+                                </Table.Row>
+                              {/each}
+                            </Table.Body>
+                          </Table.Root>
+                        </CardContent>
+                      </Card>
+                    {/if}
+                  </div>
+
+                  <!-- Additional Store Metadata -->
+                  <Card class="bg-muted/30">
+                    <CardHeader class="pb-3">
+                      <CardTitle class="text-sm font-medium">
+                        Profile Settings
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div
+                        class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm"
+                      >
+                        <div>
+                          <span class="text-muted-foreground">DIA</span>
+                          <p class="font-medium">{store.dia ?? "–"} hours</p>
+                        </div>
+                        <div>
+                          <span class="text-muted-foreground">Carbs/hr</span>
+                          <p class="font-medium">
+                            {store.carbs_hr ?? "–"} g/hr
+                          </p>
+                        </div>
+                        <div>
+                          <span class="text-muted-foreground">Timezone</span>
+                          <p class="font-medium">{store.timezone ?? "–"}</p>
+                        </div>
+                        <div>
+                          <span class="text-muted-foreground">Units</span>
+                          <p class="font-medium">{store.units ?? "–"}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                {:else}
+                  <div class="text-center py-8 text-muted-foreground">
+                    <p>No data available for this profile store.</p>
+                  </div>
+                {/if}
+              </Tabs.Content>
+            {/each}
+          </Tabs.Root>
+        {:else}
+          <Card class="border-dashed">
+            <CardContent class="py-8">
+              <div class="text-center text-muted-foreground">
+                <p>
+                  This profile doesn't contain any therapy settings (basal, carb
+                  ratios, etc.)
+                </p>
+                <Button
+                  variant="outline"
+                  class="mt-4"
+                  onclick={() => openEditDialog()}
+                >
+                  <Edit class="h-4 w-4 mr-2" />
+                  Add Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        {/if}
+      {/if}
     {/if}
-  {/if}
-</div>
+  </div>
+</svelte:boundary>
 
 <!-- Dialogs -->
 <ProfileCreateDialog

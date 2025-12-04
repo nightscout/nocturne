@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
   import { page } from "$app/state";
 
   import type { Treatment } from "$lib/api";
@@ -22,14 +21,36 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import * as Popover from "$lib/components/ui/popover";
-  import { Calendar, Filter, X, ChevronDown } from "lucide-svelte";
+  import {
+    Calendar,
+    Filter,
+    X,
+    ChevronDown,
+    AlertTriangle,
+  } from "lucide-svelte";
   import {
     formatInsulinDisplay,
     formatCarbDisplay,
   } from "$lib/utils/calculate/treatment-stats.js";
-  import { formatDateTime } from "$lib/utils/date-formatting";
+  import { formatDate } from "$lib/utils/date-formatting";
+  import { toast } from "svelte-sonner";
+  import { getReportsData } from "$lib/data/reports.remote";
+  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
 
-  let { data, form } = $props();
+  // Import remote function forms and commands
+  import {
+    deleteTreatmentForm,
+    updateTreatment,
+    bulkDeleteTreatments,
+  } from "./data.remote";
+  import { invalidateAll } from "$app/navigation";
+
+  // Build date range input from URL parameters
+  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+
+  // Query for reports data
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  const data = $derived(await reportsQuery);
 
   // Compute stats from layout data
   const stats = $derived(
@@ -57,47 +78,10 @@
   let treatmentToEdit = $state<Treatment | null>(null);
   let treatmentToDelete = $state<Treatment | null>(null);
   let treatmentsToDelete = $state<Treatment[]>([]);
+
+  // Loading states
   let isLoading = $state(false);
   let isEditLoading = $state(false);
-  $inspect(data);
-
-  // Hidden form element reference for edit submission
-  let editFormElement = $state<HTMLFormElement | null>(null);
-
-  // Status message
-  let statusMessage = $state<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-
-  // Handle form results
-  $effect(() => {
-    if (form?.message) {
-      showStatus("success", form.message);
-
-      // Handle delete result
-      if (form.deletedTreatmentId) {
-        showDeleteConfirm = false;
-        treatmentToDelete = null;
-      }
-
-      // Handle bulk delete result
-      if (form.deletedTreatmentIds) {
-        showBulkDeleteConfirm = false;
-        treatmentsToDelete = [];
-      }
-
-      // Handle edit result
-      if (form.updatedTreatment) {
-        showEditDialog = false;
-        treatmentToEdit = null;
-        isEditLoading = false;
-      }
-    } else if (form?.error) {
-      showStatus("error", form.error);
-      isEditLoading = false;
-    }
-  });
 
   // Filtered treatments based on category and search
   let filteredTreatments = $derived.by(() => {
@@ -209,30 +193,26 @@
     treatmentToEdit = null;
   }
 
-  function handleEditSave(updatedTreatment: Treatment) {
-    if (!editFormElement) return;
+  async function handleEditSave(updatedTreatment: Treatment) {
+    isEditLoading = true;
+    try {
+      // Use the remote function command for programmatic submission
+      const result = await updateTreatment({
+        treatmentId: updatedTreatment._id || "",
+        treatmentData: updatedTreatment,
+      });
 
-    // Set hidden form values and submit
-    const treatmentIdInput = editFormElement.querySelector(
-      'input[name="treatmentId"]'
-    ) as HTMLInputElement;
-    const treatmentDataInput = editFormElement.querySelector(
-      'input[name="treatmentData"]'
-    ) as HTMLInputElement;
-
-    if (treatmentIdInput && treatmentDataInput) {
-      treatmentIdInput.value = updatedTreatment._id || "";
-      treatmentDataInput.value = JSON.stringify(updatedTreatment);
-      isEditLoading = true;
-      editFormElement.requestSubmit();
+      toast.success(result.message);
+      showEditDialog = false;
+      treatmentToEdit = null;
+      // Trigger data reload
+      invalidateAll();
+    } catch (error) {
+      console.error("Update error:", error);
+      toast.error("Failed to update treatment");
+    } finally {
+      isEditLoading = false;
     }
-  }
-
-  function showStatus(type: "success" | "error", text: string) {
-    statusMessage = { type, text };
-    setTimeout(() => {
-      statusMessage = null;
-    }, 5000);
   }
 
   // Check if any filters are active
@@ -251,407 +231,426 @@
   />
 </svelte:head>
 
-<div class="container mx-auto space-y-6 px-4 py-6">
-  <!-- Header -->
-  <div class="space-y-2">
-    <div
-      class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
-    >
-      <Calendar class="h-4 w-4" />
-      <span>
-        {new Date(data.dateRange.from).toLocaleDateString()} – {new Date(
-          data.dateRange.to
-        ).toLocaleDateString()}
-      </span>
-      <span class="text-muted-foreground/50">•</span>
-      <span>{data.treatments.length.toLocaleString()} treatments</span>
-    </div>
-    <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
-    <p class="mx-auto max-w-2xl text-center text-muted-foreground">
-      Review and manage your insulin doses, carb entries, and device events. Use
-      filters to find specific treatments.
-    </p>
-  </div>
-
-  <!-- Status Messages -->
-  {#if statusMessage}
-    <Alert.Root
-      variant={statusMessage.type === "error" ? "destructive" : "default"}
-    >
-      <Alert.Description class="flex items-center justify-between">
-        <span>{statusMessage.text}</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onclick={() => (statusMessage = null)}
-        >
-          <X class="h-4 w-4" />
-        </Button>
-      </Alert.Description>
-    </Alert.Root>
-  {/if}
-
-  <!-- Summary Stats -->
-  <TreatmentStatsCard stats={filteredStats} dateRange={data.dateRange} />
-
-  <!-- Category Tabs -->
-  <TreatmentCategoryTabs
-    {activeCategory}
-    {categoryCounts}
-    onChange={handleCategoryChange}
-  />
-
-  <!-- Filters Panel -->
-  <Card.Root>
-    <Card.Content class="p-4">
-      <div
-        class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
-      >
-        <!-- Left side: Search and Event Type filter -->
-        <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
-          <!-- Search -->
-          <div class="flex-1 max-w-sm">
-            <Label for="search" class="text-sm font-medium">Search</Label>
-            <Input
-              id="search"
-              type="text"
-              placeholder="Search treatments..."
-              value={searchQuery}
-              oninput={handleSearch}
-            />
-          </div>
-
-          <!-- Event Type Filter -->
-          <Popover.Root>
-            <Popover.Trigger>
-              {#snippet child({ props })}
-                <Button variant="outline" class="gap-2" {...props}>
-                  <Filter class="h-4 w-4" />
-                  Event Types
-                  {#if selectedEventTypes.length > 0}
-                    <Badge variant="secondary" class="ml-1">
-                      {selectedEventTypes.length}
-                    </Badge>
-                  {/if}
-                  <ChevronDown class="h-4 w-4" />
-                </Button>
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content class="w-64 p-3" align="start">
-              <div class="space-y-2 max-h-64 overflow-y-auto">
-                {#each availableEventTypes as eventType}
-                  <label
-                    class="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedEventTypes.includes(eventType)}
-                      onchange={() => toggleEventType(eventType)}
-                      class="rounded"
-                    />
-                    {eventType}
-                  </label>
-                {/each}
-              </div>
-            </Popover.Content>
-          </Popover.Root>
-        </div>
-
-        <!-- Right side: Clear filters -->
-        <div class="flex items-center gap-2">
-          {#if hasActiveFilters}
-            <Button variant="ghost" size="sm" onclick={clearFilters}>
-              <X class="mr-1 h-4 w-4" />
-              Clear filters
-            </Button>
-          {/if}
+<svelte:boundary>
+  {#snippet pending()}
+    <div class="container mx-auto space-y-6 px-4 py-6">
+      <div class="flex items-center justify-center h-64">
+        <div class="text-center space-y-4">
+          <div
+            class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"
+          ></div>
+          <p class="text-muted-foreground">Loading treatments...</p>
         </div>
       </div>
+    </div>
+  {/snippet}
 
-      <!-- Active filters display -->
-      {#if hasActiveFilters}
-        <div
-          class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm"
-        >
-          <span class="text-muted-foreground">Showing:</span>
-          <span class="font-medium">
-            {filteredTreatments.length} of {data.treatments.length}
-          </span>
-
-          {#if activeCategory !== "all"}
-            <Badge variant="secondary" class="gap-1">
-              {TREATMENT_CATEGORIES[activeCategory].name}
-              <button
-                onclick={() => (activeCategory = "all")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
-            </Badge>
-          {/if}
-
-          {#each selectedEventTypes as eventType}
-            <Badge variant="outline" class="gap-1">
-              {eventType}
-              <button
-                onclick={() => toggleEventType(eventType)}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
-            </Badge>
-          {/each}
-
-          {#if searchQuery.trim()}
-            <Badge variant="outline" class="gap-1">
-              "{searchQuery}"
-              <button
-                onclick={() => (searchQuery = "")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
-            </Badge>
-          {/if}
-        </div>
-      {/if}
-    </Card.Content>
-  </Card.Root>
-
-  <!-- Data Table -->
-  <Card.Root>
-    <Card.Content class="p-0">
-      <TreatmentsDataTable
-        treatments={filteredTreatments}
-        onEdit={editTreatment}
-        onDelete={confirmDelete}
-        onBulkDelete={confirmBulkDelete}
-      />
-    </Card.Content>
-  </Card.Root>
-
-  <!-- Footer -->
-  <div class="text-center text-xs text-muted-foreground">
-    <p>
-      Report generated from {data.treatments.length.toLocaleString()} treatments between
-      {new Date(data.dateRange.from).toLocaleDateString()} and {new Date(
-        data.dateRange.to
-      ).toLocaleDateString()}
-    </p>
-  </div>
-</div>
-
-<!-- Edit Treatment Dialog -->
-<TreatmentEditDialog
-  bind:open={showEditDialog}
-  treatment={treatmentToEdit}
-  {availableEventTypes}
-  isLoading={isEditLoading}
-  onClose={handleEditClose}
-  onSave={handleEditSave}
-/>
-
-<!-- Hidden form for edit submission -->
-<form
-  bind:this={editFormElement}
-  method="POST"
-  action="?/updateTreatment"
-  class="hidden"
-  use:enhance={() => {
-    return async ({ update }) => {
-      await update();
-    };
-  }}
->
-  <input type="hidden" name="treatmentId" value="" />
-  <input type="hidden" name="treatmentData" value="" />
-</form>
-
-<!-- Delete Confirmation Modal -->
-{#if showDeleteConfirm && treatmentToDelete}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    role="dialog"
-    aria-modal="true"
-  >
-    <Card.Root class="w-full max-w-md">
-      <Card.Header>
-        <Card.Title>Delete Treatment</Card.Title>
-        <Card.Description>
-          Are you sure you want to delete this {treatmentToDelete.eventType} treatment?
-          This action cannot be undone.
-        </Card.Description>
-      </Card.Header>
-
-      <Card.Content>
-        <Alert.Root>
-          <Alert.Title>Treatment Details</Alert.Title>
-          <Alert.Description>
-            <div class="space-y-1 text-sm">
-              <div>
-                <strong>Time:</strong>
-                {formatDate(treatmentToDelete.created_at)}
-              </div>
-              <div>
-                <strong>Type:</strong>
-                {treatmentToDelete.eventType || "Unknown"}
-              </div>
-              {#if treatmentToDelete.insulin}
-                <div>
-                  <strong>Insulin:</strong>
-                  {formatInsulinDisplay(treatmentToDelete.insulin)}U
-                </div>
-              {/if}
-              {#if treatmentToDelete.carbs}
-                <div>
-                  <strong>Carbs:</strong>
-                  {formatCarbDisplay(treatmentToDelete.carbs)}g
-                </div>
-              {/if}
-            </div>
-          </Alert.Description>
-        </Alert.Root>
-      </Card.Content>
-
-      <Card.Footer class="flex gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          class="flex-1"
-          onclick={() => {
-            showDeleteConfirm = false;
-            treatmentToDelete = null;
-          }}
-          disabled={isLoading}
-        >
-          Cancel
-        </Button>
-        <form
-          method="POST"
-          action="?/deleteTreatment"
-          style="flex: 1;"
-          use:enhance={() => {
-            isLoading = true;
-            return async ({ update }) => {
-              isLoading = false;
-              await update();
-            };
-          }}
-        >
-          <input
-            type="hidden"
-            name="treatmentId"
-            value={treatmentToDelete._id}
-          />
+  {#snippet failed(error)}
+    <div class="container mx-auto space-y-6 px-4 py-6">
+      <Card.Root class="border-2 border-destructive">
+        <Card.Header>
+          <Card.Title class="flex items-center gap-2 text-destructive">
+            <AlertTriangle class="w-5 h-5" />
+            Error Loading Treatments
+          </Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <p class="text-destructive-foreground">{error.message}</p>
           <Button
-            type="submit"
-            variant="destructive"
-            class="w-full"
+            variant="outline"
+            class="mt-4"
+            onclick={() => getReportsData(dateRangeInput).refresh()}
+          >
+            Try again
+          </Button>
+        </Card.Content>
+      </Card.Root>
+    </div>
+  {/snippet}
+
+  <div class="container mx-auto space-y-6 px-4 py-6">
+    <!-- Header -->
+    <div class="space-y-2">
+      <div
+        class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
+      >
+        <Calendar class="h-4 w-4" />
+        <span>
+          {new Date(data.dateRange.from).toLocaleDateString()} – {new Date(
+            data.dateRange.to
+          ).toLocaleDateString()}
+        </span>
+        <span class="text-muted-foreground/50">•</span>
+        <span>{data.treatments.length.toLocaleString()} treatments</span>
+      </div>
+      <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
+      <p class="mx-auto max-w-2xl text-center text-muted-foreground">
+        Review and manage your insulin doses, carb entries, and device events.
+        Use filters to find specific treatments.
+      </p>
+    </div>
+
+    <!-- Summary Stats -->
+    <TreatmentStatsCard stats={filteredStats} dateRange={data.dateRange} />
+
+    <!-- Category Tabs -->
+    <TreatmentCategoryTabs
+      {activeCategory}
+      {categoryCounts}
+      onChange={handleCategoryChange}
+    />
+
+    <!-- Filters Panel -->
+    <Card.Root>
+      <Card.Content class="p-4">
+        <div
+          class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+        >
+          <!-- Left side: Search and Event Type filter -->
+          <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
+            <!-- Search -->
+            <div class="flex-1 max-w-sm">
+              <Label for="search" class="text-sm font-medium">Search</Label>
+              <Input
+                id="search"
+                type="text"
+                placeholder="Search treatments..."
+                value={searchQuery}
+                oninput={handleSearch}
+              />
+            </div>
+
+            <!-- Event Type Filter -->
+            <Popover.Root>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <Button variant="outline" class="gap-2" {...props}>
+                    <Filter class="h-4 w-4" />
+                    Event Types
+                    {#if selectedEventTypes.length > 0}
+                      <Badge variant="secondary" class="ml-1">
+                        {selectedEventTypes.length}
+                      </Badge>
+                    {/if}
+                    <ChevronDown class="h-4 w-4" />
+                  </Button>
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content class="w-64 p-3" align="start">
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+                  {#each availableEventTypes as eventType}
+                    <label
+                      class="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEventTypes.includes(eventType)}
+                        onchange={() => toggleEventType(eventType)}
+                        class="rounded"
+                      />
+                      {eventType}
+                    </label>
+                  {/each}
+                </div>
+              </Popover.Content>
+            </Popover.Root>
+          </div>
+
+          <!-- Right side: Clear filters -->
+          <div class="flex items-center gap-2">
+            {#if hasActiveFilters}
+              <Button variant="ghost" size="sm" onclick={clearFilters}>
+                <X class="mr-1 h-4 w-4" />
+                Clear filters
+              </Button>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Active filters display -->
+        {#if hasActiveFilters}
+          <div
+            class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm"
+          >
+            <span class="text-muted-foreground">Showing:</span>
+            <span class="font-medium">
+              {filteredTreatments.length} of {data.treatments.length}
+            </span>
+
+            {#if activeCategory !== "all"}
+              <Badge variant="secondary" class="gap-1">
+                {TREATMENT_CATEGORIES[activeCategory].name}
+                <button
+                  onclick={() => (activeCategory = "all")}
+                  class="ml-1 hover:text-foreground"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </Badge>
+            {/if}
+
+            {#each selectedEventTypes as eventType}
+              <Badge variant="outline" class="gap-1">
+                {eventType}
+                <button
+                  onclick={() => toggleEventType(eventType)}
+                  class="ml-1 hover:text-foreground"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </Badge>
+            {/each}
+
+            {#if searchQuery.trim()}
+              <Badge variant="outline" class="gap-1">
+                "{searchQuery}"
+                <button
+                  onclick={() => (searchQuery = "")}
+                  class="ml-1 hover:text-foreground"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </Badge>
+            {/if}
+          </div>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+
+    <!-- Data Table -->
+    <Card.Root>
+      <Card.Content class="p-0">
+        <TreatmentsDataTable
+          treatments={filteredTreatments}
+          onEdit={editTreatment}
+          onDelete={confirmDelete}
+          onBulkDelete={confirmBulkDelete}
+        />
+      </Card.Content>
+    </Card.Root>
+
+    <!-- Footer -->
+    <div class="text-center text-xs text-muted-foreground">
+      <p>
+        Report generated from {data.treatments.length.toLocaleString()} treatments
+        between
+        {new Date(data.dateRange.from).toLocaleDateString()} and {new Date(
+          data.dateRange.to
+        ).toLocaleDateString()}
+      </p>
+    </div>
+  </div>
+
+  <!-- Edit Treatment Dialog -->
+  <TreatmentEditDialog
+    bind:open={showEditDialog}
+    treatment={treatmentToEdit}
+    {availableEventTypes}
+    isLoading={isEditLoading}
+    onClose={handleEditClose}
+    onSave={handleEditSave}
+  />
+
+  <!-- Delete Confirmation Modal -->
+  {#if showDeleteConfirm && treatmentToDelete}
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <Card.Root class="w-full max-w-md">
+        <Card.Header>
+          <Card.Title>Delete Treatment</Card.Title>
+          <Card.Description>
+            Are you sure you want to delete this {treatmentToDelete.eventType} treatment?
+            This action cannot be undone.
+          </Card.Description>
+        </Card.Header>
+
+        <Card.Content>
+          <Alert.Root>
+            <Alert.Title>Treatment Details</Alert.Title>
+            <Alert.Description>
+              <div class="space-y-1 text-sm">
+                <div>
+                  <strong>Time:</strong>
+                  {formatDate(treatmentToDelete.created_at)}
+                </div>
+                <div>
+                  <strong>Type:</strong>
+                  {treatmentToDelete.eventType || "Unknown"}
+                </div>
+                {#if treatmentToDelete.insulin}
+                  <div>
+                    <strong>Insulin:</strong>
+                    {formatInsulinDisplay(treatmentToDelete.insulin)}U
+                  </div>
+                {/if}
+                {#if treatmentToDelete.carbs}
+                  <div>
+                    <strong>Carbs:</strong>
+                    {formatCarbDisplay(treatmentToDelete.carbs)}g
+                  </div>
+                {/if}
+              </div>
+            </Alert.Description>
+          </Alert.Root>
+        </Card.Content>
+
+        <Card.Footer class="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            class="flex-1"
+            onclick={() => {
+              showDeleteConfirm = false;
+              treatmentToDelete = null;
+            }}
             disabled={isLoading}
           >
-            {isLoading ? "Deleting..." : "Delete"}
+            Cancel
           </Button>
-        </form>
-      </Card.Footer>
-    </Card.Root>
-  </div>
-{/if}
+          <form
+            {...deleteTreatmentForm
+              .for(treatmentToDelete._id || "")
+              .enhance(async ({ submit }) => {
+                isLoading = true;
+                try {
+                  await submit();
+                  toast.success("Treatment deleted successfully");
+                  showDeleteConfirm = false;
+                  treatmentToDelete = null;
+                  invalidateAll();
+                } catch (error) {
+                  console.error("Delete error:", error);
+                  toast.error("Failed to delete treatment");
+                } finally {
+                  isLoading = false;
+                }
+              })}
+            style="flex: 1;"
+          >
+            <input
+              type="hidden"
+              name="treatmentId"
+              value={treatmentToDelete._id}
+            />
+            <Button
+              type="submit"
+              variant="destructive"
+              class="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? "Deleting..." : "Delete"}
+            </Button>
+          </form>
+        </Card.Footer>
+      </Card.Root>
+    </div>
+  {/if}
 
-<!-- Bulk Delete Confirmation Modal -->
-{#if showBulkDeleteConfirm && treatmentsToDelete.length > 0}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    role="dialog"
-    aria-modal="true"
-  >
-    <Card.Root class="w-full max-w-lg">
-      <Card.Header>
-        <Card.Title>Delete {treatmentsToDelete.length} Treatments</Card.Title>
-        <Card.Description>
-          Are you sure you want to delete {treatmentsToDelete.length} selected treatment{treatmentsToDelete.length !==
-          1
-            ? "s"
-            : ""}? This action cannot be undone.
-        </Card.Description>
-      </Card.Header>
+  <!-- Bulk Delete Confirmation Modal -->
+  {#if showBulkDeleteConfirm && treatmentsToDelete.length > 0}
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <Card.Root class="w-full max-w-lg">
+        <Card.Header>
+          <Card.Title>Delete {treatmentsToDelete.length} Treatments</Card.Title>
+          <Card.Description>
+            Are you sure you want to delete {treatmentsToDelete.length} selected treatment{treatmentsToDelete.length !==
+            1
+              ? "s"
+              : ""}? This action cannot be undone.
+          </Card.Description>
+        </Card.Header>
 
-      <Card.Content>
-        <Alert.Root>
-          <Alert.Title>Selected Treatments</Alert.Title>
-          <Alert.Description>
-            <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
-              {#each treatmentsToDelete.slice(0, 5) as treatment}
-                <div
-                  class="flex items-center justify-between border-b border-border py-1 last:border-b-0"
-                >
-                  <div>
-                    <div class="font-medium">
-                      {treatment.eventType || "Unknown"}
+        <Card.Content>
+          <Alert.Root>
+            <Alert.Title>Selected Treatments</Alert.Title>
+            <Alert.Description>
+              <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
+                {#each treatmentsToDelete.slice(0, 5) as treatment}
+                  <div
+                    class="flex items-center justify-between border-b border-border py-1 last:border-b-0"
+                  >
+                    <div>
+                      <div class="font-medium">
+                        {treatment.eventType || "Unknown"}
+                      </div>
+                      <div class="text-xs text-muted-foreground">
+                        {formatDate(treatment.created_at)}
+                      </div>
                     </div>
-                    <div class="text-xs text-muted-foreground">
-                      {formatDate(treatment.created_at)}
+                    <div class="text-xs">
+                      {#if treatment.insulin}
+                        {formatInsulinDisplay(treatment.insulin)}U
+                      {/if}
+                      {#if treatment.carbs}
+                        {formatCarbDisplay(treatment.carbs)}g
+                      {/if}
                     </div>
                   </div>
-                  <div class="text-xs">
-                    {#if treatment.insulin}
-                      {formatInsulinDisplay(treatment.insulin)}U
-                    {/if}
-                    {#if treatment.carbs}
-                      {formatCarbDisplay(treatment.carbs)}g
-                    {/if}
+                {/each}
+                {#if treatmentsToDelete.length > 5}
+                  <div class="py-2 text-center text-xs text-muted-foreground">
+                    ... and {treatmentsToDelete.length - 5} more treatments
                   </div>
-                </div>
-              {/each}
-              {#if treatmentsToDelete.length > 5}
-                <div class="py-2 text-center text-xs text-muted-foreground">
-                  ... and {treatmentsToDelete.length - 5} more treatments
-                </div>
-              {/if}
-            </div>
-          </Alert.Description>
-        </Alert.Root>
-      </Card.Content>
+                {/if}
+              </div>
+            </Alert.Description>
+          </Alert.Root>
+        </Card.Content>
 
-      <Card.Footer class="flex gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          class="flex-1"
-          onclick={() => {
-            showBulkDeleteConfirm = false;
-            treatmentsToDelete = [];
-          }}
-          disabled={isLoading}
-        >
-          Cancel
-        </Button>
-        <form
-          method="POST"
-          action="?/bulkDeleteTreatments"
-          style="flex: 1;"
-          use:enhance={() => {
-            isLoading = true;
-            return async ({ update }) => {
-              isLoading = false;
-              await update();
-            };
-          }}
-        >
-          {#each treatmentsToDelete as treatment}
-            <input type="hidden" name="treatmentIds" value={treatment._id} />
-          {/each}
+        <Card.Footer class="flex gap-3">
           <Button
-            type="submit"
-            variant="destructive"
-            class="w-full"
+            type="button"
+            variant="secondary"
+            class="flex-1"
+            onclick={() => {
+              showBulkDeleteConfirm = false;
+              treatmentsToDelete = [];
+            }}
             disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            class="flex-1"
+            disabled={isLoading}
+            onclick={async () => {
+              isLoading = true;
+              try {
+                const treatmentIds = treatmentsToDelete
+                  .map((t) => t._id)
+                  .filter(Boolean) as string[];
+                const result = await bulkDeleteTreatments(treatmentIds);
+                if (result.success) {
+                  toast.success(result.message);
+                  showBulkDeleteConfirm = false;
+                  treatmentsToDelete = [];
+                  invalidateAll();
+                } else {
+                  toast.error(result.message);
+                }
+              } catch (error) {
+                console.error("Bulk delete error:", error);
+                toast.error("Failed to delete treatments");
+              } finally {
+                isLoading = false;
+              }
+            }}
           >
             {isLoading
               ? "Deleting..."
               : `Delete ${treatmentsToDelete.length} Treatment${treatmentsToDelete.length !== 1 ? "s" : ""}`}
           </Button>
-        </form>
-      </Card.Footer>
-    </Card.Root>
-  </div>
-{/if}
+        </Card.Footer>
+      </Card.Root>
+    </div>
+  {/if}
+</svelte:boundary>

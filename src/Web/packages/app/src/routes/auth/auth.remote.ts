@@ -434,6 +434,22 @@ export const verifyEmailForm = form(verifyEmailSchema, async (data, issue) => {
   }
 });
 
+/**
+ * Get current authentication state
+ * Used to check if user is already logged in
+ */
+export const getAuthState = query(async () => {
+  const event = getRequestEvent();
+  if (!event) {
+    return { isAuthenticated: false, user: null };
+  }
+
+  return {
+    isAuthenticated: event.locals.isAuthenticated ?? false,
+    user: event.locals.user ?? null,
+  };
+});
+
 // ============================================================================
 // Type Exports for Components
 // ============================================================================

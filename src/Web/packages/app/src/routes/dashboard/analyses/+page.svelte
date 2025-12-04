@@ -67,13 +67,13 @@
   }
 
   function nextPage() {
-    const params = new URLSearchParams($page.url.searchParams);
+    const params = new URLSearchParams(page.url.searchParams);
     params.set("skip", (filters.skip + filters.count).toString());
     goto(`/dashboard/analyses?${params.toString()}`);
   }
 
   function prevPage() {
-    const params = new URLSearchParams($page.url.searchParams);
+    const params = new URLSearchParams(page.url.searchParams);
     params.set("skip", Math.max(0, filters.skip - filters.count).toString());
     goto(`/dashboard/analyses?${params.toString()}`);
   }

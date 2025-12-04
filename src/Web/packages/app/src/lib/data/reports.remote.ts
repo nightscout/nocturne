@@ -3,9 +3,8 @@
  * Provides entries, treatments, and analysis data for all report pages
  */
 import { z } from 'zod';
-import { query } from '$app/server';
+import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
 
 /**
  * Input schema for date range queries
@@ -57,7 +56,8 @@ function calculateDateRange(input?: DateRangeInput): { startDate: Date; endDate:
 export const getEntries = query(
 	DateRangeSchema.optional(),
 	async (input) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
 		const entriesQuery = `find[date][$gte]=${startDate.toISOString()}&find[date][$lte]=${endDate.toISOString()}`;
@@ -79,7 +79,8 @@ export const getEntries = query(
 export const getTreatments = query(
 	DateRangeSchema.optional(),
 	async (input) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
 		const treatmentsQuery = `find[created_at][$gte]=${startDate.toISOString()}&find[created_at][$lte]=${endDate.toISOString()}`;
@@ -124,15 +125,16 @@ export const getAnalysis = query(
 	z.object({
 		entries: z.array(z.any()),
 		treatments: z.array(z.any()),
-		population: z.number().optional(),
+		population: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
 	}),
 	async ({ entries, treatments, population = 0 }) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
 		return apiClient.statistics.analyzeGlucoseDataExtended({
 			entries,
 			treatments,
-			population,
+			population: population as 0 | 1 | 2 | 3 | 4 | 5,
 		});
 	}
 );
@@ -141,7 +143,8 @@ export const getAnalysis = query(
  * Get multi-period statistics summary
  */
 export const getSummary = query(async () => {
-	const apiClient = getApiClient();
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 	return apiClient.statistics.getMultiPeriodStatistics();
 });
 
@@ -152,7 +155,8 @@ export const getSummary = query(async () => {
 export const getReportsData = query(
 	DateRangeSchema.optional(),
 	async (input) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
 		const entriesQuery = `find[date][$gte]=${startDate.toISOString()}&find[date][$lte]=${endDate.toISOString()}`;
@@ -191,7 +195,7 @@ export const getReportsData = query(
 			apiClient.statistics.analyzeGlucoseDataExtended({
 				entries,
 				treatments,
-				population: 0,
+				population: 0 as const,
 			}),
 		]);
 

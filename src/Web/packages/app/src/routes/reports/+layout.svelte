@@ -6,7 +6,7 @@
   import { ArrowLeftIcon, Filter, Calendar } from "lucide-svelte";
   import { queryParam } from "sveltekit-search-params";
 
-  let { children, data } = $props();
+  let { children } = $props();
 
   // Filter sidebar state
   let filterSidebarOpen = $state(false);
@@ -103,8 +103,6 @@
             >
               <Calendar class="h-3 w-3" />
               <span>{dateRangeDisplay()}</span>
-              <span>•</span>
-              <span>{data.entries.length} entries</span>
             </div>
           </div>
         </div>

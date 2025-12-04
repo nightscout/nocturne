@@ -2,9 +2,8 @@
  * Remote functions for profile management
  */
 import { z } from 'zod';
-import { query, command } from '$app/server';
+import { getRequestEvent, query, command } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
 import type { Profile } from '$lib/api';
 
 /**
@@ -13,7 +12,8 @@ import type { Profile } from '$lib/api';
 export const getProfiles = query(
 	z.string().optional(), // selectedProfileId
 	async (selectedProfileId) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
 		try {
 			const response = await apiClient.profile.getProfiles2();
@@ -66,7 +66,8 @@ export const createProfile = command(
 		icon: z.string().optional(),
 	}),
 	async (profileData) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
 		const now = Date.now();
 		const storeName = profileData.defaultProfile || 'Default';
@@ -103,7 +104,7 @@ export const createProfile = command(
 		const createdProfile = Array.isArray(result) ? result[0] : result;
 
 		// Refresh the profiles query
-		getProfiles().refresh();
+		await getProfiles(undefined).refresh();
 
 		return {
 			message: 'Profile created successfully',
@@ -121,12 +122,13 @@ export const updateProfile = command(
 		profileData: z.any(), // Full Profile object
 	}),
 	async ({ profileId, profileData }) => {
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
 		const updatedProfile = await apiClient.profile.updateProfile(profileId, profileData);
 
 		// Refresh the profiles query
-		getProfiles().refresh();
+		await getProfiles(undefined).refresh();
 
 		return {
 			message: 'Profile updated successfully',
@@ -139,12 +141,13 @@ export const updateProfile = command(
  * Delete a profile
  */
 export const deleteProfile = command(z.string(), async (profileId) => {
-	const apiClient = getApiClient();
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 	await apiClient.profile.deleteProfile(profileId);
 
 	// Refresh the profiles query
-	getProfiles().refresh();
+	await getProfiles(undefined).refresh();
 
 	return {
 		message: 'Profile deleted successfully',

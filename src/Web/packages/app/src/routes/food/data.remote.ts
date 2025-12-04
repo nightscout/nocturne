@@ -1,16 +1,17 @@
 /**
  * Remote functions for food database
  */
-import { query } from '$app/server';
+import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
+
 import type { FoodRecord, QuickPickRecord } from './types';
 
 /**
  * Get all food records and quickpicks
  */
 export const getFoodData = query(async () => {
-	const apiClient = getApiClient();
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 	try {
 		const records = await apiClient.food.getFood2();

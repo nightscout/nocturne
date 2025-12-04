@@ -95,7 +95,7 @@
   }
 
   function refreshData() {
-    goto($page.url.pathname + $page.url.search, { invalidateAll: true });
+    goto(page.url.pathname + page.url.search, { invalidateAll: true });
   }
 </script>
 

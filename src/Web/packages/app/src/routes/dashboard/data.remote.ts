@@ -2,9 +2,9 @@
  * Remote functions for dashboard data
  */
 import { z } from 'zod';
-import { query } from '$app/server';
+import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
+
 
 const DashboardFiltersSchema = z.object({
 	fromDate: z.string().optional(),
@@ -15,7 +15,8 @@ const DashboardFiltersSchema = z.object({
  * Get dashboard compatibility metrics and data
  */
 export const getDashboardData = query(DashboardFiltersSchema.optional(), async (filters) => {
-	const apiClient = getApiClient();
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 	try {
 		const fromDate = filters?.fromDate ? new Date(filters.fromDate) : undefined;
@@ -89,7 +90,8 @@ const AnalysesFiltersSchema = z.object({
  * Get analyses list with filtering
  */
 export const getAnalyses = query(AnalysesFiltersSchema.optional(), async (filters) => {
-	const apiClient = getApiClient();
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 	try {
 		const requestPath = filters?.requestPath || '';
@@ -137,7 +139,8 @@ export const getAnalyses = query(AnalysesFiltersSchema.optional(), async (filter
  * Get a single analysis detail by ID
  */
 export const getAnalysisById = query(z.string(), async (id) => {
-	const apiClient = getApiClient();
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 	try {
 		const response = await fetch(`${apiClient.baseUrl}/api/v3/discrepancy/analyses/${id}`);

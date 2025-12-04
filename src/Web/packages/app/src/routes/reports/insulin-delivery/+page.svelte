@@ -24,12 +24,24 @@
   import BasalBolusRatioChart from "$lib/components/reports/BasalBolusRatioChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import type { Treatment } from "$lib/api";
+  import { page } from "$app/state";
+  import { getReportsData } from "$lib/data/reports.remote";
+  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
 
-  let { data } = $props();
+  // Build date range input from URL parameters
+  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url, 30));
 
-  // Use reactive accessors for data properties
-  const treatments = $derived(data.treatments);
-  const dateRange = $derived(data.dateRange);
+  // Query for reports data
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  const data = $derived(await reportsQuery);
+
+  const treatments = $derived(data?.treatments ?? []);
+  const dateRange = $derived(
+    data?.dateRange ?? {
+      from: new Date().toISOString(),
+      to: new Date().toISOString(),
+    }
+  );
 
   // Helper dates
   const startDate = $derived(new Date(dateRange.from));

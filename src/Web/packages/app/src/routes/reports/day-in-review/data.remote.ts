@@ -3,9 +3,9 @@
  * Fetches entries and treatments for a specific day
  */
 import { z } from 'zod';
-import { query } from '$app/server';
+import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
+
 
 /**
  * Get day-in-review data for a specific date
@@ -22,7 +22,8 @@ export const getDayInReviewData = query(
 			throw error(400, 'Invalid date parameter');
 		}
 
-		const apiClient = getApiClient();
+		const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 		// Set date boundaries
 		const dayStart = new Date(date);

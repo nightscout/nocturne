@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation";
   import * as Sheet from "$lib/components/ui/sheet";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
@@ -94,8 +93,6 @@
     days.set(daysCount);
     fromDate.set(startDate.toString());
     toDate.set(endDate.toString());
-
-    invalidateAll();
   }
 
   function handleCalendarChange(newValue: DateRange | undefined) {
@@ -103,8 +100,6 @@
       days.set(undefined);
       fromDate.set(newValue.start.toString());
       toDate.set(newValue.end.toString());
-
-      invalidateAll();
     }
   }
 

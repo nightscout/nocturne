@@ -6,13 +6,34 @@
   import type { FoodRecord, QuickPickRecord } from "./types";
   import FoodList from "./FoodList.svelte";
   import { getFoodData } from "./data.remote";
+  import { onMount } from "svelte";
 
-  // Fetch food data using remote function
-  const foodData = await getFoodData();
-
-  // Create and set the store in context
-  const foodState = new FoodState(foodData);
+  // Create store with empty initial data - setContext must be called synchronously
+  const foodState = new FoodState({
+    foodList: [],
+    quickPickList: [],
+    categories: {},
+    nightscoutUrl: "",
+  });
   setFoodState(foodState);
+
+  // Fetch food data asynchronously and update the store
+  onMount(async () => {
+    foodState.loading = true;
+    try {
+      const data = await getFoodData();
+      // Update the store with fetched data
+      foodState.foodList = data.foodList;
+      foodState.quickPickList = data.quickPickList;
+      foodState.categories = data.categories;
+      foodState.status = "Database loaded";
+    } catch (error) {
+      foodState.status = "Failed to load food database";
+      console.error("Failed to load food data:", error);
+    } finally {
+      foodState.loading = false;
+    }
+  });
 
   // Drag and drop handlers (these stay in the main component as they handle DOM events)
   function handleFoodDragStart(event: DragEvent, food: FoodRecord) {

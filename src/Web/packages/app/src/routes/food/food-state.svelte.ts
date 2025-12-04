@@ -73,14 +73,15 @@ export class FoodState {
 		foodList: FoodRecord[];
 		quickPickList: QuickPickRecord[];
 		categories: Record<string, Record<string, boolean>>;
-		nightscoutUrl: string;
+		nightscoutUrl?: string;
 		error?: string;
 	}) {
 		this.foodList = [...initialData.foodList];
 		this.quickPickList = [...initialData.quickPickList];
 		this.categories = { ...initialData.categories };
-		this.nightscoutUrl = initialData.nightscoutUrl;
-		this.status = initialData.error || 'Database loaded';
+		// Use window.location.origin as default for client-side API calls
+		this.nightscoutUrl = initialData.nightscoutUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+		this.status = initialData.error || (initialData.foodList.length > 0 ? 'Database loaded' : '');
 	}
 
 	// Private helper methods

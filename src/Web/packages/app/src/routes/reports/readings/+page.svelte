@@ -1,11 +1,38 @@
 <script lang="ts">
   import { GlucoseChart } from "$lib/components/glucose-chart";
+  import { page } from "$app/state";
+  import { getReportsData } from "$lib/data/reports.remote";
+  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
 
-  let { data } = $props();
+  // Build date range input from URL parameters
+  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+
+  // Query for reports data
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  const data = $derived(await reportsQuery);
 </script>
 
-<GlucoseChart
-  entries={data.entries}
-  treatments={data.treatments}
-  dateRange={data.dateRange}
-/>
+<svelte:boundary>
+  {#snippet pending()}
+    <div class="flex items-center justify-center h-64">
+      <div class="text-center space-y-4">
+        <div
+          class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"
+        ></div>
+        <p class="text-muted-foreground">Loading readings...</p>
+      </div>
+    </div>
+  {/snippet}
+
+  {#snippet failed(error)}
+    <div class="p-4 text-center">
+      <p class="text-destructive">{error.message}</p>
+    </div>
+  {/snippet}
+
+  <GlucoseChart
+    entries={data.entries}
+    treatments={data.treatments}
+    dateRange={data.dateRange}
+  />
+</svelte:boundary>

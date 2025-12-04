@@ -11,14 +11,12 @@ import type {
 } from "$lib/websocket/types";
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
-import { ApiClient } from "$lib/api/api-client";
+import { getApiClient } from "$lib/api/client";
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
 export class RealtimeStore {
   private websocketClient!: WebSocketClient;
-  private apiClient?: ApiClient;
-  private config: WebSocketConfig;
   private initialized = false;
 
   /** Reactive state using Svelte 5 runes */
@@ -90,7 +88,6 @@ export class RealtimeStore {
   });
 
   constructor(config: WebSocketConfig) {
-    this.config = config;
     this.websocketClient = new WebSocketClient(config);
     this.setupEventHandlers();
   }
@@ -106,33 +103,28 @@ export class RealtimeStore {
       return;
     }
 
-    // Initialize API client for fetching historical data
-    // Use the same base URL as the WebSocket connection (window.location.origin)
-    this.apiClient = new ApiClient(this.config.url);
-
     // Start with empty data
     this.entries = [];
     this.treatments = [];
 
     try {
-      // Fetch historical data first
-      if (this.apiClient) {
-        const [historicalEntries, historicalTreatments] = await Promise.all([
-          this.apiClient.entries.getEntries2(undefined, 1000),
-          this.apiClient.treatments.getTreatments2(undefined, 500),
-        ]);
+      // Fetch historical data using the properly configured API client
+      const apiClient = getApiClient();
+      const [historicalEntries, historicalTreatments] = await Promise.all([
+        apiClient.entries.getEntries2(undefined, 1000),
+        apiClient.treatments.getTreatments2(undefined, 500),
+      ]);
 
-        if (historicalEntries && historicalEntries.length > 0) {
-          this.entries = historicalEntries.sort(
-            (a: Entry, b: Entry) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
+      if (historicalEntries && historicalEntries.length > 0) {
+        this.entries = historicalEntries.sort(
+          (a: Entry, b: Entry) => (b.mills || 0) - (a.mills || 0)
+        );
+      }
 
-        if (historicalTreatments && historicalTreatments.length > 0) {
-          this.treatments = historicalTreatments.sort(
-            (a: Treatment, b: Treatment) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
+      if (historicalTreatments && historicalTreatments.length > 0) {
+        this.treatments = historicalTreatments.sort(
+          (a: Treatment, b: Treatment) => (b.mills || 0) - (a.mills || 0)
+        );
       }
     } catch (error) {
       console.error("Failed to fetch historical data:", error);

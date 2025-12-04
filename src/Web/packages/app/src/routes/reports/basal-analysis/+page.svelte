@@ -23,12 +23,24 @@
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import type { Treatment } from "$lib/api";
+  import { page } from "$app/state";
+  import { getReportsData } from "$lib/data/reports.remote";
+  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
 
-  let { data } = $props();
+  // Build date range input from URL parameters
+  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url, 30));
 
-  // Use reactive accessors for data properties
-  const treatments = $derived(data.treatments);
-  const dateRange = $derived(data.dateRange);
+  // Query for reports data
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  const data = $derived(await reportsQuery);
+
+  const treatments = $derived(data?.treatments ?? []);
+  const dateRange = $derived(
+    data?.dateRange ?? {
+      from: new Date().toISOString(),
+      to: new Date().toISOString(),
+    }
+  );
 
   // Helper dates
   const startDate = $derived(new Date(dateRange.from));
@@ -186,16 +198,16 @@
         This report shows how your <strong>
           basal (background) insulin delivery
         </strong>
-         varies throughout the day. The percentile chart shows your typical patterns:
+        varies throughout the day. The percentile chart shows your typical patterns:
       </p>
       <ul class="list-inside list-disc space-y-1 pl-2 text-muted-foreground">
         <li>
           The <strong>median line</strong>
-           shows your most common basal rate at each hour
+          shows your most common basal rate at each hour
         </li>
         <li>
           The <strong>shaded bands</strong>
-           show the range of variation (10th-90th percentile)
+          show the range of variation (10th-90th percentile)
         </li>
         <li>Wider bands indicate more variability in your basal needs</li>
       </ul>
@@ -364,7 +376,7 @@
                   </h4>
                   <p class="text-sm text-muted-foreground">
                     <strong>{tempBasalInfo.zeroTemps}</strong>
-                     zero or suspend temp basals were recorded. This often indicates
+                    zero or suspend temp basals were recorded. This often indicates
                     low glucose prevention or manual suspensions.
                   </p>
                 </div>

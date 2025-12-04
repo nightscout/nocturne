@@ -14,8 +14,15 @@
     type PointInTimeData,
   } from "$lib/data/week-to-week.remote";
   import PointDetailDialog from "$lib/components/reports/PointDetailDialog.svelte";
+  import { getReportsData } from "$lib/data/reports.remote";
+  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
 
-  let { data } = $props();
+  // Build date range input from URL parameters
+  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+
+  // Query for reports data
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  const data = $derived(await reportsQuery);
 
   // Day of week colors - matches Nightscout
   const DAY_COLORS = [

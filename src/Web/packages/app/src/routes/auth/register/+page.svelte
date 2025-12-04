@@ -13,14 +13,14 @@
     ArrowLeft,
   } from "lucide-svelte";
   import { registerForm, getLocalAuthConfig } from "../auth.remote";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import { goto } from "$app/navigation";
 
   // Query for local auth configuration
   const localAuthQuery = getLocalAuthConfig();
 
   // Get return URL from query params
-  const returnUrl = $derived($page.url.searchParams.get("returnUrl") || "/");
+  const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
 
   // Track registration result
   let registrationResult = $state<{
