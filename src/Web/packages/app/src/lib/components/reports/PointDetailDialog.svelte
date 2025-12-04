@@ -10,8 +10,6 @@
     Battery,
     Gauge,
     Clock,
-    TrendingUp,
-    TrendingDown,
     Minus,
     ArrowUp,
     ArrowDown,
@@ -19,7 +17,6 @@
     ArrowDownRight,
   } from "lucide-svelte";
   import type { PointInTimeData } from "$lib/data/week-to-week.remote";
-  import type { Component } from "svelte";
 
   interface Props {
     open: boolean;
@@ -29,28 +26,35 @@
     dayColor: string;
   }
 
-  let { open, onOpenChange, data, loading, dayColor }: Props = $props();
+  let {
+    open = $bindable(),
+    onOpenChange,
+    data,
+    loading,
+    dayColor,
+  }: Props = $props();
 
-  // Get direction icon
-  const DirectionIcon = $derived.by((): Component => {
-    if (!data?.glucose.direction) return Minus;
+  // Get direction icon type
+  type DirectionType = "up" | "upRight" | "down" | "downRight" | "flat";
+  const directionType = $derived.by((): DirectionType => {
+    if (!data?.glucose.direction) return "flat";
     switch (data.glucose.direction) {
       case "DoubleUp":
-        return ArrowUp;
+        return "up";
       case "SingleUp":
-        return ArrowUpRight;
+        return "upRight";
       case "FortyFiveUp":
-        return ArrowUpRight;
+        return "upRight";
       case "DoubleDown":
-        return ArrowDown;
+        return "down";
       case "SingleDown":
-        return ArrowDownRight;
+        return "downRight";
       case "FortyFiveDown":
-        return ArrowDownRight;
+        return "downRight";
       case "Flat":
-        return Minus;
+        return "flat";
       default:
-        return Minus;
+        return "flat";
     }
   });
 
@@ -116,7 +120,17 @@
           </div>
           <div class="flex flex-col items-end gap-1">
             <div class="flex items-center gap-1 {glucoseColorClass}">
-              <svelte:component this={DirectionIcon} class="h-5 w-5" />
+              {#if directionType === "up"}
+                <ArrowUp class="h-5 w-5" />
+              {:else if directionType === "upRight"}
+                <ArrowUpRight class="h-5 w-5" />
+              {:else if directionType === "down"}
+                <ArrowDown class="h-5 w-5" />
+              {:else if directionType === "downRight"}
+                <ArrowDownRight class="h-5 w-5" />
+              {:else}
+                <Minus class="h-5 w-5" />
+              {/if}
               {#if data.glucose.direction}
                 <span class="text-sm">{data.glucose.direction}</span>
               {/if}

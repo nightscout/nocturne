@@ -37,7 +37,9 @@
 
   let { data } = $props();
 
-  const { entries, analysis: analysisPromise, dateRange } = data;
+  const entries = $derived(data.entries);
+  const analysisPromise = $derived(data.analysis);
+  const dateRange = $derived(data.dateRange);
 
   // Helper dates
   const startDate = $derived(new Date(dateRange.from));

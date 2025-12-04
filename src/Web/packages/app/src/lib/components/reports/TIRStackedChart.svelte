@@ -1,5 +1,4 @@
 <script lang="ts">
-  import * as ChartC from "$lib/components/ui/chart/index.js";
   import {
     DEFAULT_CONFIG,
     type ExtendedAnalysisConfig,
@@ -11,10 +10,12 @@
     entries,
     config,
   }: { entries: Entry[]; config?: ExtendedAnalysisConfig } = $props();
-  const timeInRange = calculateTimeInRange(entries, {
-    ...DEFAULT_CONFIG,
-    ...config,
-  });
+  const timeInRange = $derived(
+    calculateTimeInRange(entries, {
+      ...DEFAULT_CONFIG,
+      ...config,
+    })
+  );
 
   const chartConfig = {
     severeLow: {
@@ -78,7 +79,7 @@
     },
   }}
 >
-  {#snippet tooltip({ context })}
+  {#snippet tooltip({ context: _ })}
     <Tooltip.Root>
       {#snippet children({ data })}
         <Tooltip.List>

@@ -17,12 +17,6 @@
 
   let { data } = $props();
 
-  // Get week offset from URL or default to 0
-  const initialWeekOffset = $derived(() => {
-    const weekParam = page.url.searchParams.get("week");
-    return weekParam ? parseInt(weekParam) : 0;
-  });
-
   // Day of week colors - matches Nightscout
   const DAY_COLORS = [
     { name: "Sunday", color: "#808080", shortName: "Sun" }, // Gray
@@ -52,8 +46,21 @@
     sizeOptions[parseInt(selectedSizeIndex)] ?? sizeOptions[2]
   );
 
-  // Week navigation - initialize from URL
-  let weekOffset = $state(initialWeekOffset() ?? 0);
+  // Week navigation - derive initial value from URL params to avoid state_referenced_locally warning
+  const initialWeekOffset = $derived(() => {
+    const weekParam = page.url.searchParams.get("week");
+    return weekParam ? parseInt(weekParam) : 0;
+  });
+  let weekOffset = $state(0);
+
+  // Initialize weekOffset from URL on mount
+  $effect(() => {
+    // Only set on initial load, not on subsequent URL changes (which we control)
+    const urlOffset = initialWeekOffset();
+    if (weekOffset === 0 && urlOffset !== 0) {
+      weekOffset = urlOffset;
+    }
+  });
 
   // Point detail dialog state
   let dialogOpen = $state(false);
@@ -103,7 +110,12 @@
     // Group by day of week and normalize time to be within a single 24-hour period
     const grouped: Map<
       number,
-      { original: Entry; normalized: Date; dayOfWeek: number }[]
+      {
+        original: Entry;
+        normalized: Date;
+        dayOfWeek: number;
+        originalTimestamp: number;
+      }[]
     > = new Map();
 
     for (let i = 0; i < 7; i++) {
@@ -234,7 +246,7 @@
 
     try {
       const result = await getPointInTimeData(point.originalTimestamp);
-      dialogData = result;
+      dialogData = result as PointInTimeData | null;
     } catch (error) {
       console.error("Failed to fetch point data:", error);
     } finally {
@@ -402,9 +414,14 @@
                   r={4}
                   fill={series.color}
                   class="cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
-                  onclick={(e, point) => {
+                  onclick={(event: MouseEvent) => {
+                    // Get data from event target's __data__ property (d3 pattern)
+                    const target = event.target as SVGElement & {
+                      __data__?: ChartPoint;
+                    };
+                    const point = target?.__data__;
                     if (point) {
-                      handlePointClick(point as ChartPoint, series.dayOfWeek);
+                      handlePointClick(point, series.dayOfWeek);
                     }
                   }}
                 />

@@ -2,7 +2,7 @@
  * Server-side API client utilities for remote functions
  * Uses getRequestEvent to access the authenticated API client from locals
  */
-import { getRequestEvent, query } from '$app/server';
+import { getRequestEvent } from '$app/server';
 import type { ApiClient } from '$lib/api/api-client';
 
 /**

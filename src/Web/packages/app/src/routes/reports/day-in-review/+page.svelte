@@ -1,15 +1,5 @@
 <script lang="ts">
-  import {
-    Chart,
-    Svg,
-    Axis,
-    Spline,
-    Rect,
-    Group,
-    Points,
-    Text,
-    Arc,
-  } from "layerchart";
+  import { Chart, Svg, Axis, Spline, Rect, Group, Points } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";

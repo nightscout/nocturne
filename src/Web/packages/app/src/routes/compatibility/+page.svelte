@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { onMount, onDestroy } from "svelte";
   import { getCompatibilityData } from "./data.remote";
+  import type { AnalysisListItemDto } from "$lib/api";
 
   // Get filter params from URL
   const urlParams = $derived({
@@ -16,28 +17,40 @@
   });
 
   // Fetch data using remote function
-  const initialData = $derived(await getCompatibilityData(urlParams));
+  const fetchedData = $derived(await getCompatibilityData(urlParams));
 
-  // Runes for reactive state
-  let analyses = $state(initialData.analyses);
-  let metrics = $state(initialData.metrics);
-  let endpoints = $state(initialData.endpoints);
-  let config = $state(initialData.config);
+  // Use derived values for the fetched data to maintain reactivity
+  const analyses = $derived(fetchedData.analyses);
+  const metrics = $derived(fetchedData.metrics);
+  const config = $derived(fetchedData.config);
+
+  // Mutable state
   let isPolling = $state(true);
   let lastUpdate = $state(new Date());
   let nocturneUrl = $state(""); // Auto-detected URL
 
+  // Local override for analyses when polling
+  let polledAnalyses = $state<AnalysisListItemDto[] | null>(null);
+  let polledMetrics = $state<typeof fetchedData.metrics | null>(null);
+
   // Polling interval (5 seconds)
   let pollInterval: NodeJS.Timeout | null = null;
 
-  // Filter state
-  let filterPath = $state(initialData.filters.requestPath || "");
-  let filterMethod = $state(initialData.filters.requestMethod || "");
-  let filterMatch = $state(initialData.filters.overallMatch || "");
+  // Filter state - initialized from derived fetchedData
+  let filterPath = $state("");
+  let filterMethod = $state("");
+  let filterMatch = $state("");
   let showCompatible = $state(false); // Hide compatible by default
 
+  // Initialize filter state from fetched data
+  $effect(() => {
+    filterPath = fetchedData.filters.requestPath || "";
+    filterMethod = fetchedData.filters.requestMethod || "";
+    filterMatch = fetchedData.filters.overallMatch || "";
+  });
+
   // Helper to get match type display
-  function getMatchTypeDisplay(matchType: number) {
+  function getMatchTypeDisplay(matchType: number | undefined) {
     const types = [
       {
         value: 0,
@@ -86,7 +99,8 @@
   }
 
   // Helper to determine if analysis is compatible
-  function isCompatible(matchType: number) {
+  function isCompatible(matchType: number | undefined) {
+    if (matchType === undefined) return false;
     return matchType === 0 || matchType === 1; // Perfect or Minor Differences
   }
 
@@ -107,9 +121,9 @@
       ]);
 
       if (metricsRes.ok && analysesRes.ok) {
-        metrics = await metricsRes.json();
+        polledMetrics = await metricsRes.json();
         const analysesData = await analysesRes.json();
-        analyses = analysesData.analyses || [];
+        polledAnalyses = analysesData.analyses || [];
         lastUpdate = new Date();
       }
     } catch (err) {
@@ -164,14 +178,19 @@
   }
 
   // Filtered analyses based on showCompatible
+  // Use polled data if available, otherwise use the derived fetched data
+  const activeAnalyses = $derived(polledAnalyses ?? analyses);
+  const activeMetrics = $derived(polledMetrics ?? metrics);
+
   let filteredAnalyses = $derived(
     showCompatible
-      ? analyses
-      : analyses.filter((a) => !isCompatible(a.overallMatch))
+      ? activeAnalyses
+      : activeAnalyses.filter((a) => !isCompatible(a.overallMatch))
   );
 
   // Format timestamp
-  function formatTime(timestamp: string) {
+  function formatTime(timestamp: string | Date | undefined) {
+    if (!timestamp) return "N/A";
     return new Date(timestamp).toLocaleString();
   }
 
@@ -228,14 +247,14 @@
       <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
         Total Requests
       </h3>
-      <p class="text-3xl font-bold">{metrics.totalRequests || 0}</p>
+      <p class="text-3xl font-bold">{activeMetrics.totalRequests || 0}</p>
     </div>
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
         Compatibility Score
       </h3>
       <p class="text-3xl font-bold">
-        {(metrics.compatibilityScore || 0).toFixed(1)}%
+        {(activeMetrics.compatibilityScore || 0).toFixed(1)}%
       </p>
     </div>
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -243,7 +262,7 @@
         Critical Issues
       </h3>
       <p class="text-3xl font-bold text-red-600">
-        {metrics.criticalDifferences || 0}
+        {activeMetrics.criticalDifferences || 0}
       </p>
     </div>
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -251,7 +270,7 @@
         Avg Response Time
       </h3>
       <p class="text-3xl font-bold">
-        {formatDuration(metrics.averageNocturneResponseTime || 0)}
+        {formatDuration(activeMetrics.averageNocturneResponseTime || 0)}
       </p>
     </div>
   </div>
@@ -417,15 +436,15 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm">
-                {#if analysis.criticalDiscrepancyCount > 0}
+                {#if (analysis.criticalDiscrepancyCount ?? 0) > 0}
                   <span class="text-red-600 font-semibold">
                     {analysis.criticalDiscrepancyCount} critical
                   </span>
-                {:else if analysis.majorDiscrepancyCount > 0}
+                {:else if (analysis.majorDiscrepancyCount ?? 0) > 0}
                   <span class="text-yellow-600 font-semibold">
                     {analysis.majorDiscrepancyCount} major
                   </span>
-                {:else if analysis.minorDiscrepancyCount > 0}
+                {:else if (analysis.minorDiscrepancyCount ?? 0) > 0}
                   <span class="text-blue-600">
                     {analysis.minorDiscrepancyCount} minor
                   </span>
