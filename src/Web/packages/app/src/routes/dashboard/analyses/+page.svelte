@@ -28,18 +28,31 @@
     Server,
     AlertCircle,
   } from "lucide-svelte";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import type { PageData } from "./$types";
+  import { getAnalyses } from "../data.remote";
 
-  export let data: PageData;
+  // Get filter params from URL
+  const urlFilters = $derived({
+    requestPath: page.url.searchParams.get("requestPath") || undefined,
+    overallMatch: page.url.searchParams.get("overallMatch")
+      ? parseInt(page.url.searchParams.get("overallMatch")!)
+      : undefined,
+    fromDate: page.url.searchParams.get("fromDate") || undefined,
+    toDate: page.url.searchParams.get("toDate") || undefined,
+    count: parseInt(page.url.searchParams.get("count") || "50", 10),
+    skip: parseInt(page.url.searchParams.get("skip") || "0", 10),
+  });
 
-  $: ({ analyses, filters } = data);
+  // Fetch analyses using remote function
+  const data = $derived(await getAnalyses(urlFilters));
 
-  let searchPath = filters.requestPath || "";
-  let selectedMatch = filters.overallMatch?.toString() || "";
-  let fromDate = filters.fromDate ? filters.fromDate.split("T")[0] : "";
-  let toDate = filters.toDate ? filters.toDate.split("T")[0] : "";
+  const { analyses, filters } = $derived(data);
+
+  let searchPath = $state(filters.requestPath || "");
+  let selectedMatch = $state(filters.overallMatch?.toString() || "");
+  let fromDate = $state(filters.fromDate ? filters.fromDate.split("T")[0] : "");
+  let toDate = $state(filters.toDate ? filters.toDate.split("T")[0] : "");
 
   function applyFilters() {
     const params = new URLSearchParams();

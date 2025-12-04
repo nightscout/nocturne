@@ -29,7 +29,12 @@
     carbs_hr: number;
   }
 
-  let { open = $bindable(), isLoading = false, onClose, onSave }: Props = $props();
+  let {
+    open = $bindable(),
+    isLoading = false,
+    onClose,
+    onSave,
+  }: Props = $props();
 
   // Form state
   let formState = $state<CreateProfileData>({
@@ -110,7 +115,13 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-4">
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        handleSubmit();
+      }}
+      class="space-y-4"
+    >
       <!-- Profile Name -->
       <div class="space-y-2">
         <Label for="profile-name">Profile Name *</Label>
@@ -136,12 +147,16 @@
         <Label for="units">Blood Glucose Units</Label>
         <Select.Root type="single" bind:value={formState.units}>
           <Select.Trigger class="w-full">
-            {BG_UNITS.find(u => u.value === formState.units)?.label ?? "Select units"}
+            {BG_UNITS.find((u) => u.value === formState.units)?.label ??
+              "Select units"}
           </Select.Trigger>
           <Select.Content>
             {#each BG_UNITS as unit}
               <Select.Item value={unit.value}>
-                {unit.label} <span class="text-muted-foreground text-xs">({unit.description})</span>
+                {unit.label}
+                <span class="text-muted-foreground text-xs">
+                  ({unit.description})
+                </span>
               </Select.Item>
             {/each}
           </Select.Content>
@@ -199,7 +214,12 @@
       </div>
 
       <Dialog.Footer class="pt-4">
-        <Button variant="outline" type="button" onclick={handleClose} disabled={isLoading}>
+        <Button
+          variant="outline"
+          type="button"
+          onclick={handleClose}
+          disabled={isLoading}
+        >
           Cancel
         </Button>
         <Button type="submit" disabled={isLoading}>

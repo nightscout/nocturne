@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { page } from "$app/state";
 
   import type { Treatment } from "$lib/api";
   import {
@@ -30,12 +31,24 @@
 
   let { data, form } = $props();
 
+  // Compute stats from layout data
+  const stats = $derived(
+    calculateTreatmentStats(data.treatments as Treatment[])
+  );
+
+  // Get filter state from URL params
+  const categoryParam = $derived(page.url.searchParams.get("category"));
+  const searchParam = $derived(page.url.searchParams.get("search"));
+  const eventTypesParam = $derived(page.url.searchParams.get("eventTypes"));
+
   // State
   let activeCategory = $state<TreatmentCategoryId | "all">(
-    (data.filters.category as TreatmentCategoryId | "all") || "all"
+    (categoryParam as TreatmentCategoryId | "all") || "all"
   );
-  let searchQuery = $state(data.filters.search || "");
-  let selectedEventTypes = $state<string[]>(data.filters.eventTypes || []);
+  let searchQuery = $state(searchParam || "");
+  let selectedEventTypes = $state<string[]>(
+    eventTypesParam ? eventTypesParam.split(",") : []
+  );
 
   // Modal states
   let showDeleteConfirm = $state(false);
@@ -133,7 +146,7 @@
   let filteredStats = $derived(calculateTreatmentStats(filteredTreatments));
 
   // Category counts from original data
-  let categoryCounts = $derived(data.stats.byCategoryCount);
+  let categoryCounts = $derived(stats.byCategoryCount);
 
   // Available event types for filter
   let availableEventTypes = $derived.by(() => {

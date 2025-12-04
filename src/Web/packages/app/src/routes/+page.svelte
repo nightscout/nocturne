@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { PageData } from "./$types";
   import {
     CurrentBGDisplay,
     BGStatisticsCards,
@@ -8,7 +7,6 @@
     RecentTreatmentsCard,
   } from "$lib/components/dashboard";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  let { data }: { data: PageData } = $props();
 
   const realtimeStore = getRealtimeStore();
 </script>

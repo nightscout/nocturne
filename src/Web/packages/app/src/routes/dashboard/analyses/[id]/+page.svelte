@@ -9,7 +9,12 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import { Tabs, TabsContent, TabsList, TabsTrigger } from "$lib/components/ui/tabs";
+  import {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+  } from "$lib/components/ui/tabs";
   import {
     AlertTriangle,
     Clock,
@@ -20,72 +25,111 @@
     Copy,
     ArrowLeft,
   } from "lucide-svelte";
-  import { page } from "$app/stores";
-  import type { PageData } from './$types';
+  import { page } from "$app/state";
+  import { getAnalysisById } from "../../data.remote";
 
-  export let data: PageData;
+  // Get ID from route params
+  const analysisId = $derived(page.params.id);
 
-  $: ({ analysis } = data);
+  // Fetch analysis using remote function
+  const data = $derived(await getAnalysisById(analysisId));
+
+  const { analysis } = $derived(data);
 
   function getMatchTypeDescription(matchType: number): string {
     switch (matchType) {
-      case 0: return 'Perfect Match';
-      case 1: return 'Minor Differences';
-      case 2: return 'Major Differences';
-      case 3: return 'Critical Differences';
-      case 4: return 'Nightscout Missing';
-      case 5: return 'Nocturne Missing';
-      case 6: return 'Both Missing';
-      case 7: return 'Comparison Error';
-      default: return 'Unknown';
+      case 0:
+        return "Perfect Match";
+      case 1:
+        return "Minor Differences";
+      case 2:
+        return "Major Differences";
+      case 3:
+        return "Critical Differences";
+      case 4:
+        return "Nightscout Missing";
+      case 5:
+        return "Nocturne Missing";
+      case 6:
+        return "Both Missing";
+      case 7:
+        return "Comparison Error";
+      default:
+        return "Unknown";
     }
   }
 
   function getMatchTypeColor(matchType: number): string {
     switch (matchType) {
-      case 0: return 'bg-green-100 text-green-800';
-      case 1: return 'bg-yellow-100 text-yellow-800';
-      case 2: return 'bg-orange-100 text-orange-800';
-      case 3: return 'bg-red-100 text-red-800';
+      case 0:
+        return "bg-green-100 text-green-800";
+      case 1:
+        return "bg-yellow-100 text-yellow-800";
+      case 2:
+        return "bg-orange-100 text-orange-800";
+      case 3:
+        return "bg-red-100 text-red-800";
       case 4:
       case 5:
-      case 6: return 'bg-purple-100 text-purple-800';
-      case 7: return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 6:
+        return "bg-purple-100 text-purple-800";
+      case 7:
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   }
 
   function getDiscrepancyTypeDescription(type: number): string {
     switch (type) {
-      case 0: return 'Status Code';
-      case 1: return 'Header';
-      case 2: return 'Content Type';
-      case 3: return 'Body';
-      case 4: return 'JSON Structure';
-      case 5: return 'String Value';
-      case 6: return 'Numeric Value';
-      case 7: return 'Timestamp';
-      case 8: return 'Array Length';
-      case 9: return 'Performance';
-      default: return 'Unknown';
+      case 0:
+        return "Status Code";
+      case 1:
+        return "Header";
+      case 2:
+        return "Content Type";
+      case 3:
+        return "Body";
+      case 4:
+        return "JSON Structure";
+      case 5:
+        return "String Value";
+      case 6:
+        return "Numeric Value";
+      case 7:
+        return "Timestamp";
+      case 8:
+        return "Array Length";
+      case 9:
+        return "Performance";
+      default:
+        return "Unknown";
     }
   }
 
   function getSeverityColor(severity: number): string {
     switch (severity) {
-      case 0: return 'bg-yellow-100 text-yellow-800';
-      case 1: return 'bg-orange-100 text-orange-800';
-      case 2: return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 0:
+        return "bg-yellow-100 text-yellow-800";
+      case 1:
+        return "bg-orange-100 text-orange-800";
+      case 2:
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   }
 
   function getSeverityDescription(severity: number): string {
     switch (severity) {
-      case 0: return 'Minor';
-      case 1: return 'Major';
-      case 2: return 'Critical';
-      default: return 'Unknown';
+      case 0:
+        return "Minor";
+      case 1:
+        return "Major";
+      case 2:
+        return "Critical";
+      default:
+        return "Unknown";
     }
   }
 
@@ -121,10 +165,12 @@
     <CardHeader>
       <CardTitle class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <code class="bg-muted px-2 py-1 rounded text-sm">{analysis.requestMethod}</code>
+          <code class="bg-muted px-2 py-1 rounded text-sm">
+            {analysis.requestMethod}
+          </code>
           <span>{analysis.requestPath}</span>
         </div>
-        <Badge class="{getMatchTypeColor(analysis.overallMatch)}">
+        <Badge class={getMatchTypeColor(analysis.overallMatch)}>
           {getMatchTypeDescription(analysis.overallMatch)}
         </Badge>
       </CardTitle>
@@ -137,24 +183,36 @@
       <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <div class="text-sm font-medium">Processing Time</div>
-          <div class="text-lg font-bold text-blue-600">{analysis.totalProcessingTimeMs}ms</div>
+          <div class="text-lg font-bold text-blue-600">
+            {analysis.totalProcessingTimeMs}ms
+          </div>
         </div>
         <div>
           <div class="text-sm font-medium">Status Match</div>
-          <div class="{analysis.statusCodeMatch ? 'text-green-600' : 'text-red-600'} font-bold">
-            {analysis.statusCodeMatch ? 'Yes' : 'No'}
+          <div
+            class="{analysis.statusCodeMatch
+              ? 'text-green-600'
+              : 'text-red-600'} font-bold"
+          >
+            {analysis.statusCodeMatch ? "Yes" : "No"}
           </div>
         </div>
         <div>
           <div class="text-sm font-medium">Body Match</div>
-          <div class="{analysis.bodyMatch ? 'text-green-600' : 'text-red-600'} font-bold">
-            {analysis.bodyMatch ? 'Yes' : 'No'}
+          <div
+            class="{analysis.bodyMatch
+              ? 'text-green-600'
+              : 'text-red-600'} font-bold"
+          >
+            {analysis.bodyMatch ? "Yes" : "No"}
           </div>
         </div>
         <div>
           <div class="text-sm font-medium">Total Discrepancies</div>
           <div class="text-lg font-bold text-orange-600">
-            {analysis.criticalDiscrepancyCount + analysis.majorDiscrepancyCount + analysis.minorDiscrepancyCount}
+            {analysis.criticalDiscrepancyCount +
+              analysis.majorDiscrepancyCount +
+              analysis.minorDiscrepancyCount}
           </div>
         </div>
       </div>
@@ -168,15 +226,31 @@
             <div class="flex items-center gap-2">
               <Server class="h-4 w-4" />
               <span class="text-sm">Nightscout:</span>
-              <Badge variant="outline" class="{analysis.nightscoutStatusCode ? (analysis.nightscoutStatusCode >= 200 && analysis.nightscoutStatusCode < 300 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800') : 'bg-gray-100 text-gray-800'}">
-                {analysis.nightscoutStatusCode || 'N/A'}
+              <Badge
+                variant="outline"
+                class={analysis.nightscoutStatusCode
+                  ? analysis.nightscoutStatusCode >= 200 &&
+                    analysis.nightscoutStatusCode < 300
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
+                  : "bg-gray-100 text-gray-800"}
+              >
+                {analysis.nightscoutStatusCode || "N/A"}
               </Badge>
             </div>
             <div class="flex items-center gap-2">
               <Server class="h-4 w-4" />
               <span class="text-sm">Nocturne:</span>
-              <Badge variant="outline" class="{analysis.nocturneStatusCode ? (analysis.nocturneStatusCode >= 200 && analysis.nocturneStatusCode < 300 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800') : 'bg-gray-100 text-gray-800'}">
-                {analysis.nocturneStatusCode || 'N/A'}
+              <Badge
+                variant="outline"
+                class={analysis.nocturneStatusCode
+                  ? analysis.nocturneStatusCode >= 200 &&
+                    analysis.nocturneStatusCode < 300
+                    ? "bg-green-100 text-green-800"
+                    : "bg-red-100 text-red-800"
+                  : "bg-gray-100 text-gray-800"}
+              >
+                {analysis.nocturneStatusCode || "N/A"}
               </Badge>
             </div>
           </div>
@@ -193,14 +267,14 @@
               <Clock class="h-4 w-4" />
               <span class="text-sm">Nightscout:</span>
               <Badge variant="outline">
-                {analysis.nightscoutResponseTimeMs || 'N/A'}ms
+                {analysis.nightscoutResponseTimeMs || "N/A"}ms
               </Badge>
             </div>
             <div class="flex items-center gap-2">
               <Clock class="h-4 w-4" />
               <span class="text-sm">Nocturne:</span>
               <Badge variant="outline">
-                {analysis.nocturneResponseTimeMs || 'N/A'}ms
+                {analysis.nocturneResponseTimeMs || "N/A"}ms
               </Badge>
             </div>
           </div>
@@ -215,10 +289,14 @@
           <div class="space-y-2">
             <div class="flex items-center gap-2">
               <span class="text-sm">Selected Response:</span>
-              <Badge class="bg-blue-100 text-blue-800">{analysis.selectedResponseTarget}</Badge>
+              <Badge class="bg-blue-100 text-blue-800">
+                {analysis.selectedResponseTarget}
+              </Badge>
             </div>
             {#if analysis.selectionReason}
-              <p class="text-sm text-muted-foreground">{analysis.selectionReason}</p>
+              <p class="text-sm text-muted-foreground">
+                {analysis.selectionReason}
+              </p>
             {/if}
           </div>
         </div>
@@ -266,13 +344,17 @@
               <!-- Header -->
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <Badge class="{getSeverityColor(discrepancy.severity)} text-xs">
+                  <Badge
+                    class="{getSeverityColor(discrepancy.severity)} text-xs"
+                  >
                     {getSeverityDescription(discrepancy.severity)}
                   </Badge>
                   <Badge variant="outline" class="text-xs">
                     {getDiscrepancyTypeDescription(discrepancy.discrepancyType)}
                   </Badge>
-                  <code class="text-sm bg-muted px-2 py-1 rounded">{discrepancy.field}</code>
+                  <code class="text-sm bg-muted px-2 py-1 rounded">
+                    {discrepancy.field}
+                  </code>
                 </div>
                 <span class="text-xs text-muted-foreground">
                   {new Date(discrepancy.recordedAt).toLocaleString()}
@@ -286,32 +368,42 @@
               <div class="grid gap-4 md:grid-cols-2">
                 <div>
                   <div class="flex items-center justify-between mb-1">
-                    <h4 class="text-sm font-semibold text-purple-700">Nightscout Value</h4>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      on:click={() => copyToClipboard(discrepancy.nightscoutValue)}
+                    <h4 class="text-sm font-semibold text-purple-700">
+                      Nightscout Value
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      on:click={() =>
+                        copyToClipboard(discrepancy.nightscoutValue)}
                     >
                       <Copy class="h-3 w-3" />
                     </Button>
                   </div>
-                  <div class="bg-purple-50 border border-purple-200 rounded p-3">
-                    <pre class="text-xs overflow-x-auto">{discrepancy.nightscoutValue}</pre>
+                  <div
+                    class="bg-purple-50 border border-purple-200 rounded p-3"
+                  >
+                    <pre
+                      class="text-xs overflow-x-auto">{discrepancy.nightscoutValue}</pre>
                   </div>
                 </div>
                 <div>
                   <div class="flex items-center justify-between mb-1">
-                    <h4 class="text-sm font-semibold text-green-700">Nocturne Value</h4>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      on:click={() => copyToClipboard(discrepancy.nocturneValue)}
+                    <h4 class="text-sm font-semibold text-green-700">
+                      Nocturne Value
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      on:click={() =>
+                        copyToClipboard(discrepancy.nocturneValue)}
                     >
                       <Copy class="h-3 w-3" />
                     </Button>
                   </div>
                   <div class="bg-green-50 border border-green-200 rounded p-3">
-                    <pre class="text-xs overflow-x-auto">{discrepancy.nocturneValue}</pre>
+                    <pre
+                      class="text-xs overflow-x-auto">{discrepancy.nocturneValue}</pre>
                   </div>
                 </div>
               </div>

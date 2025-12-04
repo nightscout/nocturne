@@ -2,9 +2,14 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-svelte";
-  import type { PageData } from "./$types";
+  import { page } from "$app/state";
 
-  const { data } = $props<{ data: PageData }>();
+  // Get error details from URL params
+  const error = $derived(page.url.searchParams.get("error") || "unknown_error");
+  const description = $derived(
+    page.url.searchParams.get("description") ||
+      "An authentication error occurred"
+  );
 
   /** Get a user-friendly error title based on error code */
   function getErrorTitle(error: string): string {
@@ -60,17 +65,17 @@
         <AlertTriangle class="h-6 w-6 text-destructive" />
       </div>
       <Card.Title class="text-2xl font-bold">
-        {getErrorTitle(data.error)}
+        {getErrorTitle(error)}
       </Card.Title>
       <Card.Description>
-        {data.description}
+        {description}
       </Card.Description>
     </Card.Header>
 
     <Card.Content class="space-y-4">
       <div class="rounded-lg border border-muted bg-muted/50 p-4">
         <p class="text-sm text-muted-foreground">
-          {getSuggestion(data.error)}
+          {getSuggestion(error)}
         </p>
       </div>
 
@@ -90,7 +95,7 @@
       <div class="text-center text-xs text-muted-foreground">
         <p>
           Error code: <code class="bg-muted px-1 py-0.5 rounded">
-            {data.error}
+            {error}
           </code>
         </p>
       </div>

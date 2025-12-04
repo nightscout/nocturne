@@ -1,6 +1,6 @@
 /**
  * Profile Icon Constants
- * 
+ *
  * Available icons for profile customization, using Lucide icon names
  */
 
@@ -62,7 +62,7 @@ export function getProfileIconName(iconId: string | undefined): string {
  */
 export const COMMON_TIMEZONES = [
   "America/New_York",
-  "America/Chicago", 
+  "America/Chicago",
   "America/Denver",
   "America/Los_Angeles",
   "America/Anchorage",

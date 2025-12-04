@@ -110,7 +110,7 @@ export const actions: Actions = {
       }
 
       const profileData = JSON.parse(profileDataStr) as Profile;
-      
+
       const updatedProfile = await locals.apiClient.profile.updateProfile(
         profileId,
         profileData

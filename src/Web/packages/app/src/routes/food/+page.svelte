@@ -5,21 +5,13 @@
   import QuickPicksList from "./QuickPicksList.svelte";
   import type { FoodRecord, QuickPickRecord } from "./types";
   import FoodList from "./FoodList.svelte";
+  import { getFoodData } from "./data.remote";
 
-  interface Props {
-    data: {
-      foodList: FoodRecord[];
-      quickPickList: QuickPickRecord[];
-      categories: Record<string, Record<string, boolean>>;
-      nightscoutUrl: string;
-      error?: string;
-    };
-  }
-
-  let { data }: Props = $props();
+  // Fetch food data using remote function
+  const foodData = await getFoodData();
 
   // Create and set the store in context
-  const foodState = new FoodState(data);
+  const foodState = new FoodState(foodData);
   setFoodState(foodState);
 
   // Drag and drop handlers (these stay in the main component as they handle DOM events)

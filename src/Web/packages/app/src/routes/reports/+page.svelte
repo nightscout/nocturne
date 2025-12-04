@@ -184,6 +184,17 @@
           status: "available",
           forClinic: true,
         },
+        {
+          title: "Glucose Distribution",
+          userDescription:
+            "See how your glucose values are distributed between low, in-range, and high.",
+          clinicalDescription:
+            "Pie chart visualization with TIR breakdown, A1c estimation, GVI, PGS, and variability metrics.",
+          href: "/reports/glucose-distribution",
+          icon: PieChart,
+          status: "available",
+          forClinic: true,
+        },
       ],
     },
     {
@@ -224,6 +235,17 @@
             "Daily glucose overlay with treatment markers, statistics, and pattern comparison.",
           href: "/reports/readings",
           icon: Calendar,
+          status: "available",
+          forClinic: false,
+        },
+        {
+          title: "Week to Week",
+          userDescription:
+            "Compare glucose patterns across each day of the week, overlaid on a single chart.",
+          clinicalDescription:
+            "Weekly glucose overlay showing day-of-week patterns for circadian and weekly rhythm analysis.",
+          href: "/reports/week-to-week",
+          icon: Layers,
           status: "available",
           forClinic: false,
         },

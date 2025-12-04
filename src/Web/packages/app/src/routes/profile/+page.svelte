@@ -84,35 +84,35 @@
 
   // Icon component map
   const iconComponents: Record<string, typeof Icon> = {
-    "user": User,
+    user: User,
     "user-circle": UserCircle,
-    "heart": Heart,
+    heart: Heart,
     "heart-pulse": HeartPulse,
-    "activity": Activity,
-    "syringe": Syringe,
-    "pill": Pill,
-    "droplet": Droplet,
-    "target": Target,
-    "sun": Sun,
-    "moon": Moon,
-    "sunrise": Sunrise,
-    "sunset": Sunset,
-    "dumbbell": Dumbbell,
-    "bike": Bike,
-    "footprints": Footprints,
-    "utensils": Utensils,
-    "coffee": Coffee,
-    "cake": Cake,
-    "baby": Baby,
-    "briefcase": Briefcase,
-    "home": Home,
-    "plane": Plane,
-    "zap": Zap,
-    "shield": Shield,
-    "star": Star,
-    "sparkles": Sparkles,
-    "clock": Clock,
-    "calendar": Calendar,
+    activity: Activity,
+    syringe: Syringe,
+    pill: Pill,
+    droplet: Droplet,
+    target: Target,
+    sun: Sun,
+    moon: Moon,
+    sunrise: Sunrise,
+    sunset: Sunset,
+    dumbbell: Dumbbell,
+    bike: Bike,
+    footprints: Footprints,
+    utensils: Utensils,
+    coffee: Coffee,
+    cake: Cake,
+    baby: Baby,
+    briefcase: Briefcase,
+    home: Home,
+    plane: Plane,
+    zap: Zap,
+    shield: Shield,
+    star: Star,
+    sparkles: Sparkles,
+    clock: Clock,
+    calendar: Calendar,
     "trending-up": TrendingUp,
   };
 
@@ -148,7 +148,9 @@
         profileToDelete = null;
         // Navigate to another profile if we deleted the selected one
         if (form.deletedProfileId === selectedProfileId) {
-          const remaining = data.profiles.filter(p => p._id !== form.deletedProfileId);
+          const remaining = data.profiles.filter(
+            (p) => p._id !== form.deletedProfileId
+          );
           selectProfile(remaining[0]?._id ?? null);
         }
       }
@@ -162,7 +164,8 @@
 
   // Derived: get selected profile
   let selectedProfile = $derived(
-    data.profiles.find((p) => p._id === selectedProfileId) ?? data.currentProfile
+    data.profiles.find((p) => p._id === selectedProfileId) ??
+      data.currentProfile
   );
 
   // Derived: get selected profile's store names
@@ -237,7 +240,9 @@
     if (!createFormEl) return;
     isLoading = true;
 
-    const input = createFormEl.querySelector('input[name="profileData"]') as HTMLInputElement;
+    const input = createFormEl.querySelector(
+      'input[name="profileData"]'
+    ) as HTMLInputElement;
     if (input) {
       input.value = JSON.stringify(profileData);
       createFormEl.requestSubmit();
@@ -248,8 +253,12 @@
     if (!updateFormEl || !profile._id) return;
     isLoading = true;
 
-    const idInput = updateFormEl.querySelector('input[name="profileId"]') as HTMLInputElement;
-    const dataInput = updateFormEl.querySelector('input[name="profileData"]') as HTMLInputElement;
+    const idInput = updateFormEl.querySelector(
+      'input[name="profileId"]'
+    ) as HTMLInputElement;
+    const dataInput = updateFormEl.querySelector(
+      'input[name="profileData"]'
+    ) as HTMLInputElement;
     if (idInput && dataInput) {
       idInput.value = profile._id;
       dataInput.value = JSON.stringify(profile);
@@ -261,7 +270,9 @@
     if (!deleteFormEl || !profileToDelete?._id) return;
     isLoading = true;
 
-    const input = deleteFormEl.querySelector('input[name="profileId"]') as HTMLInputElement;
+    const input = deleteFormEl.querySelector(
+      'input[name="profileId"]'
+    ) as HTMLInputElement;
     if (input) {
       input.value = profileToDelete._id;
       deleteFormEl.requestSubmit();
@@ -393,7 +404,8 @@
             Profile History
           </CardTitle>
           <CardDescription>
-            Select a profile to view its settings. The most recently used profile is shown first.
+            Select a profile to view its settings. The most recently used
+            profile is shown first.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -434,7 +446,9 @@
                     {/if}
                   </div>
                   <p class="text-xs text-muted-foreground truncate">
-                    {formatRelativeTime(profile.created_at)} • {formatDateDetailed(profile.created_at).split(",")[0]}
+                    {formatRelativeTime(profile.created_at)} • {formatDateDetailed(
+                      profile.created_at
+                    ).split(",")[0]}
                   </p>
                 </div>
                 <ChevronRight
@@ -541,7 +555,11 @@
                 </Tabs.Trigger>
               {/each}
             </Tabs.List>
-            <Button variant="outline" size="sm" onclick={() => openEditDialog()}>
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => openEditDialog()}
+            >
               <Edit class="h-4 w-4 mr-2" />
               Edit
             </Button>
@@ -694,7 +712,11 @@
                 This profile doesn't contain any therapy settings (basal, carb
                 ratios, etc.)
               </p>
-              <Button variant="outline" class="mt-4" onclick={() => openEditDialog()}>
+              <Button
+                variant="outline"
+                class="mt-4"
+                onclick={() => openEditDialog()}
+              >
                 <Edit class="h-4 w-4 mr-2" />
                 Add Settings
               </Button>

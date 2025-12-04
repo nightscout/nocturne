@@ -23,54 +23,74 @@
     Settings,
     RefreshCw,
   } from "lucide-svelte";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import type { PageData } from './$types';
+  import { getDashboardData } from "./data.remote";
 
-  export let data: PageData;
+  // Get filter params from URL
+  const urlFilters = $derived({
+    fromDate: page.url.searchParams.get("fromDate") || undefined,
+    toDate: page.url.searchParams.get("toDate") || undefined,
+  });
 
-  $: ({ metrics, endpoints, analyses, status, filters } = data);
+  // Fetch dashboard data using remote function
+  const data = $derived(await getDashboardData(urlFilters));
+
+  const { metrics, endpoints, analyses, status, filters } = $derived(data);
 
   // Helper function to get status color
   function getStatusColor(healthStatus: string): string {
     switch (healthStatus.toLowerCase()) {
-      case 'excellent':
-        return 'bg-green-500';
-      case 'good':
-        return 'bg-blue-500'; 
-      case 'fair':
-        return 'bg-yellow-500';
-      case 'poor':
-        return 'bg-orange-500';
-      case 'critical':
-        return 'bg-red-500';
+      case "excellent":
+        return "bg-green-500";
+      case "good":
+        return "bg-blue-500";
+      case "fair":
+        return "bg-yellow-500";
+      case "poor":
+        return "bg-orange-500";
+      case "critical":
+        return "bg-red-500";
       default:
-        return 'bg-gray-500';
+        return "bg-gray-500";
     }
   }
 
   // Helper function to get match type description
   function getMatchTypeDescription(matchType: number): string {
     switch (matchType) {
-      case 0: return 'Perfect Match';
-      case 1: return 'Minor Differences';
-      case 2: return 'Major Differences';
-      case 3: return 'Critical Differences';
-      case 4: return 'Nightscout Missing';
-      case 5: return 'Nocturne Missing';
-      case 6: return 'Both Missing';
-      case 7: return 'Comparison Error';
-      default: return 'Unknown';
+      case 0:
+        return "Perfect Match";
+      case 1:
+        return "Minor Differences";
+      case 2:
+        return "Major Differences";
+      case 3:
+        return "Critical Differences";
+      case 4:
+        return "Nightscout Missing";
+      case 5:
+        return "Nocturne Missing";
+      case 6:
+        return "Both Missing";
+      case 7:
+        return "Comparison Error";
+      default:
+        return "Unknown";
     }
   }
 
   // Helper function to get severity badge color
   function getSeverityColor(severity: number): string {
     switch (severity) {
-      case 0: return 'bg-yellow-100 text-yellow-800';
-      case 1: return 'bg-orange-100 text-orange-800';
-      case 2: return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 0:
+        return "bg-yellow-100 text-yellow-800";
+      case 1:
+        return "bg-orange-100 text-orange-800";
+      case 2:
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   }
 
@@ -81,7 +101,10 @@
 
 <svelte:head>
   <title>Compatibility Dashboard - Nocturne</title>
-  <meta name="description" content="Monitor Nightscout/Nocturne compatibility in real-time" />
+  <meta
+    name="description"
+    content="Monitor Nightscout/Nocturne compatibility in real-time"
+  />
 </svelte:head>
 
 <div class="container mx-auto p-6 space-y-6">
@@ -109,14 +132,20 @@
   <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
     <!-- Overall Score -->
     <Card>
-      <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader
+        class="flex flex-row items-center justify-between space-y-0 pb-2"
+      >
         <CardTitle class="text-sm font-medium">Compatibility Score</CardTitle>
         <CheckCircle class="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div class="text-2xl font-bold">{metrics.compatibilityScore.toFixed(1)}%</div>
+        <div class="text-2xl font-bold">
+          {metrics.compatibilityScore.toFixed(1)}%
+        </div>
         <p class="text-xs text-muted-foreground">
-          <Badge class="{getStatusColor(status.healthStatus)} text-white text-xs">
+          <Badge
+            class="{getStatusColor(status.healthStatus)} text-white text-xs"
+          >
             {status.healthStatus}
           </Badge>
         </p>
@@ -125,40 +154,48 @@
 
     <!-- Total Requests -->
     <Card>
-      <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader
+        class="flex flex-row items-center justify-between space-y-0 pb-2"
+      >
         <CardTitle class="text-sm font-medium">Total Requests</CardTitle>
         <Activity class="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div class="text-2xl font-bold">{metrics.totalRequests.toLocaleString()}</div>
-        <p class="text-xs text-muted-foreground">
-          In selected period
-        </p>
+        <div class="text-2xl font-bold">
+          {metrics.totalRequests.toLocaleString()}
+        </div>
+        <p class="text-xs text-muted-foreground">In selected period</p>
       </CardContent>
     </Card>
 
     <!-- Critical Issues -->
     <Card>
-      <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader
+        class="flex flex-row items-center justify-between space-y-0 pb-2"
+      >
         <CardTitle class="text-sm font-medium">Critical Issues</CardTitle>
         <AlertTriangle class="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div class="text-2xl font-bold text-red-600">{status.criticalIssues}</div>
-        <p class="text-xs text-muted-foreground">
-          Require immediate attention
-        </p>
+        <div class="text-2xl font-bold text-red-600">
+          {status.criticalIssues}
+        </div>
+        <p class="text-xs text-muted-foreground">Require immediate attention</p>
       </CardContent>
     </Card>
 
     <!-- Response Time Comparison -->
     <Card>
-      <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader
+        class="flex flex-row items-center justify-between space-y-0 pb-2"
+      >
         <CardTitle class="text-sm font-medium">Avg Response Time</CardTitle>
         <Clock class="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div class="text-2xl font-bold">{Math.round(metrics.averageNocturneResponseTime)}ms</div>
+        <div class="text-2xl font-bold">
+          {Math.round(metrics.averageNocturneResponseTime)}ms
+        </div>
         <p class="text-xs text-muted-foreground">
           vs {Math.round(metrics.averageNightscoutResponseTime)}ms Nightscout
         </p>
@@ -172,32 +209,46 @@
     <Card>
       <CardHeader>
         <CardTitle>Response Match Breakdown</CardTitle>
-        <CardDescription>Distribution of response comparison results</CardDescription>
+        <CardDescription>
+          Distribution of response comparison results
+        </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="space-y-2">
           <div class="flex justify-between items-center">
             <span class="text-sm">Perfect Matches</span>
             <Badge class="bg-green-100 text-green-800">
-              {metrics.perfectMatches} ({((metrics.perfectMatches / metrics.totalRequests) * 100).toFixed(1)}%)
+              {metrics.perfectMatches} ({(
+                (metrics.perfectMatches / metrics.totalRequests) *
+                100
+              ).toFixed(1)}%)
             </Badge>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm">Minor Differences</span>
             <Badge class="bg-yellow-100 text-yellow-800">
-              {metrics.minorDifferences} ({((metrics.minorDifferences / metrics.totalRequests) * 100).toFixed(1)}%)
+              {metrics.minorDifferences} ({(
+                (metrics.minorDifferences / metrics.totalRequests) *
+                100
+              ).toFixed(1)}%)
             </Badge>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm">Major Differences</span>
             <Badge class="bg-orange-100 text-orange-800">
-              {metrics.majorDifferences} ({((metrics.majorDifferences / metrics.totalRequests) * 100).toFixed(1)}%)
+              {metrics.majorDifferences} ({(
+                (metrics.majorDifferences / metrics.totalRequests) *
+                100
+              ).toFixed(1)}%)
             </Badge>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm">Critical Differences</span>
             <Badge class="bg-red-100 text-red-800">
-              {metrics.criticalDifferences} ({((metrics.criticalDifferences / metrics.totalRequests) * 100).toFixed(1)}%)
+              {metrics.criticalDifferences} ({(
+                (metrics.criticalDifferences / metrics.totalRequests) *
+                100
+              ).toFixed(1)}%)
             </Badge>
           </div>
         </div>
@@ -208,33 +259,54 @@
     <Card>
       <CardHeader>
         <CardTitle>Top Problematic Endpoints</CardTitle>
-        <CardDescription>Endpoints with the most compatibility issues</CardDescription>
+        <CardDescription>
+          Endpoints with the most compatibility issues
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div class="space-y-3">
-          {#each endpoints.slice(0, 5).sort((a, b) => (b.criticalDifferences + b.majorDifferences) - (a.criticalDifferences + a.majorDifferences)) as endpoint}
-            <div class="flex items-center justify-between p-2 rounded-lg border">
+          {#each endpoints
+            .slice(0, 5)
+            .sort((a, b) => b.criticalDifferences + b.majorDifferences - (a.criticalDifferences + a.majorDifferences)) as endpoint}
+            <div
+              class="flex items-center justify-between p-2 rounded-lg border"
+            >
               <div class="flex-1">
-                <div class="font-medium text-sm truncate">{endpoint.endpoint}</div>
+                <div class="font-medium text-sm truncate">
+                  {endpoint.endpoint}
+                </div>
                 <div class="text-xs text-muted-foreground">
-                  {endpoint.totalRequests} requests • {endpoint.compatibilityScore.toFixed(1)}% compatible
+                  {endpoint.totalRequests} requests • {endpoint.compatibilityScore.toFixed(
+                    1
+                  )}% compatible
                 </div>
               </div>
               <div class="flex gap-1">
                 {#if endpoint.criticalDifferences > 0}
-                  <Badge class="bg-red-100 text-red-800 text-xs">{endpoint.criticalDifferences}</Badge>
+                  <Badge class="bg-red-100 text-red-800 text-xs">
+                    {endpoint.criticalDifferences}
+                  </Badge>
                 {/if}
                 {#if endpoint.majorDifferences > 0}
-                  <Badge class="bg-orange-100 text-orange-800 text-xs">{endpoint.majorDifferences}</Badge>
+                  <Badge class="bg-orange-100 text-orange-800 text-xs">
+                    {endpoint.majorDifferences}
+                  </Badge>
                 {/if}
               </div>
             </div>
           {:else}
-            <p class="text-sm text-muted-foreground">No endpoints with issues found</p>
+            <p class="text-sm text-muted-foreground">
+              No endpoints with issues found
+            </p>
           {/each}
         </div>
         <Separator class="my-4" />
-        <Button variant="outline" size="sm" href="/dashboard/endpoints" class="w-full">
+        <Button
+          variant="outline"
+          size="sm"
+          href="/dashboard/endpoints"
+          class="w-full"
+        >
           <BarChart3 class="h-4 w-4 mr-2" />
           View All Endpoints
         </Button>
@@ -254,16 +326,24 @@
           <div class="flex items-center justify-between p-3 rounded-lg border">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-1">
-                <code class="text-xs bg-muted px-1 py-0.5 rounded">{analysis.requestMethod}</code>
-                <span class="font-medium text-sm truncate">{analysis.requestPath}</span>
-                <Badge class="text-xs {getSeverityColor(analysis.overallMatch)}">
+                <code class="text-xs bg-muted px-1 py-0.5 rounded">
+                  {analysis.requestMethod}
+                </code>
+                <span class="font-medium text-sm truncate">
+                  {analysis.requestPath}
+                </span>
+                <Badge
+                  class="text-xs {getSeverityColor(analysis.overallMatch)}"
+                >
                   {getMatchTypeDescription(analysis.overallMatch)}
                 </Badge>
               </div>
               <div class="text-xs text-muted-foreground">
-                {new Date(analysis.analysisTimestamp).toLocaleString()} • 
-                {analysis.totalProcessingTimeMs}ms • 
-                {analysis.criticalDiscrepancyCount + analysis.majorDiscrepancyCount + analysis.minorDiscrepancyCount} discrepancies
+                {new Date(analysis.analysisTimestamp).toLocaleString()} •
+                {analysis.totalProcessingTimeMs}ms •
+                {analysis.criticalDiscrepancyCount +
+                  analysis.majorDiscrepancyCount +
+                  analysis.minorDiscrepancyCount} discrepancies
               </div>
             </div>
             <div class="flex items-center gap-2">
@@ -274,12 +354,20 @@
                 </Badge>
               {/if}
               {#if analysis.majorDiscrepancyCount > 0}
-                <Badge class="bg-orange-100 text-orange-800 text-xs">{analysis.majorDiscrepancyCount}</Badge>
+                <Badge class="bg-orange-100 text-orange-800 text-xs">
+                  {analysis.majorDiscrepancyCount}
+                </Badge>
               {/if}
               {#if analysis.minorDiscrepancyCount > 0}
-                <Badge class="bg-yellow-100 text-yellow-800 text-xs">{analysis.minorDiscrepancyCount}</Badge>
+                <Badge class="bg-yellow-100 text-yellow-800 text-xs">
+                  {analysis.minorDiscrepancyCount}
+                </Badge>
               {/if}
-              <Button variant="ghost" size="sm" href="/dashboard/analyses/{analysis.id}">
+              <Button
+                variant="ghost"
+                size="sm"
+                href="/dashboard/analyses/{analysis.id}"
+              >
                 <Info class="h-4 w-4" />
               </Button>
             </div>
@@ -289,7 +377,12 @@
         {/each}
       </div>
       <Separator class="my-4" />
-      <Button variant="outline" size="sm" href="/dashboard/analyses" class="w-full">
+      <Button
+        variant="outline"
+        size="sm"
+        href="/dashboard/analyses"
+        class="w-full"
+      >
         View All Analyses
       </Button>
     </CardContent>

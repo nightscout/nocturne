@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { browser } from "$app/environment";
+  import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -19,7 +20,6 @@
     Trash2,
   } from "lucide-svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import type { PageData } from "./$types";
 
   // Element type definitions
   type ElementType = "sg" | "dt" | "ar" | "ag" | "time" | "nl";
@@ -84,7 +84,8 @@
     },
   };
 
-  let { data }: { data: PageData } = $props();
+  // Get preset face from URL params
+  const presetFace = $derived(page.url.searchParams.get("face"));
 
   // Get realtime store for live preview
   const realtimeStore = getRealtimeStore();
@@ -279,11 +280,10 @@
 </script>
 
 <svelte:head>
-  <title>{data.meta?.title || "Clock Configuration - Nightscout"}</title>
+  <title>Clock Configuration - Nightscout</title>
   <meta
     name="description"
-    content={data.meta?.description ||
-      "Configure your Nightscout clock display settings"}
+    content="Configure your Nightscout clock display settings"
   />
 </svelte:head>
 

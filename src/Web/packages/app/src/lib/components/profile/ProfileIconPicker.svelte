@@ -48,35 +48,35 @@
 
   // Map icon IDs to Lucide components
   const iconComponents: Record<string, typeof Icon> = {
-    "user": User,
+    user: User,
     "user-circle": UserCircle,
-    "heart": Heart,
+    heart: Heart,
     "heart-pulse": HeartPulse,
-    "activity": Activity,
-    "syringe": Syringe,
-    "pill": Pill,
-    "droplet": Droplet,
-    "target": Target,
-    "sun": Sun,
-    "moon": Moon,
-    "sunrise": Sunrise,
-    "sunset": Sunset,
-    "dumbbell": Dumbbell,
-    "bike": Bike,
-    "footprints": Footprints,
-    "utensils": Utensils,
-    "coffee": Coffee,
-    "cake": Cake,
-    "baby": Baby,
-    "briefcase": Briefcase,
-    "home": Home,
-    "plane": Plane,
-    "zap": Zap,
-    "shield": Shield,
-    "star": Star,
-    "sparkles": Sparkles,
-    "clock": Clock,
-    "calendar": Calendar,
+    activity: Activity,
+    syringe: Syringe,
+    pill: Pill,
+    droplet: Droplet,
+    target: Target,
+    sun: Sun,
+    moon: Moon,
+    sunrise: Sunrise,
+    sunset: Sunset,
+    dumbbell: Dumbbell,
+    bike: Bike,
+    footprints: Footprints,
+    utensils: Utensils,
+    coffee: Coffee,
+    cake: Cake,
+    baby: Baby,
+    briefcase: Briefcase,
+    home: Home,
+    plane: Plane,
+    zap: Zap,
+    shield: Shield,
+    star: Star,
+    sparkles: Sparkles,
+    clock: Clock,
+    calendar: Calendar,
     "trending-up": TrendingUp,
   };
 
@@ -88,7 +88,7 @@
   // Get current icon component
   let CurrentIcon = $derived(iconComponents[selectedIcon] ?? User);
   let currentIconName = $derived(
-    PROFILE_ICONS.find(i => i.id === selectedIcon)?.name ?? "User"
+    PROFILE_ICONS.find((i) => i.id === selectedIcon)?.name ?? "User"
   );
 </script>
 

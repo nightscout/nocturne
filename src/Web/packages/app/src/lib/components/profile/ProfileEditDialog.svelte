@@ -8,10 +8,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    BG_UNITS,
-    COMMON_TIMEZONES,
-  } from "$lib/constants/profile-icons";
+  import { BG_UNITS, COMMON_TIMEZONES } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
   import {
     Edit,
@@ -52,7 +49,9 @@
   });
 
   // Track which tab is active for time-value editing
-  let activeTab = $state<"general" | "basal" | "carbratio" | "sens" | "targets">("general");
+  let activeTab = $state<
+    "general" | "basal" | "carbratio" | "sens" | "targets"
+  >("general");
 
   // Reset form when dialog opens or profile changes
   $effect(() => {
@@ -76,7 +75,9 @@
   }
 
   // Time value editing helpers
-  function addTimeValue(field: "basal" | "carbratio" | "sens" | "target_low" | "target_high") {
+  function addTimeValue(
+    field: "basal" | "carbratio" | "sens" | "target_low" | "target_high"
+  ) {
     if (!editedProfile?.store || !editedStoreName) return;
 
     const store = editedProfile.store[editedStoreName];
@@ -90,7 +91,10 @@
     editedProfile = { ...editedProfile };
   }
 
-  function removeTimeValue(field: "basal" | "carbratio" | "sens" | "target_low" | "target_high", index: number) {
+  function removeTimeValue(
+    field: "basal" | "carbratio" | "sens" | "target_low" | "target_high",
+    index: number
+  ) {
     if (!editedProfile?.store || !editedStoreName) return;
 
     const store = editedProfile.store[editedStoreName];
@@ -150,12 +154,16 @@
         Edit Profile: {editedStoreName ?? "Unknown"}
       </Dialog.Title>
       <Dialog.Description>
-        Modify your therapy settings. Changes are not saved until you click Save.
+        Modify your therapy settings. Changes are not saved until you click
+        Save.
       </Dialog.Description>
     </Dialog.Header>
 
     {#if editedProfile && storeData}
-      <Tabs.Root bind:value={activeTab} class="flex-1 overflow-hidden flex flex-col">
+      <Tabs.Root
+        bind:value={activeTab}
+        class="flex-1 overflow-hidden flex flex-col"
+      >
         <Tabs.List class="grid w-full grid-cols-5">
           <Tabs.Trigger value="general">General</Tabs.Trigger>
           <Tabs.Trigger value="basal">Basal</Tabs.Trigger>
@@ -174,7 +182,8 @@
                 <Input
                   id="profile-name"
                   value={editedProfile.defaultProfile ?? ""}
-                  onchange={(e) => updateProfileField("defaultProfile", e.currentTarget.value)}
+                  onchange={(e) =>
+                    updateProfileField("defaultProfile", e.currentTarget.value)}
                 />
               </div>
 
@@ -190,8 +199,8 @@
               <!-- Units -->
               <div class="space-y-2">
                 <Label>Blood Glucose Units</Label>
-                <Select.Root 
-                  type="single" 
+                <Select.Root
+                  type="single"
                   value={editedProfile.units ?? "mg/dL"}
                   onValueChange={(v) => {
                     updateProfileField("units", v);
@@ -212,8 +221,8 @@
               <!-- Timezone -->
               <div class="space-y-2">
                 <Label>Timezone</Label>
-                <Select.Root 
-                  type="single" 
+                <Select.Root
+                  type="single"
                   value={storeData.timezone ?? ""}
                   onValueChange={(v) => updateStoreField("timezone", v)}
                 >
@@ -238,7 +247,8 @@
                   min="0"
                   max="10"
                   value={storeData.dia ?? 4}
-                  onchange={(e) => updateStoreField("dia", Number(e.currentTarget.value))}
+                  onchange={(e) =>
+                    updateStoreField("dia", Number(e.currentTarget.value))}
                 />
               </div>
 
@@ -252,7 +262,8 @@
                   min="0"
                   max="100"
                   value={storeData.carbs_hr ?? 20}
-                  onchange={(e) => updateStoreField("carbs_hr", Number(e.currentTarget.value))}
+                  onchange={(e) =>
+                    updateStoreField("carbs_hr", Number(e.currentTarget.value))}
                 />
               </div>
             </div>
@@ -262,7 +273,8 @@
           <Tabs.Content value="basal" class="mt-0">
             {@render TimeValueEditor({
               title: "Basal Rates",
-              description: "Background insulin delivery rates throughout the day",
+              description:
+                "Background insulin delivery rates throughout the day",
               unit: "U/hr",
               icon: Activity,
               field: "basal",
@@ -274,7 +286,8 @@
           <Tabs.Content value="carbratio" class="mt-0">
             {@render TimeValueEditor({
               title: "Carb Ratios (I:C)",
-              description: "Grams of carbohydrates covered by one unit of insulin",
+              description:
+                "Grams of carbohydrates covered by one unit of insulin",
               unit: "g/U",
               icon: Droplet,
               field: "carbratio",
@@ -286,7 +299,8 @@
           <Tabs.Content value="sens" class="mt-0">
             {@render TimeValueEditor({
               title: "Insulin Sensitivity Factor (ISF)",
-              description: "How much your blood glucose drops per unit of insulin",
+              description:
+                "How much your blood glucose drops per unit of insulin",
               unit: editedProfile.units === "mmol" ? "mmol/L/U" : "mg/dL/U",
               icon: TrendingUp,
               field: "sens",
@@ -297,7 +311,9 @@
           <!-- Targets Tab -->
           <Tabs.Content value="targets" class="mt-0 space-y-6">
             <div class="flex items-center gap-3 mb-4">
-              <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <div
+                class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
+              >
                 <Target class="h-5 w-5 text-amber-600" />
               </div>
               <div>
@@ -338,7 +354,13 @@
                             type="time"
                             value={tv.time ?? "00:00"}
                             class="w-24"
-                            onchange={(e) => updateTimeValue("target_low", i, "time", e.currentTarget.value)}
+                            onchange={(e) =>
+                              updateTimeValue(
+                                "target_low",
+                                i,
+                                "time",
+                                e.currentTarget.value
+                              )}
                           />
                         </Table.Cell>
                         <Table.Cell>
@@ -347,7 +369,13 @@
                             step="1"
                             value={tv.value ?? 0}
                             class="w-20"
-                            onchange={(e) => updateTimeValue("target_low", i, "value", Number(e.currentTarget.value))}
+                            onchange={(e) =>
+                              updateTimeValue(
+                                "target_low",
+                                i,
+                                "value",
+                                Number(e.currentTarget.value)
+                              )}
                           />
                         </Table.Cell>
                         <Table.Cell>
@@ -395,7 +423,13 @@
                             type="time"
                             value={tv.time ?? "00:00"}
                             class="w-24"
-                            onchange={(e) => updateTimeValue("target_high", i, "time", e.currentTarget.value)}
+                            onchange={(e) =>
+                              updateTimeValue(
+                                "target_high",
+                                i,
+                                "time",
+                                e.currentTarget.value
+                              )}
                           />
                         </Table.Cell>
                         <Table.Cell>
@@ -404,7 +438,13 @@
                             step="1"
                             value={tv.value ?? 0}
                             class="w-20"
-                            onchange={(e) => updateTimeValue("target_high", i, "value", Number(e.currentTarget.value))}
+                            onchange={(e) =>
+                              updateTimeValue(
+                                "target_high",
+                                i,
+                                "value",
+                                Number(e.currentTarget.value)
+                              )}
                           />
                         </Table.Cell>
                         <Table.Cell>
@@ -428,7 +468,9 @@
       </Tabs.Root>
 
       <Dialog.Footer class="pt-4 border-t mt-4">
-        <div class="flex items-center gap-2 text-sm text-muted-foreground mr-auto">
+        <div
+          class="flex items-center gap-2 text-sm text-muted-foreground mr-auto"
+        >
           <Badge variant="secondary">Unsaved changes</Badge>
         </div>
         <Button variant="outline" onclick={handleClose} disabled={isLoading}>
@@ -469,7 +511,9 @@
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+        <div
+          class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
+        >
           <Icon class="h-5 w-5 text-primary" />
         </div>
         <div>
@@ -499,7 +543,8 @@
                 type="time"
                 value={tv.time ?? "00:00"}
                 class="w-28"
-                onchange={(e) => updateTimeValue(field, i, "time", e.currentTarget.value)}
+                onchange={(e) =>
+                  updateTimeValue(field, i, "time", e.currentTarget.value)}
               />
             </Table.Cell>
             <Table.Cell class="text-right">
@@ -508,7 +553,13 @@
                 step="0.1"
                 value={tv.value ?? 0}
                 class="w-24 text-right"
-                onchange={(e) => updateTimeValue(field, i, "value", Number(e.currentTarget.value))}
+                onchange={(e) =>
+                  updateTimeValue(
+                    field,
+                    i,
+                    "value",
+                    Number(e.currentTarget.value)
+                  )}
               />
             </Table.Cell>
             <Table.Cell>
@@ -524,7 +575,10 @@
           </Table.Row>
         {:else}
           <Table.Row>
-            <Table.Cell colspan={3} class="text-center py-4 text-muted-foreground">
+            <Table.Cell
+              colspan={3}
+              class="text-center py-4 text-muted-foreground"
+            >
               No time blocks configured. Click "Add Time Block" to get started.
             </Table.Cell>
           </Table.Row>

@@ -13,7 +13,13 @@
     onConfirm: () => void;
   }
 
-  let { open = $bindable(), profile, isLoading = false, onClose, onConfirm }: Props = $props();
+  let {
+    open = $bindable(),
+    profile,
+    isLoading = false,
+    onClose,
+    onConfirm,
+  }: Props = $props();
 </script>
 
 <AlertDialog.Root bind:open>
@@ -24,7 +30,8 @@
         Delete Profile
       </AlertDialog.Title>
       <AlertDialog.Description>
-        Are you sure you want to delete this profile? This action cannot be undone.
+        Are you sure you want to delete this profile? This action cannot be
+        undone.
       </AlertDialog.Description>
     </AlertDialog.Header>
 

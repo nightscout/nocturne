@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { browser } from "$app/environment";
+  import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -14,13 +15,9 @@
   } from "lucide-svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { parseClockFace } from "$lib/clock-parser";
-  import type { PageData } from "./$types";
 
-  interface Props {
-    data: PageData;
-  }
-
-  let { data }: Props = $props();
+  // Get face from URL search params
+  const face = $derived(page.url.searchParams.get("face"));
 
   const realtimeStore = getRealtimeStore();
   const currentBG = $derived(realtimeStore.currentBG);
@@ -140,17 +137,17 @@
 
   // If we have a face parameter, redirect to the proper route
   $effect(() => {
-    if (browser && data.face) {
-      goto(`/clock/${encodeURIComponent(data.face)}`);
+    if (browser && face) {
+      goto(`/clock/${encodeURIComponent(face)}`);
     }
   });
 </script>
 
 <svelte:head>
-  <title>Nightscout Clock{data.face ? ` - ${data.face}` : " Faces"}</title>
+  <title>Nightscout Clock{face ? ` - ${face}` : " Faces"}</title>
 </svelte:head>
 
-{#if data.face}
+{#if face}
   <!-- Redirecting to clock display -->
   <div class="flex h-dvh items-center justify-center bg-background">
     <div class="text-center">

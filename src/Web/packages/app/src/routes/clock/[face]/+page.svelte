@@ -13,12 +13,13 @@
     Globe,
   } from "lucide-svelte";
 
-  let { data } = $props();
-
   const realtimeStore = getRealtimeStore();
 
+  // Get face from route params
+  const face = $derived(page.params.face);
+
   // Parse clock configuration from URL parameter
-  const clockConfig = $derived<ClockConfig>(parseClockFace(data.face));
+  const clockConfig = $derived<ClockConfig>(parseClockFace(face));
 
   // Get profile timezone from query params (e.g., ?tz=Europe/Stockholm)
   const profileTimezone = $derived(page.url.searchParams.get("tz"));
