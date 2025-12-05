@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import type { Entry } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
+  import { StatusPillBar } from "$lib/components/status-pills";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { Clock } from "lucide-svelte";
 
@@ -16,6 +17,8 @@
      * will show offset
      */
     profileTimezone?: string;
+    /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
+    showPills?: boolean;
   }
 
   let {
@@ -24,6 +27,7 @@
     bgDelta,
     demoMode,
     profileTimezone,
+    showPills = true,
   }: ComponentProps = $props();
 
   const realtimeStore = getRealtimeStore();
@@ -149,3 +153,18 @@
     </div>
   </div>
 </div>
+
+<!-- Status Pills Bar -->
+{#if showPills}
+  <div class="mt-4">
+    <StatusPillBar
+      iob={realtimeStore.pillsData.iob}
+      cob={realtimeStore.pillsData.cob}
+      cage={realtimeStore.pillsData.cage}
+      sage={realtimeStore.pillsData.sage}
+      basal={realtimeStore.pillsData.basal}
+      loop={realtimeStore.pillsData.loop}
+      units="mmol/L"
+    />
+  </div>
+{/if}

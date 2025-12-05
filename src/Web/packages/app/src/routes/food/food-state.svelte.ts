@@ -1,6 +1,13 @@
 // Food state using Svelte 5 runes with class-based approach
 import type { FoodRecord, QuickPickRecord, FoodFilter } from './types.js';
 import { toast } from 'svelte-sonner';
+import {
+	createFood,
+	updateFood,
+	deleteFood as deleteFoodRemote,
+	createQuickPick as createQuickPickRemote,
+	saveQuickPicks as saveQuickPicksRemote,
+} from './data.remote';
 
 const createEmptyFood = (): FoodRecord => ({
 	type: 'food',
@@ -32,7 +39,6 @@ export class FoodState {
 	status = $state('');
 
 	private quickPicksToDelete = $state<string[]>([]);
-	private nightscoutUrl: string;
 
 	// Derived state
 	filteredFoodList = $derived.by(() => {
@@ -73,14 +79,11 @@ export class FoodState {
 		foodList: FoodRecord[];
 		quickPickList: QuickPickRecord[];
 		categories: Record<string, Record<string, boolean>>;
-		nightscoutUrl?: string;
 		error?: string;
 	}) {
 		this.foodList = [...initialData.foodList];
 		this.quickPickList = [...initialData.quickPickList];
 		this.categories = { ...initialData.categories };
-		// Use window.location.origin as default for client-side API calls
-		this.nightscoutUrl = initialData.nightscoutUrl || (typeof window !== 'undefined' ? window.location.origin : '');
 		this.status = initialData.error || (initialData.foodList.length > 0 ? 'Database loaded' : '');
 	}
 
@@ -100,24 +103,15 @@ export class FoodState {
 	async saveFood() {
 		try {
 			const isNew = !this.currentFood._id;
-			const url = `${this.nightscoutUrl}/api/v1/food/`;
-			const method = isNew ? 'POST' : 'PUT';
 
-			const foodToSave = { ...this.currentFood };
 			if (isNew) {
+				const foodToSave = { ...this.currentFood };
 				delete foodToSave._id;
-			}
 
-			const response = await fetch(url, {
-				method,
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(foodToSave)
-			});
+				const result = await createFood(foodToSave);
 
-			if (response.ok) {
-				if (isNew) {
-					const result = await response.json();
-					this.currentFood._id = result[0]._id;
+				if (result.success && result.record) {
+					this.currentFood._id = result.record._id;
 					this.foodList.push({ ...this.currentFood });
 
 					// Update categories
@@ -127,19 +121,29 @@ export class FoodState {
 					if (this.currentFood.category && this.currentFood.subcategory) {
 						this.categories[this.currentFood.category][this.currentFood.subcategory] = true;
 					}
+
+					this.clearForm();
+					toast.success('Food created successfully');
+					this.status = 'OK';
 				} else {
+					throw new Error(result.error || 'Failed to create food');
+				}
+			} else {
+				const result = await updateFood(this.currentFood);
+
+				if (result.success) {
 					// Update existing record in list
 					const index = this.foodList.findIndex((f) => f._id === this.currentFood._id);
 					if (index !== -1) {
 						this.foodList[index] = { ...this.currentFood };
 					}
-				}
 
-				this.clearForm();
-				toast.success(isNew ? 'Food created successfully' : 'Food updated successfully');
-				this.status = 'OK';
-			} else {
-				throw new Error('Failed to save food');
+					this.clearForm();
+					toast.success('Food updated successfully');
+					this.status = 'OK';
+				} else {
+					throw new Error(result.error || 'Failed to update food');
+				}
 			}
 		} catch (error) {
 			toast.error('Failed to save food');
@@ -149,16 +153,14 @@ export class FoodState {
 
 	async deleteFood(food: FoodRecord) {
 		try {
-			const response = await fetch(`${this.nightscoutUrl}/api/v1/food/${food._id}`, {
-				method: 'DELETE'
-			});
+			const result = await deleteFoodRemote(food._id!);
 
-			if (response.ok) {
+			if (result.success) {
 				this.foodList = this.foodList.filter((f) => f._id !== food._id);
 				toast.success('Food deleted successfully');
 				this.status = 'OK';
 			} else {
-				throw new Error('Failed to delete food');
+				throw new Error(result.error || 'Failed to delete food');
 			}
 		} catch (error) {
 			toast.error('Failed to delete food');
@@ -187,20 +189,15 @@ export class FoodState {
 				position: 99999
 			};
 
-			const response = await fetch(`${this.nightscoutUrl}/api/v1/food/`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(newQuickPick)
-			});
+			const result = await createQuickPickRemote(newQuickPick);
 
-			if (response.ok) {
-				const result = await response.json();
-				newQuickPick._id = result[0]._id;
+			if (result.success && result.record) {
+				newQuickPick._id = result.record._id;
 				this.quickPickList.unshift(newQuickPick);
 				toast.success('Quick pick created');
 				this.status = 'OK';
 			} else {
-				throw new Error('Failed to create quick pick');
+				throw new Error(result.error || 'Failed to create quick pick');
 			}
 		} catch (error) {
 			toast.error('Failed to create quick pick');
@@ -210,26 +207,24 @@ export class FoodState {
 
 	async saveQuickPicks() {
 		try {
-			// Delete marked quick picks
-			for (const id of this.quickPicksToDelete) {
-				await fetch(`${this.nightscoutUrl}/api/v1/food/${id}`, { method: 'DELETE' });
+			// Prepare quickpicks with updated positions
+			const toUpdate = this.quickPickList.map((qp, i) => ({
+				...qp,
+				position: qp.hidden ? 99999 : i,
+			}));
+
+			const result = await saveQuickPicksRemote({
+				toDelete: this.quickPicksToDelete,
+				toUpdate,
+			});
+
+			if (result.success) {
+				this.quickPicksToDelete = [];
+				toast.success('Quick picks saved successfully');
+				this.status = 'OK';
+			} else {
+				throw new Error(result.error || 'Failed to save quick picks');
 			}
-			this.quickPicksToDelete = [];
-
-			// Update positions and save all quick picks
-			for (let i = 0; i < this.quickPickList.length; i++) {
-				const qp = this.quickPickList[i];
-				qp.position = qp.hidden ? 99999 : i;
-
-				await fetch(`${this.nightscoutUrl}/api/v1/food/`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(qp)
-				});
-			}
-
-			toast.success('Quick picks saved successfully');
-			this.status = 'OK';
 		} catch (error) {
 			toast.error('Failed to save quick picks');
 			this.status = 'Error';

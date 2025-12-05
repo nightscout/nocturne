@@ -12,6 +12,13 @@ const batteryStatsSchema = z.object({
   to: z.number().optional(),
 });
 
+const batteryReportSchema = z.object({
+  device: z.string().optional().nullable(),
+  from: z.number(),
+  to: z.number(),
+  cycleLimit: z.number().optional().default(50),
+});
+
 /**
  * Get the current battery status for all tracked devices
  */
@@ -53,4 +60,37 @@ export const getBatteryCardData = query(currentBatterySchema, async (props) => {
   ]);
 
   return { currentStatus, statistics };
+});
+
+/**
+ * Get all data needed for the battery report page
+ */
+export const getBatteryReportData = query(batteryReportSchema, async (props) => {
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
+
+  const [statistics, cycles, readings] = await Promise.all([
+    apiClient.battery.getBatteryStatistics(
+      props.device ?? undefined,
+      props.from,
+      props.to
+    ),
+    apiClient.battery.getChargeCycles(
+      props.device ?? undefined,
+      props.from,
+      props.to,
+      props.cycleLimit
+    ),
+    apiClient.battery.getBatteryReadings(
+      props.device ?? undefined,
+      props.from,
+      props.to
+    ),
+  ]);
+
+  return {
+    statistics: statistics ?? [],
+    cycles: cycles ?? [],
+    readings: readings ?? [],
+  };
 });

@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getApiClient } from "$lib/api/client";
+  import {
+    getServicesOverview,
+    getUploaderSetup,
+    deleteDemoData as deleteDemoDataRemote,
+    deleteDataSourceData as deleteDataSourceDataRemote,
+  } from "$lib/data/services.remote";
   import type {
     ServicesOverview,
     UploaderApp,
@@ -84,8 +89,7 @@
     isLoading = true;
     error = null;
     try {
-      const apiClient = getApiClient();
-      servicesOverview = await apiClient.services.getServicesOverview();
+      servicesOverview = await getServicesOverview();
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load services";
     } finally {
@@ -98,8 +102,7 @@
     showSetupDialog = true;
 
     try {
-      const apiClient = getApiClient();
-      uploaderSetup = await apiClient.services.getUploaderSetup(uploader.id!);
+      uploaderSetup = await getUploaderSetup(uploader.id!);
     } catch (e) {
       console.error("Failed to load setup instructions", e);
     }
@@ -131,8 +134,7 @@
     isDeletingDemo = true;
     demoDeleteResult = null;
     try {
-      const apiClient = getApiClient();
-      const result = await apiClient.services.deleteDemoData();
+      const result = await deleteDemoDataRemote();
       demoDeleteResult = {
         success: result.success ?? false,
         entriesDeleted: result.entriesDeleted,
@@ -157,10 +159,7 @@
     isDeletingDataSource = true;
     deleteResult = null;
     try {
-      const apiClient = getApiClient();
-      const result = await apiClient.services.deleteDataSourceData(
-        selectedDataSource.id!
-      );
+      const result = await deleteDataSourceDataRemote(selectedDataSource.id!);
       deleteResult = {
         success: result.success ?? false,
         entriesDeleted: result.entriesDeleted,

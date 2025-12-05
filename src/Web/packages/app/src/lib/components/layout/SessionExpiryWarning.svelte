@@ -3,6 +3,7 @@
   import * as Alert from "$lib/components/ui/alert";
   import { Clock, RefreshCw, X } from "lucide-svelte";
   import { formatSessionExpiry } from "$lib/stores/auth.svelte";
+  import { refreshSession } from "../../../routes/auth/auth.remote";
 
   interface Props {
     /**
@@ -29,12 +30,9 @@
     isRefreshing = true;
 
     try {
-      const response = await fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "include",
-      });
+      const result = await refreshSession();
 
-      if (response.ok) {
+      if (result.success) {
         onRefresh?.();
       } else {
         // Refresh failed, redirect to login

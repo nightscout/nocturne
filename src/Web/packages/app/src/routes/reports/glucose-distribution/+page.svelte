@@ -319,7 +319,7 @@
                   startAngle + (d.value / totalValue) * Math.PI * 2;
                 acc.push({ ...d, startAngle, endAngle });
                 return acc;
-              }, [] as Array<{ name: string; value: number; color: string; startAngle: number; endAngle: number }>)}
+              }, [] as Array)}
               <div class="h-[300px] w-[300px]">
                 <Chart>
                   <Svg>

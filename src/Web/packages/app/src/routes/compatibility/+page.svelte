@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { onMount, onDestroy } from "svelte";
-  import { getCompatibilityData } from "./data.remote";
+  import { getCompatibilityData, getCompatibilityMetrics, getCompatibilityAnalyses } from "./data.remote";
   import type { AnalysisListItemDto } from "$lib/api";
 
   // Get filter params from URL
@@ -107,25 +107,22 @@
   // Poll for new data
   async function pollData() {
     try {
-      const queryParams = new URLSearchParams({
+      const filters = {
         ...(filterPath && { requestPath: filterPath }),
         ...(filterMethod && { requestMethod: filterMethod }),
-        ...(filterMatch && { overallMatch: filterMatch }),
-        count: "100",
-        skip: "0",
-      });
+        ...(filterMatch && { overallMatch: parseInt(filterMatch) }),
+        count: 100,
+        skip: 0,
+      };
 
-      const [metricsRes, analysesRes] = await Promise.all([
-        fetch(`/api/compatibility/metrics`),
-        fetch(`/api/compatibility/analyses?${queryParams}`),
+      const [metricsResult, analysesResult] = await Promise.all([
+        getCompatibilityMetrics(),
+        getCompatibilityAnalyses(filters),
       ]);
 
-      if (metricsRes.ok && analysesRes.ok) {
-        polledMetrics = await metricsRes.json();
-        const analysesData = await analysesRes.json();
-        polledAnalyses = analysesData.analyses || [];
-        lastUpdate = new Date();
-      }
+      polledMetrics = metricsResult;
+      polledAnalyses = analysesResult;
+      lastUpdate = new Date();
     } catch (err) {
       console.error("Error polling data:", err);
     }

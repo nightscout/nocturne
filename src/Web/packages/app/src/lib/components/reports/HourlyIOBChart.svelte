@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import * as ChartC from "$lib/components/ui/chart/index.js";
-  import { getUniversalApiClient } from "$lib/api";
+  import { getHourlyIob } from "$lib/data/iob.remote";
   import { onMount } from "svelte";
 
   interface Props {
@@ -28,24 +28,13 @@
       isLoading = true;
       error = null;
 
-      const apiClient = getUniversalApiClient();
-      const response = await apiClient.iob.getHourlyIob(
+      const response = await getHourlyIob({
         intervalMinutes,
-        24, // hours
-        undefined // startTime - use default (24 hours ago)
-      );
+        hours: 24,
+        startTime: undefined,
+      });
 
-      // Transform API response to match chart data format
-      chartData =
-        response.data?.map((item) => ({
-          timeSlot: item.timeSlot || 0,
-          hour: item.hour || 0,
-          minute: item.minute || 0,
-          timeLabel: item.timeLabel || "",
-          totalIOB: item.totalIOB || 0,
-          bolusIOB: item.bolusIOB || 0,
-          basalIOB: item.basalIOB || 0,
-        })) || [];
+      chartData = response.data;
     } catch (err) {
       console.error("Failed to load IOB data:", err);
       error = "Failed to load IOB data";

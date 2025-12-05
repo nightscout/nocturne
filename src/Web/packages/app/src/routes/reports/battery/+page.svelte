@@ -23,11 +23,11 @@
     RefreshCw,
   } from "lucide-svelte";
   import {
-    getApiClient,
     type BatteryStatistics,
     type ChargeCycle,
     type BatteryReading,
   } from "$lib/api";
+  import { getBatteryReportData } from "$lib/data/battery.remote";
   import { onMount } from "svelte";
 
   // State
@@ -47,31 +47,16 @@
     error = null;
 
     try {
-      const apiClient = getApiClient();
+      const result = await getBatteryReportData({
+        device: selectedDevice,
+        from: dateRange.from,
+        to: dateRange.to,
+        cycleLimit: 50,
+      });
 
-      // Fetch all data in parallel
-      const [statsResult, cyclesResult, readingsResult] = await Promise.all([
-        apiClient.battery.getBatteryStatistics(
-          selectedDevice,
-          dateRange.from,
-          dateRange.to
-        ),
-        apiClient.battery.getChargeCycles(
-          selectedDevice,
-          dateRange.from,
-          dateRange.to,
-          50
-        ),
-        apiClient.battery.getBatteryReadings(
-          selectedDevice,
-          dateRange.from,
-          dateRange.to
-        ),
-      ]);
-
-      statistics = statsResult ?? [];
-      cycles = cyclesResult ?? [];
-      readings = readingsResult ?? [];
+      statistics = result.statistics;
+      cycles = result.cycles;
+      readings = result.readings;
     } catch (e) {
       console.error("Failed to fetch battery data:", e);
       error = "Failed to load battery report data";

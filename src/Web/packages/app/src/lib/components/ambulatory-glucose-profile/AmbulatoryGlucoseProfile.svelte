@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Entry } from "$lib/api";
-  import { ApiClient, type AveragedStats } from "$lib/api";
-  import { env as publicEnv } from "$env/dynamic/public";
+  import type { AveragedStats } from "$lib/api";
+  import { calculateAveragedStats } from "$lib/data/statistics.remote";
   import { DEFAULT_THRESHOLDS } from "$lib/constants";
   import { AreaChart } from "layerchart";
   import { onMount } from "svelte";
@@ -20,7 +20,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  onMount(() => {
+  onMount(async () => {
     // If we already have averaged stats, use them
     if (averagedStats?.length) {
       data = averagedStats;
@@ -30,18 +30,15 @@
 
     // If we have entries but no stats, calculate them
     if (entries?.length) {
-      const apiClient = new ApiClient(publicEnv.PUBLIC_API_URL || "http://localhost:1612");
-      apiClient.statistics
-        .calculateAveragedStats(entries)
-        .then((stats) => {
-          data = stats;
-          loading = false;
-        })
-        .catch((err) => {
-          console.error("Failed to calculate averaged stats:", err);
-          error = err.message || "Failed to load data";
-          loading = false;
-        });
+      try {
+        const stats = await calculateAveragedStats({ entries });
+        data = stats;
+        loading = false;
+      } catch (err) {
+        console.error("Failed to calculate averaged stats:", err);
+        error = err instanceof Error ? err.message : "Failed to load data";
+        loading = false;
+      }
     } else {
       // No data to work with
       loading = false;

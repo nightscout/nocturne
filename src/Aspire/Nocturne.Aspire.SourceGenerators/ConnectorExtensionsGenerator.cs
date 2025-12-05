@@ -243,6 +243,7 @@ namespace Nocturne.Aspire.SourceGenerators
         private static void GenerateConnectorMethod(StringBuilder sb, ConnectorInfo connector)
         {
             var methodName = $"Add{connector.ConnectorName}Connector";
+            var connectorNameLower = connector.ConnectorName.ToLower();
 
             sb.AppendLine();
             sb.AppendLine($"        public static IDistributedApplicationBuilder {methodName}(");
@@ -293,6 +294,9 @@ namespace Nocturne.Aspire.SourceGenerators
                 sb.AppendLine();
             }
 
+            // Generate common base configuration parameters (SaveRawData, DataDirectory)
+            GenerateBaseConfigParameters(sb, connector.ConnectorName, connectorNameLower);
+
             // Generate connector resource
             sb.AppendLine("            var connector = builder");
             sb.AppendLine(
@@ -317,6 +321,12 @@ namespace Nocturne.Aspire.SourceGenerators
                     );
                 }
             }
+
+            // Inject base configuration environment variables
+            sb.AppendLine($"            connector.WithEnvironment(\"SaveRawData\", saveRawData);");
+            sb.AppendLine(
+                $"            connector.WithEnvironment(\"DataDirectory\", dataDirectory);"
+            );
             sb.AppendLine();
 
             // Set parent relationships
@@ -325,10 +335,61 @@ namespace Nocturne.Aspire.SourceGenerators
                 var varName = ToCamelCase(param.PropertyName);
                 sb.AppendLine($"            {varName}.WithParentRelationship(connector);");
             }
+            sb.AppendLine($"            saveRawData.WithParentRelationship(connector);");
+            sb.AppendLine($"            dataDirectory.WithParentRelationship(connector);");
 
             sb.AppendLine();
             sb.AppendLine("            return builder;");
             sb.AppendLine("        }");
+        }
+
+        /// <summary>
+        /// Generates common base configuration parameters that all connectors support.
+        /// These are defined in BaseConnectorConfiguration and should be available for all connectors.
+        /// </summary>
+        private static void GenerateBaseConfigParameters(
+            StringBuilder sb,
+            string connectorName,
+            string connectorNameLower
+        )
+        {
+            // SaveRawData parameter
+            sb.AppendLine(
+                $"            var config_saveRawData = builder.Configuration[\"Parameters:Connectors:{connectorName}:SaveRawData\"];"
+            );
+            sb.AppendLine(
+                $"            var val_saveRawData = !string.IsNullOrEmpty(config_saveRawData) ? config_saveRawData : \"false\";"
+            );
+            sb.AppendLine($"            var saveRawData = val_saveRawData is not null");
+            sb.AppendLine(
+                $"                ? builder.AddParameter(\"{connectorNameLower}-save-raw-data\", val_saveRawData, secret: false)"
+            );
+            sb.AppendLine(
+                $"                : builder.AddParameter(\"{connectorNameLower}-save-raw-data\", secret: false);"
+            );
+            sb.AppendLine(
+                $"            saveRawData.WithDescription(\"Save raw API responses to files for debugging\");"
+            );
+            sb.AppendLine();
+
+            // DataDirectory parameter
+            sb.AppendLine(
+                $"            var config_dataDirectory = builder.Configuration[\"Parameters:Connectors:{connectorName}:DataDirectory\"];"
+            );
+            sb.AppendLine(
+                $"            var val_dataDirectory = !string.IsNullOrEmpty(config_dataDirectory) ? config_dataDirectory : \"data\";"
+            );
+            sb.AppendLine($"            var dataDirectory = val_dataDirectory is not null");
+            sb.AppendLine(
+                $"                ? builder.AddParameter(\"{connectorNameLower}-data-directory\", val_dataDirectory, secret: false)"
+            );
+            sb.AppendLine(
+                $"                : builder.AddParameter(\"{connectorNameLower}-data-directory\", secret: false);"
+            );
+            sb.AppendLine(
+                $"            dataDirectory.WithDescription(\"Directory to save raw data files\");"
+            );
+            sb.AppendLine();
         }
 
         private static string ToCamelCase(string str)

@@ -698,6 +698,11 @@ namespace Nocturne.Connectors.Glooko.Services
                             : basal.Timestamp;
                         var basalDate = DateTime.Parse(timestamp);
 
+                        // Duration is in seconds, rate is U/hr
+                        // Calculate insulin delivered: rate (U/hr) × duration (seconds) / 3600 (seconds/hr)
+                        var durationMinutes = basal.Duration / 60.0;
+                        var insulinDelivered = basal.Rate * basal.Duration / 3600.0;
+
                         var treatment = new Treatment
                         {
                             Id = GenerateTreatmentId(
@@ -711,7 +716,8 @@ namespace Nocturne.Connectors.Glooko.Services
                                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Rate = basal.Rate,
                             Absolute = basal.Rate,
-                            Duration = basal.Duration / 60.0, // Convert seconds to minutes
+                            Duration = durationMinutes,
+                            Insulin = insulinDelivered > 0 ? insulinDelivered : null,
                             AdditionalProperties = JsonSerializer.Deserialize<
                                 Dictionary<string, object>
                             >(JsonSerializer.Serialize(basal)),

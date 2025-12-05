@@ -268,6 +268,9 @@ public class FeatureSettings
 
     [JsonPropertyName("plugins")]
     public Dictionary<string, PluginSettings> Plugins { get; set; } = new();
+
+    [JsonPropertyName("battery")]
+    public BatteryDisplaySettings Battery { get; set; } = new();
 }
 
 public class DisplaySettings
@@ -310,6 +313,51 @@ public class DashboardWidgets
 
     [JsonPropertyName("dailyStats")]
     public bool DailyStats { get; set; } = true;
+
+    [JsonPropertyName("batteryStatus")]
+    public bool BatteryStatus { get; set; } = true;
+}
+
+/// <summary>
+/// Battery display settings for controlling how battery information is shown
+/// </summary>
+public class BatteryDisplaySettings
+{
+    /// <summary>
+    /// Battery level at which to show a warning (yellow indicator)
+    /// </summary>
+    [JsonPropertyName("warnThreshold")]
+    public int WarnThreshold { get; set; } = 30;
+
+    /// <summary>
+    /// Battery level at which to show urgent warning (red indicator)
+    /// </summary>
+    [JsonPropertyName("urgentThreshold")]
+    public int UrgentThreshold { get; set; } = 20;
+
+    /// <summary>
+    /// Whether to enable battery low alerts
+    /// </summary>
+    [JsonPropertyName("enableAlerts")]
+    public bool EnableAlerts { get; set; } = true;
+
+    /// <summary>
+    /// How many minutes of battery history to consider when determining status
+    /// </summary>
+    [JsonPropertyName("recentMinutes")]
+    public int RecentMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// Whether to show voltage in addition to percentage (when available)
+    /// </summary>
+    [JsonPropertyName("showVoltage")]
+    public bool ShowVoltage { get; set; } = false;
+
+    /// <summary>
+    /// Whether to show statistics in the battery card (charge duration, etc.)
+    /// </summary>
+    [JsonPropertyName("showStatistics")]
+    public bool ShowStatistics { get; set; } = true;
 }
 
 public class PluginSettings

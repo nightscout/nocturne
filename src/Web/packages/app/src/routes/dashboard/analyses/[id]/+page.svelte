@@ -388,8 +388,7 @@
                     <Button
                       variant="ghost"
                       size="sm"
-                      onclick={() =>
-                        copyToClipboard(discrepancy.nocturneValue)}
+                      onclick={() => copyToClipboard(discrepancy.nocturneValue)}
                     >
                       <Copy class="h-3 w-3" />
                     </Button>

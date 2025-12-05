@@ -89,3 +89,50 @@ export const getAnalysisDetail = query(z.string(), async (analysisId) => {
 		throw error(500, 'Failed to load analysis detail');
 	}
 });
+
+/**
+ * Get compatibility metrics only (for polling)
+ */
+export const getCompatibilityMetrics = query(async () => {
+	const client = getApiClient();
+
+	try {
+		return await client.compatibility.getMetrics(undefined, undefined);
+	} catch (err) {
+		console.error('Error loading compatibility metrics:', err);
+		throw error(500, 'Failed to load compatibility metrics');
+	}
+});
+
+/**
+ * Get analyses list only (for polling)
+ */
+export const getCompatibilityAnalyses = query(
+	CompatibilityFiltersSchema.optional(),
+	async (filters) => {
+		const client = getApiClient();
+
+		try {
+			const requestPath = filters?.requestPath || undefined;
+			const overallMatch = filters?.overallMatch as ResponseMatchType | undefined;
+			const requestMethod = filters?.requestMethod || undefined;
+			const count = filters?.count ?? 100;
+			const skip = filters?.skip ?? 0;
+
+			const analysesData = await client.compatibility.getAnalyses(
+				requestPath,
+				overallMatch,
+				requestMethod,
+				undefined,
+				undefined,
+				count,
+				skip
+			);
+
+			return analysesData.analyses || [];
+		} catch (err) {
+			console.error('Error loading compatibility analyses:', err);
+			throw error(500, 'Failed to load compatibility analyses');
+		}
+	}
+);

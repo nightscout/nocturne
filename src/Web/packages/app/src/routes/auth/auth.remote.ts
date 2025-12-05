@@ -450,6 +450,141 @@ export const getAuthState = query(async () => {
   };
 });
 
+/**
+ * Get current session info
+ * Used by client-side store to check authentication state
+ */
+export const getSessionInfo = query(async () => {
+  const event = getRequestEvent();
+  if (!event) {
+    return {
+      isAuthenticated: false,
+      user: null,
+    };
+  }
+
+  const api = getApiClient();
+
+  try {
+    const session = await api.oidc.getSession();
+    return {
+      isAuthenticated: session?.isAuthenticated ?? false,
+      subjectId: session?.subjectId,
+      name: session?.name,
+      email: session?.email,
+      roles: session?.roles ?? [],
+      permissions: session?.permissions ?? [],
+      expiresAt: session?.expiresAt,
+    };
+  } catch (error) {
+    console.error("Failed to get session:", error);
+    return {
+      isAuthenticated: false,
+      user: null,
+    };
+  }
+});
+
+/**
+ * Get available OIDC providers
+ */
+export const getProvidersInfo = query(async () => {
+  const api = getApiClient();
+
+  try {
+    const providers = await api.oidc.getProviders();
+    return {
+      providers: providers?.map((p) => ({
+        id: p.id,
+        name: p.name,
+        icon: p.icon,
+        buttonColor: p.buttonColor,
+      })) ?? [],
+    };
+  } catch (error) {
+    console.error("Failed to get providers:", error);
+    return { providers: [] };
+  }
+});
+
+/**
+ * Refresh the current session tokens
+ */
+export const refreshSession = query(async () => {
+  const event = getRequestEvent();
+  if (!event) {
+    return { success: false };
+  }
+
+  const api = getApiClient();
+
+  try {
+    const result = await api.oidc.refresh();
+
+    // Update cookies if new tokens are returned
+    if (result.accessToken) {
+      const isSecure = event.url.protocol === "https:";
+
+      event.cookies.set(".Nocturne.AccessToken", result.accessToken, {
+        path: "/",
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: "lax",
+        maxAge: result.expiresIn || 3600,
+      });
+
+      event.cookies.set("IsAuthenticated", "true", {
+        path: "/",
+        httpOnly: false,
+        secure: isSecure,
+        sameSite: "lax",
+        maxAge: result.expiresIn || 3600,
+      });
+    }
+
+    return {
+      success: true,
+      expiresAt: result.expiresAt,
+    };
+  } catch (error) {
+    console.error("Failed to refresh session:", error);
+    return { success: false };
+  }
+});
+
+/**
+ * Logout and clear session cookies
+ */
+export const logoutSession = query(z.string().optional(), async (_providerId) => {
+  const event = getRequestEvent();
+  if (!event) {
+    return { success: false };
+  }
+
+  const api = getApiClient();
+
+  try {
+    // Try to revoke on the backend
+    await api.oidc.logout();
+
+    // Clear all auth cookies
+    event.cookies.delete(".Nocturne.AccessToken", { path: "/" });
+    event.cookies.delete(".Nocturne.RefreshToken", { path: "/" });
+    event.cookies.delete("IsAuthenticated", { path: "/" });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to logout:", error);
+
+    // Still clear cookies even if backend call fails
+    event.cookies.delete(".Nocturne.AccessToken", { path: "/" });
+    event.cookies.delete(".Nocturne.RefreshToken", { path: "/" });
+    event.cookies.delete("IsAuthenticated", { path: "/" });
+
+    return { success: true };
+  }
+});
+
 // ============================================================================
 // Type Exports for Components
 // ============================================================================

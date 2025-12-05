@@ -12,6 +12,12 @@
 import { getContext, setContext } from "svelte";
 import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
+import {
+  getSessionInfo,
+  getProvidersInfo,
+  refreshSession as refreshSessionRemote,
+  logoutSession as logoutSessionRemote,
+} from "../../routes/auth/auth.remote";
 
 const AUTH_STORE_KEY = Symbol("auth-store");
 
@@ -166,16 +172,7 @@ export class AuthStore {
     this._error = null;
 
     try {
-      // Use fetch directly to call the session endpoint
-      const response = await fetch("/api/auth/session", {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load session");
-      }
-
-      const session: SessionInfo = await response.json();
+      const session = await getSessionInfo();
 
       if (session.isAuthenticated && session.subjectId) {
         this._user = {
@@ -210,18 +207,10 @@ export class AuthStore {
     if (!browser) return [];
 
     try {
-      const response = await fetch("/api/auth/providers", {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load providers");
-      }
-
-      const providers = await response.json();
-      this._providers = providers.map((p: any) => ({
-        id: p.id,
-        name: p.name,
+      const result = await getProvidersInfo();
+      this._providers = result.providers.map((p) => ({
+        id: p.id ?? "",
+        name: p.name ?? "",
         icon: p.icon,
         buttonColor: p.buttonColor,
       }));
@@ -263,30 +252,16 @@ export class AuthStore {
     this._state = "loading";
 
     try {
-      const params = new URLSearchParams();
-      if (providerId) {
-        params.set("providerId", providerId);
-      }
+      const result = await logoutSessionRemote(providerId);
 
-      const response = await fetch(`/api/auth/logout${params.toString() ? `?${params.toString()}` : ""}`, {
-        method: "POST",
-        credentials: "include",
-      });
+      // Clear local state
+      this._user = null;
+      this._expiresAt = null;
+      this._state = "unauthenticated";
+      this._expiryWarningShown = false;
 
-      if (response.ok) {
-        const result = await response.json();
-
-        // Clear local state
-        this._user = null;
-        this._expiresAt = null;
-        this._state = "unauthenticated";
-        this._expiryWarningShown = false;
-
-        // If provider has a logout URL, redirect there
-        if (result.providerLogoutUrl) {
-          window.location.href = result.providerLogoutUrl;
-          return;
-        }
+      if (!result.success) {
+        console.warn("Logout API call failed, but local state cleared");
       }
     } catch (e) {
       console.error("Logout failed:", e);
@@ -308,14 +283,10 @@ export class AuthStore {
     if (!browser) return false;
 
     try {
-      const response = await fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "include",
-      });
+      const result = await refreshSessionRemote();
 
-      if (response.ok) {
-        const tokens = await response.json();
-        this._expiresAt = tokens.expiresAt ? new Date(tokens.expiresAt) : null;
+      if (result.success) {
+        this._expiresAt = result.expiresAt ? new Date(result.expiresAt) : null;
         this._expiryWarningShown = false;
 
         // Reload session to get updated user info

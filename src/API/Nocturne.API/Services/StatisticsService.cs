@@ -1357,6 +1357,7 @@ public class StatisticsService : IStatisticsService
                 || treatment.Carbs.HasValue
                 || treatment.Protein.HasValue
                 || treatment.Fat.HasValue
+                || (treatment.Rate.HasValue && treatment.Duration.HasValue)
             )
             {
                 summary.TreatmentCount++;
@@ -1372,6 +1373,21 @@ public class StatisticsService : IStatisticsService
                 else
                 {
                     summary.Totals.Insulin.Basal += treatment.Insulin.Value;
+                }
+            }
+            // Fallback: Calculate basal insulin from rate × duration for legacy data
+            // that has rate/duration but no pre-calculated insulin value
+            else if (
+                treatment.Rate.HasValue
+                && treatment.Duration.HasValue
+                && !IsBolusTreatment(treatment)
+            )
+            {
+                // Rate is U/hr, Duration is in minutes
+                var basalInsulin = (treatment.Rate.Value * treatment.Duration.Value) / 60.0;
+                if (basalInsulin > 0)
+                {
+                    summary.Totals.Insulin.Basal += basalInsulin;
                 }
             }
 

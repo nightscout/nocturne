@@ -26,6 +26,7 @@ import {
   NotificationsClient,
   IobClient,
   CompatibilityClient,
+  DiscrepancyClient,
   UISettingsClient,
   ServicesClient,
   LocalAuthClient,
@@ -68,6 +69,7 @@ export class ApiClient {
   public readonly timeQuery: TimeQueryClient;
   public readonly iob: IobClient;
   public readonly compatibility: CompatibilityClient;
+  public readonly discrepancy: DiscrepancyClient;
   public readonly uiSettings: UISettingsClient;
   public readonly services: ServicesClient;
   public readonly localAuth: LocalAuthClient;
@@ -116,6 +118,7 @@ export class ApiClient {
     this.timeQuery = new TimeQueryClient(apiBaseUrl, http);
     this.iob = new IobClient(apiBaseUrl, http);
     this.compatibility = new CompatibilityClient(apiBaseUrl, http);
+    this.discrepancy = new DiscrepancyClient(apiBaseUrl, http);
     this.uiSettings = new UISettingsClient(apiBaseUrl, http);
     this.services = new ServicesClient(apiBaseUrl, http);
     this.localAuth = new LocalAuthClient(apiBaseUrl, http);

@@ -9,9 +9,11 @@ import type {
   AnnouncementEvent,
   AlarmEvent,
 } from "$lib/websocket/types";
+import type { DeviceStatus, Profile } from "$lib/api";
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
+import { processPillsData, type ProcessedPillsData } from "$lib/data/pills-processor";
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
@@ -22,6 +24,8 @@ export class RealtimeStore {
   /** Reactive state using Svelte 5 runes */
   entries = $state<Entry[]>([]);
   treatments = $state<Treatment[]>([]);
+  deviceStatuses = $state<DeviceStatus[]>([]);
+  profile = $state<Profile | null>(null);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -87,6 +91,16 @@ export class RealtimeStore {
       .sort((a, b) => (b.mills || 0) - (a.mills || 0));
   });
 
+  /** Processed pills data (COB, IOB, CAGE, SAGE, Loop, Basal) */
+  pillsData = $derived.by((): ProcessedPillsData => {
+    return processPillsData(
+      this.deviceStatuses,
+      this.treatments,
+      this.profile,
+      { units: 'mmol/L' } // TODO: Get from settings
+    );
+  });
+
   constructor(config: WebSocketConfig) {
     this.websocketClient = new WebSocketClient(config);
     this.setupEventHandlers();
@@ -106,13 +120,17 @@ export class RealtimeStore {
     // Start with empty data
     this.entries = [];
     this.treatments = [];
+    this.deviceStatuses = [];
+    this.profile = null;
 
     try {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
-      const [historicalEntries, historicalTreatments] = await Promise.all([
+      const [historicalEntries, historicalTreatments, deviceStatusData, profileData] = await Promise.all([
         apiClient.entries.getEntries2(undefined, 1000),
         apiClient.treatments.getTreatments2(undefined, 500),
+        apiClient.deviceStatus.getDeviceStatus2(undefined, 100).catch(() => []),
+        apiClient.profile.getProfiles2(1).catch(() => []),
       ]);
 
       if (historicalEntries && historicalEntries.length > 0) {
@@ -125,6 +143,16 @@ export class RealtimeStore {
         this.treatments = historicalTreatments.sort(
           (a: Treatment, b: Treatment) => (b.mills || 0) - (a.mills || 0)
         );
+      }
+
+      if (deviceStatusData && deviceStatusData.length > 0) {
+        this.deviceStatuses = deviceStatusData.sort(
+          (a: DeviceStatus, b: DeviceStatus) => (b.mills || 0) - (a.mills || 0)
+        );
+      }
+
+      if (profileData && profileData.length > 0) {
+        this.profile = profileData[0];
       }
     } catch (error) {
       console.error("Failed to fetch historical data:", error);
@@ -230,6 +258,16 @@ export class RealtimeStore {
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
           .slice(0, 500);
       }
+    } else if (colName === "devicestatus" && this.isDeviceStatus(doc)) {
+      const exists = this.deviceStatuses.some(
+        (ds) => ds._id === doc._id
+      );
+
+      if (!exists) {
+        this.deviceStatuses = [doc, ...this.deviceStatuses]
+          .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+          .slice(0, 100);
+      }
     }
   }
 
@@ -319,6 +357,14 @@ export class RealtimeStore {
 
   private isTreatment(obj: any): obj is Treatment {
     return obj && typeof obj === "object" && "eventType" in obj;
+  }
+
+  private isDeviceStatus(obj: any): obj is DeviceStatus {
+    return (
+      obj &&
+      typeof obj === "object" &&
+      ("device" in obj || "loop" in obj || "openaps" in obj || "pump" in obj)
+    );
   }
 
   /** Authenticate with API secret */

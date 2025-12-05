@@ -22,43 +22,12 @@ export const getDashboardData = query(DashboardFiltersSchema.optional(), async (
 		const fromDate = filters?.fromDate ? new Date(filters.fromDate) : undefined;
 		const toDate = filters?.toDate ? new Date(filters.toDate) : undefined;
 
-		// Fetch all dashboard data in parallel
-		const [metricsResponse, endpointResponse, analysesResponse, statusResponse] =
-			await Promise.all([
-				fetch(
-					`${apiClient.baseUrl}/api/v3/discrepancy/metrics?${new URLSearchParams({
-						...(fromDate && { fromDate: fromDate.toISOString() }),
-						...(toDate && { toDate: toDate.toISOString() }),
-					})}`
-				),
-				fetch(
-					`${apiClient.baseUrl}/api/v3/discrepancy/endpoints?${new URLSearchParams({
-						...(fromDate && { fromDate: fromDate.toISOString() }),
-						...(toDate && { toDate: toDate.toISOString() }),
-					})}`
-				),
-				fetch(`${apiClient.baseUrl}/api/v3/discrepancy/analyses?count=20&skip=0`),
-				fetch(`${apiClient.baseUrl}/api/v3/discrepancy/status`),
-			]);
-
-		if (!metricsResponse.ok) {
-			throw error(500, 'Failed to fetch compatibility metrics');
-		}
-		if (!endpointResponse.ok) {
-			throw error(500, 'Failed to fetch endpoint metrics');
-		}
-		if (!analysesResponse.ok) {
-			throw error(500, 'Failed to fetch recent analyses');
-		}
-		if (!statusResponse.ok) {
-			throw error(500, 'Failed to fetch compatibility status');
-		}
-
+		// Fetch all dashboard data in parallel using the API client
 		const [metrics, endpoints, analyses, status] = await Promise.all([
-			metricsResponse.json(),
-			endpointResponse.json(),
-			analysesResponse.json(),
-			statusResponse.json(),
+			apiClient.discrepancy.getCompatibilityMetrics(fromDate, toDate),
+			apiClient.discrepancy.getEndpointMetrics(fromDate, toDate),
+			apiClient.discrepancy.getDiscrepancyAnalyses(undefined, undefined, undefined, undefined, 20, 0),
+			apiClient.discrepancy.getCompatibilityStatus(),
 		]);
 
 		return {
@@ -94,29 +63,21 @@ export const getAnalyses = query(AnalysesFiltersSchema.optional(), async (filter
 	const { apiClient } = locals;
 
 	try {
-		const requestPath = filters?.requestPath || '';
+		const requestPath = filters?.requestPath || undefined;
 		const overallMatch = filters?.overallMatch;
 		const fromDate = filters?.fromDate ? new Date(filters.fromDate) : undefined;
 		const toDate = filters?.toDate ? new Date(filters.toDate) : undefined;
 		const count = filters?.count ?? 50;
 		const skip = filters?.skip ?? 0;
 
-		const queryParams = new URLSearchParams({
-			count: count.toString(),
-			skip: skip.toString(),
-			...(requestPath && { requestPath }),
-			...(overallMatch !== undefined && { overallMatch: overallMatch.toString() }),
-			...(fromDate && { fromDate: fromDate.toISOString() }),
-			...(toDate && { toDate: toDate.toISOString() }),
-		});
-
-		const response = await fetch(`${apiClient.baseUrl}/api/v3/discrepancy/analyses?${queryParams}`);
-
-		if (!response.ok) {
-			throw error(500, 'Failed to fetch discrepancy analyses');
-		}
-
-		const analyses = await response.json();
+		const analyses = await apiClient.discrepancy.getDiscrepancyAnalyses(
+			requestPath,
+			overallMatch,
+			fromDate,
+			toDate,
+			count,
+			skip
+		);
 
 		return {
 			analyses,
@@ -143,22 +104,12 @@ export const getAnalysisById = query(z.string(), async (id) => {
 	const { apiClient } = locals;
 
 	try {
-		const response = await fetch(`${apiClient.baseUrl}/api/v3/discrepancy/analyses/${id}`);
-
-		if (!response.ok) {
-			if (response.status === 404) {
-				throw error(404, 'Analysis not found');
-			}
-			throw error(500, 'Failed to fetch analysis');
-		}
-
-		const analysis = await response.json();
-
+		const analysis = await apiClient.discrepancy.getDiscrepancyAnalysis(id);
 		return { analysis };
 	} catch (err) {
 		console.error('Error loading analysis:', err);
-		if ((err as any).status) {
-			throw err;
+		if ((err as any).status === 404) {
+			throw error(404, 'Analysis not found');
 		}
 		throw error(500, 'Failed to load analysis');
 	}

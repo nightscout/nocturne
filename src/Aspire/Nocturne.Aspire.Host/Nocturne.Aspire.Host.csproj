@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.0.1" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.0.2" />
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,26 +15,15 @@
     <PackageReference Include="Aspire.Hosting.Docker" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.NodeJS.Extensions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Scalar.Aspire" />
     <PackageReference Include="Spectre.Console" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\API\Nocturne.API\Nocturne.API.csproj" />
-    <ProjectReference
-      Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"
-      IsAspireProjectResource="false"
-    />
-    <ProjectReference
-      Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj"
-      IsAspireProjectResource="false"
-    />
-    <ProjectReference
-      Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"
-      IsAspireProjectResource="false"
-    />
-    <ProjectReference
-      Include="..\..\Connectors\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj"
-      IsAspireProjectResource="false"
-    />
+    <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" IsAspireProjectResource="false" />
+    <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" IsAspireProjectResource="false" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj" IsAspireProjectResource="false" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MiniMed\Nocturne.Connectors.MiniMed.csproj" />
@@ -43,12 +32,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
     <ProjectReference Include="..\..\Services\Nocturne.Services.Demo\Nocturne.Services.Demo.csproj" />
     <!-- Source generator for automatic connector extension generation -->
-    <ProjectReference
-      Include="..\Nocturne.Aspire.SourceGenerators\Nocturne.Aspire.SourceGenerators.csproj"
-      OutputItemType="Analyzer"
-      ReferenceOutputAssembly="false"
-      IsAspireProjectResource="false"
-    />
+    <ProjectReference Include="..\Nocturne.Aspire.SourceGenerators\Nocturne.Aspire.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" IsAspireProjectResource="false" />
   </ItemGroup>
   <!-- Enable viewing generated files for debugging -->
   <PropertyGroup>

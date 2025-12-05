@@ -29,7 +29,12 @@ namespace Nocturne.Connectors.Configurations
         /// </summary>
         [Required]
         [EnvironmentVariable("CONNECT_GLOOKO_USERNAME")]
-        [AspireParameter("glooko-username", "Email", secret: false, description: "Glooko account email")]
+        [AspireParameter(
+            "glooko-username",
+            "Email",
+            secret: false,
+            description: "Glooko account email"
+        )]
         public string GlookoUsername { get; set; } = string.Empty;
 
         /// <summary>
@@ -37,20 +42,37 @@ namespace Nocturne.Connectors.Configurations
         /// </summary>
         [Required]
         [EnvironmentVariable("CONNECT_GLOOKO_PASSWORD")]
-        [AspireParameter("glooko-password", "Password", secret: true, description: "Glooko account password")]
+        [AspireParameter(
+            "glooko-password",
+            "Password",
+            secret: true,
+            description: "Glooko account password"
+        )]
         public string GlookoPassword { get; set; } = string.Empty;
 
         /// <summary>
         /// Glooko server region (US or EU)
         /// </summary>
         [EnvironmentVariable("CONNECT_GLOOKO_SERVER")]
-        [AspireParameter("glooko-server", "Server", secret: false, description: "Glooko server (US or EU)", defaultValue: "US")]
+        [AspireParameter(
+            "glooko-server",
+            "Server",
+            secret: false,
+            description: "Glooko server (US or EU)",
+            defaultValue: "US"
+        )]
         public string GlookoServer { get; set; } = "US";
 
         /// <summary>
         /// Timezone offset in hours (default 0)
         /// </summary>
-        [AspireParameter("glooko-timezone-offset", "TimezoneOffset", secret: false, description: "Timezone offset in hours", defaultValue: "0")]
+        [AspireParameter(
+            "glooko-timezone-offset",
+            "TimezoneOffset",
+            secret: false,
+            description: "Timezone offset in hours",
+            defaultValue: "0"
+        )]
         public double GlookoTimezoneOffset { get; set; } = 0;
 
         protected override void ValidateSourceSpecificConfiguration()

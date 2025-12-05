@@ -8,16 +8,52 @@ import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 
 /**
- * Session info response from the API
+ * Helper to get the API base URL (server-side internal or public)
  */
-interface SessionInfo {
-  isAuthenticated: boolean;
-  subjectId?: string;
-  name?: string;
-  email?: string;
-  roles?: string[];
-  permissions?: string[];
-  expiresAt?: string;
+function getApiBaseUrl(): string | null {
+  return env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL || null;
+}
+
+/**
+ * Helper to get the hashed API secret for authentication
+ */
+function getHashedApiSecret(): string | null {
+  const apiSecret = env.API_SECRET;
+  return apiSecret
+    ? createHash("sha1").update(apiSecret).digest("hex").toLowerCase()
+    : null;
+}
+
+/**
+ * Create an API client with custom fetch that includes auth headers
+ */
+function createServerApiClient(
+  baseUrl: string,
+  fetchFn: typeof fetch,
+  options?: { accessToken?: string; hashedSecret?: string | null }
+): ApiClient {
+  const httpClient = {
+    fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
+      const headers = new Headers(init?.headers);
+
+      // Add the hashed API secret as authentication
+      if (options?.hashedSecret) {
+        headers.set("api-secret", options.hashedSecret);
+      }
+
+      // Forward access token cookie if provided
+      if (options?.accessToken) {
+        headers.set("Cookie", `.Nocturne.AccessToken=${options.accessToken}`);
+      }
+
+      return fetchFn(url, {
+        ...init,
+        headers,
+      });
+    },
+  };
+
+  return new ApiClient(baseUrl, httpClient);
 }
 
 /**
@@ -28,9 +64,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   event.locals.user = null;
   event.locals.isAuthenticated = false;
 
-  // Use NOCTURNE_API_URL for server-side (internal Docker network) if available,
-  // otherwise fall back to PUBLIC_API_URL for development
-  const apiBaseUrl = env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL;
+  const apiBaseUrl = getApiBaseUrl();
 
   if (!apiBaseUrl) {
     return resolve(event);
@@ -46,36 +80,27 @@ const authHandle: Handle = async ({ event, resolve }) => {
   }
 
   try {
-    // Validate session with the API by calling /auth/session
-    const sessionUrl = new URL("/auth/session", apiBaseUrl);
-
-    // Forward the access token cookie
-    const headers: HeadersInit = {};
-    if (accessToken) {
-      headers["Cookie"] = `.Nocturne.AccessToken=${accessToken}`;
-    }
-
-    const response = await fetch(sessionUrl.toString(), {
-      method: "GET",
-      headers,
+    // Create a temporary API client with the access token for session validation
+    const apiClient = createServerApiClient(apiBaseUrl, fetch, {
+      accessToken,
+      hashedSecret: getHashedApiSecret(),
     });
 
-    if (response.ok) {
-      const session: SessionInfo = await response.json();
+    // Validate session with the API using the typed client
+    const session = await apiClient.oidc.getSession();
 
-      if (session.isAuthenticated && session.subjectId) {
-        const user: AuthUser = {
-          subjectId: session.subjectId,
-          name: session.name ?? "User",
-          email: session.email,
-          roles: session.roles ?? [],
-          permissions: session.permissions ?? [],
-          expiresAt: session.expiresAt ? new Date(session.expiresAt) : undefined,
-        };
+    if (session?.isAuthenticated && session.subjectId) {
+      const user: AuthUser = {
+        subjectId: session.subjectId,
+        name: session.name ?? "User",
+        email: session.email,
+        roles: session.roles ?? [],
+        permissions: session.permissions ?? [],
+        expiresAt: session.expiresAt,
+      };
 
-        event.locals.user = user;
-        event.locals.isAuthenticated = true;
-      }
+      event.locals.user = user;
+      event.locals.isAuthenticated = true;
     }
   } catch (error) {
     // Log but don't fail the request - user will be treated as unauthenticated
@@ -89,20 +114,14 @@ const authHandle: Handle = async ({ event, resolve }) => {
 const proxyHandle: Handle = async ({ event, resolve }) => {
   // Check if the request is for /api
   if (event.url.pathname.startsWith("/api")) {
-    // Use NOCTURNE_API_URL for server-side (internal Docker network) if available,
-    // otherwise fall back to PUBLIC_API_URL for development
-    const apiBaseUrl = env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL;
+    const apiBaseUrl = getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error(
         "Neither NOCTURNE_API_URL nor PUBLIC_API_URL is defined. Please set one in your environment variables."
       );
     }
 
-    // Get the API secret and hash it with SHA1
-    const apiSecret = env.API_SECRET;
-    const hashedSecret = apiSecret
-      ? createHash("sha1").update(apiSecret).digest("hex").toLowerCase()
-      : null;
+    const hashedSecret = getHashedApiSecret();
 
     // Construct the target URL
     const targetUrl = new URL(event.url.pathname + event.url.search, apiBaseUrl);
@@ -133,39 +152,17 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
 };
 
 const apiClientHandle: Handle = async ({ event, resolve }) => {
-  // Use NOCTURNE_API_URL for server-side (internal Docker network) if available,
-  // otherwise fall back to PUBLIC_API_URL for development
-  const apiBaseUrl = env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL;
+  const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) {
     throw new Error(
       "Neither NOCTURNE_API_URL nor PUBLIC_API_URL is defined. Please set one in your environment variables."
     );
   }
 
-  // Get the API secret and hash it with SHA1
-  const apiSecret = env.API_SECRET;
-  const hashedSecret = apiSecret
-    ? createHash("sha1").update(apiSecret).digest("hex").toLowerCase()
-    : null;
-
-  // Wrap SvelteKit's fetch to add authentication headers
-  const httpClient = {
-    fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
-      const headers = new Headers(init?.headers);
-
-      // Add the hashed API secret as authentication
-      if (hashedSecret) {
-        headers.set("api-secret", hashedSecret);
-      }
-
-      return event.fetch(url, {
-        ...init,
-        headers,
-      });
-    },
-  };
-
-  event.locals.apiClient = new ApiClient(apiBaseUrl, httpClient);
+  // Create API client with SvelteKit's fetch and auth headers
+  event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
+    hashedSecret: getHashedApiSecret(),
+  });
 
   return resolve(event);
 };

@@ -30,7 +30,6 @@ using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
 using NSwag;
 using OpenTelemetry.Logs;
-using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -294,6 +293,7 @@ builder.Services.AddScoped<IUISettingsService, UISettingsService>();
 builder.Services.AddScoped<ITreatmentService, TreatmentService>();
 builder.Services.AddScoped<IEntryService, EntryService>();
 builder.Services.AddScoped<IDeviceStatusService, DeviceStatusService>();
+builder.Services.AddScoped<IBatteryService, BatteryService>();
 builder.Services.AddScoped<IProfileDataService, ProfileDataService>();
 builder.Services.AddScoped<IFoodService, FoodService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
@@ -353,38 +353,9 @@ app.MapHub<DataHub>("/hubs/data");
 app.MapHub<AlarmHub>("/hubs/alarms");
 
 // Note: Using NSwag instead of Microsoft.AspNetCore.OpenApi for better compatibility
+// OpenAPI documents are served at /openapi/{documentName}.json
+// Scalar API Reference is provided via Scalar.Aspire in the Aspire Host
 app.MapOpenApi();
-
-// Add NSwag OpenAPI document
-// app.UseOpenApi(options =>
-// {
-//     options.Path = "/openapi/{documentName}.json";
-// });
-
-// app.UseSwaggerUi(settings =>
-// {
-//     settings.Path = "/swagger";
-//     settings.DocumentPath = "/openapi/v1.json";
-// });
-// app.MapScalarApiReference();
-
-// app.MapScalarApiReference(options =>
-//     {
-//         options
-//             .WithTitle("Nocturne API Reference")
-//             .WithTheme(ScalarTheme.Mars)
-//             .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient)
-//             .WithDocumentDownloadType(DocumentDownloadType.Json)
-//             .AddApiKeyAuthentication(
-//                 "ApiKey",
-//                 x => x.Value = builder.Configuration.GetValue<string>("ApiKey")
-//             )
-//             .WithOpenApiRoutePattern("/openapi/{documentName}.json");
-//     })
-//     .AllowAnonymous();
-
-// Add a redirect from /scalar to /scalar/v1 for convenience
-// app.MapGet("/scalar", () => Results.Redirect("/scalar/v1"));
 
 // Add root endpoint to serve a basic info page
 app.MapGet(
@@ -427,7 +398,8 @@ app.MapGet(
                 name = "Nocturne API",
                 version = "1.0.0",
                 description = "Modern C# rewrite of Nightscout API",
-                api_documentation = "/scalar/v1",
+                api_documentation = "/openapi/v1.json",
+                aspire_dashboard_note = "API documentation is available via Scalar in the Aspire dashboard",
                 database_status = databaseStatus,
                 latest_entry = latestEntry,
                 endpoints = new

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
+using Scalar.Aspire;
 
 class Program
 {
@@ -275,14 +276,15 @@ class Program
             Console.WriteLine("[Aspire] Building @nocturne/bridge...");
 
             // On Windows, pnpm is a .cmd file that requires shell execution
-            // Use cmd.exe /c to properly resolve the command
+            // On Linux, pnpm is a shell script that also requires shell execution
+            // Use cmd.exe /c on Windows and sh -c on Linux to properly resolve the command
             var isWindows = OperatingSystem.IsWindows();
             var buildProcess = new System.Diagnostics.Process
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = isWindows ? "cmd.exe" : "pnpm",
-                    Arguments = isWindows ? "/c pnpm run build" : "run build",
+                    FileName = isWindows ? "cmd.exe" : "/bin/sh",
+                    Arguments = isWindows ? "/c pnpm run build" : "-c \"pnpm run build\"",
                     WorkingDirectory = bridgePackagePath,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -350,6 +352,23 @@ class Program
             );
 
         apiSecret.WithParentRelationship(web);
+
+        // Add Scalar API Reference for unified API documentation
+        // This provides a single documentation interface for all services in the Aspire dashboard
+        var scalar = builder
+            .AddScalarApiReference(options =>
+            {
+                options.WithTheme(ScalarTheme.Mars);
+            })
+            .WithApiReference(
+                api,
+                options =>
+                {
+                    options
+                        .AddDocument("v1", "Nocturne API")
+                        .WithOpenApiRoutePattern("/openapi/{documentName}.json");
+                }
+            );
 
         // Add conditional notification services (if configured in appsettings.json)
         // Note: Actual notification service projects would be added here when they exist
