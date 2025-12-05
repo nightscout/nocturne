@@ -2,7 +2,11 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { onMount, onDestroy } from "svelte";
-  import { getCompatibilityData, getCompatibilityMetrics, getCompatibilityAnalyses } from "./data.remote";
+  import {
+    getCompatibilityData,
+    getCompatibilityMetrics,
+    getCompatibilityAnalyses,
+  } from "./data.remote";
   import type { AnalysisListItemDto } from "$lib/api";
 
   // Get filter params from URL

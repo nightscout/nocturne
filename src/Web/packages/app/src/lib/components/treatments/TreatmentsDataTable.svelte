@@ -657,7 +657,7 @@
   </Popover.Root>
 {/snippet}
 
-{#snippet additionalPropertiesSnippet({ props }: { props: Record<string, unknown></string> })}
+{#snippet additionalPropertiesSnippet({ props }: { props: any })}
   <Tooltip.Root>
     <Tooltip.Trigger>
       {#snippet child({ props: triggerProps })}

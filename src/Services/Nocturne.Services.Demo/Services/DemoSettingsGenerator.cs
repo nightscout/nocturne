@@ -397,7 +397,7 @@ public class DemoSettingsGenerator
                 new()
                 {
                     Id = "glooko",
-                    Name = "Glooko/Diasend",
+                    Name = "Glooko",
                     Type = "data",
                     Description = "Import data from Glooko platform",
                     Icon = "glooko",

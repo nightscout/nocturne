@@ -295,7 +295,7 @@ public class DataSourceService : IDataSourceService
             new()
             {
                 Id = "glooko",
-                Name = "Glooko/Diasend",
+                Name = "Glooko",
                 Category = "data",
                 Description = "Import data from Glooko platform.",
                 Icon = "glooko",
