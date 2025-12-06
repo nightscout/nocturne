@@ -57,7 +57,7 @@
   }
 
   function goBackToMonthView() {
-    goto("/reports/month-to-month");
+    goto("/calendar");
   }
 
   // Format date for display

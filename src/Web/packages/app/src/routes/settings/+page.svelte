@@ -47,7 +47,8 @@
     {
       id: "therapy",
       title: "Therapy (Profile)",
-      description: "Configure insulin ratios, sensitivity factors, and targets via your Profile",
+      description:
+        "Configure insulin ratios, sensitivity factors, and targets via your Profile",
       icon: Syringe,
       href: "/profile",
     },

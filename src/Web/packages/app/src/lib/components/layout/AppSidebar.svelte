@@ -52,6 +52,11 @@
       icon: Home,
     },
     {
+      title: "Calendar",
+      href: "/calendar",
+      icon: Calendar,
+    },
+    {
       title: "Reports",
       icon: BarChart3,
       children: [
@@ -90,11 +95,6 @@
           icon: Sunrise,
         },
         {
-          title: "Month to Month",
-          href: "/reports/month-to-month",
-          icon: Calendar,
-        },
-        {
           title: "Glucose Distribution",
           href: "/reports/glucose-distribution",
           icon: PieChart,
@@ -122,7 +122,7 @@
       children: [
         { title: "Overview", href: "/settings", icon: Settings },
         { title: "Devices", href: "/settings/devices", icon: Smartphone },
-        { title: "Therapy", href: "/settings/therapy", icon: Syringe },
+        { title: "Therapy", href: "/profile", icon: Syringe }, // Redirects to Profile page
         { title: "Algorithm", href: "/settings/algorithm", icon: Brain },
         { title: "Features", href: "/settings/features", icon: Sparkles },
         { title: "Notifications", href: "/settings/notifications", icon: Bell },

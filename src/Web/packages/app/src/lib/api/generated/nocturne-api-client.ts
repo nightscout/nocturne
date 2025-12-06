@@ -13375,7 +13375,6 @@ export interface ConnectorSyncResult {
 
 export interface UISettingsConfiguration {
     devices?: DeviceSettings;
-    therapy?: TherapySettings;
     algorithm?: AlgorithmSettings;
     features?: FeatureSettings;
     notifications?: NotificationSettings;
@@ -13403,32 +13402,6 @@ export interface ConnectedDevice {
 export interface CgmConfiguration {
     dataSourcePriority?: string;
     sensorWarmupHours?: number;
-}
-
-export interface TherapySettings {
-    units?: string;
-    carbRatios?: TimeBasedValue[];
-    insulinSensitivity?: TimeBasedValue[];
-    basalRates?: TimeBasedValue[];
-    bgTargets?: BgTargets;
-    activeInsulin?: ActiveInsulinSettings;
-}
-
-export interface TimeBasedValue {
-    time?: string;
-    value?: number;
-}
-
-export interface BgTargets {
-    targetLow?: number;
-    targetHigh?: number;
-    urgentLow?: number;
-    urgentHigh?: number;
-}
-
-export interface ActiveInsulinSettings {
-    duration?: number;
-    peak?: number;
 }
 
 export interface AlgorithmSettings {
