@@ -20,7 +20,6 @@ public class UISettingsService : IUISettingsService
     // Settings keys for different sections
     private const string UiSettingsKey = "ui:settings:complete";
     private const string DevicesSettingsKey = "ui:settings:devices";
-    private const string TherapySettingsKey = "ui:settings:therapy";
     private const string AlgorithmSettingsKey = "ui:settings:algorithm";
     private const string FeaturesSettingsKey = "ui:settings:features";
     private const string NotificationsSettingsKey = "ui:settings:notifications";
@@ -339,7 +338,6 @@ public class UISettingsService : IUISettingsService
         return sectionName.ToLowerInvariant() switch
         {
             "devices" => DevicesSettingsKey,
-            "therapy" => TherapySettingsKey,
             "algorithm" => AlgorithmSettingsKey,
             "features" => FeaturesSettingsKey,
             "notifications" => NotificationsSettingsKey,
@@ -358,7 +356,6 @@ public class UISettingsService : IUISettingsService
         return sectionName.ToLowerInvariant() switch
         {
             "devices" => settings.Devices as T,
-            "therapy" => settings.Therapy as T,
             "algorithm" => settings.Algorithm as T,
             "features" => settings.Features as T,
             "notifications" => settings.Notifications as T,
@@ -380,9 +377,6 @@ public class UISettingsService : IUISettingsService
         {
             case "devices" when sectionSettings is DeviceSettings ds:
                 settings.Devices = ds;
-                break;
-            case "therapy" when sectionSettings is TherapySettings ts:
-                settings.Therapy = ts;
                 break;
             case "algorithm" when sectionSettings is AlgorithmSettings alg:
                 settings.Algorithm = alg;
@@ -420,24 +414,6 @@ public class UISettingsService : IUISettingsService
         return new UISettingsConfiguration
         {
             Devices = new DeviceSettings(),
-            Therapy = new TherapySettings
-            {
-                Units = "mg/dl",
-                CarbRatios = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 10 },
-                },
-                InsulinSensitivity = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 40 },
-                },
-                BasalRates = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 1.0 },
-                },
-                BgTargets = new BgTargets(),
-                ActiveInsulin = new ActiveInsulinSettings(),
-            },
             Algorithm = new AlgorithmSettings(),
             Features = GenerateDefaultFeatureSettings(),
             Notifications = GenerateDefaultNotificationSettings(),

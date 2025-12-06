@@ -11,7 +11,6 @@ import { getApiClient } from "$lib/api/client";
 import type {
   UISettingsConfiguration,
   DeviceSettings,
-  TherapySettings,
   AlgorithmSettings,
   FeatureSettings,
   NotificationSettings,
@@ -34,7 +33,6 @@ export class SettingsStore {
 
   // Individual section states with proper reactivity
   devices = $state<DeviceSettings | null>(null);
-  therapy = $state<TherapySettings | null>(null);
   algorithm = $state<AlgorithmSettings | null>(null);
   features = $state<FeatureSettings | null>(null);
   notifications = $state<NotificationSettings | null>(null);
@@ -98,8 +96,8 @@ export class SettingsStore {
       this._rawSettings = settings;
 
       // Populate individual sections with deep copies for reactivity
+      // Note: Therapy settings are managed via Profiles, not here
       this.devices = settings.devices ? { ...settings.devices } : null;
-      this.therapy = settings.therapy ? { ...settings.therapy } : null;
       this.algorithm = settings.algorithm ? { ...settings.algorithm } : null;
       this.features = settings.features ? { ...settings.features } : null;
       this.notifications = settings.notifications ? { ...settings.notifications } : null;
@@ -148,7 +146,6 @@ export class SettingsStore {
 
     return {
       devices: this.devices ?? undefined,
-      therapy: this.therapy ?? undefined,
       algorithm: this.algorithm ?? undefined,
       features: this.features ?? undefined,
       notifications,
@@ -241,67 +238,11 @@ export class SettingsStore {
   reset(): void {
     if (this._rawSettings) {
       this.devices = this._rawSettings.devices ? { ...this._rawSettings.devices } : null;
-      this.therapy = this._rawSettings.therapy ? { ...this._rawSettings.therapy } : null;
       this.algorithm = this._rawSettings.algorithm ? { ...this._rawSettings.algorithm } : null;
       this.features = this._rawSettings.features ? { ...this._rawSettings.features } : null;
       this.notifications = this._rawSettings.notifications ? { ...this._rawSettings.notifications } : null;
       this.services = this._rawSettings.services ? { ...this._rawSettings.services } : null;
       this._hasChanges = false;
-    }
-  }
-
-  // ==========================================
-  // Therapy Settings Helpers
-  // ==========================================
-
-  addCarbRatio(time: string = "00:00", value: number = 10): void {
-    if (this.therapy) {
-      this.therapy.carbRatios = [
-        ...(this.therapy.carbRatios ?? []),
-        { time, value }
-      ];
-      this.markChanged();
-    }
-  }
-
-  removeCarbRatio(index: number): void {
-    if (this.therapy?.carbRatios && this.therapy.carbRatios.length > 1) {
-      this.therapy.carbRatios = this.therapy.carbRatios.filter((_, i) => i !== index);
-      this.markChanged();
-    }
-  }
-
-  addInsulinSensitivity(time: string = "00:00", value: number = 40): void {
-    if (this.therapy) {
-      this.therapy.insulinSensitivity = [
-        ...(this.therapy.insulinSensitivity ?? []),
-        { time, value }
-      ];
-      this.markChanged();
-    }
-  }
-
-  removeInsulinSensitivity(index: number): void {
-    if (this.therapy?.insulinSensitivity && this.therapy.insulinSensitivity.length > 1) {
-      this.therapy.insulinSensitivity = this.therapy.insulinSensitivity.filter((_, i) => i !== index);
-      this.markChanged();
-    }
-  }
-
-  addBasalRate(time: string = "00:00", value: number = 1.0): void {
-    if (this.therapy) {
-      this.therapy.basalRates = [
-        ...(this.therapy.basalRates ?? []),
-        { time, value }
-      ];
-      this.markChanged();
-    }
-  }
-
-  removeBasalRate(index: number): void {
-    if (this.therapy?.basalRates && this.therapy.basalRates.length > 1) {
-      this.therapy.basalRates = this.therapy.basalRates.filter((_, i) => i !== index);
-      this.markChanged();
     }
   }
 

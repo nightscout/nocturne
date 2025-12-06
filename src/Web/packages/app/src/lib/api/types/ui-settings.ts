@@ -50,33 +50,6 @@ export interface DeviceSettings {
   cgmConfiguration: CgmConfiguration;
 }
 
-// Therapy Settings
-export interface TimeBasedValue {
-  time: string;
-  value: number;
-}
-
-export interface BgTargets {
-  targetLow: number;
-  targetHigh: number;
-  urgentLow: number;
-  urgentHigh: number;
-}
-
-export interface ActiveInsulinSettings {
-  duration: number;
-  peak: number;
-}
-
-export interface TherapySettings {
-  units: string;
-  carbRatios: TimeBasedValue[];
-  insulinSensitivity: TimeBasedValue[];
-  basalRates: TimeBasedValue[];
-  bgTargets: BgTargets;
-  activeInsulin: ActiveInsulinSettings;
-}
-
 // Algorithm Settings
 export interface PredictionSettings {
   enabled: boolean;
@@ -255,7 +228,6 @@ export interface ServicesSettings {
 // Complete UI Settings Configuration
 export interface UISettingsConfiguration {
   devices: DeviceSettings;
-  therapy: TherapySettings;
   algorithm: AlgorithmSettings;
   features: FeatureSettings;
   notifications: NotificationSettings;

@@ -4,8 +4,9 @@ namespace Nocturne.Core.Models.Configuration;
 
 /// <summary>
 /// Complete UI settings configuration that can be served to frontend clients.
-/// This model aggregates all settings pages data - devices, therapy, algorithm, features, notifications, and services.
+/// This model aggregates all settings pages data - devices, algorithm, features, notifications, and services.
 /// In demo mode, these are generated from demo configuration; in production, they come from the database.
+/// Note: Therapy settings are managed via Nightscout Profiles (/api/v1/profile).
 /// </summary>
 public class UISettingsConfiguration
 {
@@ -14,12 +15,6 @@ public class UISettingsConfiguration
     /// </summary>
     [JsonPropertyName("devices")]
     public DeviceSettings Devices { get; set; } = new();
-
-    /// <summary>
-    /// Therapy settings including insulin ratios, sensitivity factors, and glucose targets
-    /// </summary>
-    [JsonPropertyName("therapy")]
-    public TherapySettings Therapy { get; set; } = new();
 
     /// <summary>
     /// Algorithm settings including prediction, autosens, and loop configuration
@@ -100,67 +95,6 @@ public class CgmConfiguration
 
     [JsonPropertyName("sensorWarmupHours")]
     public int SensorWarmupHours { get; set; } = 2;
-}
-
-#endregion
-
-#region Therapy Settings
-
-/// <summary>
-/// Therapy settings including profiles for insulin ratios, sensitivity, and targets
-/// </summary>
-public class TherapySettings
-{
-    [JsonPropertyName("units")]
-    public string Units { get; set; } = "mg/dl";
-
-    [JsonPropertyName("carbRatios")]
-    public List<TimeBasedValue> CarbRatios { get; set; } = new();
-
-    [JsonPropertyName("insulinSensitivity")]
-    public List<TimeBasedValue> InsulinSensitivity { get; set; } = new();
-
-    [JsonPropertyName("basalRates")]
-    public List<TimeBasedValue> BasalRates { get; set; } = new();
-
-    [JsonPropertyName("bgTargets")]
-    public BgTargets BgTargets { get; set; } = new();
-
-    [JsonPropertyName("activeInsulin")]
-    public ActiveInsulinSettings ActiveInsulin { get; set; } = new();
-}
-
-public class TimeBasedValue
-{
-    [JsonPropertyName("time")]
-    public string Time { get; set; } = "00:00";
-
-    [JsonPropertyName("value")]
-    public double Value { get; set; }
-}
-
-public class BgTargets
-{
-    [JsonPropertyName("targetLow")]
-    public int TargetLow { get; set; } = 80;
-
-    [JsonPropertyName("targetHigh")]
-    public int TargetHigh { get; set; } = 120;
-
-    [JsonPropertyName("urgentLow")]
-    public int UrgentLow { get; set; } = 55;
-
-    [JsonPropertyName("urgentHigh")]
-    public int UrgentHigh { get; set; } = 250;
-}
-
-public class ActiveInsulinSettings
-{
-    [JsonPropertyName("duration")]
-    public double Duration { get; set; } = 4.0;
-
-    [JsonPropertyName("peak")]
-    public int Peak { get; set; } = 75;
 }
 
 #endregion

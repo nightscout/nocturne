@@ -127,7 +127,6 @@ public class UISettingsController : ControllerBase
             return section.ToLowerInvariant() switch
             {
                 "devices" => Ok(config.Devices),
-                "therapy" => Ok(config.Therapy),
                 "algorithm" => Ok(config.Algorithm),
                 "features" => Ok(config.Features),
                 "notifications" => Ok(config.Notifications),
@@ -556,42 +555,6 @@ public class UISettingsController : ControllerBase
                     SensorWarmupHours = 2,
                 },
             },
-            Therapy = new TherapySettings
-            {
-                Units = "mg/dl",
-                CarbRatios = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 10 },
-                    new() { Time = "06:00", Value = 8 },
-                    new() { Time = "12:00", Value = 10 },
-                    new() { Time = "18:00", Value = 9 },
-                },
-                InsulinSensitivity = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 50 },
-                    new() { Time = "06:00", Value = 40 },
-                    new() { Time = "12:00", Value = 45 },
-                    new() { Time = "18:00", Value = 50 },
-                },
-                BasalRates = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 0.8 },
-                    new() { Time = "03:00", Value = 0.9 },
-                    new() { Time = "06:00", Value = 1.1 },
-                    new() { Time = "09:00", Value = 0.9 },
-                    new() { Time = "12:00", Value = 0.85 },
-                    new() { Time = "18:00", Value = 0.95 },
-                    new() { Time = "21:00", Value = 0.8 },
-                },
-                BgTargets = new BgTargets
-                {
-                    TargetLow = 80,
-                    TargetHigh = 120,
-                    UrgentLow = 55,
-                    UrgentHigh = 250,
-                },
-                ActiveInsulin = new ActiveInsulinSettings { Duration = 4.0, Peak = 75 },
-            },
             Algorithm = new AlgorithmSettings
             {
                 Prediction = new PredictionSettings
@@ -635,24 +598,6 @@ public class UISettingsController : ControllerBase
         return new UISettingsConfiguration
         {
             Devices = new DeviceSettings(),
-            Therapy = new TherapySettings
-            {
-                Units = "mg/dl",
-                CarbRatios = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 10 },
-                },
-                InsulinSensitivity = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 40 },
-                },
-                BasalRates = new List<TimeBasedValue>
-                {
-                    new() { Time = "00:00", Value = 1.0 },
-                },
-                BgTargets = new BgTargets(),
-                ActiveInsulin = new ActiveInsulinSettings(),
-            },
             Algorithm = new AlgorithmSettings(),
             Features = GenerateDefaultFeatureSettings(),
             Notifications = GenerateDefaultNotificationSettings(),

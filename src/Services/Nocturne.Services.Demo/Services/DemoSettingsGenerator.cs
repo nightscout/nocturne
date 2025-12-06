@@ -24,7 +24,6 @@ public class DemoSettingsGenerator
         return new UISettingsConfiguration
         {
             Devices = GenerateDeviceSettings(),
-            Therapy = GenerateTherapySettings(),
             Algorithm = GenerateAlgorithmSettings(),
             Features = GenerateFeatureSettings(),
             Notifications = GenerateNotificationSettings(),
@@ -66,58 +65,6 @@ public class DemoSettingsGenerator
             {
                 DataSourcePriority = "cgm",
                 SensorWarmupHours = 2,
-            },
-        };
-    }
-
-    private TherapySettings GenerateTherapySettings()
-    {
-        // Use values from DemoModeConfiguration where available
-        var isf = _config.InsulinSensitivityFactor;
-        var icr = _config.CarbRatio;
-        var basalRate = _config.BasalRate;
-        var targetGlucose = _config.TargetGlucose;
-        var diaDuration = _config.InsulinDurationMinutes / 60.0; // Convert to hours
-        var insulinPeak = (int)_config.InsulinPeakMinutes;
-
-        return new TherapySettings
-        {
-            Units = "mg/dl",
-            CarbRatios = new List<TimeBasedValue>
-            {
-                new() { Time = "00:00", Value = icr },
-                new() { Time = "06:00", Value = icr - 2 }, // Lower (more aggressive) in morning
-                new() { Time = "12:00", Value = icr },
-                new() { Time = "18:00", Value = icr - 1 },
-            },
-            InsulinSensitivity = new List<TimeBasedValue>
-            {
-                new() { Time = "00:00", Value = isf + 10 },
-                new() { Time = "06:00", Value = isf - 10 }, // Less sensitive (dawn phenomenon)
-                new() { Time = "12:00", Value = isf },
-                new() { Time = "18:00", Value = isf + 10 },
-            },
-            BasalRates = new List<TimeBasedValue>
-            {
-                new() { Time = "00:00", Value = basalRate * 0.8 },
-                new() { Time = "03:00", Value = basalRate * 0.9 },
-                new() { Time = "06:00", Value = basalRate * 1.1 }, // Higher for dawn phenomenon
-                new() { Time = "09:00", Value = basalRate * 0.9 },
-                new() { Time = "12:00", Value = basalRate * 0.85 },
-                new() { Time = "18:00", Value = basalRate * 0.95 },
-                new() { Time = "21:00", Value = basalRate * 0.8 },
-            },
-            BgTargets = new BgTargets
-            {
-                TargetLow = (int)targetGlucose - 30, // 80
-                TargetHigh = (int)targetGlucose + 10, // 120
-                UrgentLow = 55,
-                UrgentHigh = 250,
-            },
-            ActiveInsulin = new ActiveInsulinSettings
-            {
-                Duration = diaDuration,
-                Peak = insulinPeak,
             },
         };
     }
@@ -254,7 +201,12 @@ public class DemoSettingsGenerator
 
     private NotificationSettings GenerateNotificationSettings()
     {
-        var targets = GenerateTherapySettings().BgTargets;
+        // Use target glucose from config to calculate alarm thresholds
+        var targetGlucose = _config.TargetGlucose;
+        var targetLow = (int)targetGlucose - 30;  // 80
+        var targetHigh = (int)targetGlucose + 10; // 120
+        var urgentLow = 55;
+        var urgentHigh = 250;
 
         return new NotificationSettings
         {
@@ -267,7 +219,7 @@ public class DemoSettingsGenerator
                 UrgentHigh = new AlarmConfig
                 {
                     Enabled = true,
-                    Threshold = targets.UrgentHigh,
+                    Threshold = urgentHigh,
                     Sound = "alarm-urgent",
                     RepeatMinutes = 5,
                     SnoozeOptions = new List<int> { 5, 10, 15, 30 },
@@ -275,7 +227,7 @@ public class DemoSettingsGenerator
                 High = new AlarmConfig
                 {
                     Enabled = true,
-                    Threshold = targets.TargetHigh + 60, // 180 mg/dL
+                    Threshold = targetHigh + 60, // 180 mg/dL
                     Sound = "alarm-high",
                     RepeatMinutes = 15,
                     SnoozeOptions = new List<int> { 15, 30, 60 },
@@ -283,7 +235,7 @@ public class DemoSettingsGenerator
                 Low = new AlarmConfig
                 {
                     Enabled = true,
-                    Threshold = targets.TargetLow - 10, // 70 mg/dL
+                    Threshold = targetLow - 10, // 70 mg/dL
                     Sound = "alarm-low",
                     RepeatMinutes = 5,
                     SnoozeOptions = new List<int> { 10, 15, 30 },
@@ -291,7 +243,7 @@ public class DemoSettingsGenerator
                 UrgentLow = new AlarmConfig
                 {
                     Enabled = true,
-                    Threshold = targets.UrgentLow,
+                    Threshold = urgentLow,
                     Sound = "alarm-urgent",
                     RepeatMinutes = 5,
                     SnoozeOptions = new List<int> { 5, 10, 15 },
