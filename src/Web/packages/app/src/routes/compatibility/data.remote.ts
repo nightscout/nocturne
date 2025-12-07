@@ -2,9 +2,8 @@
  * Remote functions for compatibility/discrepancy analysis
  */
 import { z } from 'zod';
-import { query } from '$app/server';
+import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getApiClient } from '$lib/server/api';
 import type { ResponseMatchType } from '$lib/api/generated/nocturne-api-client';
 
 const CompatibilityFiltersSchema = z.object({
@@ -21,7 +20,8 @@ const CompatibilityFiltersSchema = z.object({
 export const getCompatibilityData = query(
 	CompatibilityFiltersSchema.optional(),
 	async (filters) => {
-		const client = getApiClient();
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
 		try {
 			const requestPath = filters?.requestPath || undefined;
@@ -31,10 +31,10 @@ export const getCompatibilityData = query(
 			const skip = filters?.skip ?? 0;
 
 			const [config, metrics, endpoints, analysesData] = await Promise.all([
-				client.compatibility.getConfiguration(),
-				client.compatibility.getMetrics(undefined, undefined),
-				client.compatibility.getEndpointMetrics(undefined, undefined),
-				client.compatibility.getAnalyses(
+				apiClient.compatibility.getConfiguration(),
+				apiClient.compatibility.getMetrics(undefined, undefined),
+				apiClient.compatibility.getEndpointMetrics(undefined, undefined),
+				apiClient.compatibility.getAnalyses(
 					requestPath,
 					overallMatch,
 					requestMethod,
@@ -73,10 +73,12 @@ export const getCompatibilityData = query(
  * Get a single analysis detail by ID
  */
 export const getAnalysisDetail = query(z.string(), async (analysisId) => {
-	const client = getApiClient();
+
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
 	try {
-		const analysis = await client.compatibility.getAnalysisDetail(analysisId);
+		const analysis = await apiClient.compatibility.getAnalysisDetail(analysisId);
 		return { analysis };
 	} catch (err) {
 		console.error('Error loading analysis detail:', err);
@@ -94,10 +96,12 @@ export const getAnalysisDetail = query(z.string(), async (analysisId) => {
  * Get compatibility metrics only (for polling)
  */
 export const getCompatibilityMetrics = query(async () => {
-	const client = getApiClient();
+
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
 
 	try {
-		return await client.compatibility.getMetrics(undefined, undefined);
+		return await apiClient.compatibility.getMetrics(undefined, undefined);
 	} catch (err) {
 		console.error('Error loading compatibility metrics:', err);
 		throw error(500, 'Failed to load compatibility metrics');
@@ -110,8 +114,8 @@ export const getCompatibilityMetrics = query(async () => {
 export const getCompatibilityAnalyses = query(
 	CompatibilityFiltersSchema.optional(),
 	async (filters) => {
-		const client = getApiClient();
-
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 		try {
 			const requestPath = filters?.requestPath || undefined;
 			const overallMatch = filters?.overallMatch as ResponseMatchType | undefined;
@@ -119,7 +123,7 @@ export const getCompatibilityAnalyses = query(
 			const count = filters?.count ?? 100;
 			const skip = filters?.skip ?? 0;
 
-			const analysesData = await client.compatibility.getAnalyses(
+			const analysesData = await apiClient.compatibility.getAnalyses(
 				requestPath,
 				overallMatch,
 				requestMethod,

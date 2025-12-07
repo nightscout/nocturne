@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -9,6 +11,7 @@ namespace Nocturne.API.Controllers.V1;
 /// Controller for device health management operations
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/v1/devices")]
 public class DeviceHealthController : ControllerBase
 {
@@ -42,8 +45,7 @@ public class DeviceHealthController : ControllerBase
     {
         try
         {
-            // TODO: Get actual user ID from authentication context
-            var userId = "current-user"; // This would come from authentication
+            var userId = HttpContext.GetSubjectIdString()!;
 
             var devices = await _deviceRegistryService.GetUserDevicesAsync(
                 userId,
@@ -75,8 +77,7 @@ public class DeviceHealthController : ControllerBase
                 return BadRequest(ModelState);
             }
 
-            // TODO: Get actual user ID from authentication context
-            var userId = "current-user"; // This would come from authentication
+            var userId = HttpContext.GetSubjectIdString()!;
 
             var device = await _deviceRegistryService.RegisterDeviceAsync(
                 userId,
@@ -133,7 +134,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             var healthAnalysis = await _healthAnalysisService.AnalyzeDeviceHealthAsync(
                 id,
@@ -172,7 +177,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             return Ok(device);
         }
@@ -216,7 +225,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             await _deviceRegistryService.UpdateDeviceSettingsAsync(
                 id,
@@ -278,7 +291,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             await _deviceRegistryService.UpdateDeviceHealthAsync(
                 id,
@@ -331,7 +348,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             await _deviceRegistryService.RemoveDeviceAsync(id, HttpContext.RequestAborted);
 
@@ -384,7 +405,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             var report = await _healthAnalysisService.GenerateHealthReportAsync(
                 id,
@@ -426,7 +451,11 @@ public class DeviceHealthController : ControllerBase
                 return NotFound($"Device {id} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             var prediction = await _healthAnalysisService.PredictMaintenanceNeedsAsync(
                 id,

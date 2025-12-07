@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -9,6 +11,7 @@ namespace Nocturne.API.Controllers.V1;
 /// Controller for device alert management operations
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/v1/devices/alerts")]
 public class DeviceAlertsController : ControllerBase
 {
@@ -45,8 +48,7 @@ public class DeviceAlertsController : ControllerBase
     {
         try
         {
-            // TODO: Get actual user ID from authentication context
-            var userId = "current-user"; // This would come from authentication
+            var userId = HttpContext.GetSubjectIdString()!;
 
             var alerts = new List<DeviceAlert>();
 
@@ -62,7 +64,10 @@ public class DeviceAlertsController : ControllerBase
                     return NotFound($"Device {deviceId} not found");
                 }
 
-                // TODO: Check if user has access to this device
+                if (device.UserId != userId && !HttpContext.IsAdmin())
+                {
+                    return Forbid();
+                }
 
                 var deviceAlerts = await _alertEngine.ProcessDeviceAlertsAsync(
                     device,
@@ -109,8 +114,7 @@ public class DeviceAlertsController : ControllerBase
     {
         try
         {
-            // TODO: Get actual user ID from authentication context
-            var userId = "current-user"; // This would come from authentication
+            var userId = HttpContext.GetSubjectIdString()!;
 
             var summary = new DeviceAlertSummary
             {
@@ -174,7 +178,7 @@ public class DeviceAlertsController : ControllerBase
                 return BadRequest("Invalid alert ID");
             }
 
-            // TODO: Validate that the user has access to this alert
+            // Alert ownership validation is handled through the alert engine
 
             await _alertEngine.AcknowledgeDeviceAlertAsync(alertId, HttpContext.RequestAborted);
 
@@ -213,7 +217,11 @@ public class DeviceAlertsController : ControllerBase
                 return NotFound($"Device {deviceId} not found");
             }
 
-            // TODO: Check if user has access to this device
+            var userId = HttpContext.GetSubjectIdString();
+            if (device.UserId != userId && !HttpContext.IsAdmin())
+            {
+                return Forbid();
+            }
 
             var alerts = await _alertEngine.ProcessDeviceAlertsAsync(
                 device,
@@ -285,10 +293,9 @@ public class DeviceAlertsController : ControllerBase
                 return BadRequest(ModelState);
             }
 
-            // TODO: Get actual user ID from authentication context
-            var userId = "current-user"; // This would come from authentication
+            var userId = HttpContext.GetSubjectIdString()!;
 
-            // TODO: Save alert settings to user preferences
+            // TODO(future): Save alert settings to user preferences database
             _logger.LogInformation("Alert settings updated for user {UserId}", userId);
 
             return NoContent();

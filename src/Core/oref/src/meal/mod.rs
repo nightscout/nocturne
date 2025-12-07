@@ -2,11 +2,13 @@
 
 use chrono::{DateTime, Utc};
 use crate::types::{MealData, Profile, Treatment, GlucoseReading};
+use crate::cob;
 use crate::Result;
 
 /// Generate meal data from treatment history
 ///
 /// This implements the meal detection from `lib/meal/index.js` and `lib/meal/total.js`.
+/// COB is calculated using glucose deviation analysis from the cob module.
 pub fn generate(
     profile: &Profile,
     treatments: &[Treatment],
@@ -53,9 +55,11 @@ pub fn generate(
         }
     }
 
-    // TODO: Calculate actual COB using glucose deviations
-    // For now, use a simple model
-    let meal_cob = carbs.min(profile.max_cob);
+    // Calculate COB using glucose deviation analysis
+    let cob_result = cob::calculate(profile, glucose_data, treatments, clock)?;
+
+    // Use deviation-based COB, but cap at max_cob and entered carbs
+    let meal_cob = cob_result.meal_cob.min(profile.max_cob).min(carbs);
 
     Ok(MealData {
         carbs,
@@ -63,12 +67,12 @@ pub fn generate(
         bw_carbs,
         journal_carbs,
         meal_cob,
-        current_deviation: 0.0,
-        max_deviation: 0.0,
-        min_deviation: 0.0,
-        slope_from_max_deviation: 0.0,
-        slope_from_min_deviation: 0.0,
-        all_deviations: vec![],
+        current_deviation: cob_result.current_deviation,
+        max_deviation: cob_result.max_deviation,
+        min_deviation: cob_result.min_deviation,
+        slope_from_max_deviation: cob_result.slope_from_max,
+        slope_from_min_deviation: cob_result.slope_from_min,
+        all_deviations: vec![], // COB module returns i32, MealData expects f64 - handled separately if needed
         last_carb_time,
         bw_found,
     }.rounded())
