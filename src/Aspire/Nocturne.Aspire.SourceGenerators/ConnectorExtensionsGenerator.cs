@@ -338,6 +338,11 @@ namespace Nocturne.Aspire.SourceGenerators
             sb.AppendLine($"            saveRawData.WithParentRelationship(connector);");
             sb.AppendLine($"            dataDirectory.WithParentRelationship(connector);");
 
+            // Add reference from API to connector for service discovery
+            // This allows the API to resolve the connector's endpoint for health checks
+            sb.AppendLine();
+            sb.AppendLine("            api.WithReference(connector);");
+
             sb.AppendLine();
             sb.AppendLine("            return builder;");
             sb.AppendLine("        }");
