@@ -305,44 +305,6 @@
     return null;
   }
 
-  function getMatchingConnector(
-    source: DataSourceInfo
-  ): AvailableConnector | null {
-    if (!servicesOverview?.availableConnectors) return null;
-
-    const sourceLower = (source.sourceType ?? "").toLowerCase();
-
-    for (const connector of servicesOverview.availableConnectors) {
-      const connectorIdLower = (connector.id ?? "").toLowerCase();
-
-      // Match Dexcom connector
-      if (
-        connectorIdLower === "dexcom" &&
-        sourceLower.includes("dexcom-connector")
-      ) {
-        return connector;
-      }
-
-      // Match Libre connector
-      if (
-        connectorIdLower === "libre" &&
-        sourceLower.includes("libre-connector")
-      ) {
-        return connector;
-      }
-
-      // Match Nightscout bridge
-      if (
-        connectorIdLower === "nightscout" &&
-        sourceLower.includes("nightscout-connector")
-      ) {
-        return connector;
-      }
-    }
-
-    return null;
-  }
-
   function isUploaderActive(uploader: UploaderApp): boolean {
     if (!servicesOverview?.activeDataSources) return false;
 

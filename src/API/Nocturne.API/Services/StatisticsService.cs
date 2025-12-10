@@ -1451,7 +1451,7 @@ public class StatisticsService : IStatisticsService
 
     /// <summary>
     /// Calculate extended 7-range time in range percentages
-    /// Ranges: <54, 54-63, 63-140, 140-180, 180-200, 200-220, >220
+    /// Ranges: &lt;54, 54-63, 63-140, 140-180, 180-200, 200-220, &gt;220
     /// </summary>
     /// <param name="glucoseValues">Collection of glucose values in mg/dL</param>
     /// <returns>Extended time in range percentages</returns>

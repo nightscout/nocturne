@@ -5,11 +5,7 @@
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
   import { cn } from "$lib/utils";
-  import {
-    BG_UNITS,
-    COMMON_TIMEZONES,
-    DEFAULT_PROFILE_ICON,
-  } from "$lib/constants/profile-icons";
+  import { BG_UNITS, DEFAULT_PROFILE_ICON } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
   import { Plus } from "lucide-svelte";
 
@@ -171,7 +167,7 @@
             {formState.timezone}
           </Select.Trigger>
           <Select.Content>
-            {#each COMMON_TIMEZONES as tz}
+            {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz}
               <Select.Item value={tz}>{tz}</Select.Item>
             {/each}
           </Select.Content>

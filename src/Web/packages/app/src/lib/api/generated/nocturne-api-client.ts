@@ -1601,6 +1601,45 @@ export class MetadataClient {
         }
         return Promise.resolve<ExternalUrls>(null as any);
     }
+
+    /**
+     * Get treatment event types metadata
+    This endpoint exposes all available treatment event types for type-safe usage in frontend clients
+     * @return Treatment event types metadata
+     */
+    getTreatmentEventTypes(signal?: AbortSignal): Promise<TreatmentEventTypesMetadata> {
+        let url_ = this.baseUrl + "/api/Metadata/treatment-event-types";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatmentEventTypes(_response);
+        });
+    }
+
+    protected processGetTreatmentEventTypes(response: Response): Promise<TreatmentEventTypesMetadata> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentEventTypesMetadata;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TreatmentEventTypesMetadata>(null as any);
+    }
 }
 
 export class OidcClient {
@@ -12991,7 +13030,30 @@ export interface WebSocketEventsMetadata {
     description?: string;
 }
 
-export type WebSocketEvents = "connect" | "disconnect" | "connect_error" | "reconnect" | "reconnect_failed" | "connect_ack" | "dataUpdate" | "treatmentUpdate" | "create" | "update" | "delete" | "announcement" | "alarm" | "urgent_alarm" | "clear_alarm" | "notification" | "statusUpdate" | "status" | "authenticate" | "authenticated" | "join" | "leave";
+export enum WebSocketEvents {
+    Connect = "connect",
+    Disconnect = "disconnect",
+    ConnectError = "connect_error",
+    Reconnect = "reconnect",
+    ReconnectFailed = "reconnect_failed",
+    ConnectAck = "connect_ack",
+    DataUpdate = "dataUpdate",
+    TreatmentUpdate = "treatmentUpdate",
+    Create = "create",
+    Update = "update",
+    Delete = "delete",
+    Announcement = "announcement",
+    Alarm = "alarm",
+    UrgentAlarm = "urgent_alarm",
+    ClearAlarm = "clear_alarm",
+    Notification = "notification",
+    StatusUpdate = "statusUpdate",
+    Status = "status",
+    Authenticate = "authenticate",
+    Authenticated = "authenticated",
+    Join = "join",
+    Leave = "leave",
+}
 
 export interface ExternalUrls {
     website?: string;
@@ -13005,6 +13067,65 @@ export interface ConnectorDocsUrls {
     careLink?: string;
     nightscout?: string;
     glooko?: string;
+}
+
+/** Metadata about available treatment event types */
+export interface TreatmentEventTypesMetadata {
+    /** Array of all available treatment event types */
+    availableTypes?: TreatmentEventType[];
+    /** Full configurations for each event type including field applicability */
+    configurations?: EventTypeConfiguration[];
+    /** Description of the treatment event types */
+    description?: string;
+}
+
+export enum TreatmentEventType {
+    None = "<none>",
+    BgCheck = "BG Check",
+    SnackBolus = "Snack Bolus",
+    MealBolus = "Meal Bolus",
+    CorrectionBolus = "Correction Bolus",
+    CarbCorrection = "Carb Correction",
+    ComboBolus = "Combo Bolus",
+    Announcement = "Announcement",
+    Note = "Note",
+    Question = "Question",
+    SiteChange = "Site Change",
+    SensorStart = "Sensor Start",
+    SensorChange = "Sensor Change",
+    SensorStop = "Sensor Stop",
+    PumpBatteryChange = "Pump Battery Change",
+    InsulinChange = "Insulin Change",
+    TempBasalStart = "Temp Basal Start",
+    TempBasalEnd = "Temp Basal End",
+    ProfileSwitch = "Profile Switch",
+    DadAlert = "D.A.D. Alert",
+    TempBasal = "Temp Basal",
+    Exercise = "Exercise",
+    OpenApsOffline = "OpenAPS Offline",
+    SuspendPump = "Suspend Pump",
+    ResumePump = "Resume Pump",
+    BolusWizard = "Bolus Wizard",
+    Calibration = "Calibration",
+    TransmitterSensorInsert = "Transmitter Sensor Insert",
+    PodChange = "Pod Change",
+}
+
+export interface EventTypeConfiguration {
+    eventType?: TreatmentEventType;
+    name?: string;
+    bg?: boolean;
+    insulin?: boolean;
+    carbs?: boolean;
+    protein?: boolean;
+    fat?: boolean;
+    prebolus?: boolean;
+    duration?: boolean;
+    percent?: boolean;
+    absolute?: boolean;
+    profile?: boolean;
+    split?: boolean;
+    sensor?: boolean;
 }
 
 /** OIDC provider info for login page */
@@ -13524,7 +13645,13 @@ export interface GlycemicRiskIndex {
     interpretation?: string;
 }
 
-export type GRIZone = 0 | 1 | 2 | 3 | 4;
+export enum GRIZone {
+    A = 0,
+    B = 1,
+    C = 2,
+    D = 3,
+    E = 4,
+}
 
 export interface TimeOfDayAnalysis {
     overnight?: PeriodMetrics;
@@ -13539,7 +13666,7 @@ export interface TimeOfDayAnalysis {
 }
 
 export interface DayOfWeekAnalysis {
-    dayMetrics?: { [key in DayOfWeek]?: DayMetrics; };
+    dayMetrics?: { [key in keyof typeof DayOfWeek]?: DayMetrics; };
     weekdayAverage?: PeriodMetrics;
     weekendAverage?: PeriodMetrics;
     highestVariabilityDay?: DayOfWeek | undefined;
@@ -13548,7 +13675,15 @@ export interface DayOfWeekAnalysis {
     patternDescription?: string;
 }
 
-export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export enum DayOfWeek {
+    Sunday = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 3,
+    Thursday = 4,
+    Friday = 5,
+    Saturday = 6,
+}
 
 export interface DayMetrics extends PeriodMetrics {
     dayOfWeek?: DayOfWeek;
@@ -13567,7 +13702,7 @@ export interface HypoglycemiaAnalysis {
     lowestGlucose?: number;
     averageRecoveryTimeMinutes?: number;
     hourlyDistribution?: { [key: string]: number; };
-    dayOfWeekDistribution?: { [key in DayOfWeek]?: number; };
+    dayOfWeekDistribution?: { [key in keyof typeof DayOfWeek]?: number; };
     peakHour?: number | undefined;
     peakDay?: DayOfWeek | undefined;
     hasRecurringPattern?: boolean;
@@ -13601,7 +13736,7 @@ export interface HyperglycemiaAnalysis {
     highestGlucose?: number;
     averageTimeToTargetMinutes?: number;
     hourlyDistribution?: { [key: string]: number; };
-    dayOfWeekDistribution?: { [key in DayOfWeek]?: number; };
+    dayOfWeekDistribution?: { [key in keyof typeof DayOfWeek]?: number; };
     peakHour?: number | undefined;
     peakDay?: DayOfWeek | undefined;
     hasPostMealPattern?: boolean;
@@ -13642,7 +13777,14 @@ export interface ClinicalTargetAssessment {
     strengths?: string[];
 }
 
-export type DiabetesPopulation = 0 | 1 | 2 | 3 | 4 | 5;
+export enum DiabetesPopulation {
+    Type1Adult = 0,
+    Type2Adult = 1,
+    Type1Pediatric = 2,
+    Elderly = 3,
+    Pregnancy = 4,
+    PregnancyType1 = 5,
+}
 
 export interface ClinicalTargets {
     targetTIR?: number;
@@ -13665,7 +13807,11 @@ export interface TargetAssessment {
     progressPercentage?: number;
 }
 
-export type TargetStatus = 0 | 1 | 2;
+export enum TargetStatus {
+    Met = 0,
+    Close = 1,
+    NotMet = 2,
+}
 
 export interface DataSufficiencyAssessment {
     isSufficient?: boolean;
@@ -13920,7 +14066,16 @@ export interface AnalysisListItemDto {
     nocturneMissing?: boolean;
 }
 
-export type ResponseMatchType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export enum ResponseMatchType {
+    Perfect = 0,
+    MinorDifferences = 1,
+    MajorDifferences = 2,
+    CriticalDifferences = 3,
+    NightscoutMissing = 4,
+    NocturneMissing = 5,
+    BothMissing = 6,
+    ComparisonError = 7,
+}
 
 /** Analysis detail DTO */
 export interface AnalysisDetailDto {
@@ -13977,7 +14132,12 @@ export interface MigrationReadinessReport {
     performanceNote?: string | undefined;
 }
 
-export type MigrationReadinessLevel = 0 | 1 | 2 | 3;
+export enum MigrationReadinessLevel {
+    NotReady = 0,
+    NeedsWork = 1,
+    NearReady = 2,
+    Ready = 3,
+}
 
 /** Result of manual API comparison test */
 export interface ManualTestResult {
@@ -14033,9 +14193,25 @@ export interface DeviceAlert {
     data?: { [key: string]: any; } | undefined;
 }
 
-export type DeviceAlertType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export enum DeviceAlertType {
+    BatteryWarning = 0,
+    BatteryCritical = 1,
+    SensorExpirationWarning = 2,
+    SensorExpired = 3,
+    CalibrationReminder = 4,
+    CalibrationOverdue = 5,
+    DataGapDetected = 6,
+    CommunicationFailure = 7,
+    DeviceError = 8,
+    MaintenanceRequired = 9,
+}
 
-export type DeviceIssueSeverity = 0 | 1 | 2 | 3;
+export enum DeviceIssueSeverity {
+    Low = 0,
+    Medium = 1,
+    High = 2,
+    Critical = 3,
+}
 
 /** Device alert summary model */
 export interface DeviceAlertSummary {
@@ -14048,7 +14224,7 @@ export interface DeviceAlertSummary {
     /** Number of warning alerts */
     warningAlerts?: number;
     /** Alerts grouped by type */
-    alertsByType?: { [key in DeviceAlertType]?: number; };
+    alertsByType?: { [key in keyof typeof DeviceAlertType]?: number; };
 }
 
 /** Device alert settings model */
@@ -14102,9 +14278,20 @@ export interface DeviceHealth {
     updatedAt?: Date;
 }
 
-export type DeviceType = 0 | 1 | 2 | 3;
+export enum DeviceType {
+    CGM = 0,
+    InsulinPump = 1,
+    BGM = 2,
+    Unknown = 3,
+}
 
-export type DeviceStatusType = 0 | 1 | 2 | 3 | 4;
+export enum DeviceStatusType {
+    Active = 0,
+    Inactive = 1,
+    Warning = 2,
+    Error = 3,
+    Maintenance = 4,
+}
 
 export interface DeviceRegistrationRequest {
     deviceId?: string;
@@ -14127,7 +14314,13 @@ export interface DeviceHealthAnalysis {
     nextMaintenanceDate?: Date | undefined;
 }
 
-export type DeviceHealthStatus = 0 | 1 | 2 | 3 | 4;
+export enum DeviceHealthStatus {
+    Excellent = 0,
+    Good = 1,
+    Fair = 2,
+    Poor = 3,
+    Critical = 4,
+}
 
 export interface DeviceHealthIssue {
     type?: DeviceIssueType;
@@ -14137,7 +14330,16 @@ export interface DeviceHealthIssue {
     suggestedResolution?: string | undefined;
 }
 
-export type DeviceIssueType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export enum DeviceIssueType {
+    LowBattery = 0,
+    SensorExpiring = 1,
+    CalibrationOverdue = 2,
+    DataGap = 3,
+    CommunicationError = 4,
+    DeviceError = 5,
+    PerformanceDegradation = 6,
+    MaintenanceRequired = 7,
+}
 
 export interface DeviceSettingsUpdate {
     batteryWarningThreshold?: number | undefined;
@@ -14166,7 +14368,12 @@ export interface DeviceHealthReport {
     keyMetrics?: { [key: string]: any; };
 }
 
-export type HealthTrend = 0 | 1 | 2 | 3;
+export enum HealthTrend {
+    Improving = 0,
+    Stable = 1,
+    Declining = 2,
+    Unknown = 3,
+}
 
 export interface MaintenancePrediction {
     deviceId?: string;
@@ -14176,7 +14383,13 @@ export interface MaintenancePrediction {
     reasons?: string[];
 }
 
-export type MaintenanceType = 0 | 1 | 2 | 3 | 4;
+export enum MaintenanceType {
+    BatteryReplacement = 0,
+    SensorReplacement = 1,
+    Calibration = 2,
+    GeneralMaintenance = 3,
+    DeviceReplacement = 4,
+}
 
 export interface DiscrepancyAnalysisDto {
     id?: string;
@@ -14733,7 +14946,16 @@ export interface AlarmProfileConfiguration {
     updatedAt?: Date;
 }
 
-export type AlarmTriggerType = "High" | "Low" | "UrgentHigh" | "UrgentLow" | "RisingFast" | "FallingFast" | "StaleData" | "Custom";
+export enum AlarmTriggerType {
+    High = "High",
+    Low = "Low",
+    UrgentHigh = "UrgentHigh",
+    UrgentLow = "UrgentLow",
+    RisingFast = "RisingFast",
+    FallingFast = "FallingFast",
+    StaleData = "StaleData",
+    Custom = "Custom",
+}
 
 export interface AlarmAudioSettings {
     enabled?: boolean;
@@ -14794,7 +15016,12 @@ export interface TimeRange {
     endTime?: string;
 }
 
-export type AlarmPriority = "Low" | "Normal" | "High" | "Critical";
+export enum AlarmPriority {
+    Low = "Low",
+    Normal = "Normal",
+    High = "High",
+    Critical = "Critical",
+}
 
 export interface QuietHoursConfiguration {
     enabled?: boolean;

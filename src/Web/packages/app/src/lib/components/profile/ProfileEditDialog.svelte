@@ -8,7 +8,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
-  import { BG_UNITS, COMMON_TIMEZONES } from "$lib/constants/profile-icons";
+  import { BG_UNITS } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
   import {
     Edit,
@@ -230,7 +230,7 @@
                     {storeData.timezone ?? "Select timezone"}
                   </Select.Trigger>
                   <Select.Content>
-                    {#each COMMON_TIMEZONES as tz}
+                    {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz}
                       <Select.Item value={tz}>{tz}</Select.Item>
                     {/each}
                   </Select.Content>

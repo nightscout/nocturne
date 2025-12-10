@@ -58,27 +58,6 @@ export function getProfileIconName(iconId: string | undefined): string {
 }
 
 /**
- * Common timezones for profile settings
- */
-export const COMMON_TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Europe/Moscow",
-  "Asia/Tokyo",
-  "Asia/Shanghai",
-  "Asia/Singapore",
-  "Australia/Sydney",
-  "Pacific/Auckland",
-] as const;
-
-/**
  * Units options for blood glucose
  */
 export const BG_UNITS = [
@@ -86,4 +65,3 @@ export const BG_UNITS = [
   { value: "mmol", label: "mmol/L", description: "Millimoles per liter" },
 ] as const;
 
-export type BgUnitsValue = typeof BG_UNITS[number]["value"];

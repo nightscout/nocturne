@@ -55,6 +55,24 @@ public class MetadataController : ControllerBase
             }
         );
     }
+    /// <summary>
+    /// Get treatment event types metadata
+    /// This endpoint exposes all available treatment event types for type-safe usage in frontend clients
+    /// </summary>
+    /// <returns>Treatment event types metadata</returns>
+    [HttpGet("treatment-event-types")]
+    [ProducesResponseType(typeof(TreatmentEventTypesMetadata), 200)]
+    public ActionResult<TreatmentEventTypesMetadata> GetTreatmentEventTypes()
+    {
+        return Ok(
+            new TreatmentEventTypesMetadata
+            {
+                AvailableTypes = Enum.GetValues<TreatmentEventType>(),
+                Configurations = EventTypeConfigurations.GetAll(),
+                Description = "Available treatment event types for diabetes management events",
+            }
+        );
+    }
 }
 
 /// <summary>
@@ -70,6 +88,28 @@ public class WebSocketEventsMetadata
 
     /// <summary>
     /// Description of the WebSocket events
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about available treatment event types
+/// </summary>
+public class TreatmentEventTypesMetadata
+{
+    /// <summary>
+    /// Array of all available treatment event types
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public TreatmentEventType[] AvailableTypes { get; set; } = [];
+
+    /// <summary>
+    /// Full configurations for each event type including field applicability
+    /// </summary>
+    public EventTypeConfiguration[] Configurations { get; set; } = [];
+
+    /// <summary>
+    /// Description of the treatment event types
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }
