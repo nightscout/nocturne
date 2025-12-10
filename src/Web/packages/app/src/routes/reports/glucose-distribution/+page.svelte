@@ -16,20 +16,11 @@
   const reportsQuery = $derived(getReportsData(dateRangeInput));
   const data = $derived(await reportsQuery);
 
-  // Glucose distribution ranges (matching Nightscout) - colors only
+  // Glucose distribution ranges (using CSS variables for theme support)
   const RANGES = [
-    {
-      name: "Low",
-      color: "#c30909",
-    }, // Red
-    {
-      name: "In Range",
-      color: "#5ab85a", // Green
-    },
-    {
-      name: "High",
-      color: "#e9e91a", // Yellow
-    },
+    { name: "Low", color: "var(--glucose-low)" },
+    { name: "In Range", color: "var(--glucose-in-range)" },
+    { name: "High", color: "var(--glucose-high)" },
   ] as const;
 
   const rangeStats = $derived.by(() => {

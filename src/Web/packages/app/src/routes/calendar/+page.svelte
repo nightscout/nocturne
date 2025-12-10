@@ -1,14 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import type { Entry, Treatment } from "$lib/api";
-  import { DEFAULT_THRESHOLDS } from "$lib/constants";
   import * as Select from "$lib/components/ui/select";
   import * as Card from "$lib/components/ui/card";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { Calendar, ChevronLeft, ChevronRight } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
-  import type { DayStats } from "$lib/data/month-to-month.remote";
-  import { getReportsData } from "$lib/data/reports.remote";
+  import { type DayStats, getPunchCardData } from "$lib/data/month-to-month.remote";
   import { cn } from "$lib/utils";
   import { glucoseUnitsState } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
@@ -24,14 +21,14 @@
     const firstDay = new Date(currentYear, currentMonth, 1);
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
     return {
-      from: firstDay.toISOString().split("T")[0],
-      to: lastDay.toISOString().split("T")[0],
+      fromDate: firstDay.toISOString().split("T")[0],
+      toDate: lastDay.toISOString().split("T")[0],
     };
   });
 
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
-  const data = $derived(await reportsQuery);
+  // Query for punch card data (calculations done on backend)
+  const punchCardQuery = $derived(getPunchCardData(dateRangeInput));
+  const data = $derived(await punchCardQuery);
 
   // Navigation functions
   function previousMonth() {
@@ -67,11 +64,11 @@
   ];
   let selectedSizeMode = $state<SizeMode>("difference");
 
-  // Colors for glucose distribution (matching Nightscout)
+  // Colors for glucose distribution (using CSS variables for theme support)
   const GLUCOSE_COLORS = {
-    low: "#c30909", // Red
-    inRange: "#5ab85a", // Green
-    high: "#e9e91a", // Yellow
+    low: "var(--glucose-low)",
+    inRange: "var(--glucose-in-range)",
+    high: "var(--glucose-high)",
   };
 
   // Day of week names
@@ -95,107 +92,23 @@
   const MIN_RADIUS = 14;
   const MAX_RADIUS = 30;
 
-  // Calculate days data from entries and treatments
+  // Get days data from backend response
   const daysData = $derived.by(() => {
-    const entries = (data?.entries ?? []) as Entry[];
-    const treatments = (data?.treatments ?? []) as Treatment[];
-
+    const monthData = data?.months?.[0];
     const daysMap = new Map<string, DayStats>();
-    let maxCarbs = 0;
-    let maxInsulin = 0;
-    let maxDiff = 0;
 
-    // Get first and last day of month
-    const firstDay = new Date(currentYear, currentMonth, 1);
-    const lastDay = new Date(currentYear, currentMonth + 1, 0);
-
-    // Iterate through each day of the month
-    const currentDate = new Date(firstDay);
-    while (currentDate <= lastDay) {
-      const dayStart = new Date(currentDate);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(currentDate);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const dayEntries = entries.filter((e) => {
-        const entryTime = e.mills ?? new Date(e.dateString ?? "").getTime();
-        return entryTime >= dayStart.getTime() && entryTime <= dayEnd.getTime();
-      });
-
-      const dayTreatments = treatments.filter((t) => {
-        const treatmentTime = t.mills ?? new Date(t.createdAt ?? "").getTime();
-        return (
-          treatmentTime >= dayStart.getTime() &&
-          treatmentTime <= dayEnd.getTime()
-        );
-      });
-
-      // Calculate glucose distribution
-      const readings = dayEntries
-        .filter((e) => e.sgv || e.mgdl)
-        .map((e) => e.sgv ?? e.mgdl ?? 0);
-
-      const totalReadings = readings.length;
-      const lowThreshold = DEFAULT_THRESHOLDS.low ?? 70;
-      const highThreshold = DEFAULT_THRESHOLDS.high ?? 180;
-
-      const lowCount = readings.filter((r) => r < lowThreshold).length;
-      const highCount = readings.filter((r) => r >= highThreshold).length;
-      const inRangeCount = totalReadings - lowCount - highCount;
-
-      // Calculate treatment totals
-      let totalCarbs = 0;
-      let totalInsulin = 0;
-
-      for (const treatment of dayTreatments) {
-        if (treatment.carbs && treatment.carbs > 0) {
-          totalCarbs += treatment.carbs;
-        }
-        if (treatment.insulin && treatment.insulin > 0) {
-          totalInsulin += treatment.insulin;
-        }
+    if (monthData) {
+      for (const day of monthData.days) {
+        daysMap.set(day.date, day);
       }
-
-      const dateKey = currentDate.toISOString().split("T")[0];
-      const dayStats: DayStats = {
-        date: dateKey,
-        timestamp: dayStart.getTime(),
-        totalReadings,
-        inRangeCount,
-        lowCount,
-        highCount,
-        inRangePercent:
-          totalReadings > 0 ? (inRangeCount / totalReadings) * 100 : 0,
-        lowPercent: totalReadings > 0 ? (lowCount / totalReadings) * 100 : 0,
-        highPercent: totalReadings > 0 ? (highCount / totalReadings) * 100 : 0,
-        averageGlucose:
-          totalReadings > 0
-            ? readings.reduce((sum, r) => sum + r, 0) / totalReadings
-            : 0,
-        totalCarbs,
-        totalInsulin,
-        totalBolus: 0,
-        totalBasal: 0,
-        carbToInsulinRatio: 0,
-      };
-
-      // Calculate carb to insulin ratio differential
-      const standardCarbRatio = 10;
-      const expectedInsulin = totalCarbs / standardCarbRatio;
-      dayStats.carbToInsulinRatio =
-        totalInsulin > 0 || totalCarbs > 0
-          ? Math.abs(expectedInsulin - totalInsulin)
-          : 0;
-
-      daysMap.set(dateKey, dayStats);
-      maxCarbs = Math.max(maxCarbs, totalCarbs);
-      maxInsulin = Math.max(maxInsulin, totalInsulin);
-      maxDiff = Math.max(maxDiff, dayStats.carbToInsulinRatio);
-
-      currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    return { days: daysMap, maxCarbs, maxInsulin, maxDiff };
+    return {
+      days: daysMap,
+      maxCarbs: monthData?.maxCarbs ?? 0,
+      maxInsulin: monthData?.maxInsulin ?? 0,
+      maxDiff: monthData?.maxCarbInsulinDiff ?? 0,
+    };
   });
 
   // Calculate pie chart radius based on size mode
@@ -215,7 +128,7 @@
         max = daysData.maxInsulin || 1;
         break;
       case "difference":
-        value = day.carbToInsulinRatio;
+        value = Math.abs(day.carbToInsulinRatio);
         max = daysData.maxDiff || 1;
         break;
     }
@@ -303,7 +216,7 @@
     goto(`/reports/day-in-review?date=${day.date}`);
   }
 
-  // Calculate month summary
+  // Calculate month summary from backend data
   const monthSummary = $derived.by(() => {
     const days = Array.from(daysData.days.values());
     return days.reduce(

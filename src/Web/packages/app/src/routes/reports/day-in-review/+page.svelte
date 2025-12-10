@@ -23,7 +23,6 @@
     RetrospectiveDataResponse,
   } from "$lib/api";
   import { DEFAULT_THRESHOLDS } from "$lib/constants";
-  import { TIR_COLORS_HEX } from "$lib/constants/tir-colors";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Select from "$lib/components/ui/select";
@@ -223,14 +222,14 @@
   const units = $derived(glucoseUnitsState.units);
   const unitLabel = $derived(getUnitLabel(units));
 
-  // Colors for glucose chart
+  // Colors for glucose chart (using CSS variables for theme support)
   const GLUCOSE_COLORS = {
-    line: "#1e90ff", // Blue
-    low: TIR_COLORS_HEX.low,
-    inRange: TIR_COLORS_HEX.target,
-    high: TIR_COLORS_HEX.high,
-    severeLow: TIR_COLORS_HEX.severeLow,
-    severeHigh: TIR_COLORS_HEX.severeHigh,
+    line: "var(--insulin)",
+    low: "var(--glucose-low)",
+    inRange: "var(--glucose-in-range)",
+    high: "var(--glucose-high)",
+    severeLow: "var(--glucose-very-low)",
+    severeHigh: "var(--glucose-very-high)",
   };
 
   // Treatment colors

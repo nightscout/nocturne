@@ -19,10 +19,7 @@ export const EXTERNAL_URLS: ExternalUrls = {
   },
 };
 
-export * from "./tir-colors";
-export { default as TIR_COLORS } from "./tir-colors";
 import type { GlycemicThresholds } from "../api";
-import { TIR_COLORS_CSS } from "./tir-colors";
 
 export interface CompressionLowConfig {
   enabled: boolean;
@@ -61,26 +58,26 @@ export const chartConfig = {
   severeLow: {
     threshold: DEFAULT_THRESHOLDS.severeLow,
     label: "Severe Low",
-    color: TIR_COLORS_CSS.severeLow,
+    color: "var(--glucose-very-low)",
   },
   low: {
     threshold: DEFAULT_THRESHOLDS.low,
     label: "Low",
-    color: TIR_COLORS_CSS.low,
+    color: "var(--glucose-low)",
   },
   target: {
     threshold: DEFAULT_THRESHOLDS.targetBottom,
     label: "Target",
-    color: TIR_COLORS_CSS.target,
+    color: "var(--glucose-in-range)",
   },
   high: {
     threshold: DEFAULT_THRESHOLDS.high,
     label: "High",
-    color: TIR_COLORS_CSS.high,
+    color: "var(--glucose-high)",
   },
   severeHigh: {
     threshold: DEFAULT_THRESHOLDS.severeHigh,
     label: "Severe High",
-    color: TIR_COLORS_CSS.severeHigh,
+    color: "var(--glucose-very-high)",
   },
 };

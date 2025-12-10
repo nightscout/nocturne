@@ -443,11 +443,11 @@
     const high = chartConfig.high.threshold ?? 180;
     const severeHigh = chartConfig.severeHigh.threshold ?? 250;
 
-    if (sgv < low) return "rgb(239 68 68)";
-    if (sgv < target) return "rgb(234 179 8)";
-    if (sgv <= high) return "rgb(34 197 94)";
-    if (sgv <= severeHigh) return "rgb(249 115 22)";
-    return "rgb(239 68 68)";
+    if (sgv < low) return "var(--glucose-very-low)";
+    if (sgv < target) return "var(--glucose-low)";
+    if (sgv <= high) return "var(--glucose-in-range)";
+    if (sgv <= severeHigh) return "var(--glucose-high)";
+    return "var(--glucose-very-high)";
   }
 
   function formatTime(date: Date): string {
