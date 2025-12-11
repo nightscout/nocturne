@@ -1,6 +1,10 @@
 <script lang="ts">
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import {
+    glucoseUnits,
+    predictionMinutes,
+    predictionEnabled,
+  } from "$lib/stores/appearance-store.svelte";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
@@ -36,8 +40,8 @@
   // Stale threshold in milliseconds (10 minutes)
   const STALE_THRESHOLD_MS = 10 * 60 * 1000;
 
-  // Prediction horizon in minutes (30 minutes = 6 points at 5-min intervals)
-  const PREDICTION_HORIZON_MS = 30 * 60 * 1000;
+  // Prediction horizon in milliseconds
+  const predictionHorizonMs = $derived(predictionMinutes.current * 60 * 1000);
 
   // Stale detection - data older than threshold (recalculates every second)
   let now = $state(Date.now());
@@ -101,7 +105,7 @@
     }
 
     const baseTime = orefPredictions.timestamp.getTime();
-    const cutoffTime = baseTime + PREDICTION_HORIZON_MS;
+    const cutoffTime = baseTime + predictionHorizonMs;
 
     // Filter to only include points within 30-minute horizon
     return orefPredictions.curves.main
@@ -230,7 +234,7 @@
           <Spline class="stroke-primary stroke-2 fill-none" />
 
           <!-- Prediction line (dashed) -->
-          {#if predictionData.length > 1}
+          {#if predictionData.length > 1 && predictionEnabled.current}
             <Spline
               data={predictionData}
               class="stroke-primary/50 stroke-2 fill-none [stroke-dasharray:4]"

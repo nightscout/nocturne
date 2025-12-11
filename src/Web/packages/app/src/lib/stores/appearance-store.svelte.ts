@@ -171,3 +171,53 @@ export function setGlucoseUnits(units: GlucoseUnits): void {
   glucoseUnits.current = units;
 }
 
+// ==========================================
+// Prediction Settings
+// ==========================================
+
+/**
+ * Prediction time horizon in minutes
+ * Controls how far into the future predictions are shown
+ */
+export const predictionMinutes = new PersistedState<number>(
+  "nocturne-prediction-minutes",
+  30
+);
+
+/**
+ * Prediction enabled state
+ * Controls whether prediction lines are shown on charts
+ */
+export const predictionEnabled = new PersistedState<boolean>(
+  "nocturne-prediction-enabled",
+  true
+);
+
+/**
+ * Get current prediction minutes
+ */
+export function getPredictionMinutes(): number {
+  return predictionMinutes.current;
+}
+
+/**
+ * Get current prediction enabled state
+ */
+export function getPredictionEnabled(): boolean {
+  return predictionEnabled.current;
+}
+
+/**
+ * Set prediction minutes
+ */
+export function setPredictionMinutes(minutes: number): void {
+  predictionMinutes.current = minutes;
+}
+
+/**
+ * Set prediction enabled state
+ */
+export function setPredictionEnabled(enabled: boolean): void {
+  predictionEnabled.current = enabled;
+}
+

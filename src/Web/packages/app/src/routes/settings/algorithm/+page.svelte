@@ -1,6 +1,10 @@
 <script lang="ts">
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
+    predictionMinutes,
+    predictionEnabled,
+  } from "$lib/stores/appearance-store.svelte";
+  import {
     Card,
     CardContent,
     CardDescription,
@@ -29,6 +33,22 @@
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
   const store = getSettingsStore();
+
+  // Sync server settings to appearance store when loaded
+  $effect(() => {
+    if (store.algorithm?.prediction?.minutes) {
+      // Only update if significantly different to avoid loops, though PersistedState handles it well
+      if (store.algorithm.prediction.minutes !== predictionMinutes.current) {
+        predictionMinutes.current = store.algorithm.prediction.minutes;
+      }
+    }
+    // Sync enabled state
+    if (store.algorithm?.prediction?.enabled !== undefined) {
+      if (store.algorithm.prediction.enabled !== predictionEnabled.current) {
+        predictionEnabled.current = store.algorithm.prediction.enabled;
+      }
+    }
+  });
 </script>
 
 <svelte:head>
@@ -82,6 +102,8 @@
               if (store.algorithm?.prediction) {
                 store.algorithm.prediction.enabled = checked;
                 store.markChanged();
+                // Update appearance store
+                predictionEnabled.current = checked;
               }
             }}
           />
@@ -102,10 +124,11 @@
                   class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
                   oninput={(e) => {
                     if (store.algorithm?.prediction) {
-                      store.algorithm.prediction.minutes = parseInt(
-                        e.currentTarget.value
-                      );
+                      const val = parseInt(e.currentTarget.value);
+                      store.algorithm.prediction.minutes = val;
                       store.markChanged();
+                      // Update appearance store for instant reactivity
+                      predictionMinutes.current = val;
                     }
                   }}
                 />
