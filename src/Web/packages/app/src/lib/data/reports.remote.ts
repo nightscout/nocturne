@@ -3,8 +3,10 @@
  * Provides entries, treatments, and analysis data for all report pages
  */
 import { z } from 'zod';
+import { DiabetesPopulationSchema } from '$lib/api/generated/schemas';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
+import { DiabetesPopulation } from '$lib/api';
 
 /**
  * Input schema for date range queries
@@ -125,16 +127,16 @@ export const getAnalysis = query(
 	z.object({
 		entries: z.array(z.any()),
 		treatments: z.array(z.any()),
-		population: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+		population: DiabetesPopulationSchema.optional(),
 	}),
-	async ({ entries, treatments, population = 0 }) => {
+	async ({ entries, treatments, population = DiabetesPopulation.Type1Adult }) => {
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
 
 		return apiClient.statistics.analyzeGlucoseDataExtended({
 			entries,
 			treatments,
-			population: population as 0 | 1 | 2 | 3 | 4 | 5,
+			population,
 		});
 	}
 );
@@ -188,6 +190,7 @@ export const getReportsData = query(
 		}
 
 		const treatments = allTreatments;
+		const population = DiabetesPopulation.Type1Adult; // TODO: Get from user settings
 
 		// Get summary and analysis
 		const [summary, analysis] = await Promise.all([
@@ -195,7 +198,7 @@ export const getReportsData = query(
 			apiClient.statistics.analyzeGlucoseDataExtended({
 				entries,
 				treatments,
-				population: 0 as const,
+				population,
 			}),
 		]);
 

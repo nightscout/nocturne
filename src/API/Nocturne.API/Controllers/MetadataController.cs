@@ -83,7 +83,6 @@ public class WebSocketEventsMetadata
     /// <summary>
     /// Array of all available WebSocket event types
     /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     public WebSocketEvents[] AvailableEvents { get; set; } = [];
 
     /// <summary>
@@ -100,7 +99,6 @@ public class TreatmentEventTypesMetadata
     /// <summary>
     /// Array of all available treatment event types
     /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     public TreatmentEventType[] AvailableTypes { get; set; } = [];
 
     /// <summary>

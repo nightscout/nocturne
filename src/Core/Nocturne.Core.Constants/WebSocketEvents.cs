@@ -7,6 +7,7 @@ namespace Nocturne.Core.Constants;
 /// WebSocket event types for Socket.IO communication.
 /// These constants ensure type safety between the C# backend and TypeScript frontend.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum WebSocketEvents
 {
     // Connection events

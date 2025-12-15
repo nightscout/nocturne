@@ -39,6 +39,9 @@ services:
       NOCTURNE-POSTGRES_URI: "postgresql://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@nocturne-postgres-server:5432/nocturne"
       NOCTURNE-POSTGRES_JDBCCONNECTIONSTRING: "jdbc:postgresql://nocturne-postgres-server:5432/nocturne"
       NOCTURNE-POSTGRES_DATABASE: "nocturne"
+      NIGHTSCOUT-CONNECTOR_HTTP: "http://nightscout-connector:${NIGHTSCOUT_CONNECTOR_PORT}"
+      services__nightscout-connector__http__0: "http://nightscout-connector:${NIGHTSCOUT_CONNECTOR_PORT}"
+      DemoService__Enabled: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://production-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "nocturne-api"
@@ -46,59 +49,6 @@ services:
       - "${NOCTURNE_API_PORT}"
     depends_on:
       nocturne-postgres-server:
-        condition: "service_started"
-    networks:
-      - "nocturne-network"
-  glooko-connector:
-    image: "${GLOOKO_CONNECTOR_IMAGE}"
-    environment:
-      OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES: "true"
-      OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES: "true"
-      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
-      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
-      HTTP_PORTS: "${GLOOKO_CONNECTOR_PORT}"
-      NocturneApiUrl: "http://nocturne-api:${NOCTURNE_API_PORT}"
-      ApiSecret: "${API_SECRET}"
-      NOCTURNE-API_HTTP: "http://nocturne-api:${NOCTURNE_API_PORT}"
-      services__nocturne-api__http__0: "http://nocturne-api:${NOCTURNE_API_PORT}"
-      NOCTURNE-API_HTTPS: "https://nocturne-api:${NOCTURNE_API_PORT}"
-      CONNECT_GLOOKO_USERNAME: "${GLOOKO_USERNAME}"
-      CONNECT_GLOOKO_PASSWORD: "${GLOOKO_PASSWORD}"
-      CONNECT_GLOOKO_SERVER: "${GLOOKO_SERVER}"
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://production-dashboard:18889"
-      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
-      OTEL_SERVICE_NAME: "glooko-connector"
-    expose:
-      - "${GLOOKO_CONNECTOR_PORT}"
-    depends_on:
-      nocturne-api:
-        condition: "service_started"
-    networks:
-      - "nocturne-network"
-  freestyle-connector:
-    image: "${FREESTYLE_CONNECTOR_IMAGE}"
-    environment:
-      OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES: "true"
-      OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES: "true"
-      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
-      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
-      HTTP_PORTS: "${FREESTYLE_CONNECTOR_PORT}"
-      NocturneApiUrl: "http://nocturne-api:${NOCTURNE_API_PORT}"
-      ApiSecret: "${API_SECRET}"
-      NOCTURNE-API_HTTP: "http://nocturne-api:${NOCTURNE_API_PORT}"
-      services__nocturne-api__http__0: "http://nocturne-api:${NOCTURNE_API_PORT}"
-      NOCTURNE-API_HTTPS: "https://nocturne-api:${NOCTURNE_API_PORT}"
-      CONNECT_LIBRE_USERNAME: "${LIBRELINKUP_USERNAME}"
-      CONNECT_LIBRE_PASSWORD: "${LIBRELINKUP_PASSWORD}"
-      CONNECT_LIBRE_REGION: "${LIBRELINKUP_REGION}"
-      CONNECT_LIBRE_PATIENT_ID: "${LIBRELINKUP_PATIENT_ID}"
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://production-dashboard:18889"
-      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
-      OTEL_SERVICE_NAME: "freestyle-connector"
-    expose:
-      - "${FREESTYLE_CONNECTOR_PORT}"
-    depends_on:
-      nocturne-api:
         condition: "service_started"
     networks:
       - "nocturne-network"
@@ -117,6 +67,8 @@ services:
       NOCTURNE-API_HTTPS: "https://nocturne-api:${NOCTURNE_API_PORT}"
       CONNECT_NS_URL: "${NIGHTSCOUT_SOURCE_URL}"
       CONNECT_NS_API_SECRET: "${NIGHTSCOUT_SOURCE_SECRET}"
+      SaveRawData: "${NIGHTSCOUT_SAVE_RAW_DATA}"
+      DataDirectory: "${NIGHTSCOUT_DATA_DIRECTORY}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://production-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "nightscout-connector"
@@ -125,6 +77,20 @@ services:
     depends_on:
       nocturne-api:
         condition: "service_started"
+    networks:
+      - "nocturne-network"
+  scalar:
+    image: "scalarapi/aspire-api-reference:0.8.0"
+    environment:
+      API_REFERENCE_CONFIG: "W3sicHJveHlVcmwiOiIvc2NhbGFyLXByb3h5Iiwic2VydmVycyI6W3sidXJsIjoiaHR0cDovL25vY3R1cm5lLWFwaSIsImRlc2NyaXB0aW9uIjoibm9jdHVybmUtYXBpIn1dLCJ0aGVtZSI6Ik1hcnMiLCJmYXZpY29uIjoiZmF2aWNvbi5zdmciLCJfaW50ZWdyYXRpb24iOiJkb3RuZXQiLCJzb3VyY2VzIjpbeyJ0aXRsZSI6Im5vY3R1cm5lLWFwaSB8IE5vY3R1cm5lIEFQSSIsInVybCI6Imh0dHA6Ly9ub2N0dXJuZS1hcGkvb3BlbmFwaS92MS5qc29uIn1dfV0="
+      CDN_URL: "scalar.js"
+      ALLOW_SELF_SIGNED_CERTIFICATES: "False"
+      DEFAULT_PROXY: "True"
+      NOCTURNE-API_HTTP: "http://nocturne-api:${NOCTURNE_API_PORT}"
+      services__nocturne-api__http__0: "http://nocturne-api:${NOCTURNE_API_PORT}"
+      NOCTURNE-API_HTTPS: "https://nocturne-api:${NOCTURNE_API_PORT}"
+    expose:
+      - "8080"
     networks:
       - "nocturne-network"
 networks:

@@ -15,19 +15,6 @@ const ManualTestRequestSchema = z.object({
 
 export type ManualTestRequest = z.infer<typeof ManualTestRequestSchema>;
 
-export interface ManualTestResult {
-	queryPath: string;
-	method: string;
-	timestamp: string;
-	nightscoutResponse?: string;
-	nocturneResponse?: string;
-	nightscoutStatusCode?: number;
-	nocturneStatusCode?: number;
-	nightscoutResponseTimeMs: number;
-	nocturneResponseTimeMs: number;
-	nightscoutError?: string;
-	nocturneError?: string;
-}
 
 /**
  * Run a manual compatibility test between Nightscout and Nocturne

@@ -63,8 +63,10 @@
   const _predictionStatus = $derived(
     predictionsQuery ? await predictionsQuery : null
   );
-  // Suppress unused warning
-  void _predictionStatus;
+  // Reference in effect to suppress unused warning and ensure reactivity
+  $effect(() => {
+    void _predictionStatus;
+  });
 </script>
 
 <svelte:boundary>
