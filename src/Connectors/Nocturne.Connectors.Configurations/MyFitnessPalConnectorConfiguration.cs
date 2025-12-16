@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "MyFitnessPal",
         projectTypeName: "Nocturne_Connectors_MyFitnessPal",
-        serviceName: "ServiceNames.MyFitnessPalConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix",
+        serviceName: ServiceNames.MyFitnessPalConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.MyFitnessPalPrefix,
         connectSourceName: "ConnectSource.MyFitnessPal",
         dataSourceId: "myfitnesspal-connector",
         icon: "myfitnesspal",

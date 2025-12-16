@@ -9,5 +9,7 @@ public class ConnectorStatusDto
     public long TotalEntries { get; set; }
     public DateTime? LastEntryTime { get; set; }
     public int EntriesLast24Hours { get; set; }
+    public string State { get; set; } = "Idle";
+    public string? StateMessage { get; set; }
     public bool IsHealthy { get; set; }
 }

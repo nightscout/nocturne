@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "MiniMed",
         projectTypeName: "Nocturne_Connectors_MiniMed",
-        serviceName: "ServiceNames.MiniMedConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.MiniMedPrefix",
+        serviceName: ServiceNames.MiniMedConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.MiniMedPrefix,
         connectSourceName: "ConnectSource.CareLink",
         dataSourceId: "minimed-connector",
         icon: "medtronic",

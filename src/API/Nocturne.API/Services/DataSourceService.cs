@@ -139,7 +139,7 @@ public class DataSourceService : IDataSourceService
     /// <inheritdoc />
     public List<AvailableConnector> GetAvailableConnectors()
     {
-        return new List<AvailableConnector>
+        var connectors = new List<AvailableConnector>
         {
             new()
             {
@@ -325,6 +325,13 @@ public class DataSourceService : IDataSourceService
                 DocumentationUrl = UrlConstants.External.DocsGlooko,
             },
         };
+
+        foreach (var connector in connectors)
+        {
+            connector.IsConfigured = _manualSyncService.IsConnectorConfigured(connector.Id);
+        }
+
+        return connectors;
     }
 
     /// <inheritdoc />
@@ -626,8 +633,9 @@ public class DataSourceService : IDataSourceService
         var dataSources = await GetActiveDataSourcesAsync(cancellationToken);
 
         // Check if manual sync is enabled and if there are any active connectors
-        var hasActiveConnectors = dataSources.Any(ds => ds.Category == "connector");
-        var manualSyncEnabled = _manualSyncService.IsEnabled() && hasActiveConnectors;
+        // improved: check configuration instead of just active data sources
+        var hasEnabledConnectors = _manualSyncService.HasEnabledConnectors();
+        var manualSyncEnabled = _manualSyncService.IsEnabled() && hasEnabledConnectors;
 
         return new ServicesOverview
         {
@@ -786,6 +794,52 @@ public class DataSourceService : IDataSourceService
         }
 
         return info;
+    }
+
+
+    /// <inheritdoc />
+    public async Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
+        string connectorId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogInformation("Deleting data for connector: {ConnectorId}", connectorId);
+
+        try
+        {
+            // Resolve the connector metadata to find the correct data source ID
+            var metadata = ConnectorMetadataService.GetByConnectorId(connectorId);
+            if (metadata == null)
+            {
+                return new DataSourceDeleteResult
+                {
+                    Success = false,
+                    DataSource = connectorId,
+                    Error = $"Connector not found: {connectorId}",
+                };
+            }
+
+            // Connector's DataSourceId is what we use in the database (e.g. "dexcom-connector")
+            var dataSourceId = metadata.DataSourceId;
+            _logger.LogInformation(
+                "Resolved connector {ConnectorId} to data source ID {DataSourceId}",
+                connectorId,
+                dataSourceId
+            );
+
+            // Delegate to the existing deletion logic
+            return await DeleteDataSourceDataAsync(dataSourceId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting data for connector: {ConnectorId}", connectorId);
+            return new DataSourceDeleteResult
+            {
+                Success = false,
+                DataSource = connectorId,
+                Error = "Failed to delete connector data",
+            };
+        }
     }
 
     private static string GenerateId(string deviceId)

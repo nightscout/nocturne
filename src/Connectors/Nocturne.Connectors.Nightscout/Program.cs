@@ -43,12 +43,7 @@ public class Program
                 nightscoutConfig.SourceApiSecret
             );
 
-        // Register metrics tracker
-        builder.Services.AddSingleton<IConnectorMetricsTracker, ConnectorMetricsTracker>();
 
-        // Register strategies
-        builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
-        builder.Services.AddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
 
         // Configure API data submitter for HTTP-based data submission
         var apiUrl = builder.Configuration["NocturneApiUrl"];
@@ -68,6 +63,8 @@ public class Program
         builder.Services.AddHostedService<NightscoutHostedService>();
 
         // Add health checks
+        // Add base connector services (State, Metrics, Strategies)
+        builder.Services.AddBaseConnectorServices();
         builder.Services.AddHealthChecks().AddConnectorHealthCheck("nightscout");
 
         var app = builder.Build();

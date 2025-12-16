@@ -101,6 +101,9 @@ public class ConnectorHealthService : IConnectorHealthService
                 DateTime? lastEntryTime = null;
                 int entriesLast24h = 0;
 
+                string state = "Idle";
+                string? stateMessage = null;
+
                 if (checkResult.TryGetProperty("data", out var data))
                 {
                     if (data.TryGetProperty("TotalEntries", out var msgEl) && msgEl.ValueKind == JsonValueKind.Number)
@@ -120,6 +123,16 @@ public class ConnectorHealthService : IConnectorHealthService
                     {
                         entriesLast24h = countEl.GetInt32();
                     }
+
+                    if (data.TryGetProperty("State", out var stateEl) && stateEl.ValueKind == JsonValueKind.String)
+                    {
+                        state = stateEl.GetString() ?? "Idle";
+                    }
+
+                    if (data.TryGetProperty("StateMessage", out var stateMsgEl) && stateMsgEl.ValueKind == JsonValueKind.String)
+                    {
+                        stateMessage = stateMsgEl.GetString();
+                    }
                 }
 
                 return new ConnectorStatusDto
@@ -131,6 +144,8 @@ public class ConnectorHealthService : IConnectorHealthService
                     TotalEntries = totalEntries,
                     LastEntryTime = lastEntryTime,
                     EntriesLast24Hours = entriesLast24h,
+                    State = state,
+                    StateMessage = stateMessage,
                     IsHealthy = status == "Healthy"
                 };
             }

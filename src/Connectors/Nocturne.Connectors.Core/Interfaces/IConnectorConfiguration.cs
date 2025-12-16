@@ -16,6 +16,11 @@ namespace Nocturne.Connectors.Core.Interfaces
         ConnectSource ConnectSource { get; set; }
 
         /// <summary>
+        /// Whether the connector is enabled
+        /// </summary>
+        bool Enabled { get; set; }
+
+        /// <summary>
         /// Whether to save raw data for debugging
         /// </summary>
         bool SaveRawData { get; set; }

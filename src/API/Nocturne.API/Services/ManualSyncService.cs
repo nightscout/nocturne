@@ -1,60 +1,77 @@
+using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
-using Nocturne.Connectors.Configurations;
-using Nocturne.Connectors.Dexcom.Services;
-using Nocturne.Connectors.FreeStyle.Services;
-using Nocturne.Connectors.Glooko.Services;
-using Nocturne.Connectors.MiniMed.Services;
-using Nocturne.Connectors.MyFitnessPal.Services;
-using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Services;
 
 namespace Nocturne.API.Services;
 
 /// <summary>
-/// Service for manually triggering data synchronization across all enabled connectors
+/// Service for triggering manual data synchronization via connector sidecar services
 /// </summary>
 public class ManualSyncService : IManualSyncService
 {
     private readonly ManualSyncSettings _settings;
     private readonly ILogger<ManualSyncService> _logger;
-    private readonly IServiceProvider _serviceProvider;
-
-    // Connector configurations
-    private readonly DexcomConnectorConfiguration? _dexcomConfig;
-    private readonly GlookoConnectorConfiguration? _glookoConfig;
-    private readonly LibreLinkUpConnectorConfiguration? _libreConfig;
-    private readonly CareLinkConnectorConfiguration? _carelinkConfig;
-    private readonly NightscoutConnectorConfiguration? _nightscoutConfig;
-    private readonly MyFitnessPalConnectorConfiguration? _mfpConfig;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
     public ManualSyncService(
         IOptions<ManualSyncSettings> settings,
         ILogger<ManualSyncService> logger,
-        IServiceProvider serviceProvider,
-        DexcomConnectorConfiguration? dexcomConfig = null,
-        GlookoConnectorConfiguration? glookoConfig = null,
-        LibreLinkUpConnectorConfiguration? libreConfig = null,
-        CareLinkConnectorConfiguration? carelinkConfig = null,
-        NightscoutConnectorConfiguration? nightscoutConfig = null,
-        MyFitnessPalConnectorConfiguration? mfpConfig = null
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration
     )
     {
         _settings = settings.Value;
         _logger = logger;
-        _serviceProvider = serviceProvider;
-        _dexcomConfig = dexcomConfig;
-        _glookoConfig = glookoConfig;
-        _libreConfig = libreConfig;
-        _carelinkConfig = carelinkConfig;
-        _nightscoutConfig = nightscoutConfig;
-        _mfpConfig = mfpConfig;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
     }
 
     /// <inheritdoc />
     public bool IsEnabled()
     {
         return _settings.IsEnabled;
+    }
+
+    /// <inheritdoc />
+    public bool HasEnabledConnectors()
+    {
+        var connectors = ConnectorMetadataService.GetAll();
+        foreach (var connector in connectors)
+        {
+            if (IsConnectorConfiguredInternal(connector.ConnectorName))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool IsConnectorConfigured(string connectorId)
+    {
+        if (string.IsNullOrEmpty(connectorId))
+        {
+            return false;
+        }
+
+        return IsConnectorConfiguredInternal(connectorId);
+    }
+
+    private bool IsConnectorConfiguredInternal(string connectorName)
+    {
+        var section = _configuration.GetSection($"Parameters:Connectors:{connectorName}");
+
+        if (!section.Exists())
+        {
+            return false;
+        }
+
+        // Check if explicitly enabled (defaults to true in BaseConnectorConfiguration)
+        return section.GetValue("Enabled", true);
     }
 
     /// <inheritdoc />
@@ -78,49 +95,28 @@ public class ManualSyncService : IManualSyncService
         }
 
         _logger.LogInformation(
-            "Starting manual sync for all connectors with {LookbackDays} day lookback",
+            "Starting manual sync for all connectors (Sidecar Mode) with {LookbackDays} day lookback",
             _settings.BackfillDays
         );
 
         var connectorTasks = new List<Task<ConnectorSyncResult>>();
+        var connectors = ConnectorMetadataService.GetAll();
 
         // Queue up all enabled connectors
-        if (_dexcomConfig != null && _dexcomConfig.SyncIntervalMinutes > 0)
+        foreach (var connector in connectors)
         {
-            connectorTasks.Add(SyncConnectorAsync<DexcomConnectorService>("Dexcom", cancellationToken));
-        }
-
-        if (_glookoConfig != null && _glookoConfig.SyncIntervalMinutes > 0)
-        {
-            connectorTasks.Add(SyncConnectorAsync<GlookoConnectorService>("Glooko", cancellationToken));
-        }
-
-        if (_libreConfig != null && _libreConfig.SyncIntervalMinutes > 0)
-        {
-            connectorTasks.Add(
-                SyncConnectorAsync<LibreConnectorService>("LibreLinkUp", cancellationToken)
-            );
-        }
-
-        if (_carelinkConfig != null && _carelinkConfig.SyncIntervalMinutes > 0)
-        {
-            connectorTasks.Add(
-                SyncConnectorAsync<CareLinkConnectorService>("CareLink", cancellationToken)
-            );
-        }
-
-        if (_nightscoutConfig != null && _nightscoutConfig.SyncIntervalMinutes > 0)
-        {
-            connectorTasks.Add(
-                SyncConnectorAsync<NightscoutConnectorService>("Nightscout", cancellationToken)
-            );
-        }
-
-        if (_mfpConfig != null && _mfpConfig.SyncIntervalMinutes > 0)
-        {
-            connectorTasks.Add(
-                SyncConnectorAsync<MyFitnessPalConnectorService>("MyFitnessPal", cancellationToken)
-            );
+            if (IsConnectorConfiguredInternal(connector.ConnectorName))
+            {
+                 // Use the ServiceName from metadata (e.g., "dexcom-connector")
+                 if (!string.IsNullOrEmpty(connector.ServiceName))
+                 {
+                     connectorTasks.Add(SyncConnectorAsync(connector.DisplayName, connector.ServiceName, cancellationToken));
+                 }
+                 else
+                 {
+                     _logger.LogWarning("Connector {ConnectorName} has no ServiceName configured, skipping manual sync override", connector.ConnectorName);
+                 }
+            }
         }
 
         result.TotalConnectors = connectorTasks.Count;
@@ -135,7 +131,7 @@ public class ManualSyncService : IManualSyncService
         }
 
         // Execute all connectors in parallel
-        _logger.LogInformation("Syncing {Count} connectors in parallel", result.TotalConnectors);
+        _logger.LogInformation("Syncing {Count} connector sidecars in parallel", result.TotalConnectors);
         var connectorResults = await Task.WhenAll(connectorTasks);
 
         result.ConnectorResults = connectorResults.ToList();
@@ -155,98 +151,65 @@ public class ManualSyncService : IManualSyncService
     }
 
     /// <summary>
-    /// Syncs a single connector
+    /// Syncs a single connector by modifying the sidecar service
     /// </summary>
-    private async Task<ConnectorSyncResult> SyncConnectorAsync<TService>(
-        string connectorName,
+    private async Task<ConnectorSyncResult> SyncConnectorAsync(
+        string displayName,
+        string serviceName,
         CancellationToken cancellationToken
     )
-        where TService : class
     {
-        var result = new ConnectorSyncResult { ConnectorName = connectorName };
+        var result = new ConnectorSyncResult { ConnectorName = displayName };
         var startTime = DateTimeOffset.UtcNow;
 
         try
         {
-            _logger.LogInformation("Starting manual sync for {ConnectorName}", connectorName);
+            // Ensure service name includes http scheme if not present (though our logic assumes host only)
+            // But checking previous logic it used $"http://{serviceName}/sync"
 
-            // Create a scope to get scoped services
-            using var scope = _serviceProvider.CreateScope();
-            var service = scope.ServiceProvider.GetService<TService>();
+            var url = $"http://{serviceName}/sync";
+            _logger.LogInformation("Triggering sidecar sync for {ConnectorName} at {Url}", displayName, url);
 
-            if (service == null)
-            {
-                _logger.LogWarning(
-                    "Connector service {ConnectorName} is not registered",
-                    connectorName
-                );
-                result.Success = false;
-                result.ErrorMessage = $"Service not registered: {connectorName}";
-                result.Duration = DateTimeOffset.UtcNow - startTime;
-                return result;
-            }
+            var client = _httpClientFactory.CreateClient();
 
-            // Use reflection to call SyncDataAsync method
-            var syncMethod = service
-                .GetType()
-                .GetMethod("SyncDataAsync", new[] { typeof(CancellationToken) });
+            // We can pass the lookback days/startdate if the sidecar endpoint supports it.
+            // Currently sidecars use their own config, but we could potentially pass a query param ?backfillDays=X
+            // For now, keep it simple as a trigger.
 
-            if (syncMethod == null)
-            {
-                _logger.LogWarning(
-                    "Connector service {ConnectorName} does not have SyncDataAsync method",
-                    connectorName
-                );
-                result.Success = false;
-                result.ErrorMessage = $"SyncDataAsync method not found on {connectorName}";
-                result.Duration = DateTimeOffset.UtcNow - startTime;
-                return result;
-            }
+            var response = await client.PostAsync(url, null, cancellationToken);
 
-            // Invoke the sync method
-            var task = syncMethod.Invoke(service, new object[] { cancellationToken }) as Task<bool>;
+            // Note: We don't read content unless it's an error to save performance if body is large (it shouldn't be for sync trigger)
+            // But logging error content is useful.
 
-            if (task == null)
-            {
-                _logger.LogWarning(
-                    "Failed to invoke SyncDataAsync on {ConnectorName}",
-                    connectorName
-                );
-                result.Success = false;
-                result.ErrorMessage = $"Failed to invoke SyncDataAsync on {connectorName}";
-                result.Duration = DateTimeOffset.UtcNow - startTime;
-                return result;
-            }
-
-            var success = await task;
-
-            result.Success = success;
             result.Duration = DateTimeOffset.UtcNow - startTime;
 
-            if (success)
+            if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation(
-                    "Manual sync completed successfully for {ConnectorName} in {Duration}",
-                    connectorName,
-                    result.Duration
+                 _logger.LogInformation(
+                    "Sidecar sync triggered successfully for {ConnectorName}",
+                    displayName
                 );
+                result.Success = true;
             }
             else
             {
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogWarning(
-                    "Manual sync failed for {ConnectorName} in {Duration}",
-                    connectorName,
-                    result.Duration
+                    "Sidecar sync failed for {ConnectorName}: {StatusCode} - {Error}",
+                    displayName,
+                    response.StatusCode,
+                    error
                 );
-                result.ErrorMessage = "Sync returned false";
+                result.Success = false;
+                result.ErrorMessage = $"Sidecar returned {response.StatusCode}: {error}";
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Error during manual sync for {ConnectorName}: {Message}",
-                connectorName,
+                "Error triggering sidecar sync for {ConnectorName}: {Message}",
+                displayName,
                 ex.Message
             );
             result.Success = false;

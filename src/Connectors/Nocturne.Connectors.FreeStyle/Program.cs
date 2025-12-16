@@ -58,12 +58,7 @@ public class Program
 
         builder.Services.AddHttpClient<LibreConnectorService>().ConfigureLibreLinkUpClient(server);
 
-        // Register metrics tracker
-        builder.Services.AddSingleton<IConnectorMetricsTracker, ConnectorMetricsTracker>();
 
-        // Register strategies
-        builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
-        builder.Services.AddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
 
         // Configure API data submitter for HTTP-based data submission
         var apiUrl = builder.Configuration["NocturneApiUrl"];
@@ -83,6 +78,8 @@ public class Program
         builder.Services.AddHostedService<FreeStyleHostedService>();
 
         // Add health checks
+        // Add base connector services (State, Metrics, Strategies)
+        builder.Services.AddBaseConnectorServices();
         builder.Services.AddHealthChecks().AddConnectorHealthCheck("libre");
 
         var app = builder.Build();

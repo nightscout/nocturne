@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "Nightscout",
         projectTypeName: "Nocturne_Connectors_Nightscout",
-        serviceName: "ServiceNames.NightscoutConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.NightscoutPrefix",
+        serviceName: ServiceNames.NightscoutConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.NightscoutPrefix,
         connectSourceName: "ConnectSource.Nightscout",
         dataSourceId: "nightscout-connector",
         icon: "nightscout",

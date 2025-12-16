@@ -22,6 +22,10 @@ public class Program
         // Add service defaults
         builder.AddServiceDefaults();
 
+        // Add connector state service
+        // Add base connector services
+        builder.Services.AddBaseConnectorServices();
+
         // Configure services
         // Bind configuration for HttpClient setup
         var dexcomConfig = new DexcomConnectorConfiguration();
@@ -51,11 +55,7 @@ public class Program
         builder.Services.AddHttpClient<DexcomConnectorService>().ConfigureDexcomClient(serverUrl);
 
         // Register metrics tracker
-        builder.Services.AddSingleton<IConnectorMetricsTracker, ConnectorMetricsTracker>();
 
-        // Register strategies
-        builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
-        builder.Services.AddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
 
         // Configure API data submitter for HTTP-based data submission
         var apiUrl = builder.Configuration["NocturneApiUrl"];

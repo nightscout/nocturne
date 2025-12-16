@@ -14,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "TConnectSync",
         projectTypeName: "TConnectSync",
-        serviceName: "ServiceNames.TConnectSyncConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.TConnectSyncPrefix",
+        serviceName: ServiceNames.TConnectSyncConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.TConnectSyncPrefix,
         connectSourceName: "ConnectSource.TConnectSync",
         dataSourceId: "tconnectsync-connector",
         icon: "tconnect",

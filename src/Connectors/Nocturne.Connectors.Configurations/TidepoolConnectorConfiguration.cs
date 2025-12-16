@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "Tidepool",
         projectTypeName: "Nocturne_Connectors_Tidepool",
-        serviceName: "ServiceNames.TidepoolConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.TidepoolPrefix",
+        serviceName: ServiceNames.TidepoolConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.TidepoolPrefix,
         connectSourceName: "ConnectSource.Tidepool",
         dataSourceId: "tidepool-connector",
         icon: "tidepool",

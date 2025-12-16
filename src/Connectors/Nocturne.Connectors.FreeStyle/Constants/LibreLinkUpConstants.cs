@@ -50,7 +50,7 @@ public static class LibreLinkUpConstants
     public static class Configuration
     {
         public const string DefaultRegion = "EU";
-        public const string DeviceIdentifier = "nightscout-connect-librelinkup";
+        public const string DeviceIdentifier = "libre-connector";
         public const int MaxRetries = 3;
         public const int MaxHealthFailures = 5;
         public const string EntryType = "sgv";

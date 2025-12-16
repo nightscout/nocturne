@@ -30,6 +30,7 @@ namespace Nocturne.Connectors.Core.Services
             public string Icon { get; set; } = string.Empty;
             public ConnectorCategory Category { get; set; } = ConnectorCategory.Other;
             public string Description { get; set; } = string.Empty;
+            public string ServiceName { get; set; } = string.Empty;
 
             /// <summary>
             /// Converts this connector info to an AvailableService for UI consumption.
@@ -51,7 +52,7 @@ namespace Nocturne.Connectors.Core.Services
         }
 
         /// <summary>
-        /// Gets connector display info by DataSource ID (e.g., "glooko-connector").
+        /// Gets connector display info by DataSource ID (e.g., "dexcom-connector").
         /// Returns null if the dataSourceId is not from a known connector.
         /// </summary>
         public static ConnectorDisplayInfo? GetByDataSourceId(string? dataSourceId)
@@ -63,6 +64,22 @@ namespace Nocturne.Connectors.Core.Services
 
             _connectorsByDataSourceId.TryGetValue(dataSourceId, out var info);
             return info;
+        }
+
+        /// <summary>
+        /// Gets connector display info by Connector ID (name) (e.g., "dexcom").
+        /// Returns null if the connectorId is not found.
+        /// </summary>
+        public static ConnectorDisplayInfo? GetByConnectorId(string? connectorId)
+        {
+            if (string.IsNullOrEmpty(connectorId))
+                return null;
+
+            EnsureInitialized();
+
+            return _connectorsByDataSourceId.Values.FirstOrDefault(c =>
+                c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
+            );
         }
 
         /// <summary>
@@ -127,7 +144,8 @@ namespace Nocturne.Connectors.Core.Services
                                     DataSourceId = attr.DataSourceId,
                                     Icon = attr.Icon,
                                     Category = attr.Category,
-                                    Description = attr.Description
+                                    Description = attr.Description,
+                                    ServiceName = attr.ServiceName
                                 };
 
                                 _connectorsByDataSourceId[attr.DataSourceId] = info;

@@ -87,9 +87,10 @@ namespace Nocturne.Connectors.Dexcom.Services
             IRetryDelayStrategy retryDelayStrategy,
             IRateLimitingStrategy rateLimitingStrategy,
             IApiDataSubmitter? apiDataSubmitter = null,
-            IConnectorMetricsTracker? metricsTracker = null
+            IConnectorMetricsTracker? metricsTracker = null,
+            IConnectorStateService? stateService = null
         )
-            : base(httpClient, logger, apiDataSubmitter, metricsTracker)
+            : base(httpClient, logger, apiDataSubmitter, metricsTracker, stateService)
         {
             _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
             _retryDelayStrategy =
@@ -644,7 +645,7 @@ namespace Nocturne.Connectors.Dexcom.Services
                     Date = timestamp,
                     Sgv = dexcomEntry.Value,
                     Direction = direction.ToString(),
-                    Device = "nightscout-connect-dexcom-share",
+                    Device = ConnectorSource,
                     Type = "sgv",
                 };
             }

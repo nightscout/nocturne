@@ -281,10 +281,51 @@ public class ServicesController : ControllerBase
             }
             return Ok(result);
         }
+
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting data for data source: {Id}", id);
             return StatusCode(500, new { error = "Failed to delete data source data" });
+        }
+    }
+
+    /// <summary>
+    /// Delete all data from a specific connector.
+    /// WARNING: This is a destructive operation that cannot be undone.
+    /// </summary>
+    /// <param name="id">Connector ID (e.g., "dexcom")</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result of the delete operation</returns>
+    [HttpDelete("connectors/{id}/data")]
+    [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectorData(
+        string id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogWarning("Deleting all data for connector: {Id}", id);
+
+        try
+        {
+            var result = await _dataSourceService.DeleteConnectorDataAsync(id, cancellationToken);
+
+            if (!result.Success)
+            {
+                if (result.Error?.Contains("not found") == true)
+                {
+                    return NotFound(result);
+                }
+                return StatusCode(500, result);
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting data for connector: {Id}", id);
+            return StatusCode(500, new { error = "Failed to delete connector data" });
         }
     }
 

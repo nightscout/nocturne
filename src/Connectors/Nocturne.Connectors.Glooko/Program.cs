@@ -24,6 +24,10 @@ public class Program
         // Add service defaults
         builder.AddServiceDefaults();
 
+        // Add connector state service
+        // Add base connector services (State, Metrics, Strategies)
+        builder.Services.AddBaseConnectorServices();
+
         // Configure services
         // Bind configuration for HttpClient setup
         var glookoConfig = new GlookoConnectorConfiguration();
@@ -47,12 +51,6 @@ public class Program
 
         builder.Services.AddHttpClient<GlookoConnectorService>().ConfigureGlookoClient(server);
 
-        // Register metrics tracker
-        builder.Services.AddSingleton<IConnectorMetricsTracker, ConnectorMetricsTracker>();
-
-        // Register strategies
-        builder.Services.AddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
-        builder.Services.AddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
         builder.Services.AddSingleton(
             typeof(IConnectorFileService<>),
             typeof(ConnectorFileService<>)

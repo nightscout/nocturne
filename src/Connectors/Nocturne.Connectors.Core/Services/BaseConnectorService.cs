@@ -42,23 +42,29 @@ namespace Nocturne.Connectors.Core.Services
         /// </summary>
         public abstract string ConnectorSource { get; }
 
+        protected readonly IConnectorStateService? _stateService;
+
         /// <summary>
         /// Base constructor for connector services using IHttpClientFactory pattern
         /// </summary>
         /// <param name="httpClient">HttpClient instance from IHttpClientFactory (will not be disposed)</param>
         /// <param name="logger">Logger instance for this connector</param>
         /// <param name="apiDataSubmitter">Optional API data submitter for Nocturne mode</param>
+        /// <param name="metricsTracker">Optional metrics tracker</param>
+        /// <param name="stateService">Optional state service for tracking connector state</param>
         protected BaseConnectorService(
             HttpClient httpClient,
             ILogger logger,
             IApiDataSubmitter? apiDataSubmitter = null,
-            IConnectorMetricsTracker? metricsTracker = null
+            IConnectorMetricsTracker? metricsTracker = null,
+            IConnectorStateService? stateService = null
         )
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _apiDataSubmitter = apiDataSubmitter;
             _metricsTracker = metricsTracker;
+            _stateService = stateService;
         }
 
         /// <summary>
@@ -598,119 +604,147 @@ namespace Nocturne.Connectors.Core.Services
             CancellationToken cancellationToken = default
         )
         {
-            // In Nocturne mode, only use message bus (no fallback to direct API)
-            if (config.Mode == ConnectorMode.Nocturne)
+            _logger.LogInformation("Starting data sync for {ConnectorSource}", ConnectorSource);
+            _stateService?.SetState(ConnectorState.Syncing, "Syncing data...");
+
+            try
             {
-                if (_apiDataSubmitter == null)
+                // In Nocturne mode, only use message bus (no fallback to direct API)
+                if (config.Mode == ConnectorMode.Nocturne)
                 {
-                    _logger?.LogError(
-                        "API data submitter is required for Nocturne mode but is not available"
-                    );
-                    return false;
-                }
+                    if (_apiDataSubmitter == null)
+                    {
+                        _logger?.LogError(
+                            "API data submitter is required for Nocturne mode but is not available"
+                        );
+                        _stateService?.SetState(ConnectorState.Error, "Configuration error: API submitter missing");
+                        return false;
+                    }
 
-                try
-                {
-                    _logger?.LogInformation(
-                        "Using API data submitter for data synchronization from {ConnectorSource} in Nocturne mode",
-                        ConnectorSource
-                    );
-
-                    // Fetch glucose data (use default since for Nocturne mode as no Nightscout lookup available)
-                    var sinceTimestamp = DateTime.UtcNow.AddHours(-24);
-                    var entries = await FetchGlucoseDataAsync(sinceTimestamp);
-
-                    // Submit via API with batching
-                    var success = await PublishGlucoseDataInBatchesAsync(
-                        entries,
-                        config,
-                        cancellationToken
-                    );
-
-                    if (success)
+                    try
                     {
                         _logger?.LogInformation(
-                            "Successfully submitted data via API in Nocturne mode"
+                            "Using API data submitter for data synchronization from {ConnectorSource} in Nocturne mode",
+                            ConnectorSource
                         );
-                        return true;
+
+                        // Fetch glucose data (use default since for Nocturne mode as no Nightscout lookup available)
+                        var sinceTimestamp = DateTime.UtcNow.AddHours(-24);
+                        var entries = await FetchGlucoseDataAsync(sinceTimestamp);
+
+                        // Submit via API with batching
+                        var success = await PublishGlucoseDataInBatchesAsync(
+                            entries,
+                            config,
+                            cancellationToken
+                        );
+
+                        if (success)
+                        {
+                            _logger?.LogInformation(
+                                "Successfully submitted data via API in Nocturne mode"
+                            );
+                            _stateService?.SetState(ConnectorState.Idle, "Sync completed successfully");
+                            return true;
+                        }
+                        else
+                        {
+                            _logger?.LogError("API data submission failed in Nocturne mode");
+                            _stateService?.SetState(ConnectorState.Error, "Data submission failed");
+                            return false;
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        _logger?.LogError("API data submission failed in Nocturne mode");
+                        _logger?.LogError(ex, "API data submission failed in Nocturne mode");
+                        _stateService?.SetState(ConnectorState.Error, $"Error: {ex.Message}");
                         return false;
                     }
                 }
-                catch (Exception ex)
+
+                // Standalone mode - prefer API submitter when available, fallback to direct API
+                if (_apiDataSubmitter != null)
                 {
-                    _logger?.LogError(ex, "API data submission failed in Nocturne mode");
-                    return false;
-                }
-            }
-
-            // Standalone mode - prefer API submitter when available, fallback to direct API
-            if (_apiDataSubmitter != null)
-            {
-                try
-                {
-                    _logger?.LogInformation(
-                        "Using API data submitter for data synchronization from {ConnectorSource} in Standalone mode",
-                        ConnectorSource
-                    );
-
-                    // Fetch glucose data
-                    var sinceTimestamp = await CalculateSinceTimestampAsync(config);
-                    var entries = await FetchGlucoseDataAsync(sinceTimestamp);
-
-                    // Publish via message bus with batching
-                    var success = await PublishGlucoseDataInBatchesAsync(
-                        entries,
-                        config,
-                        cancellationToken
-                    );
-
-                    if (success)
+                    try
                     {
-                        _logger?.LogInformation("Successfully published data via message bus");
-                        return true;
+                        _logger?.LogInformation(
+                            "Using API data submitter for data synchronization from {ConnectorSource} in Standalone mode",
+                            ConnectorSource
+                        );
+
+                        // Fetch glucose data
+                        var sinceTimestamp = await CalculateSinceTimestampAsync(config);
+                        var entries = await FetchGlucoseDataAsync(sinceTimestamp);
+
+                        // Publish via message bus with batching
+                        var success = await PublishGlucoseDataInBatchesAsync(
+                            entries,
+                            config,
+                            cancellationToken
+                        );
+
+                        if (success)
+                        {
+                            _logger?.LogInformation("Successfully published data via message bus");
+                            _stateService?.SetState(ConnectorState.Idle, "Sync completed successfully");
+                            return true;
+                        }
+                        else if (config.FallbackToDirectApi)
+                        {
+                            _logger?.LogWarning(
+                                "Message publishing failed, falling back to direct API upload"
+                            );
+                            var result = await UploadToNightscoutAsync(entries, config);
+                            if (result) _stateService?.SetState(ConnectorState.Idle, "Sync completed (fallback used)");
+                            else _stateService?.SetState(ConnectorState.Error, "Sync failed (fallback also failed)");
+                            return result;
+                        }
+                        else
+                        {
+                            _logger?.LogError("Message publishing failed and fallback disabled");
+                            _stateService?.SetState(ConnectorState.Error, "Message publishing failed");
+                            return false;
+                        }
                     }
-                    else if (config.FallbackToDirectApi)
+                    catch (Exception ex) when (config.FallbackToDirectApi)
                     {
                         _logger?.LogWarning(
-                            "Message publishing failed, falling back to direct API upload"
+                            ex,
+                            "Message bus processing failed, falling back to direct API"
                         );
-                        return await UploadToNightscoutAsync(entries, config);
+                        var sinceTimestamp = await CalculateSinceTimestampAsync(config);
+                        var entries = await FetchGlucoseDataAsync(sinceTimestamp);
+                        var result = await UploadToNightscoutAsync(entries, config);
+                        if (result) _stateService?.SetState(ConnectorState.Idle, "Sync completed (fallback used)");
+                        else _stateService?.SetState(ConnectorState.Error, "Sync failed (fallback also failed)");
+                        return result;
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        _logger?.LogError("Message publishing failed and fallback disabled");
+                        _logger?.LogError(ex, "Message bus processing failed and fallback disabled");
+                        _stateService?.SetState(ConnectorState.Error, $"Error: {ex.Message}");
                         return false;
                     }
                 }
-                catch (Exception ex) when (config.FallbackToDirectApi)
+                else
                 {
-                    _logger?.LogWarning(
-                        ex,
-                        "Message bus processing failed, falling back to direct API"
+                    _logger?.LogInformation(
+                        "Message bus not available, using direct API processing for {ConnectorSource} in Standalone mode",
+                        ConnectorSource
                     );
                     var sinceTimestamp = await CalculateSinceTimestampAsync(config);
                     var entries = await FetchGlucoseDataAsync(sinceTimestamp);
-                    return await UploadToNightscoutAsync(entries, config);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogError(ex, "Message bus processing failed and fallback disabled");
-                    return false;
+                    var result = await UploadToNightscoutAsync(entries, config);
+                    if (result) _stateService?.SetState(ConnectorState.Idle, "Sync completed");
+                    else _stateService?.SetState(ConnectorState.Error, "Sync failed");
+                    return result;
                 }
             }
-            else
+            catch (Exception ex)
             {
-                _logger?.LogInformation(
-                    "Message bus not available, using direct API processing for {ConnectorSource} in Standalone mode",
-                    ConnectorSource
-                );
-                var sinceTimestamp = await CalculateSinceTimestampAsync(config);
-                var entries = await FetchGlucoseDataAsync(sinceTimestamp);
-                return await UploadToNightscoutAsync(entries, config);
+                 _logger?.LogError(ex, "Unexpected error in SyncDataAsync");
+                 _stateService?.SetState(ConnectorState.Error, $"Unexpected error: {ex.Message}");
+                 return false;
             }
         }
 

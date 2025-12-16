@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "LibreLinkUp",
         projectTypeName: "Nocturne_Connectors_FreeStyle",
-        serviceName: "ServiceNames.LibreConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.FreeStylePrefix",
+        serviceName: ServiceNames.LibreConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.FreeStylePrefix,
         connectSourceName: "ConnectSource.LibreLinkUp",
         dataSourceId: "libre-connector",
         icon: "libre",

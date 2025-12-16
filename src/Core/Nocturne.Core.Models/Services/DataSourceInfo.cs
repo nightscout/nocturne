@@ -142,6 +142,12 @@ public class AvailableConnector
     public bool RequiresServerConfig { get; set; }
 
     /// <summary>
+    /// Whether this connector is currently configured in appsettings
+    /// </summary>
+    [JsonPropertyName("isConfigured")]
+    public bool IsConfigured { get; set; }
+
+    /// <summary>
     /// Configuration fields required for this connector
     /// </summary>
     [JsonPropertyName("configFields")]

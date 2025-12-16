@@ -66,9 +66,10 @@ namespace Nocturne.Connectors.Glooko.Services
             IRateLimitingStrategy rateLimitingStrategy,
             IConnectorFileService<GlookoBatchData>? fileService = null,
             IApiDataSubmitter? apiDataSubmitter = null,
-            IConnectorMetricsTracker? metricsTracker = null
+            IConnectorMetricsTracker? metricsTracker = null,
+            IConnectorStateService? stateService = null
         )
-            : base(httpClient, logger, apiDataSubmitter, metricsTracker)
+            : base(httpClient, logger, apiDataSubmitter, metricsTracker, stateService)
         {
             _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
             _retryDelayStrategy =
@@ -969,7 +970,7 @@ namespace Nocturne.Connectors.Glooko.Services
                     Date = date,
                     Sgv = reading.Value,
                     Type = "sgv",
-                    Device = "Glooko",
+                    Device = ConnectorSource,
                     Direction = ParseTrendToDirection(reading.Trend).ToString(),
                     Id = $"glooko_{date.Ticks}",
                 };

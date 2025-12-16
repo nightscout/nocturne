@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "Glooko",
         projectTypeName: "Nocturne_Connectors_Glooko",
-        serviceName: "ServiceNames.GlookoConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.GlookoPrefix",
+        serviceName: ServiceNames.GlookoConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.GlookoPrefix,
         connectSourceName: "ConnectSource.Glooko",
         dataSourceId: "glooko-connector",
         icon: "glooko",

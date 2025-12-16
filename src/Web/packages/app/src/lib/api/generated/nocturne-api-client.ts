@@ -6042,6 +6042,59 @@ export class ServicesClient {
     }
 
     /**
+     * Delete all data from a specific connector.
+    WARNING: This is a destructive operation that cannot be undone.
+     * @param id Connector ID (e.g., "dexcom")
+     * @return Result of the delete operation
+     */
+    deleteConnectorData(id: string, signal?: AbortSignal): Promise<DataSourceDeleteResult> {
+        let url_ = this.baseUrl + "/api/v4/services/connectors/{id}/data";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteConnectorData(_response);
+        });
+    }
+
+    protected processDeleteConnectorData(response: Response): Promise<DataSourceDeleteResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DataSourceDeleteResult;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DataSourceDeleteResult>(null as any);
+    }
+
+    /**
      * Trigger a manual sync of all enabled connectors.
     This will sync data for the configured lookback period for all enabled connectors.
     Only available if BackfillDays is configured in appsettings.
@@ -13030,6 +13083,8 @@ export interface ConnectorStatusDto {
     totalEntries?: number;
     lastEntryTime?: Date | undefined;
     entriesLast24Hours?: number;
+    state?: string;
+    stateMessage?: string | undefined;
     isHealthy?: boolean;
 }
 
@@ -14820,6 +14875,7 @@ export interface AvailableConnector {
     icon?: string;
     available?: boolean;
     requiresServerConfig?: boolean;
+    isConfigured?: boolean;
     configFields?: ConnectorConfigField[] | undefined;
     documentationUrl?: string | undefined;
 }

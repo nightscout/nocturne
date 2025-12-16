@@ -13,6 +13,7 @@ namespace Nocturne.Connectors.Core.Health
                 connectorName,
                 sp => new ConnectorHealthCheck(
                     sp.GetRequiredService<IConnectorMetricsTracker>(),
+                    sp.GetRequiredService<IConnectorStateService>(),
                     connectorName),
                 failureStatus: HealthStatus.Degraded,
                 tags: new[] { "connector", "metrics" }

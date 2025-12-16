@@ -18,4 +18,15 @@ public interface IManualSyncService
     /// Gets whether manual sync is configured and available
     /// </summary>
     bool IsEnabled();
+
+    /// <summary>
+    /// Checks if there are any connectors configured and enabled
+    /// </summary>
+    bool HasEnabledConnectors();
+
+    /// <summary>
+    /// Checks if a specific connector is configured and enabled
+    /// </summary>
+    /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
+    bool IsConnectorConfigured(string connectorId);
 }

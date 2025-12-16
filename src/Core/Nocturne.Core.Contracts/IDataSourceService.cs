@@ -71,4 +71,16 @@ public interface IDataSourceService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result containing number of entries and treatments deleted</returns>
     Task<DataSourceDeleteResult> DeleteDemoDataAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete all data from a specific connector.
+    /// This is a destructive operation that cannot be undone.
+    /// </summary>
+    /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result of the delete operation</returns>
+    Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
+        string connectorId,
+        CancellationToken cancellationToken = default
+    );
 }

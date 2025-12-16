@@ -10,11 +10,13 @@ namespace Nocturne.Connectors.Core.Health
     public class ConnectorHealthCheck : IHealthCheck
     {
         private readonly IConnectorMetricsTracker _metricsTracker;
+        private readonly IConnectorStateService _stateService;
         private readonly string _connectorSource;
 
-        public ConnectorHealthCheck(IConnectorMetricsTracker metricsTracker, string connectorSource)
+        public ConnectorHealthCheck(IConnectorMetricsTracker metricsTracker, IConnectorStateService stateService, string connectorSource)
         {
             _metricsTracker = metricsTracker ?? throw new ArgumentNullException(nameof(metricsTracker));
+            _stateService = stateService ?? throw new ArgumentNullException(nameof(stateService));
             _connectorSource = connectorSource ?? "unknown";
         }
 
@@ -24,7 +26,9 @@ namespace Nocturne.Connectors.Core.Health
             {
                 { "connector_source", _connectorSource },
                 { "TotalEntries", _metricsTracker.TotalEntries },
-                { "EntriesLast24Hours", _metricsTracker.EntriesLast24Hours }
+                { "EntriesLast24Hours", _metricsTracker.EntriesLast24Hours },
+                { "State", _stateService.CurrentState.ToString() },
+                { "StateMessage", _stateService.StateMessage ?? string.Empty }
             };
 
             if (_metricsTracker.LastEntryTime.HasValue)

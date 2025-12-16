@@ -4790,6 +4790,52 @@
         }
       }
     },
+    "/api/v4/services/connectors/{id}/data": {
+      "delete": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Delete all data from a specific connector.\nWARNING: This is a destructive operation that cannot be undone.",
+        "operationId": "Services_DeleteConnectorData",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Connector ID (e.g., \"dexcom\")",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result of the delete operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataSourceDeleteResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v4/services/manual-sync": {
       "post": {
         "tags": [
@@ -11387,6 +11433,13 @@
             "type": "integer",
             "format": "int32"
           },
+          "state": {
+            "type": "string"
+          },
+          "stateMessage": {
+            "type": "string",
+            "nullable": true
+          },
           "isHealthy": {
             "type": "boolean"
           }
@@ -16881,6 +16934,9 @@
             "type": "boolean"
           },
           "requiresServerConfig": {
+            "type": "boolean"
+          },
+          "isConfigured": {
             "type": "boolean"
           },
           "configFields": {

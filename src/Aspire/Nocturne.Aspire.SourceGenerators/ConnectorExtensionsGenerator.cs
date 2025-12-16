@@ -348,7 +348,7 @@ namespace Nocturne.Aspire.SourceGenerators
                 sb.AppendLine($"            var scriptPath = Path.Combine(builder.AppHostDirectory, \"{connector.ScriptPath.Replace("\\", "\\\\")}\");");
                 sb.AppendLine("            var connector = builder");
                 sb.AppendLine(
-                    $"                .AddUvicornApp({connector.ServiceName}, scriptPath, \"main:app\")"
+                    $"                .AddUvicornApp(\"{EscapeString(connector.ServiceName)}\", scriptPath, \"main:app\")"
                 );
                 sb.AppendLine("                .WithHttpHealthCheck(\"/health\")");
             }
@@ -357,7 +357,7 @@ namespace Nocturne.Aspire.SourceGenerators
                 // Default C# Project Generation
                 sb.AppendLine("            var connector = builder");
                 sb.AppendLine(
-                    $"                .AddProject<Projects.{connector.ProjectTypeName}>({connector.ServiceName})"
+                    $"                .AddProject<Projects.{connector.ProjectTypeName}>(\"{EscapeString(connector.ServiceName)}\")"
                 );
                 sb.AppendLine("                .WithHttpEndpoint(port: 0, name: \"http\")");
             }

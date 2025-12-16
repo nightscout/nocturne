@@ -347,8 +347,8 @@ builder.Services.AddHttpClient(ConnectorHealthService.HttpClientName)
     .AddServiceDiscovery();
 builder.Services.AddScoped<IConnectorHealthService, ConnectorHealthService>();
 
-// Configure and register connector services as background workers
-ConfigureConnectorServices(builder);
+// Connector configurations are dynamically resolved by ManualSyncService
+
 
 var app = builder.Build();
 
@@ -482,117 +482,7 @@ static bool IsRunningInNSwagContext()
     return false;
 }
 
-// Configures connector services as background workers within the API
-static void ConfigureConnectorServices(WebApplicationBuilder builder)
-{
-    var connectorsSection = builder.Configuration.GetSection("Connectors");
-    if (!connectorsSection.Exists())
-    {
-        Console.WriteLine("No connectors configured - skipping connector initialization");
-        return;
-    }
 
-    var apiUrl = builder.Configuration["NocturneApiUrl"];
-    var apiSecret = builder.Configuration["ApiSecret"];
-
-    // Register API data submitter for HTTP-based data submission
-    builder.Services.AddSingleton<IApiDataSubmitter>(sp =>
-    {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        var logger = sp.GetRequiredService<ILogger<ApiDataSubmitter>>();
-        if (string.IsNullOrEmpty(apiUrl))
-        {
-            throw new InvalidOperationException("NocturneApiUrl configuration is missing.");
-        }
-        return new ApiDataSubmitter(httpClient, apiUrl, apiSecret, logger);
-    });
-
-    // Dexcom Connector
-    var dexcomConfig = connectorsSection.GetSection("Dexcom").Get<DexcomConnectorConfiguration>();
-    if (dexcomConfig != null && dexcomConfig.SyncIntervalMinutes > 0)
-    {
-        dexcomConfig.ContentRootPath = builder.Environment.ContentRootPath;
-        Console.WriteLine(
-            $"Configuring Dexcom connector with {dexcomConfig.SyncIntervalMinutes} minute interval"
-        );
-        builder.Services.AddSingleton(dexcomConfig);
-        builder.Services.AddScoped<DexcomConnectorService>();
-        builder.Services.AddHostedService<DexcomConnectorBackgroundService>();
-    }
-
-    // Glooko Connector
-    var glookoConfig = connectorsSection.GetSection("Glooko").Get<GlookoConnectorConfiguration>();
-    if (glookoConfig != null && glookoConfig.SyncIntervalMinutes > 0)
-    {
-        glookoConfig.ContentRootPath = builder.Environment.ContentRootPath;
-        Console.WriteLine(
-            $"Configuring Glooko connector with {glookoConfig.SyncIntervalMinutes} minute interval (DataDirectory: {glookoConfig.DataDirectory})"
-        );
-        builder.Services.AddSingleton(glookoConfig);
-        builder.Services.AddScoped<GlookoConnectorService>();
-        builder.Services.AddHostedService<GlookoConnectorBackgroundService>();
-    }
-
-    // FreeStyle LibreLinkUp Connector
-    var libreConfig = connectorsSection
-        .GetSection("LibreLinkUp")
-        .Get<LibreLinkUpConnectorConfiguration>();
-    if (libreConfig != null && libreConfig.SyncIntervalMinutes > 0)
-    {
-        libreConfig.ContentRootPath = builder.Environment.ContentRootPath;
-        Console.WriteLine(
-            $"Configuring FreeStyle LibreLinkUp connector with {libreConfig.SyncIntervalMinutes} minute interval"
-        );
-        builder.Services.AddSingleton(libreConfig);
-        builder.Services.AddScoped<LibreConnectorService>();
-        builder.Services.AddHostedService<FreeStyleConnectorBackgroundService>();
-    }
-
-    // MiniMed CareLink Connector
-    var carelinkConfig = connectorsSection
-        .GetSection("CareLink")
-        .Get<CareLinkConnectorConfiguration>();
-    if (carelinkConfig != null && carelinkConfig.SyncIntervalMinutes > 0)
-    {
-        carelinkConfig.ContentRootPath = builder.Environment.ContentRootPath;
-        Console.WriteLine(
-            $"Configuring MiniMed CareLink connector with {carelinkConfig.SyncIntervalMinutes} minute interval"
-        );
-        builder.Services.AddSingleton(carelinkConfig);
-        builder.Services.AddScoped<CareLinkConnectorService>();
-        builder.Services.AddHostedService<MiniMedConnectorBackgroundService>();
-    }
-
-    // Nightscout Connector
-    var nightscoutConfig = connectorsSection
-        .GetSection("Nightscout")
-        .Get<NightscoutConnectorConfiguration>();
-    if (nightscoutConfig != null && nightscoutConfig.SyncIntervalMinutes > 0)
-    {
-        nightscoutConfig.ContentRootPath = builder.Environment.ContentRootPath;
-        Console.WriteLine(
-            $"Configuring Nightscout connector with {nightscoutConfig.SyncIntervalMinutes} minute interval"
-        );
-        builder.Services.AddSingleton(nightscoutConfig);
-        builder.Services.AddScoped<NightscoutConnectorService>();
-        builder.Services.AddHostedService<NightscoutConnectorBackgroundService>();
-    }
-
-    // MyFitnessPal Connector
-    var mfpConfig = connectorsSection
-        .GetSection("MyFitnessPal")
-        .Get<MyFitnessPalConnectorConfiguration>();
-    if (mfpConfig != null && mfpConfig.SyncIntervalMinutes > 0)
-    {
-        mfpConfig.ContentRootPath = builder.Environment.ContentRootPath;
-        Console.WriteLine(
-            $"Configuring MyFitnessPal connector with {mfpConfig.SyncIntervalMinutes} minute interval"
-        );
-        builder.Services.AddSingleton(mfpConfig);
-        builder.Services.AddScoped<MyFitnessPalConnectorService>();
-        builder.Services.AddHostedService<MyFitnessPalConnectorBackgroundService>();
-    }
-}
 
 // Make Program accessible for testing
 namespace Nocturne.API

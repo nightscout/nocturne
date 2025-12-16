@@ -4,6 +4,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 
 #nullable enable
+using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Configurations
 {
@@ -13,8 +14,8 @@ namespace Nocturne.Connectors.Configurations
     [ConnectorRegistration(
         connectorName: "Dexcom",
         projectTypeName: "Nocturne_Connectors_Dexcom",
-        serviceName: "ServiceNames.DexcomConnector",
-        environmentPrefix: "ServiceNames.ConnectorEnvironment.DexcomPrefix",
+        serviceName: ServiceNames.DexcomConnector,
+        environmentPrefix: ServiceNames.ConnectorEnvironment.DexcomPrefix,
         connectSourceName: "ConnectSource.Dexcom",
         dataSourceId: "dexcom-connector",
         icon: "dexcom",

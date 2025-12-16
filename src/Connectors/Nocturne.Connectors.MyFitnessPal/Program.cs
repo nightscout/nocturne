@@ -40,8 +40,7 @@ public class Program
         builder.Services.AddHttpClient<MyFitnessPalConnectorService>()
             .ConfigureMyFitnessPalClient();
 
-        // Register metrics tracker
-        builder.Services.AddSingleton<IConnectorMetricsTracker, ConnectorMetricsTracker>();
+
 
         // Configure API data submitter for HTTP-based data submission
         var apiUrl = builder.Configuration["NocturneApiUrl"];
@@ -65,6 +64,8 @@ public class Program
         builder.Services.AddHostedService<MyFitnessPalSyncService>();
 
         // Add health checks
+        // Add base connector services (State, Metrics, Strategies)
+        builder.Services.AddBaseConnectorServices();
         builder.Services.AddHealthChecks().AddConnectorHealthCheck("myfitnesspal");
 
         var app = builder.Build();

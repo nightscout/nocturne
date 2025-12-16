@@ -90,14 +90,14 @@ public static class ServiceNames
     /// </summary>
     public static class ConnectorEnvironment
     {
-        public const string DexcomPrefix = "Connectors__Dexcom__";
-        public const string GlookoPrefix = "Connectors__Glooko__";
-        public const string FreeStylePrefix = "Connectors__FreeStyle__";
-        public const string MiniMedPrefix = "Connectors__MiniMed__";
-        public const string NightscoutPrefix = "Connectors__Nightscout__";
-        public const string MyFitnessPalPrefix = "Connectors__MyFitnessPal__";
-        public const string TidepoolPrefix = "Connectors__Tidepool__";
-        public const string TConnectSyncPrefix = "Connectors__TConnectSync__";
+        public const string DexcomPrefix = "Parameters__Connectors__Dexcom__";
+        public const string GlookoPrefix = "Parameters__Connectors__Glooko__";
+        public const string FreeStylePrefix = "Parameters__Connectors__FreeStyle__";
+        public const string MiniMedPrefix = "Parameters__Connectors__MiniMed__";
+        public const string NightscoutPrefix = "Parameters__Connectors__Nightscout__";
+        public const string MyFitnessPalPrefix = "Parameters__Connectors__MyFitnessPal__";
+        public const string TidepoolPrefix = "Parameters__Connectors__Tidepool__";
+        public const string TConnectSyncPrefix = "Parameters__Connectors__TConnectSync__";
     }
 
     /// <summary>

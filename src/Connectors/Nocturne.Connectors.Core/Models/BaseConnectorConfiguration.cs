@@ -20,6 +20,8 @@ namespace Nocturne.Connectors.Core.Models
 
         public bool SaveRawData { get; set; } = false;
 
+        public bool Enabled { get; set; } = true;
+
         /// <summary>
         /// Gets or sets the data directory path. Can be relative or absolute.
         /// Relative paths are resolved against the content root path.
