@@ -201,6 +201,34 @@ class Program
         builder.AddNightscoutConnector(api, apiSecret);
         builder.AddMyFitnessPalConnector(api, apiSecret);
 
+        // Add TConnectSync Python Connector
+        var tconnectPath = Path.Combine(solutionRoot, "src", "Connectors", "Nocturne.Connectors.TConnectSync");
+        var tconnect = builder.AddUvicornApp("tconnectsync", tconnectPath, "main:app")
+             .WithHttpHealthCheck("/health")
+             .WithExternalHttpEndpoints()
+             .WithReference(api)
+             .WithEnvironment("NOCTURNE_API_URL", api.GetEndpoint("http"))
+             .WithEnvironment("API_SECRET", apiSecret);
+
+        // Inject Tandem credentials from configuration
+        // We use parameters for these secrets, reading from the structured config
+        var tandemEmail = builder.AddParameter("tconnect-email",
+            secret: true,
+            value: builder.Configuration["Parameters:Connectors:TConnectSync:Email"]);
+
+        var tandemPassword = builder.AddParameter("tconnect-password",
+            secret: true,
+            value: builder.Configuration["Parameters:Connectors:TConnectSync:Password"]);
+
+        var tandemRegion = builder.AddParameter("tconnect-region",
+            secret: false,
+            value: builder.Configuration["Parameters:Connectors:TConnectSync:Region"] ?? "US");
+
+        tconnect
+            .WithEnvironment("TCONNECT_EMAIL", tandemEmail)
+            .WithEnvironment("TCONNECT_PASSWORD", tandemPassword)
+            .WithEnvironment("TCONNECT_REGION", tandemRegion);
+
         // Add Demo Data Service (optional, for demonstrations and testing)
         var demoEnabled = builder.Configuration.GetValue<bool>(
             "Parameters:DemoMode:Enabled",
@@ -242,8 +270,8 @@ class Program
                     builder.Configuration["Parameters:DemoMode:RegenerateOnStartup"] ?? "true"
                 )
                 .WithEnvironment(
-                    "DemoMode__HistoryDays",
-                    builder.Configuration["Parameters:DemoMode:HistoryDays"] ?? "90"
+                    "DemoMode__BackfillDays",
+                    builder.Configuration["Parameters:DemoMode:BackfillDays"] ?? "90"
                 )
                 .WithEnvironment(
                     "DemoMode__IntervalMinutes",

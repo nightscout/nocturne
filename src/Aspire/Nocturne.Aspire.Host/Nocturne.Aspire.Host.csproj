@@ -13,6 +13,7 @@
     <PackageReference Include="Aspire.Hosting.JavaScript" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
     <PackageReference Include="Aspire.Hosting.Docker" />
+    <PackageReference Include="Aspire.Hosting.Python" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.NodeJS.Extensions" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Rust" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />

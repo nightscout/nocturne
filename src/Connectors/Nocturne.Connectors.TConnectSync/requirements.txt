@@ -1,0 +1,4 @@
+tconnectsync
+fastapi
+uvicorn
+httpx
