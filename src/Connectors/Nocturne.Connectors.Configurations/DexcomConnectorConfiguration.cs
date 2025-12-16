@@ -18,7 +18,7 @@ namespace Nocturne.Connectors.Configurations
         connectSourceName: "ConnectSource.Dexcom",
         dataSourceId: "dexcom-connector",
         icon: "dexcom",
-        category: "cgm",
+        category: ConnectorCategory.Cgm,
         description: "Connect to Dexcom Share or Clarity",
         displayName: "Dexcom"
     )]

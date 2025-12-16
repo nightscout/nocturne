@@ -33,6 +33,7 @@ public static class ServiceNames
     public const string NightscoutConnector = "nightscout-connector";
     public const string MyFitnessPalConnector = "myfitnesspal-connector";
     public const string TidepoolConnector = "tidepool-connector";
+    public const string TConnectSyncConnector = "tconnectsync-connector";
 
     // Docker Container Names
     public static class Docker
@@ -96,6 +97,7 @@ public static class ServiceNames
         public const string NightscoutPrefix = "Connectors__Nightscout__";
         public const string MyFitnessPalPrefix = "Connectors__MyFitnessPal__";
         public const string TidepoolPrefix = "Connectors__Tidepool__";
+        public const string TConnectSyncPrefix = "Connectors__TConnectSync__";
     }
 
     /// <summary>

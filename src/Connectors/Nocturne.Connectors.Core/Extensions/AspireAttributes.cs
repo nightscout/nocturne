@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using System;
 
 #nullable enable
@@ -99,7 +100,7 @@ namespace Nocturne.Connectors.Core.Extensions
         /// <summary>
         /// Category for grouping in UI (e.g., "cgm", "pump", "data", "connector")
         /// </summary>
-        public string Category { get; }
+        public ConnectorCategory Category { get; }
 
         /// <summary>
         /// Human-readable description of the connector
@@ -112,6 +113,16 @@ namespace Nocturne.Connectors.Core.Extensions
         /// </summary>
         public string DisplayName { get; }
 
+        /// <summary>
+        /// Type of connector project (e.g., "CSharpProject", "PythonApp")
+        /// </summary>
+        public ConnectorType Type { get; }
+
+        /// <summary>
+        /// Path to script or app directory (referenced from solution root) for non-C# projects
+        /// </summary>
+        public string? ScriptPath { get; }
+
         public ConnectorRegistrationAttribute(
             string connectorName,
             string projectTypeName,
@@ -120,9 +131,11 @@ namespace Nocturne.Connectors.Core.Extensions
             string connectSourceName,
             string dataSourceId = "",
             string icon = "",
-            string category = "connector",
+            ConnectorCategory category = ConnectorCategory.Other,
             string description = "",
-            string displayName = ""
+            string displayName = "",
+            ConnectorType type = ConnectorType.CSharpProject,
+            string? scriptPath = null
         )
         {
             ConnectorName = connectorName;
@@ -135,6 +148,8 @@ namespace Nocturne.Connectors.Core.Extensions
             Category = category;
             Description = description;
             DisplayName = string.IsNullOrEmpty(displayName) ? connectorName : displayName;
+            Type = type;
+            ScriptPath = scriptPath;
         }
     }
 }

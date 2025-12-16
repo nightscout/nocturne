@@ -110,6 +110,45 @@ namespace Nocturne.Aspire.SourceGenerators
             var environmentPrefix = connectorAttr.ConstructorArguments[3].Value?.ToString();
             var connectSourceName = connectorAttr.ConstructorArguments[4].Value?.ToString();
 
+            // Extract optional arguments (Type and ScriptPath) if present
+            // The constructor has default values, so we need to handle potential missing arguments in strictly positional context?
+            // Roslyn provides arguments in order.
+            // Constructor: (..., displayName, type, scriptPath)
+
+            // Check if arguments are provided by name or position
+            string type = "CSharpProject";
+            string? scriptPath = null;
+
+            // Named arguments override positional ones
+            foreach (var namedArg in connectorAttr.NamedArguments)
+            {
+                if (namedArg.Key == "Type" && namedArg.Value.Value != null)
+                {
+                    if (namedArg.Value.Value is int typeVal)
+                        type = typeVal == 1 ? "PythonApp" : "CSharpProject";
+                    else
+                        type = namedArg.Value.Value.ToString();
+                }
+                else if (namedArg.Key == "ScriptPath" && namedArg.Value.Value != null)
+                {
+                    scriptPath = namedArg.Value.Value.ToString();
+                }
+            }
+
+            // Also check positional arguments if they exist beyond the required ones
+            // Constructor signature: (..., type, scriptPath) at indices 10 and 11
+            if (connectorAttr.ConstructorArguments.Length > 10 && connectorAttr.ConstructorArguments[10].Value != null)
+            {
+                 if (connectorAttr.ConstructorArguments[10].Value is int typeVal)
+                    type = typeVal == 1 ? "PythonApp" : "CSharpProject";
+                 else
+                    type = connectorAttr.ConstructorArguments[10].Value.ToString();
+            }
+            if (connectorAttr.ConstructorArguments.Length > 11 && connectorAttr.ConstructorArguments[11].Value != null)
+            {
+                scriptPath = connectorAttr.ConstructorArguments[11].Value.ToString();
+            }
+
             if (
                 connectorName == null
                 || projectTypeName == null
@@ -198,7 +237,9 @@ namespace Nocturne.Aspire.SourceGenerators
                 ServiceName: serviceName,
                 EnvironmentPrefix: environmentPrefix,
                 ConnectSourceName: connectSourceName,
-                Parameters: parameters.ToImmutableArray()
+                Parameters: parameters.ToImmutableArray(),
+                Type: type,
+                ScriptPath: scriptPath
             );
         }
 
@@ -212,6 +253,7 @@ namespace Nocturne.Aspire.SourceGenerators
 
             var sb = new StringBuilder();
             sb.AppendLine("#nullable enable");
+            sb.AppendLine("using System.IO;"); // Added for Path.Combine
             sb.AppendLine("using Aspire.Hosting;");
             sb.AppendLine("using Aspire.Hosting.ApplicationModel;");
             sb.AppendLine("using Microsoft.Extensions.Configuration;");
@@ -298,17 +340,38 @@ namespace Nocturne.Aspire.SourceGenerators
             GenerateBaseConfigParameters(sb, connector.ConnectorName, connectorNameLower);
 
             // Generate connector resource
-            sb.AppendLine("            var connector = builder");
-            sb.AppendLine(
-                $"                .AddProject<Projects.{connector.ProjectTypeName}>({connector.ServiceName})"
-            );
-            sb.AppendLine("                .WithHttpEndpoint(port: 0, name: \"http\")");
+            if (connector.Type == "PythonApp" && !string.IsNullOrEmpty(connector.ScriptPath))
+            {
+                // Python Connector Generation
+                // Resolve path relative to AppHost directory
+                // Assumes ScriptPath is something like "../../Connectors/Nocturne.Connectors.TConnectSync"
+                sb.AppendLine($"            var scriptPath = Path.Combine(builder.AppHostDirectory, \"{connector.ScriptPath.Replace("\\", "\\\\")}\");");
+                sb.AppendLine("            var connector = builder");
+                sb.AppendLine(
+                    $"                .AddUvicornApp({connector.ServiceName}, scriptPath, \"main:app\")"
+                );
+                sb.AppendLine("                .WithHttpHealthCheck(\"/health\")");
+            }
+            else
+            {
+                // Default C# Project Generation
+                sb.AppendLine("            var connector = builder");
+                sb.AppendLine(
+                    $"                .AddProject<Projects.{connector.ProjectTypeName}>({connector.ServiceName})"
+                );
+                sb.AppendLine("                .WithHttpEndpoint(port: 0, name: \"http\")");
+            }
+
+            // Common configuration
             sb.AppendLine(
                 "                .WithEnvironment(\"NocturneApiUrl\", api.GetEndpoint(\"http\"))"
             );
             sb.AppendLine("                .WithEnvironment(\"ApiSecret\", apiSecret)");
             sb.AppendLine("                .WaitFor(api)");
             sb.AppendLine("                .WithReference(api);");
+
+            // For python apps, we specifically need to bind the environment variables to the resource
+            // The existing code chained .WithEnvironment calls on 'connector' variable, which is good.
 
             // Inject configuration as environment variables
             foreach (var param in connector.Parameters)
@@ -417,7 +480,9 @@ namespace Nocturne.Aspire.SourceGenerators
             string ServiceName,
             string EnvironmentPrefix,
             string ConnectSourceName,
-            ImmutableArray<ParameterInfo> Parameters
+            ImmutableArray<ParameterInfo> Parameters,
+            string Type = "CSharpProject",
+            string? ScriptPath = null
         );
 
         private record ParameterInfo(

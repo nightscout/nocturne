@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Models.Configuration;
 
 #nullable enable
@@ -27,7 +28,7 @@ namespace Nocturne.Connectors.Core.Services
             public string DisplayName { get; set; } = string.Empty;
             public string DataSourceId { get; set; } = string.Empty;
             public string Icon { get; set; } = string.Empty;
-            public string Category { get; set; } = "connector";
+            public ConnectorCategory Category { get; set; } = ConnectorCategory.Other;
             public string Description { get; set; } = string.Empty;
 
             /// <summary>
@@ -42,7 +43,7 @@ namespace Nocturne.Connectors.Core.Services
                 {
                     Id = serviceId,
                     Name = DisplayName,
-                    Type = Category,
+                    Type = Category.ToString().ToLowerInvariant(),
                     Description = Description,
                     Icon = Icon
                 };

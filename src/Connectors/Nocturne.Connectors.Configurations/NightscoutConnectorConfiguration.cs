@@ -18,7 +18,7 @@ namespace Nocturne.Connectors.Configurations
         connectSourceName: "ConnectSource.Nightscout",
         dataSourceId: "nightscout-connector",
         icon: "nightscout",
-        category: "data",
+        category: ConnectorCategory.Sync,
         description: "Sync with an existing Nightscout instance",
         displayName: "Nightscout"
     )]

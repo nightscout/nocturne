@@ -61,6 +61,11 @@ public static class DataSources
     public const string TidepoolConnector = "tidepool-connector";
 
     /// <summary>
+    /// Data fetched from Tandem t:connect via the TConnectSync connector.
+    /// </summary>
+    public const string TConnectSyncConnector = "tconnectsync-connector";
+
+    /// <summary>
     /// Data from xDrip+ Android app.
     /// </summary>
     public const string XDrip = "xdrip";
@@ -186,7 +191,8 @@ public static class DataSources
                 or MiniMedConnector
                 or GlookoConnector
                 or NightscoutConnector
-                or TidepoolConnector;
+                or TidepoolConnector
+                or TConnectSyncConnector;
     }
 
     /// <summary>
@@ -227,6 +233,7 @@ public static class DataSources
             GlookoConnector,
             NightscoutConnector,
             TidepoolConnector,
+            TConnectSyncConnector,
             XDrip,
             Spike,
             ManualEntry,

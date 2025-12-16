@@ -18,7 +18,7 @@ namespace Nocturne.Connectors.Configurations
         connectSourceName: "ConnectSource.Tidepool",
         dataSourceId: "tidepool-connector",
         icon: "tidepool",
-        category: "cgm",
+        category: ConnectorCategory.Cgm,
         description: "Connect to Tidepool to sync CGM, pump, and treatment data",
         displayName: "Tidepool"
     )]
