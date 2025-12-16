@@ -441,14 +441,22 @@ public class ProfileService : IProfileService
         var treatment = GetTempBasalTreatment(time);
         var comboBolusTreatment = GetComboBolusTreatment(time);
 
-        // Special handling for absolute to support temp to 0
-        if (treatment != null && treatment.Absolute.HasValue && (treatment.Duration ?? 0) > 0)
+        // Check for absolute temp basal rate (supports temp to 0)
+        // Loop and other systems may use either 'Absolute' or 'Rate' field
+        if (treatment != null && (treatment.Duration ?? 0) > 0)
         {
-            tempBasal = treatment.Absolute.Value;
-        }
-        else if (treatment?.Percent.HasValue == true)
-        {
-            tempBasal = basal * (100 + treatment.Percent.Value) / 100;
+            if (treatment.Absolute.HasValue)
+            {
+                tempBasal = treatment.Absolute.Value;
+            }
+            else if (treatment.Rate.HasValue)
+            {
+                tempBasal = treatment.Rate.Value;
+            }
+            else if (treatment.Percent.HasValue)
+            {
+                tempBasal = basal * (100 + treatment.Percent.Value) / 100;
+            }
         }
 
         if (comboBolusTreatment?.Relative.HasValue == true)

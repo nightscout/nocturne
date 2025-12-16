@@ -26,6 +26,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\API\Nocturne.API\Nocturne.API.csproj" />
+    <ProjectReference Include="..\..\..\src\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
     <ProjectReference Include="..\..\Shared\Nocturne.Tests.Shared\Nocturne.Tests.Shared.csproj" />
   </ItemGroup>
 </Project>

@@ -59,6 +59,13 @@ namespace Nocturne.Connectors.Core.Models
 
         public int BatchSize { get; set; } = 50;
 
+        /// <summary>
+        /// Timezone offset in hours (default 0).
+        /// Can be set via environment variable: CONNECT_{CONNECTORNAME}_TIMEZONE_OFFSET
+        /// or appsettings: {Configuration}:TimezoneOffset
+        /// </summary>
+        public double TimezoneOffset { get; set; } = 0;
+
         public string? RoutingKeyPrefix { get; set; }
 
         public int SyncIntervalMinutes { get; set; } = 5;

@@ -583,7 +583,7 @@ namespace Nocturne.Connectors.Glooko.Services
             try
             {
                 // Apply timezone offset
-                var timestampDelta = TimeSpan.FromHours(_config.GlookoTimezoneOffset);
+                var timestampDelta = TimeSpan.FromHours(_config.TimezoneOffset);
                 // Process foods (carb entries)
                 if (batchData.Foods != null)
                 {
@@ -600,7 +600,7 @@ namespace Nocturne.Connectors.Glooko.Services
                             var insulinDate = DateTime.Parse(matchingInsulin.Timestamp);
                             treatment.EventType = "Meal Bolus";
                             treatment.EventTime = insulinDate
-                                .Add(timestampDelta)
+                                .Subtract(timestampDelta)
                                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                             treatment.Insulin = matchingInsulin.Value;
                             treatment.PreBolus = (foodDate - insulinDate).TotalMinutes;
@@ -614,7 +614,7 @@ namespace Nocturne.Connectors.Glooko.Services
                         {
                             treatment.EventType = "Carb Correction";
                             treatment.EventTime = foodDate
-                                .Add(timestampDelta)
+                                .Subtract(timestampDelta)
                                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                             treatment.Id = GenerateTreatmentId(
                                 "Carb Correction",
@@ -651,7 +651,7 @@ namespace Nocturne.Connectors.Glooko.Services
                                 ),
                                 EventType = "Correction Bolus",
                                 EventTime = insulinDate
-                                    .Add(timestampDelta)
+                                    .Subtract(timestampDelta)
                                     .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                                 Insulin = insulin.Value,
                                 DataSource = ConnectorSource,
@@ -679,7 +679,7 @@ namespace Nocturne.Connectors.Glooko.Services
                             ),
                             EventType = "Meal Bolus",
                             EventTime = bolusDate
-                                .Add(timestampDelta)
+                                .Subtract(timestampDelta)
                                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Insulin = bolus.InsulinDelivered,
                             Carbs = bolus.CarbsInput > 0 ? bolus.CarbsInput : null,
@@ -715,7 +715,7 @@ namespace Nocturne.Connectors.Glooko.Services
                             ),
                             EventType = "Temp Basal",
                             CreatedAt = basalDate
-                                .Add(timestampDelta)
+                                .Subtract(timestampDelta)
                                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Rate = basal.Rate,
                             Absolute = basal.Rate,
@@ -960,9 +960,9 @@ namespace Nocturne.Connectors.Glooko.Services
                 var date = DateTime.Parse(reading.Timestamp).ToUniversalTime();
 
                 // Apply timezone offset if configured
-                if (_config.GlookoTimezoneOffset != 0)
+                if (_config.TimezoneOffset != 0)
                 {
-                    date = date.AddHours(_config.GlookoTimezoneOffset);
+                    date = date.AddHours(-_config.TimezoneOffset);
                 }
 
                 var entry = new Entry

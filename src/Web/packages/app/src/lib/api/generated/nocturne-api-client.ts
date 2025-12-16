@@ -14221,8 +14221,10 @@ export interface TimeSeriesPoint {
 export interface BasalPoint {
     /** Timestamp in Unix milliseconds */
     timestamp?: number;
-    /** Basal rate in U/hr */
+    /** Effective basal rate in U/hr (includes temp basals and combo bolus) */
     rate?: number;
+    /** Scheduled basal rate from profile in U/hr (without temp basal modifications) */
+    scheduledRate?: number;
     /** Whether this is a temporary basal rate */
     isTemp?: boolean;
 }

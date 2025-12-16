@@ -100,21 +100,20 @@
     | "zt"
     | "uam"
     | "cob";
-  let predictionMode = $state<PredictionDisplayMode>("cone");
-
   // Sync prediction mode with algorithm settings model
-  $effect(() => {
-    const modelToMode: Record<string, PredictionDisplayMode> = {
-      ar2: "cone",
-      linear: "cone",
-      iob: "iob",
-      cob: "cob",
-      uam: "uam",
-      cone: "cone",
-      lines: "lines",
-    };
-    predictionMode = modelToMode[predictionModel] ?? "cone";
-  });
+  const modelToMode: Record<string, PredictionDisplayMode> = {
+    ar2: "cone",
+    linear: "cone",
+    iob: "iob",
+    cob: "cob",
+    uam: "uam",
+    cone: "cone",
+    lines: "lines",
+  };
+
+  let predictionMode = $state<PredictionDisplayMode>(
+    modelToMode[predictionModel] ?? "cone"
+  );
 
   // Suppress unused variable warnings
   void isf;
@@ -122,7 +121,15 @@
 
   // Fetch predictions when enabled
   $effect(() => {
-    if (showPredictions) {
+    // Track dependencies
+    const enabled = predictionEnabled.current;
+    const hasData = entries.length > 0;
+
+    // We want to re-run when new data arrives, so we access the last entry's timestamp
+    // This is a cheap way to track "data updates" without deep comparison or tracking the whole array
+    void entries[entries.length - 1]?.mills;
+
+    if (showPredictions && enabled) {
       getPredictions({})
         .then((data) => {
           predictionData = data;
@@ -426,7 +433,12 @@
 
   // Basal is step-based, so logic is slightly different (value holds until next)
   function findBasalValue(
-    series: { time: Date; rate: number; scheduledRate?: number; isTemp?: boolean }[],
+    series: {
+      time: Date;
+      rate: number;
+      scheduledRate?: number;
+      isTemp?: boolean;
+    }[],
     time: Date
   ) {
     if (!series || series.length === 0) return undefined;

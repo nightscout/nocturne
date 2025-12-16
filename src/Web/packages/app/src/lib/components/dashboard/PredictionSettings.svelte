@@ -41,18 +41,6 @@
   }: Props = $props();
 
   // Sync prediction mode with algorithm settings model on mount
-  $effect(() => {
-    const modelToMode: Record<string, PredictionDisplayMode> = {
-      ar2: "cone",
-      linear: "cone",
-      iob: "iob",
-      cob: "cob",
-      uam: "uam",
-      cone: "cone",
-      lines: "lines",
-    };
-    predictionMode = modelToMode[predictionModel] ?? "cone";
-  });
 </script>
 
 <svelte:boundary>

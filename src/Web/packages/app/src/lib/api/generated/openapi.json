@@ -14972,7 +14972,12 @@
           },
           "rate": {
             "type": "number",
-            "description": "Basal rate in U/hr",
+            "description": "Effective basal rate in U/hr (includes temp basals and combo bolus)",
+            "format": "double"
+          },
+          "scheduledRate": {
+            "type": "number",
+            "description": "Scheduled basal rate from profile in U/hr (without temp basal modifications)",
             "format": "double"
           },
           "isTemp": {

@@ -72,6 +72,15 @@ namespace Nocturne.Connectors.Core.Extensions
             {
                 config.ContentRootPath = contentRootPath;
             }
+
+            // 1. Bind Global Settings (Parameters:Connectors:Settings)
+            var globalSection = configuration.GetSection("Parameters:Connectors:Settings");
+            if (globalSection.Exists())
+            {
+                globalSection.Bind(config);
+            }
+
+            // 2. Bind Specific Connector Settings
             // Try primary configuration path
             var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
 
@@ -152,6 +161,16 @@ namespace Nocturne.Connectors.Core.Extensions
             if (!string.IsNullOrEmpty(apiSecret))
             {
                 config.ApiSecret = apiSecret;
+            }
+
+
+
+            // Bind TimezoneOffset from dynamic environment variable: CONNECT_{CONNECTORNAME}_TIMEZONE_OFFSET
+            var timezoneEnvVar = $"CONNECT_{connectorName.ToUpperInvariant()}_TIMEZONE_OFFSET";
+            var timezoneEnvValue = configuration[timezoneEnvVar];
+            if (!string.IsNullOrEmpty(timezoneEnvValue) && double.TryParse(timezoneEnvValue, out var envTimezoneOffset))
+            {
+                config.TimezoneOffset = envTimezoneOffset;
             }
 
             // Bind connector-specific environment variables using reflection

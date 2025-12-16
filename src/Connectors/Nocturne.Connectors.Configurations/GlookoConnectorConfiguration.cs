@@ -69,17 +69,7 @@ namespace Nocturne.Connectors.Configurations
         )]
         public string GlookoServer { get; set; } = "US";
 
-        /// <summary>
-        /// Timezone offset in hours (default 0)
-        /// </summary>
-        [AspireParameter(
-            "glooko-timezone-offset",
-            "TimezoneOffset",
-            secret: false,
-            description: "Timezone offset in hours",
-            defaultValue: "0"
-        )]
-        public double GlookoTimezoneOffset { get; set; } = 0;
+
 
         protected override void ValidateSourceSpecificConfiguration()
         {

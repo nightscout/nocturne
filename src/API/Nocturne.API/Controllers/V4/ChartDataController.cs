@@ -20,6 +20,7 @@ public class ChartDataController : ControllerBase
     private readonly ITreatmentService _treatmentService;
     private readonly IDeviceStatusService _deviceStatusService;
     private readonly IProfileService _profileService;
+    private readonly IProfileDataService _profileDataService;
     private readonly ILogger<ChartDataController> _logger;
 
     public ChartDataController(
@@ -28,6 +29,7 @@ public class ChartDataController : ControllerBase
         ITreatmentService treatmentService,
         IDeviceStatusService deviceStatusService,
         IProfileService profileService,
+        IProfileDataService profileDataService,
         ILogger<ChartDataController> logger
     )
     {
@@ -36,6 +38,7 @@ public class ChartDataController : ControllerBase
         _treatmentService = treatmentService;
         _deviceStatusService = deviceStatusService;
         _profileService = profileService;
+        _profileDataService = profileDataService;
         _logger = logger;
     }
 
@@ -70,6 +73,18 @@ public class ChartDataController : ControllerBase
                 return BadRequest(new { error = "intervalMinutes must be between 1 and 60" });
             }
 
+            // Fetch and load profile data into the profile service
+            var profiles = await _profileDataService.GetProfilesAsync(
+                count: 100,
+                cancellationToken: cancellationToken
+            );
+            var profileList = profiles?.ToList() ?? new List<Profile>();
+            if (profileList.Any())
+            {
+                _profileService.LoadData(profileList);
+                _logger.LogDebug("Loaded {Count} profiles into profile service", profileList.Count);
+            }
+
             // Fetch treatments for the period (with buffer for IOB/COB calculation)
             var bufferMs = 8 * 60 * 60 * 1000; // 8 hours buffer for IOB
             var treatments = await _treatmentService.GetTreatmentsAsync(
@@ -79,9 +94,10 @@ public class ChartDataController : ControllerBase
             );
 
             // Filter treatments to relevant time range (with buffer)
-            var relevantTreatments = treatments?
-                .Where(t => t.Mills >= (startTime - bufferMs) && t.Mills <= endTime)
-                .ToList() ?? new List<Treatment>();
+            var relevantTreatments =
+                treatments
+                    ?.Where(t => t.Mills >= (startTime - bufferMs) && t.Mills <= endTime)
+                    .ToList() ?? new List<Treatment>();
 
             // Fetch device status for the period
             var deviceStatus = await _deviceStatusService.GetDeviceStatusAsync(
@@ -92,7 +108,7 @@ public class ChartDataController : ControllerBase
 
             var deviceStatusList = deviceStatus?.ToList() ?? new List<DeviceStatus>();
 
-            // Get default basal rate from profile
+            // Get default basal rate from profile at end time
             var defaultBasalRate = _profileService.HasData()
                 ? _profileService.GetBasalRate(endTime, null)
                 : 1.0;
@@ -117,7 +133,8 @@ public class ChartDataController : ControllerBase
 
                 var iob = iobResult.Iob;
                 iobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = iob });
-                if (iob > maxIob) maxIob = iob;
+                if (iob > maxIob)
+                    maxIob = iob;
 
                 // Calculate COB at this time
                 var cobResult = _cobService.CobTotal(
@@ -130,7 +147,8 @@ public class ChartDataController : ControllerBase
 
                 var cob = cobResult.Cob;
                 cobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = cob });
-                if (cob > maxCob) maxCob = cob;
+                if (cob > maxCob)
+                    maxCob = cob;
             }
 
             // Build basal series from temp basal treatments
@@ -146,16 +164,18 @@ public class ChartDataController : ControllerBase
                 basalSeries.Any() ? basalSeries.Max(b => b.Rate) : defaultBasalRate
             );
 
-            return Ok(new DashboardChartData
-            {
-                IobSeries = iobSeries,
-                CobSeries = cobSeries,
-                BasalSeries = basalSeries,
-                DefaultBasalRate = defaultBasalRate,
-                MaxBasalRate = maxBasalRate,
-                MaxIob = Math.Max(3, maxIob),
-                MaxCob = Math.Max(30, maxCob),
-            });
+            return Ok(
+                new DashboardChartData
+                {
+                    IobSeries = iobSeries,
+                    CobSeries = cobSeries,
+                    BasalSeries = basalSeries,
+                    DefaultBasalRate = defaultBasalRate,
+                    MaxBasalRate = maxBasalRate,
+                    MaxIob = Math.Max(3, maxIob),
+                    MaxCob = Math.Max(30, maxCob),
+                }
+            );
         }
         catch (Exception ex)
         {
@@ -182,13 +202,21 @@ public class ChartDataController : ControllerBase
         var series = new List<BasalPoint>();
 
         // Update profile service with temp basal treatments for accurate lookups
+        // Use case-insensitive Contains to match "Temp Basal", "temp basal", etc.
         var tempBasalTreatments = treatments
-            .Where(t => t.EventType == "Temp Basal")
+            .Where(t => !string.IsNullOrEmpty(t.EventType) &&
+                        t.EventType.Contains("Temp Basal", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var comboBolusTreatments = treatments
-            .Where(t => t.EventType == "Combo Bolus")
-            .ToList();
+        _logger.LogDebug(
+            "Found {TempBasalCount} temp basal treatments in time range. Sample: {Sample}",
+            tempBasalTreatments.Count,
+            tempBasalTreatments.FirstOrDefault() is { } first
+                ? $"Mills={first.Mills}, Rate={first.Rate}, Absolute={first.Absolute}, Duration={first.Duration}"
+                : "none"
+        );
+
+        var comboBolusTreatments = treatments.Where(t => t.EventType == "Combo Bolus").ToList();
 
         var profileSwitchTreatments = treatments
             .Where(t => t.EventType == "Profile Switch")
@@ -240,18 +268,22 @@ public class ChartDataController : ControllerBase
             }
 
             // Add point if rate, scheduled rate, or temp status changed (or first point)
-            if (prevRate == null ||
-                Math.Abs(rate - prevRate.Value) > 0.001 ||
-                Math.Abs(scheduledRate - (prevScheduledRate ?? 0)) > 0.001 ||
-                isTemp != prevIsTemp)
+            if (
+                prevRate == null
+                || Math.Abs(rate - prevRate.Value) > 0.001
+                || Math.Abs(scheduledRate - (prevScheduledRate ?? 0)) > 0.001
+                || isTemp != prevIsTemp
+            )
             {
-                series.Add(new BasalPoint
-                {
-                    Timestamp = t,
-                    Rate = rate,
-                    ScheduledRate = scheduledRate,
-                    IsTemp = isTemp
-                });
+                series.Add(
+                    new BasalPoint
+                    {
+                        Timestamp = t,
+                        Rate = rate,
+                        ScheduledRate = scheduledRate,
+                        IsTemp = isTemp,
+                    }
+                );
 
                 prevRate = rate;
                 prevScheduledRate = scheduledRate;
@@ -262,26 +294,30 @@ public class ChartDataController : ControllerBase
         // Ensure we have at least one point
         if (series.Count == 0)
         {
-            series.Add(new BasalPoint
-            {
-                Timestamp = startTime,
-                Rate = defaultBasalRate,
-                ScheduledRate = defaultBasalRate,
-                IsTemp = false
-            });
+            series.Add(
+                new BasalPoint
+                {
+                    Timestamp = startTime,
+                    Rate = defaultBasalRate,
+                    ScheduledRate = defaultBasalRate,
+                    IsTemp = false,
+                }
+            );
         }
 
         // Ensure we end at endTime
         var lastPoint = series.Last();
         if (lastPoint.Timestamp < endTime)
         {
-            series.Add(new BasalPoint
-            {
-                Timestamp = endTime,
-                Rate = lastPoint.Rate,
-                ScheduledRate = lastPoint.ScheduledRate,
-                IsTemp = lastPoint.IsTemp
-            });
+            series.Add(
+                new BasalPoint
+                {
+                    Timestamp = endTime,
+                    Rate = lastPoint.Rate,
+                    ScheduledRate = lastPoint.ScheduledRate,
+                    IsTemp = lastPoint.IsTemp,
+                }
+            );
         }
 
         return series;
