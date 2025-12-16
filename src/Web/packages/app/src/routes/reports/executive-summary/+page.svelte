@@ -25,12 +25,11 @@
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
-  import { page } from "$app/state";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url, 14));
+  const dateRangeInput = $derived(useDateRange(14));
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

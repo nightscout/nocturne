@@ -1,11 +1,10 @@
 <script lang="ts">
   import { GlucoseChart } from "$lib/components/glucose-chart";
-  import { page } from "$app/state";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+  const dateRangeInput = $derived(useDateRange());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

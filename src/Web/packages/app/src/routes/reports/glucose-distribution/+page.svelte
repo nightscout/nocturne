@@ -2,15 +2,14 @@
   import { Chart, Svg, Arc, Text, Group } from "layerchart";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
-  import { page } from "$app/state";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import { AlertTriangle } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+  const dateRangeInput = $derived(useDateRange());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

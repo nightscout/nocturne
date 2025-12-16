@@ -101,9 +101,8 @@
   import GlucoseScoreCard from "$lib/components/reports/GlucoseScoreCard.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
-  import { page } from "$app/state";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     formatGlucoseValue,
@@ -113,7 +112,7 @@
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+  const dateRangeInput = $derived(useDateRange());
 
   // Query for reports data - automatically re-fetches when dateRangeInput changes
   const reportsQuery = $derived(getReportsData(dateRangeInput));

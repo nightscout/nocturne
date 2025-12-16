@@ -15,7 +15,7 @@
   } from "$lib/data/week-to-week.remote";
   import PointDetailDialog from "$lib/components/reports/PointDetailDialog.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import {
     glucoseUnits,
     timeFormat,
@@ -23,7 +23,7 @@
   import { convertToDisplayUnits, getUnitLabel } from "$lib/utils/formatting";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+  const dateRangeInput = $derived(useDateRange());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

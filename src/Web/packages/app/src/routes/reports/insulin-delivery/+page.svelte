@@ -24,13 +24,12 @@
   import BasalBolusRatioChart from "$lib/components/reports/BasalBolusRatioChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import type { Treatment, TreatmentSummary } from "$lib/api";
-  import { page } from "$app/state";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import { countTreatmentsByCategory } from "$lib/constants/treatment-categories";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url, 30));
+  const dateRangeInput = $derived(useDateRange(30));
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

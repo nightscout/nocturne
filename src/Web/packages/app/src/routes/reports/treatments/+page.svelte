@@ -35,7 +35,7 @@
   import { formatDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
 
   // Import remote function forms and commands
   import {
@@ -46,14 +46,14 @@
   import { invalidateAll } from "$app/navigation";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url));
+  const dateRangeInput = $derived(useDateRange());
 
   // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
-  const data = $derived(await reportsQuery);
+  const data = $derived(await getReportsData(dateRangeInput));
+  const treatments = $derived(data?.treatments ?? []);
 
   const treatmentSummary = $derived(
-    data.analysis?.treatmentSummary ??
+    data?.analysis?.treatmentSummary ??
       ({
         totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
         treatmentCount: 0,
@@ -61,9 +61,7 @@
   );
 
   // Count treatments by category for UI tabs (no insulin/carb calculations)
-  const counts = $derived(
-    countTreatmentsByCategory(data.treatments as Treatment[])
-  );
+  const counts = $derived(countTreatmentsByCategory(treatments));
 
   // Get filter state from URL params (used only for initial values)
   const initialCategory = page.url.searchParams.get("category");
@@ -93,7 +91,7 @@
 
   // Filtered treatments based on category and search
   let filteredTreatments = $derived.by(() => {
-    let filtered = data.treatments as Treatment[];
+    let filtered = treatments;
 
     // Apply category filter
     if (activeCategory !== "all") {
@@ -143,7 +141,7 @@
   // Available event types for filter
   let availableEventTypes = $derived.by(() => {
     const types = new Set<string>();
-    for (const t of data.treatments as Treatment[]) {
+    for (const t of treatments) {
       if (t.eventType) types.add(t.eventType);
     }
     return Array.from(types).sort();
@@ -291,7 +289,7 @@
           ).toLocaleDateString()}
         </span>
         <span class="text-muted-foreground/50">•</span>
-        <span>{data.treatments.length.toLocaleString()} treatments</span>
+        <span>{treatments.length.toLocaleString()} treatments</span>
       </div>
       <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
       <p class="mx-auto max-w-2xl text-center text-muted-foreground">
@@ -388,7 +386,7 @@
           >
             <span class="text-muted-foreground">Showing:</span>
             <span class="font-medium">
-              {filteredTreatments.length} of {data.treatments.length}
+              {filteredTreatments.length} of {treatments.length}
             </span>
 
             {#if activeCategory !== "all"}
@@ -446,8 +444,7 @@
     <!-- Footer -->
     <div class="text-center text-xs text-muted-foreground">
       <p>
-        Report generated from {data.treatments.length.toLocaleString()} treatments
-        between
+        Report generated from {treatments.length.toLocaleString()} treatments between
         {new Date(data.dateRange.from).toLocaleDateString()} and {new Date(
           data.dateRange.to
         ).toLocaleDateString()}

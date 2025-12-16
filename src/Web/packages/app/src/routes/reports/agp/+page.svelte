@@ -30,9 +30,8 @@
   import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
   import { MediaQuery } from "svelte/reactivity";
   import CardFooter from "$lib/components/ui/card/card-footer.svelte";
-  import { page } from "$app/state";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getDateRangeInputFromUrl } from "$lib/utils/date-range";
+  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
@@ -40,7 +39,7 @@
   const siblingCount = $derived(isDesktop.current ? 1 : 0);
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(getDateRangeInputFromUrl(page.url, 14));
+  const dateRangeInput = $derived(useDateRange(14));
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));
