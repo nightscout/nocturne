@@ -131,7 +131,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// Get all permissions that have been seen by the system
     /// </summary>
     /// <returns>List of permissions with usage statistics</returns>
-    public Task<PermissionsResponse> GetAllPermissionsAsync()
+    public async Task<PermissionsResponse> GetAllPermissionsAsync()
     {
         try
         {
@@ -144,8 +144,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 permissions = _seenPermissions.Values.ToList();
             }
 
-            // TODO: Implement Role management in PostgreSQL service
-            var roles = new List<Role>();
+            var roles = await _roleService.GetAllRolesAsync();
 
             var now = DateTime.UtcNow;
 
@@ -168,14 +167,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 }
             }
 
-            return Task.FromResult(
-                new PermissionsResponse { Permissions = permissions.OrderBy(p => p.Name).ToList() }
-            );
+            return new PermissionsResponse { Permissions = permissions.OrderBy(p => p.Name).ToList() };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting all permissions");
-            return Task.FromResult(new PermissionsResponse());
+            return new PermissionsResponse();
         }
     }
 
@@ -183,14 +180,14 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// Get permission hierarchy structure as a trie
     /// </summary>
     /// <returns>Permission trie structure</returns>
-    public Task<PermissionTrieResponse> GetPermissionTrieAsync()
+    public async Task<PermissionTrieResponse> GetPermissionTrieAsync()
     {
         try
         {
             _logger.LogDebug("Building permission trie structure");
 
             // TODO: Implement Role management in PostgreSQL service
-            var roles = new List<Role>();
+            var roles = await _roleService.GetAllRolesAsync();
 
             var allPermissions = new HashSet<string>();
             foreach (var role in roles)
@@ -222,12 +219,12 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             };
 
             _logger.LogDebug("Built permission trie with {Count} permissions", response.Count);
-            return Task.FromResult(response);
+            return response;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error building permission trie");
-            return Task.FromResult(new PermissionTrieResponse());
+            return new PermissionTrieResponse();
         }
     }
 
