@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Aspire.Hosting;
 using Nocturne.Aspire.Host.Extensions;
 
 using Nocturne.Connectors.Core.Models;
@@ -276,32 +277,15 @@ class Program
             // The parameters above are defined for visibility in Aspire dashboard and secret management
         }
 
-        // Install workspace dependencies from the monorepo root
-        // This must run first because individual packages depend on workspace:* references
-        var webRootPath = Path.Combine(solutionRoot, "src", "Web");
-        Console.WriteLine("[Aspire] Installing pnpm workspace dependencies...");
-
-        var workspaceInstall = builder
-            .AddPnpmApp("nocturne-web-workspace-install", webRootPath, scriptName: "install")
-            .ExcludeFromManifest();
-
-        // Build the @nocturne/bridge TypeScript package
-        // This is a build-time dependency for the web app
         var bridgePackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "bridge");
-        Console.WriteLine("[Aspire] Adding @nocturne/bridge build task...");
-
-        // Use AddPnpmApp to run the build script
-        // Note: No WithPnpmPackageInstallation - the workspace install handles all deps
         var bridge = builder
-            .AddPnpmApp("nocturne-bridge-build", bridgePackagePath, scriptName: "build")
-            .WaitFor(workspaceInstall);
+            .AddPnpmApp("nocturne-bridge-build", bridgePackagePath, scriptName: "build");
 
         // Add the SvelteKit web application (with integrated WebSocket bridge)
         var webPackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "app");
 
-        var web = builder
-            .AddViteApp(ServiceNames.NocturneWeb, webPackagePath, packageManager: "pnpm")
-            .WaitFor(workspaceInstall)
+        var web = Aspire.Hosting.JavaScriptHostingExtensions.AddViteApp(builder, ServiceNames.NocturneWeb, webPackagePath)
+            .WithPnpm()
             .WithExternalHttpEndpoints()
             .WaitFor(api)
             .WaitFor(bridge)
@@ -342,6 +326,7 @@ class Program
 
         apiSecret.WithParentRelationship(web);
 
+        bridge.WithParentRelationship(web);
         // Add Scalar API Reference for unified API documentation
         // This provides a single documentation interface for all services in the Aspire dashboard
         var scalar = builder

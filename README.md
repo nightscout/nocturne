@@ -42,7 +42,11 @@ Nocturne/
 ### Prerequisites
 
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (for local PostgreSQL)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- [NodeJS](https://nodejs.org/)
+- [pnpm](https://pnpm.io/)
+- [Rust](https://www.rust-lang.org/)
+
 
 Copy the appsettings.example.json, and rename it to `appsettings.json`. Fill in the values for the connection strings, and any other settings you want to change. If you'd like to pipe in your Nightscout values into it just to test it out, do so in the `Connector.Nightscout` section, *not* the CompatibilityProxy; they are fundamentally different things.
 
