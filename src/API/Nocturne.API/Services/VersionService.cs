@@ -52,6 +52,8 @@ public class VersionService : IVersionService
             Name = assemblyName,
             ServerTime = DateTime.UtcNow,
             Head = Environment.GetEnvironmentVariable("GIT_HEAD") ?? "unknown",
+            Build = Environment.GetEnvironmentVariable("BUILD_DATE") ?? DateTime.UtcNow.ToString("yyyy.MM.dd"),
+            ApiCompatibility = "Nightscout v15.0",
         };
 
         _logger.LogDebug("Returning version {Version} for {Name}", response.Version, response.Name);

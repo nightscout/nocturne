@@ -590,18 +590,18 @@ namespace Nocturne.Connectors.Glooko.Services
                     foreach (var food in batchData.Foods)
                     {
                         var treatment = new Treatment();
-                        var foodDate = DateTime.Parse(food.Timestamp);
+                        var foodDate = GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
 
                         // Look for matching insulin within 45 minutes
                         var matchingInsulin = FindMatchingInsulin(batchData.Insulins, foodDate);
 
                         if (matchingInsulin != null)
+                        if (matchingInsulin != null)
                         {
-                            var insulinDate = DateTime.Parse(matchingInsulin.Timestamp);
+                            var insulinDate = GetRawGlookoDate(matchingInsulin.Timestamp, matchingInsulin.PumpTimestamp);
                             treatment.EventType = "Meal Bolus";
-                            treatment.EventTime = insulinDate
-                                .Subtract(timestampDelta)
-                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                            treatment.EventType = "Meal Bolus";
+                            treatment.CreatedAt = GetCorrectedGlookoTime(insulinDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                             treatment.Insulin = matchingInsulin.Value;
                             treatment.PreBolus = (foodDate - insulinDate).TotalMinutes;
                             treatment.Id = GenerateTreatmentId(
@@ -613,9 +613,7 @@ namespace Nocturne.Connectors.Glooko.Services
                         else
                         {
                             treatment.EventType = "Carb Correction";
-                            treatment.EventTime = foodDate
-                                .Subtract(timestampDelta)
-                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                            treatment.CreatedAt = GetCorrectedGlookoTime(foodDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                             treatment.Id = GenerateTreatmentId(
                                 "Carb Correction",
                                 foodDate,
@@ -636,7 +634,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     foreach (var insulin in batchData.Insulins)
                     {
-                        var insulinDate = DateTime.Parse(insulin.Timestamp);
+                        var insulinDate = GetRawGlookoDate(insulin.Timestamp, insulin.PumpTimestamp);
 
                         // Only create correction bolus if no matching food
                         var matchingFood = FindMatchingFood(batchData.Foods, insulinDate);
@@ -650,9 +648,7 @@ namespace Nocturne.Connectors.Glooko.Services
                                     $"insulin:{insulin.Value}"
                                 ),
                                 EventType = "Correction Bolus",
-                                EventTime = insulinDate
-                                    .Subtract(timestampDelta)
-                                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                                CreatedAt = GetCorrectedGlookoTime(insulinDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                                 Insulin = insulin.Value,
                                 DataSource = ConnectorSource,
                             };
@@ -665,10 +661,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     foreach (var bolus in batchData.NormalBoluses)
                     {
-                        var timestamp = !string.IsNullOrEmpty(bolus.PumpTimestamp)
-                            ? bolus.PumpTimestamp
-                            : bolus.Timestamp;
-                        var bolusDate = DateTime.Parse(timestamp);
+                        var bolusDate = GetRawGlookoDate(bolus.Timestamp, bolus.PumpTimestamp);
 
                         var treatment = new Treatment
                         {
@@ -678,9 +671,7 @@ namespace Nocturne.Connectors.Glooko.Services
                                 $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"
                             ),
                             EventType = "Meal Bolus",
-                            EventTime = bolusDate
-                                .Subtract(timestampDelta)
-                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            CreatedAt = GetCorrectedGlookoTime(bolusDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Insulin = bolus.InsulinDelivered,
                             Carbs = bolus.CarbsInput > 0 ? bolus.CarbsInput : null,
                             AdditionalProperties = JsonSerializer.Deserialize<
@@ -696,10 +687,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     foreach (var basal in batchData.ScheduledBasals)
                     {
-                        var timestamp = !string.IsNullOrEmpty(basal.PumpTimestamp)
-                            ? basal.PumpTimestamp
-                            : basal.Timestamp;
-                        var basalDate = DateTime.Parse(timestamp);
+                        var basalDate = GetRawGlookoDate(basal.Timestamp, basal.PumpTimestamp);
 
                         // Duration is in seconds, rate is U/hr
                         // Calculate insulin delivered: rate (U/hr) × duration (seconds) / 3600 (seconds/hr)
@@ -714,9 +702,7 @@ namespace Nocturne.Connectors.Glooko.Services
                                 $"rate:{basal.Rate}_duration:{basal.Duration}"
                             ),
                             EventType = "Temp Basal",
-                            CreatedAt = basalDate
-                                .Subtract(timestampDelta)
-                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            CreatedAt = GetCorrectedGlookoTime(basalDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Rate = basal.Rate,
                             Absolute = basal.Rate,
                             Duration = durationMinutes,
@@ -797,8 +783,9 @@ namespace Nocturne.Connectors.Glooko.Services
                 if (actualConfig.SaveRawData)
                 {
                     await SaveTreatmentsToFileAsync(treatments, ServiceName, actualConfig, _logger);
-                } // Upload treatments to Nocturne API (via ApiDataSubmitter)
-                var success = await PublishTreatmentDataAsync(treatments, actualConfig);
+                }
+                // Upload treatments to Nocturne API (via ApiDataSubmitter)
+                var success = await PublishTreatmentDataInBatchesAsync(treatments, actualConfig);
 
                 _logger.LogInformation(
                     $"Treatment upload {(success ? "succeeded" : "failed")}: {treatments.Count} treatments"
@@ -1049,7 +1036,8 @@ namespace Nocturne.Connectors.Glooko.Services
         /// <returns>True if sync was successful</returns>
         public async Task<bool> SyncGlookoHealthDataAsync(
             GlookoConnectorConfiguration config,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken = default,
+            DateTime? since = null
         )
         {
             try
@@ -1074,7 +1062,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 if (config.UseAsyncProcessing && _apiDataSubmitter != null)
                 {
                     // For Glooko, we can fetch comprehensive health data and publish it
-                    var sinceTimestamp = await CalculateSinceTimestampAsync(config);
+                    var sinceTimestamp = await CalculateSinceTimestampAsync(config, since);
                     var glucoseEntries = await FetchGlucoseDataAsync(sinceTimestamp);
 
                     // Publish health data (for now, just glucose - other health data would require additional API calls)
@@ -1101,7 +1089,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 else
                 {
                     // Use traditional sync method
-                    var success = await SyncDataAsync(config, cancellationToken);
+                    var success = await SyncDataAsync(config, cancellationToken, since);
                     if (success)
                     {
                         _logger.LogInformation(
@@ -1143,6 +1131,31 @@ namespace Nocturne.Connectors.Glooko.Services
                 "RATE OUT OF RANGE" or "RATEOUTOFRANGE" => Direction.RateOutOfRange,
                 _ => Direction.Flat, // Default fallback
             };
+        }
+
+        private DateTime GetCorrectedGlookoTime(DateTime rawDate, bool isV3 = false)
+        {
+            // V2 sends tomorrow's date with a timezone offset.
+            // V3 sends today's date with a timezone offset.
+            // In both cases, the time is local time, but marked as UTC.
+
+            // To correct V2: Subtract offset AND 24 hours.
+            // To correct V3: Subtract offset.
+
+            var offsetHours = _config.TimezoneOffset + (isV3 ? 0 : 24);
+            var corrected = rawDate.AddHours(-offsetHours);
+             _logger.LogInformation("GetCorrectedGlookoTime: Raw={Raw}, IsV3={IsV3}, ConfigOffset={ConfigOffset}, CalcOffset={CalcOffset}, Result={Result}",
+                rawDate, isV3, _config.TimezoneOffset, offsetHours, corrected);
+            return corrected;
+        }
+
+        private DateTime GetRawGlookoDate(string timestamp, string? pumpTimestamp)
+        {
+             return DateTime.Parse(
+                 !string.IsNullOrEmpty(pumpTimestamp) ? pumpTimestamp : timestamp,
+                 System.Globalization.CultureInfo.InvariantCulture,
+                 System.Globalization.DateTimeStyles.RoundtripKind
+             );
         }
     }
 }

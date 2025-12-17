@@ -69,6 +69,9 @@
 
   // Retrospective time scrubber state - initialize to current time or noon
   let scrubTime = $state(new Date());
+  // Debounced time for fetching stats to prevent network spam
+  let debouncedScrubTime = $state(new Date());
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Initialize scrub time to noon of the current date
   $effect(() => {
@@ -81,7 +84,18 @@
       0
     );
     scrubTime = noon;
+    debouncedScrubTime = noon;
   });
+
+  function updateScrubTime(time: Date) {
+    scrubTime = time;
+
+    // Debounce the stats update
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debouncedScrubTime = time;
+    }, 200);
+  }
 
   // Treatment editing state
   let selectedTreatment = $state<Treatment | null>(null);

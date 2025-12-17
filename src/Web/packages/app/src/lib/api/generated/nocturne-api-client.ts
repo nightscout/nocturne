@@ -6098,10 +6098,13 @@ export class ServicesClient {
      * Trigger a manual sync of all enabled connectors.
     This will sync data for the configured lookback period for all enabled connectors.
     Only available if BackfillDays is configured in appsettings.
+     * @param days (optional) 
      * @return Result of the manual sync operation
      */
-    triggerManualSync(signal?: AbortSignal): Promise<ManualSyncResult> {
-        let url_ = this.baseUrl + "/api/v4/services/manual-sync";
+    triggerManualSync(days?: number | null | undefined, signal?: AbortSignal): Promise<ManualSyncResult> {
+        let url_ = this.baseUrl + "/api/v4/services/manual-sync?";
+        if (days !== undefined && days !== null)
+            url_ += "days=" + encodeURIComponent("" + days) + "&";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -15617,6 +15620,7 @@ export interface Profile {
     store?: { [key: string]: ProfileData; };
     enteredBy?: string | undefined;
     loopSettings?: LoopProfileSettings | undefined;
+    isExternallyManaged?: boolean;
 }
 
 export interface ProfileData {
@@ -15725,6 +15729,8 @@ export interface VersionResponse {
     name?: string;
     serverTime?: Date;
     head?: string;
+    build?: string;
+    apiCompatibility?: string;
 }
 
 export interface DDataResponse {

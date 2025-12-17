@@ -21,9 +21,15 @@
     averagedStats?: AveragedStats[];
   } = $props();
 
-  let rawData = $state<AveragedStats[]>(averagedStats || []);
+  // Local state for calculated stats if not provided via props
+  let calculatedStats = $state<AveragedStats[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  // Use props if available, otherwise fall back to locally calculated stats
+  const rawData = $derived(
+    averagedStats?.length ? averagedStats : calculatedStats
+  );
 
   // Reactive unit-aware data transformation
   const units = $derived(glucoseUnits.current);
@@ -71,9 +77,8 @@
   }
 
   onMount(async () => {
-    // If we already have averaged stats, use them
+    // If we already have averaged stats, we don't need to load
     if (averagedStats?.length) {
-      rawData = averagedStats;
       loading = false;
       return;
     }
@@ -82,7 +87,7 @@
     if (entries?.length) {
       try {
         const stats = await calculateAveragedStats({ entries });
-        rawData = stats;
+        calculatedStats = stats;
         loading = false;
       } catch (err) {
         console.error("Failed to calculate averaged stats:", err);
@@ -91,13 +96,6 @@
       }
     } else {
       // No data to work with
-      loading = false;
-    }
-  });
-
-  $effect(() => {
-    if (averagedStats?.length) {
-      rawData = averagedStats;
       loading = false;
     }
   });

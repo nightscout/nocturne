@@ -7,22 +7,6 @@ services:
     networks:
       - "nocturne-network"
     restart: "always"
-  nocturne-postgres-server:
-    image: "docker.io/library/postgres:17.6"
-    environment:
-      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
-      POSTGRES_USER: "${POSTGRES_USERNAME}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-    expose:
-      - "5432"
-    volumes:
-      - type: "volume"
-        target: "/var/lib/postgresql/data"
-        source: "nocturne-postgres-data"
-        read_only: false
-    networks:
-      - "nocturne-network"
   nocturne-api:
     image: "${NOCTURNE_API_IMAGE}"
     environment:
@@ -31,14 +15,7 @@ services:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "${NOCTURNE_API_PORT}"
-      ConnectionStrings__nocturne-postgres: "Host=nocturne-postgres-server;Port=5432;Username=${POSTGRES_USERNAME};Password=${POSTGRES_PASSWORD};Database=nocturne"
-      NOCTURNE-POSTGRES_HOST: "nocturne-postgres-server"
-      NOCTURNE-POSTGRES_PORT: "5432"
-      NOCTURNE-POSTGRES_USERNAME: "${POSTGRES_USERNAME}"
-      NOCTURNE-POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      NOCTURNE-POSTGRES_URI: "postgresql://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@nocturne-postgres-server:5432/nocturne"
-      NOCTURNE-POSTGRES_JDBCCONNECTIONSTRING: "jdbc:postgresql://nocturne-postgres-server:5432/nocturne"
-      NOCTURNE-POSTGRES_DATABASE: "nocturne"
+      ConnectionStrings__nocturne-postgres: "${NOCTURNE_POSTGRES}"
       NIGHTSCOUT-CONNECTOR_HTTP: "http://nightscout-connector:${NIGHTSCOUT_CONNECTOR_PORT}"
       services__nightscout-connector__http__0: "http://nightscout-connector:${NIGHTSCOUT_CONNECTOR_PORT}"
       DemoService__Enabled: "false"
@@ -47,9 +24,6 @@ services:
       OTEL_SERVICE_NAME: "nocturne-api"
     ports:
       - "${NOCTURNE_API_PORT}"
-    depends_on:
-      nocturne-postgres-server:
-        condition: "service_started"
     networks:
       - "nocturne-network"
   nightscout-connector:
@@ -96,6 +70,3 @@ services:
 networks:
   nocturne-network:
     driver: "bridge"
-volumes:
-  nocturne-postgres-data:
-    driver: "local"

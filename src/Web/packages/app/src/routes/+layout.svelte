@@ -88,49 +88,36 @@
   // Stale threshold in milliseconds (10 minutes)
   const STALE_THRESHOLD_MS = 10 * 60 * 1000;
 
-  // Track current time for stale calculation
-  let now = $state(Date.now());
-  $effect(() => {
-    if (!browser) return;
-    const interval = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(interval);
-  });
+  // Track current time for stale calculation - use shared store
+  const now = $derived(realtimeStore.now);
 
   // Reactive updates when glucose changes or settings change
+  const lastUpdated = $derived(realtimeStore.lastUpdated);
+  const timeSinceReading = $derived(realtimeStore.timeSinceReading);
+
+  const isDisconnected = $derived(!realtimeStore.isConnected);
+  const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
+
   $effect(() => {
-    const bg = realtimeStore.currentBG;
+    // Determine if we should update
     const enabled = titleFaviconSettings.enabled;
-    const lastUpdated = realtimeStore.lastUpdated;
-    const isConnected = realtimeStore.isConnected;
+    const bg = realtimeStore.currentBG;
 
-    // Calculate stale and connection status
-    const isDisconnected = !isConnected;
-    const isStale = now - lastUpdated > STALE_THRESHOLD_MS;
+    // Explicit dependencies for visual updates
+    const title = timeSinceReading;
+    const delta = realtimeStore.bgDelta;
+    const dir = realtimeStore.direction;
 
-    // Calculate time since reading
-    const timeSinceMs = now - lastUpdated;
-    const mins = Math.floor(timeSinceMs / 60000);
-    let timeSinceReading: string;
-    if (mins < 1) {
-      timeSinceReading = "just now";
-    } else if (mins === 1) {
-      timeSinceReading = "1 min ago";
-    } else {
-      timeSinceReading = `${mins} min ago`;
-    }
-
-    if (enabled && bg && bg > 0) {
+    if (enabled && bg > 0) {
       titleFaviconService.update(
         bg,
-        realtimeStore.direction,
-        realtimeStore.bgDelta,
+        dir,
+        delta,
         titleFaviconSettings,
         defaultSettings.thresholds,
         isDisconnected,
         isStale,
-        timeSinceReading
+        title
       );
     }
   });

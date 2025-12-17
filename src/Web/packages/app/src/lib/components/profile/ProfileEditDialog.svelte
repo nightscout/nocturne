@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Profile, ProfileData, TimeValue } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Table from "$lib/components/ui/table";
   import * as Select from "$lib/components/ui/select";
@@ -41,6 +42,7 @@
   // Deep clone the profile for editing
   let editedProfile = $state<Profile | null>(null);
   let editedStoreName = $state<string | null>(null);
+  let showExternalWarning = $state(false);
 
   // Get the store data being edited
   let storeData = $derived.by(() => {
@@ -59,6 +61,10 @@
       // Deep clone the profile
       editedProfile = JSON.parse(JSON.stringify(profile));
       editedStoreName = storeName ?? profile.defaultProfile ?? null;
+
+      if (profile.isExternallyManaged) {
+        showExternalWarning = true;
+      }
     }
   });
 
@@ -492,6 +498,24 @@
   </Dialog.Content>
 </Dialog.Root>
 
+<AlertDialog.Root bind:open={showExternalWarning}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Externally Managed Profile</AlertDialog.Title>
+      <AlertDialog.Description>
+        This profile is managed by an external source (e.g., Glooko). <br />
+        Any changes made here will
+        <strong>NOT</strong>
+        be reflected on your device (pump/CGM). They will only affect how data is
+        viewed in Nocturne.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Action>I Understand</AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
+
 <!-- Time Value Editor Snippet -->
 {#snippet TimeValueEditor({
   title,
@@ -552,7 +576,7 @@
                 type="number"
                 step="0.1"
                 value={tv.value ?? 0}
-                class="w-24 text-right"
+                class="ml-auto w-24 text-right"
                 onchange={(e) =>
                   updateTimeValue(
                     field,

@@ -21,6 +21,10 @@ export class RealtimeStore {
   private websocketClient!: WebSocketClient;
   private initialized = false;
 
+  /** Current time state (updated every second) */
+  now = $state(Date.now());
+  private timeInterval: ReturnType<typeof setTimeout> | null = null;
+
   /** Reactive state using Svelte 5 runes */
   entries = $state<Entry[]>([]);
   treatments = $state<Treatment[]>([]);
@@ -80,12 +84,20 @@ export class RealtimeStore {
   /** Time since last update */
   lastUpdated = $derived(this.currentEntry?.mills || Date.now());
   timeSinceUpdate = $derived.by(() => {
-    return Date.now() - this.lastUpdated;
+    return this.now - this.lastUpdated;
+  });
+
+  /** Human readable time since last update */
+  timeSinceReading = $derived.by(() => {
+    const mins = Math.floor(this.timeSinceUpdate / 60000);
+    if (mins < 1) return "just now";
+    if (mins === 1) return "1 min ago";
+    return `${mins} min ago`;
   });
 
   /** Recent treatments */
   recentTreatments = $derived.by(() => {
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const oneDayAgo = this.now - 24 * 60 * 60 * 1000;
     return this.treatments
       .filter((t) => (t.mills || 0) > oneDayAgo)
       .sort((a, b) => (b.mills || 0) - (a.mills || 0));
@@ -110,6 +122,13 @@ export class RealtimeStore {
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
+    }
+
+    // Start time ticker
+    if (typeof window !== "undefined") {
+      this.timeInterval = setInterval(() => {
+        this.now = Date.now();
+      }, 1000);
     }
 
     // Skip if WebSocket URL is not available (SSR scenario)
@@ -392,6 +411,9 @@ export class RealtimeStore {
 
   /** Cleanup */
   destroy(): void {
+    if (this.timeInterval) {
+      clearInterval(this.timeInterval);
+    }
     this.websocketClient.destroy();
   }
 }

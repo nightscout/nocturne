@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host.Extensions;
+
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
@@ -29,26 +30,7 @@ class Program
             reloadOnChange: true
         );
 
-        // Configure Docker Compose environment for CI/CD and production deployments
-        // This enables Aspire to generate docker-compose.yml with proper registry and build settings
-        if (builder.ExecutionContext.IsPublishMode)
-        {
-            var containerRegistry = builder.Configuration["ContainerRegistry"] ?? "docker.io";
-            var containerRepository = builder.Configuration["ContainerRepository"] ?? "nocturne";
 
-            builder
-                .AddDockerComposeEnvironment("production")
-                .WithProperties(env =>
-                {
-                    env.DefaultContainerRegistry = containerRegistry;
-                    env.DefaultNetworkName = "nocturne-network";
-                });
-
-            Console.WriteLine($"[Aspire] Docker Compose environment configured:");
-            Console.WriteLine($"[Aspire]   Registry: {containerRegistry}");
-            Console.WriteLine($"[Aspire]   Repository: {containerRepository}");
-            Console.WriteLine($"[Aspire]   Network: nocturne-network");
-        }
 
         // Add PostgreSQL database - use remote database connection or local container
         var useRemoteDb = builder.Configuration.GetValue<bool>(

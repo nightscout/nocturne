@@ -61,12 +61,40 @@
   } from "lucide-svelte";
   import type { Profile, TimeValue } from "$lib/api";
   import { formatDateDetailed } from "$lib/utils/formatting";
+  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     getProfiles,
     createProfile,
     updateProfile,
     deleteProfile,
   } from "./data.remote";
+
+  const MGDL_TO_MMOL = 18.01559;
+
+  function convertValue(
+    value: number | undefined,
+    fromUnits: string | undefined,
+    toUnits: string
+  ): number | undefined {
+    if (value === undefined || value === null) return undefined;
+
+    const from = fromUnits === "mmol" ? "mmol" : "mg/dl";
+    const to = toUnits === "mmol" ? "mmol" : "mg/dl";
+
+    if (from === to) {
+      return from === "mmol" ? Math.round(value * 10) / 10 : Math.round(value);
+    }
+
+    if (from === "mg/dl" && to === "mmol") {
+      return Math.round((value / MGDL_TO_MMOL) * 10) / 10;
+    }
+
+    if (from === "mmol" && to === "mg/dl") {
+      return Math.round(value * MGDL_TO_MMOL);
+    }
+
+    return value;
+  }
 
   // Get the selected profile ID from URL
   const urlProfileId = $derived(page.url.searchParams.get("id"));
@@ -559,11 +587,18 @@
                         title: "Insulin Sensitivity (ISF)",
                         description: "BG drop per unit of insulin",
                         unit:
-                          selectedProfile.units === "mmol"
+                          glucoseUnits.current === "mmol"
                             ? "mmol/L/U"
                             : "mg/dL/U",
                         icon: TrendingUp,
-                        values: store.sens,
+                        values: store.sens.map((v) => ({
+                          ...v,
+                          value: convertValue(
+                            v.value,
+                            selectedProfile.units,
+                            glucoseUnits.current
+                          ),
+                        })),
                         colorClass: "text-purple-600",
                       })}
                     {/if}
@@ -612,10 +647,18 @@
                                       "–"}
                                   </Table.Cell>
                                   <Table.Cell class="text-right font-mono">
-                                    {lowValues[i]?.value ?? "–"}
+                                    {convertValue(
+                                      lowValues[i]?.value,
+                                      selectedProfile.units,
+                                      glucoseUnits.current
+                                    ) ?? "–"}
                                   </Table.Cell>
                                   <Table.Cell class="text-right font-mono">
-                                    {highValues[i]?.value ?? "–"}
+                                    {convertValue(
+                                      highValues[i]?.value,
+                                      selectedProfile.units,
+                                      glucoseUnits.current
+                                    ) ?? "–"}
                                   </Table.Cell>
                                 </Table.Row>
                               {/each}

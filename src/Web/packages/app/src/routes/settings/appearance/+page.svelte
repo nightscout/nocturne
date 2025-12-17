@@ -13,6 +13,7 @@
     userPrefersMode,
     type ColorScheme,
   } from "$lib/stores/appearance-store.svelte";
+  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import {
     Card,
@@ -44,6 +45,7 @@
   import { browser } from "$app/environment";
 
   const store = getSettingsStore();
+  const realtimeStore = getRealtimeStore();
 
   // Theme state - reactive wrapper around store (color theme: nocturne/trio)
   let currentTheme = $state<ColorTheme>(getColorTheme());
@@ -85,24 +87,13 @@
   });
 
   // Current time in timezone for display
-  let currentTime = $state("");
-
-  $effect(() => {
-    if (!browser) return;
-
-    function updateTime() {
-      currentTime = new Date().toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    }
-
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-
-    return () => clearInterval(interval);
-  });
+  const currentTime = $derived(
+    new Date(realtimeStore.now).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  );
 </script>
 
 <svelte:head>

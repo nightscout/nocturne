@@ -91,7 +91,11 @@ public class Program
         // Configure manual sync endpoint
         app.MapPost(
             "/sync",
-            async (IServiceProvider serviceProvider, CancellationToken cancellationToken) =>
+            async (
+                int? days,
+                IServiceProvider serviceProvider,
+                CancellationToken cancellationToken
+            ) =>
             {
                 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
                 var config = serviceProvider
@@ -104,17 +108,37 @@ public class Program
                     var connectorService =
                         scope.ServiceProvider.GetRequiredService<GlookoConnectorService>();
 
+                    DateTime? since = null;
+                    if (days.HasValue)
+                    {
+                        since = DateTime.UtcNow.AddDays(-days.Value);
+                        logger.LogInformation(
+                            "Manual sync requested with {Days} day lookback (since {Since})",
+                            days.Value,
+                            since
+                        );
+                    }
+
                     logger.LogInformation("Manual sync triggered for Glooko connector");
-                    var success = await connectorService.SyncGlookoHealthDataAsync(
+                    var healthSuccess = await connectorService.SyncGlookoHealthDataAsync(
                         config,
-                        cancellationToken
+                        cancellationToken,
+                        since
                     );
+
+                    var treatmentsSuccess = await connectorService.FetchAndUploadTreatmentsAsync(
+                        since,
+                        config
+                    );
+
+                    var success = healthSuccess && treatmentsSuccess;
 
                     return Results.Ok(
                         new
                         {
                             success,
-                            message = success ? "Sync completed successfully" : "Sync failed",
+                            message = success ? "Sync completed successfully" : "Sync completed with warnings",
+                            details = new { healthData = healthSuccess, treatments = treatmentsSuccess }
                         }
                     );
                 }

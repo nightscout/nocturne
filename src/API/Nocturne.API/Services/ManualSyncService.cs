@@ -76,6 +76,7 @@ public class ManualSyncService : IManualSyncService
 
     /// <inheritdoc />
     public async Task<ManualSyncResult> TriggerManualSyncAsync(
+        int? days = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -94,9 +95,11 @@ public class ManualSyncService : IManualSyncService
             return result;
         }
 
+        var lookbackDays = days ?? _settings.BackfillDays;
+
         _logger.LogInformation(
             "Starting manual sync for all connectors (Sidecar Mode) with {LookbackDays} day lookback",
-            _settings.BackfillDays
+            lookbackDays
         );
 
         var connectorTasks = new List<Task<ConnectorSyncResult>>();
@@ -110,7 +113,7 @@ public class ManualSyncService : IManualSyncService
                  // Use the ServiceName from metadata (e.g., "dexcom-connector")
                  if (!string.IsNullOrEmpty(connector.ServiceName))
                  {
-                     connectorTasks.Add(SyncConnectorAsync(connector.DisplayName, connector.ServiceName, cancellationToken));
+                     connectorTasks.Add(SyncConnectorAsync(connector.DisplayName, connector.ServiceName, lookbackDays, cancellationToken));
                  }
                  else
                  {
@@ -156,6 +159,7 @@ public class ManualSyncService : IManualSyncService
     private async Task<ConnectorSyncResult> SyncConnectorAsync(
         string displayName,
         string serviceName,
+        int? days,
         CancellationToken cancellationToken
     )
     {
@@ -164,17 +168,14 @@ public class ManualSyncService : IManualSyncService
 
         try
         {
-            // Ensure service name includes http scheme if not present (though our logic assumes host only)
-            // But checking previous logic it used $"http://{serviceName}/sync"
-
             var url = $"http://{serviceName}/sync";
+            if (days.HasValue)
+            {
+                url += $"?days={days.Value}";
+            }
             _logger.LogInformation("Triggering sidecar sync for {ConnectorName} at {Url}", displayName, url);
 
             var client = _httpClientFactory.CreateClient();
-
-            // We can pass the lookback days/startdate if the sidecar endpoint supports it.
-            // Currently sidecars use their own config, but we could potentially pass a query param ?backfillDays=X
-            // For now, keep it simple as a trigger.
 
             var response = await client.PostAsync(url, null, cancellationToken);
 

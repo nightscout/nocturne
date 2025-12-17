@@ -89,27 +89,26 @@ namespace Nocturne.Connectors.Core.Services
             DateTime? defaultSince = null
         )
         {
+            if (defaultSince.HasValue)
+            {
+                return defaultSince.Value;
+            }
+
             // First try to get the most recent treatment timestamp from target Nightscout
             var mostRecentTimestamp = await FetchLatestTreatmentTimestampAsync(config);
 
             if (mostRecentTimestamp.HasValue)
             {
-                // Add a small overlap to ensure we don't miss any entries due to timing issues
+                // Add a small overlap to ensure we don't miss any entries
                 var sinceWithOverlap = mostRecentTimestamp.Value.AddMinutes(-5);
 
-                // Ensure we don't go too far back (maximum 7 days for safety)
+                // Maximum 7 days for safety
                 var maxLookback = DateTime.UtcNow.AddDays(-7);
                 if (sinceWithOverlap < maxLookback)
                 {
-                    Console.WriteLine(
-                        $"Most recent treatment is older than 7 days, limiting lookback to 7 days"
-                    );
                     return maxLookback;
                 }
 
-                Console.WriteLine(
-                    $"Using catch-up mode: fetching data since {sinceWithOverlap:yyyy-MM-dd HH:mm:ss} UTC"
-                );
                 return sinceWithOverlap;
             }
 
@@ -597,11 +596,63 @@ namespace Nocturne.Connectors.Core.Services
         }
 
         /// <summary>
+        /// Publishes treatment messages in batches to optimize throughput
+        /// </summary>
+        protected virtual async Task<bool> PublishTreatmentDataInBatchesAsync(
+            IEnumerable<Treatment> treatments,
+            TConfig config,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var treatmentsArray = treatments.ToArray();
+            if (treatmentsArray.Length == 0)
+            {
+                return true;
+            }
+
+            var batchSize = Math.Max(1, config.BatchSize);
+            var batches = treatmentsArray
+                .Select((treatment, index) => new { treatment, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.treatment).ToArray());
+
+            bool allSuccessful = true;
+            int batchNumber = 1;
+
+            foreach (var batch in batches)
+            {
+                _logger?.LogDebug(
+                    "Publishing treatment batch {BatchNumber} with {Count} entries",
+                    batchNumber,
+                    batch.Length
+                );
+
+                var success = await PublishTreatmentDataAsync(batch, config, cancellationToken);
+                if (!success)
+                {
+                    allSuccessful = false;
+                    _logger?.LogWarning("Failed to publish treatment batch {BatchNumber}", batchNumber);
+                }
+
+                batchNumber++;
+
+                // Small delay between batches to avoid overwhelming the message bus
+                if (batchNumber > 1)
+                {
+                    await Task.Delay(100, cancellationToken);
+                }
+            }
+
+            return allSuccessful;
+        }
+
+        /// <summary>
         /// Main sync method that handles data synchronization based on connector mode
         /// </summary>
         public virtual async Task<bool> SyncDataAsync(
             TConfig config,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken = default,
+            DateTime? since = null
         )
         {
             _logger.LogInformation("Starting data sync for {ConnectorSource}", ConnectorSource);
@@ -629,7 +680,7 @@ namespace Nocturne.Connectors.Core.Services
                         );
 
                         // Fetch glucose data (use default since for Nocturne mode as no Nightscout lookup available)
-                        var sinceTimestamp = DateTime.UtcNow.AddHours(-24);
+                        var sinceTimestamp = since ?? DateTime.UtcNow.AddHours(-24);
                         var entries = await FetchGlucoseDataAsync(sinceTimestamp);
 
                         // Submit via API with batching
@@ -673,7 +724,7 @@ namespace Nocturne.Connectors.Core.Services
                         );
 
                         // Fetch glucose data
-                        var sinceTimestamp = await CalculateSinceTimestampAsync(config);
+                        var sinceTimestamp = await CalculateSinceTimestampAsync(config, since);
                         var entries = await FetchGlucoseDataAsync(sinceTimestamp);
 
                         // Publish via message bus with batching
@@ -712,7 +763,7 @@ namespace Nocturne.Connectors.Core.Services
                             ex,
                             "Message bus processing failed, falling back to direct API"
                         );
-                        var sinceTimestamp = await CalculateSinceTimestampAsync(config);
+                        var sinceTimestamp = await CalculateSinceTimestampAsync(config, since);
                         var entries = await FetchGlucoseDataAsync(sinceTimestamp);
                         var result = await UploadToNightscoutAsync(entries, config);
                         if (result) _stateService?.SetState(ConnectorState.Idle, "Sync completed (fallback used)");
@@ -732,7 +783,7 @@ namespace Nocturne.Connectors.Core.Services
                         "Message bus not available, using direct API processing for {ConnectorSource} in Standalone mode",
                         ConnectorSource
                     );
-                    var sinceTimestamp = await CalculateSinceTimestampAsync(config);
+                    var sinceTimestamp = await CalculateSinceTimestampAsync(config, since);
                     var entries = await FetchGlucoseDataAsync(sinceTimestamp);
                     var result = await UploadToNightscoutAsync(entries, config);
                     if (result) _stateService?.SetState(ConnectorState.Idle, "Sync completed");

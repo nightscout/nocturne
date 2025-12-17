@@ -24,4 +24,14 @@ public class VersionResponse
     /// Head of repository
     /// </summary>
     public string Head { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Build identifier or date
+    /// </summary>
+    public string Build { get; set; } = string.Empty;
+
+    /// <summary>
+    /// API Compatibility version (e.g. Nightscout v15)
+    /// </summary>
+    public string ApiCompatibility { get; set; } = string.Empty;
 }

@@ -39,14 +39,7 @@
   const predictionHorizonMs = $derived(predictionMinutes.current * 60 * 1000);
 
   // Stale detection - data older than threshold (recalculates every second)
-  let now = $state(Date.now());
-  $effect(() => {
-    const interval = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(interval);
-  });
-
+  const now = $derived(realtimeStore.now);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(!isConnected);
 
@@ -65,8 +58,8 @@
 
   // Fetch oref predictions (re-fetch when new data arrives)
   $effect(() => {
-    // Depend on lastUpdated to trigger refetch when new data comes in
-    lastUpdated;
+    // Explicit dependency to ensure reactivity
+    void lastUpdated;
 
     // Only fetch if we have valid glucose data
     if (rawCurrentBG > 0 && !isStale && !isDisconnected) {
@@ -153,13 +146,7 @@
   const DirectionIcon = $derived(getDirectionInfo(direction).icon);
 
   // Calculate time since last reading for display
-  const timeSince = $derived.by(() => {
-    const diff = now - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins === 1) return "1 min ago";
-    return `${mins} min ago`;
-  });
+  const timeSince = $derived(realtimeStore.timeSinceReading);
 
   // Status text - show "Connection Error" when disconnected
   const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);

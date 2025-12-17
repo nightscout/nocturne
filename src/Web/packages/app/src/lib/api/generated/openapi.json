@@ -4843,6 +4843,18 @@
         ],
         "summary": "Trigger a manual sync of all enabled connectors.\nThis will sync data for the configured lookback period for all enabled connectors.\nOnly available if BackfillDays is configured in appsettings.",
         "operationId": "Services_TriggerManualSync",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 1
+          }
+        ],
         "responses": {
           "200": {
             "description": "Result of the manual sync operation",
@@ -19365,6 +19377,9 @@
                 "$ref": "#/components/schemas/LoopProfileSettings"
               }
             ]
+          },
+          "isExternallyManaged": {
+            "type": "boolean"
           }
         }
       },
@@ -19772,6 +19787,12 @@
             "format": "date-time"
           },
           "head": {
+            "type": "string"
+          },
+          "build": {
+            "type": "string"
+          },
+          "apiCompatibility": {
             "type": "string"
           }
         }

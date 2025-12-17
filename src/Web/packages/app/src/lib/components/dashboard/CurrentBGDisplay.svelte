@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
   import type { Entry } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
   import { StatusPillBar } from "$lib/components/status-pills";
@@ -62,16 +61,8 @@
   const unitLabel = $derived(getUnitLabel(units));
   const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
 
-  // Current time state (updated every second)
-  let currentTime = $state(new Date());
-
-  $effect(() => {
-    if (!browser) return;
-    const interval = setInterval(() => {
-      currentTime = new Date();
-    }, 1000);
-    return () => clearInterval(interval);
-  });
+  // Current time state (updated every second) from shared store
+  const currentTime = $derived(new Date(realtimeStore.now));
 
   // Stale and connection status
   const isStale = $derived(
@@ -85,13 +76,7 @@
   );
 
   // Time since last reading
-  const timeSince = $derived.by(() => {
-    const diff = currentTime.getTime() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins === 1) return "1 min ago";
-    return `${mins} min ago`;
-  });
+  const timeSince = $derived(realtimeStore.timeSinceReading);
 
   // Status text - show "Connection Error" when disconnected
   const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);

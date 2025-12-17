@@ -282,7 +282,7 @@
                   <summary
                     class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
                   >
-                    ▸ For healthcare providers
+                    For healthcare providers
                   </summary>
                   <p
                     class="mt-2 rounded-md border bg-background/50 p-2.5 text-xs leading-relaxed text-muted-foreground"

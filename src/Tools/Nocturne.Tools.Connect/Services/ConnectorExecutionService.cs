@@ -359,7 +359,7 @@ public class ConnectorExecutionService
                     GlookoUsername = config.GlookoEmail ?? string.Empty,
                     GlookoPassword = config.GlookoPassword ?? string.Empty,
                     GlookoServer = config.GlookoServer,
-                    GlookoTimezoneOffset = config.GlookoTimezoneOffset,
+                    TimezoneOffset = config.GlookoTimezoneOffset,
                     Mode = ConnectorMode.Standalone,
                     NightscoutUrl = config.NightscoutUrl,
                     NightscoutApiSecret = config.NightscoutApiSecret,

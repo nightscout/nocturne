@@ -29,12 +29,37 @@
     CheckCircle,
   } from "lucide-svelte";
   import { EXTERNAL_URLS } from "$lib/constants";
+  import { onMount } from "svelte";
+  import { getApiClient } from "$lib/api/client";
 
   let includeDeviceInfo = $state(true);
   let includeRecentLogs = $state(true);
   let includeSettings = $state(false);
   let additionalDetails = $state("");
   let logsCopied = $state(false);
+
+  let serverVersion = $state("Loading...");
+  let buildDate = $state("Loading...");
+  let commitHash = $state("Loading...");
+  let apiCompat = $state("Loading...");
+
+  onMount(async () => {
+    try {
+      const api = getApiClient();
+      // Cast to any to access new fields before client regeneration
+      const meta = (await api.version.getVersion()) as any;
+      serverVersion = meta.version || "Unknown";
+      buildDate = meta.build || "Dev";
+      commitHash = meta.head ? meta.head.substring(0, 7) : "Unknown";
+      apiCompat = meta.apiCompatibility || "Nightscout v3 (Legacy)";
+    } catch (e) {
+      console.error("Failed to load version info", e);
+      serverVersion = "Error";
+      buildDate = "Error";
+      commitHash = "Error";
+      apiCompat = "Error";
+    }
+  });
 
   const communityLinks = [
     {
@@ -330,11 +355,15 @@
     <CardContent class="space-y-4">
       <div class="flex items-center justify-between py-2 border-b">
         <span class="text-muted-foreground">Version</span>
-        <span class="font-mono">1.0.0</span>
+        <span class="font-mono">{serverVersion}</span>
       </div>
       <div class="flex items-center justify-between py-2 border-b">
         <span class="text-muted-foreground">Build</span>
-        <span class="font-mono">2024.12.02</span>
+        <span class="font-mono">{buildDate}</span>
+      </div>
+      <div class="flex items-center justify-between py-2 border-b">
+        <span class="text-muted-foreground">Commit</span>
+        <span class="font-mono">{commitHash}</span>
       </div>
       <div class="flex items-center justify-between py-2 border-b">
         <span class="text-muted-foreground">License</span>
@@ -342,7 +371,7 @@
       </div>
       <div class="flex items-center justify-between py-2">
         <span class="text-muted-foreground">API Compatibility</span>
-        <Badge variant="secondary">Nightscout v15.0</Badge>
+        <Badge variant="secondary">{apiCompat}</Badge>
       </div>
 
       <Separator class="my-4" />

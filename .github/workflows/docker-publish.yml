@@ -277,10 +277,12 @@ jobs:
           mkdir -p ../../../release
 
           # Generate docker-compose artifacts using Aspire CLI
+          # We output to the repo root so it's easy to find/use
           aspire publish \
             --project . \
             --publisher docker-compose \
-            --output-path ../../../release
+            --output-path ../../../ \
+            --no-build
 
           # Also generate the Aspire manifest for advanced deployments
           aspire publish \

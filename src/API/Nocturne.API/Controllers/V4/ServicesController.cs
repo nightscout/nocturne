@@ -341,6 +341,7 @@ public class ServicesController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<ManualSyncResult>> TriggerManualSync(
+        [FromQuery] int? days = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -354,7 +355,7 @@ public class ServicesController : ControllerBase
 
         try
         {
-            var result = await _manualSyncService.TriggerManualSyncAsync(cancellationToken);
+            var result = await _manualSyncService.TriggerManualSyncAsync(days, cancellationToken);
 
             if (!result.Success)
             {

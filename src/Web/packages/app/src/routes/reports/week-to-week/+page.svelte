@@ -67,21 +67,14 @@
     sizeOptions[parseInt(selectedSizeIndex)] ?? sizeOptions[2]
   );
 
-  // Week navigation - derive initial value from URL params to avoid state_referenced_locally warning
-  const initialWeekOffset = $derived(() => {
-    const weekParam = page.url.searchParams.get("week");
-    return weekParam ? parseInt(weekParam) : 0;
-  });
-  let weekOffset = $state(0);
-
-  // Initialize weekOffset from URL on mount
-  $effect(() => {
-    // Only set on initial load, not on subsequent URL changes (which we control)
-    const urlOffset = initialWeekOffset();
-    if (weekOffset === 0 && urlOffset !== 0) {
-      weekOffset = urlOffset;
-    }
-  });
+  // Week navigation
+  // Initialize from URL param immediately to prevent layout shift
+  let weekOffset = $state(
+    (() => {
+      const weekParam = page.url.searchParams.get("week");
+      return weekParam ? parseInt(weekParam) : 0;
+    })()
+  );
 
   // Point detail dialog state
   let dialogOpen = $state(false);

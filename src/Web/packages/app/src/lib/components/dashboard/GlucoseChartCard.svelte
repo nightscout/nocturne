@@ -121,15 +121,13 @@
 
   // Fetch predictions when enabled
   $effect(() => {
-    // Track dependencies
+    // Track dependencies - re-run when these change
     const enabled = predictionEnabled.current;
-    const hasData = entries.length > 0;
 
-    // We want to re-run when new data arrives, so we access the last entry's timestamp
-    // This is a cheap way to track "data updates" without deep comparison or tracking the whole array
-    void entries[entries.length - 1]?.mills;
+    // Explicitly track the last updated timestamp from the store to know when new data arrives
+    void realtimeStore.lastUpdated;
 
-    if (showPredictions && enabled) {
+    if (showPredictions && enabled && entries.length > 0) {
       getPredictions({})
         .then((data) => {
           predictionData = data;

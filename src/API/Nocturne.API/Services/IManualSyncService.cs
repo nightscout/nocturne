@@ -12,7 +12,7 @@ public interface IManualSyncService
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Results of the manual sync operation</returns>
-    Task<ManualSyncResult> TriggerManualSyncAsync(CancellationToken cancellationToken = default);
+    Task<ManualSyncResult> TriggerManualSyncAsync(int? days = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets whether manual sync is configured and available
