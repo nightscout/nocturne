@@ -48,11 +48,31 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("carbs")]
     public double? Carbs { get; set; }
 
+    private double? _insulin;
+
     /// <summary>
-    /// Gets or sets the insulin amount in units
+    /// Gets or sets the insulin amount in units.
+    /// Derives from Amount if null, or calculates from Rate * Duration.
     /// </summary>
     [JsonPropertyName("insulin")]
-    public double? Insulin { get; set; }
+    public double? Insulin
+    {
+        get
+        {
+            if (_insulin.HasValue) return _insulin;
+            if (_amount.HasValue) return _amount;
+
+            // Try to calculate from Rate * Duration
+            // resolving synonyms for Rate
+            var r = _rate ?? _absolute;
+            if (r.HasValue && _duration.HasValue && _duration.Value > 0)
+            {
+                return r.Value * (_duration.Value / 60.0);
+            }
+            return null;
+        }
+        set => _insulin = value;
+    }
 
     /// <summary>
     /// Gets or sets the protein content in grams
@@ -129,11 +149,32 @@ public class Treatment : ProcessableDocumentBase
     }
     private string? _created_at;
 
+    private double? _duration;
+
     /// <summary>
-    /// Gets or sets the treatment duration in minutes
+    /// Gets or sets the treatment duration in minutes.
+    /// Calculates from Insulin / Rate if null.
     /// </summary>
     [JsonPropertyName("duration")]
-    public double? Duration { get; set; }
+    public double? Duration
+    {
+        get
+        {
+            if (_duration.HasValue) return _duration;
+
+            // Try to calculate from Insulin / Rate
+            // resolving synonyms
+            var i = _insulin ?? _amount;
+            var r = _rate ?? _absolute;
+
+            if (i.HasValue && r.HasValue && r.Value > 0)
+            {
+                return (i.Value / r.Value) * 60.0;
+            }
+            return null;
+        }
+        set => _duration = value;
+    }
 
     /// <summary>
     /// Gets or sets the percent of temporary basal rate
@@ -141,11 +182,18 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("percent")]
     public double? Percent { get; set; }
 
+    private double? _absolute;
+
     /// <summary>
-    /// Gets or sets the absolute temporary basal rate
+    /// Gets or sets the absolute temporary basal rate.
+    /// Returns Rate if this is null.
     /// </summary>
     [JsonPropertyName("absolute")]
-    public double? Absolute { get; set; }
+    public double? Absolute
+    {
+        get => _absolute ?? Rate;
+        set => _absolute = value;
+    }
 
     /// <summary>
     /// Gets or sets the treatment notes
@@ -219,6 +267,8 @@ public class Treatment : ProcessableDocumentBase
         set => Created_at = value;
     }
 
+    private double? _rate;
+
     /// <summary>
     /// Gets or sets the timestamp as an ISO 8601 string - optional field
     /// </summary>
@@ -271,10 +321,29 @@ public class Treatment : ProcessableDocumentBase
     public double? PreBolus { get; set; }
 
     /// <summary>
-    /// Gets or sets the basal rate (used for temp basal treatments)
+    /// Gets or sets the basal rate (used for temp basal treatments).
+    /// If not explicitly set, checks Absolute, or attempts to calculate from Insulin / (Duration/60).
     /// </summary>
     [JsonPropertyName("rate")]
-    public double? Rate { get; set; }
+    public double? Rate
+    {
+        get
+        {
+            if (_rate.HasValue) return _rate;
+            if (_absolute.HasValue) return _absolute;
+
+            // Try to calculate from Insulin / Duration
+            // resolving synonyms for Insulin
+            var i = _insulin ?? _amount;
+            if (i.HasValue && _duration.HasValue && _duration.Value > 0)
+            {
+                return i.Value / (_duration.Value / 60.0);
+            }
+
+            return null;
+        }
+        set => _rate = value;
+    }
 
     /// <summary>
     /// Gets or sets the blood glucose value in mg/dL
@@ -360,11 +429,17 @@ public class Treatment : ProcessableDocumentBase
     [Sanitizable]
     public string? Status { get; set; }
 
+    private double? _relative;
+
     /// <summary>
     /// Gets or sets the relative basal rate change
     /// </summary>
     [JsonPropertyName("relative")]
-    public double? Relative { get; set; }
+    public double? Relative
+    {
+        get => _relative ?? Rate;
+        set => _relative = value;
+    }
 
     /// <summary>
     /// Gets or sets the carb ratio
@@ -480,12 +555,18 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("temp")]
     public string? Temp { get; set; }
 
+    private double? _amount;
+
     /// <summary>
     /// Gets or sets the insulin amount delivered in units.
-    /// Used by Loop for bolus treatments.
+    /// Returns Insulin if this is null.
     /// </summary>
     [JsonPropertyName("amount")]
-    public double? Amount { get; set; }
+    public double? Amount
+    {
+        get => _amount ?? Insulin;
+        set => _amount = value;
+    }
 
     /// <summary>
     /// Gets or sets the originally programmed insulin dose in units.

@@ -427,9 +427,8 @@ public class ProfileService : IProfileService
             }
             else if (treatment.Insulin.HasValue && treatment.Duration.Value > 0)
             {
-                // Fallback: calculate rate from total insulin and duration (in minutes)
-                // Rate (U/hr) = Total Insulin (U) / (Duration (min) / 60)
-                tempBasal = treatment.Insulin.Value / (treatment.Duration.Value / 60.0);
+                // Fallback: use calculated Rate property
+                tempBasal = treatment.Rate ?? 0;
             }
         }
 
