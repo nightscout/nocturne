@@ -18,6 +18,7 @@
     Check,
     ChevronsUpDown,
     Braces,
+    Activity,
   } from "lucide-svelte";
   import {
     getEventTypeStyle,
@@ -170,6 +171,12 @@
     treatment?.additional_properties &&
       Object.keys(treatment.additional_properties).length > 0
   );
+  let calculatedRate = $derived.by(() => {
+    if (!formState.insulin || !formState.duration || formState.duration <= 0) {
+      return 0;
+    }
+    return formState.insulin / (formState.duration / 60);
+  });
 </script>
 
 <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
@@ -307,8 +314,8 @@
           />
         </div>
 
-        <!-- Insulin & Carbs Row -->
-        <div class="grid grid-cols-2 gap-4">
+        <!-- Insulin, Duration & Rate Row -->
+        <div class="grid grid-cols-3 gap-4">
           <div class="space-y-2">
             <Label for="insulin" class="flex items-center gap-1.5">
               <Syringe class="h-3.5 w-3.5 text-blue-500" />
@@ -325,6 +332,36 @@
           </div>
 
           <div class="space-y-2">
+            <Label for="duration">Duration (min)</Label>
+            <Input
+              id="duration"
+              type="number"
+              step="1"
+              min="0"
+              bind:value={formState.duration}
+              placeholder="0"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <Label for="rate" class="flex items-center gap-1.5">
+              <Activity class="h-3.5 w-3.5" />
+              Rate (U/hr)
+            </Label>
+            <Input
+              id="rate"
+              type="text"
+              readonly
+              disabled
+              value={calculatedRate > 0 ? calculatedRate.toFixed(3) : "-"}
+              class="bg-muted text-muted-foreground"
+            />
+          </div>
+        </div>
+
+        <!-- Carbs & Glucose Row -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-2">
             <Label for="carbs" class="flex items-center gap-1.5">
               <Apple class="h-3.5 w-3.5 text-green-500" />
               Carbs (g)
@@ -338,10 +375,7 @@
               placeholder="0"
             />
           </div>
-        </div>
 
-        <!-- Glucose & Duration Row -->
-        <div class="grid grid-cols-2 gap-4">
           <div class="space-y-2">
             <Label for="glucose">Blood Glucose</Label>
             <Input
@@ -351,18 +385,6 @@
               min="0"
               bind:value={formState.glucose}
               placeholder="mg/dL"
-            />
-          </div>
-
-          <div class="space-y-2">
-            <Label for="duration">Duration (min)</Label>
-            <Input
-              id="duration"
-              type="number"
-              step="1"
-              min="0"
-              bind:value={formState.duration}
-              placeholder="0"
             />
           </div>
         </div>

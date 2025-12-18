@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Entry, Treatment } from "$lib/api";
+  import type { Entry, Treatment, DeviceStatus } from "$lib/api";
   import {
     Card,
     CardContent,
@@ -22,6 +22,8 @@
     Highlight,
     Text,
     Tooltip,
+    AnnotationRange,
+    ChartClipPath,
   } from "layerchart";
   import { chartConfig } from "$lib/constants";
   import { curveStepAfter, curveMonotoneX, bisector } from "d3";
@@ -41,10 +43,12 @@
   } from "$lib/stores/appearance-store.svelte";
   import { convertToDisplayUnits } from "$lib/utils/formatting";
   import PredictionSettings from "./PredictionSettings.svelte";
+  import { cn } from "$lib/utils";
 
   interface ComponentProps {
     entries?: Entry[];
     treatments?: Treatment[];
+    deviceStatuses?: DeviceStatus[];
     demoMode?: boolean;
     dateRange?: {
       from: Date | string;
@@ -74,6 +78,7 @@
   let {
     entries = realtimeStore.entries,
     treatments = realtimeStore.treatments,
+    deviceStatuses = realtimeStore.deviceStatuses,
     demoMode = realtimeStore.demoMode,
     dateRange,
     defaultBasalRate = 1.0,
@@ -141,6 +146,41 @@
     }
   });
 
+  // Calculate most recent basal data source time
+  // This is used to detect if the basal data is stale (e.g. from an external service like Glooko that hasn't synced recently)
+  const lastBasalSourceTime = $derived.by(() => {
+    // Check device statuses for pump status updates
+    const lastDeviceStatus = deviceStatuses[0];
+    const lastDeviceStatusTime = lastDeviceStatus?.mills ?? 0;
+
+    // Check treatments for temp basals (which indicate active pump communication)
+    const lastTempBasal = treatments.find((t) => t.eventType === "Temp Basal");
+    const lastTempBasalTime = lastTempBasal?.mills ?? 0;
+
+    // Also consider entries as a proxy for connection if they are recent,
+    // but basal specifically might be stale even if entries are flowing (different pathways for some connectors)
+    // For now, let's stick to device status and treatments which are more indicative of pump control loop status
+
+    return Math.max(lastDeviceStatusTime, lastTempBasalTime);
+  });
+  const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+  const staleBasalData = $derived.by(() => {
+    // If no data at all, nothing to mark
+    if (lastBasalSourceTime === 0) return null;
+
+    const timeSinceLastUpdate = Date.now() - lastBasalSourceTime;
+
+    if (timeSinceLastUpdate > STALE_THRESHOLD_MS) {
+      return {
+        start: new Date(lastBasalSourceTime),
+        end: new Date(), // Up to now
+      };
+    }
+
+    return null;
+  });
+
   // Time range selection (in hours)
   type TimeRangeOption = "2" | "4" | "6" | "12" | "24";
 
@@ -176,9 +216,11 @@
     from: dateRange
       ? normalizeDate(dateRange.from, new Date())
       : new Date(
-          new Date().getTime() - parseInt(selectedTimeRange) * 60 * 60 * 1000
+          realtimeStore.now - parseInt(selectedTimeRange) * 60 * 60 * 1000
         ),
-    to: dateRange ? normalizeDate(dateRange.to, new Date()) : new Date(),
+    to: dateRange
+      ? normalizeDate(dateRange.to, new Date())
+      : new Date(realtimeStore.now),
   });
 
   // Fetch server-side chart data when date range changes
@@ -517,6 +559,31 @@
         padding={{ left: 48, bottom: 0, top: 8, right: 48 }}
       >
         <Svg>
+          {#if staleBasalData}
+            <ChartClipPath>
+              <AnnotationRange
+                x={[
+                  staleBasalData.start.getTime(),
+                  staleBasalData.end.getTime(),
+                ]}
+                y={[maxBasalRate, 0]}
+                pattern={{
+                  size: 8,
+
+                  lines: {
+                    rotate: -45,
+                    opacity: 0.1,
+                  },
+                }}
+              />
+              <!-- Optional: Add a line at the start of stale period -->
+              <Rule
+                x={staleBasalData.start}
+                class="stroke-yellow-500/50 stroke-1"
+                stroke-dasharray="2,2"
+              />
+            </ChartClipPath>
+          {/if}
           <!-- Scheduled basal rate line (profile rate without temp modifications) -->
           {#if scheduledBasalData.length > 0}
             <Spline
@@ -940,6 +1007,11 @@
                     value={activeBasal.rate}
                     format={"decimal"}
                     color="var(--insulin-basal)"
+                    class={cn(
+                      staleBasalData && data.time >= staleBasalData.start
+                        ? "text-yellow-500 font-bold"
+                        : ""
+                    )}
                   />
                   {#if activeBasal.isTemp && activeBasal.scheduledRate !== undefined}
                     <Tooltip.Item

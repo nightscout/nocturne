@@ -14,6 +14,7 @@ import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
 import { processPillsData, type ProcessedPillsData } from "$lib/data/pills-processor";
+import { glucoseUnits } from "./appearance-store.svelte";
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
@@ -105,11 +106,12 @@ export class RealtimeStore {
 
   /** Processed pills data (COB, IOB, CAGE, SAGE, Loop, Basal) */
   pillsData = $derived.by((): ProcessedPillsData => {
+    const units = glucoseUnits.current === "mmol" ? "mmol/L" : "mg/dL";
     return processPillsData(
       this.deviceStatuses,
       this.treatments,
       this.profile,
-      { units: 'mmol/L' } // TODO: Get from settings
+      { units }
     );
   });
 
