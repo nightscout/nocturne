@@ -193,8 +193,19 @@ export const getPunchCardData = query(punchCardSchema, async ({
   }
 
   // Fetch entries and treatments for the date range
-  const entriesQuery = `find[date][$gte]=${startDate.toISOString()}&find[date][$lte]=${endDate.toISOString()}`;
-  const treatmentsQuery = `find[created_at][$gte]=${startDate.toISOString()}&find[created_at][$lte]=${endDate.toISOString()}`;
+  const entriesFind = JSON.stringify({
+    date: {
+      $gte: startDate.toISOString(),
+      $lte: endDate.toISOString(),
+    },
+  });
+
+  const treatmentsFind = JSON.stringify({
+    created_at: {
+      $gte: startDate.toISOString(),
+      $lte: endDate.toISOString(),
+    },
+  });
 
   // Fetch all data with pagination
   const pageSize = 1000;
@@ -203,7 +214,9 @@ export const getPunchCardData = query(punchCardSchema, async ({
 
   // Fetch entries
   try {
-    allEntries = await apiClient.entries.getEntries2(entriesQuery);
+    // Pass a large count to ensure we get all entries for the month
+    // The backend default limit might be small (e.g. 10)
+    allEntries = await apiClient.entries.getEntries2(entriesFind, 100000);
   } catch {
     allEntries = [];
   }
@@ -214,7 +227,7 @@ export const getPunchCardData = query(punchCardSchema, async ({
 
   while (hasMore) {
     try {
-      const batch = await apiClient.treatments.getTreatments2(treatmentsQuery, pageSize, offset);
+      const batch = await apiClient.treatments.getTreatments2(treatmentsFind, pageSize, offset);
       allTreatments = allTreatments.concat(batch);
 
       if (batch.length < pageSize) {
@@ -325,20 +338,31 @@ export const getDayInReviewData = query(dayInReviewSchema, async ({ dateStr }): 
   const dayEnd = new Date(date);
   dayEnd.setHours(23, 59, 59, 999);
 
-  const entriesQuery = `find[date][$gte]=${dayStart.toISOString()}&find[date][$lte]=${dayEnd.toISOString()}`;
-  const treatmentsQuery = `find[created_at][$gte]=${dayStart.toISOString()}&find[created_at][$lte]=${dayEnd.toISOString()}`;
+  const entriesFind = JSON.stringify({
+    date: {
+      $gte: dayStart.toISOString(),
+      $lte: dayEnd.toISOString(),
+    },
+  });
+
+  const treatmentsFind = JSON.stringify({
+    created_at: {
+      $gte: dayStart.toISOString(),
+      $lte: dayEnd.toISOString(),
+    },
+  });
 
   let entries: Entry[] = [];
   let treatments: Treatment[] = [];
 
   try {
-    entries = await apiClient.entries.getEntries2(entriesQuery);
+    entries = await apiClient.entries.getEntries2(entriesFind, 100000);
   } catch {
     entries = [];
   }
 
   try {
-    treatments = await apiClient.treatments.getTreatments2(treatmentsQuery);
+    treatments = await apiClient.treatments.getTreatments2(treatmentsFind, 100000);
   } catch {
     treatments = [];
   }

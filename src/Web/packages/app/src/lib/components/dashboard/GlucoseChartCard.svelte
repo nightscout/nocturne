@@ -39,6 +39,9 @@
   import {
     predictionMinutes,
     predictionEnabled,
+    predictionDisplayMode,
+    glucoseChartLookback,
+    type TimeRangeOption,
   } from "$lib/stores/appearance-store.svelte";
   import { bg } from "$lib/utils/formatting";
   import PredictionSettings from "./PredictionSettings.svelte";
@@ -78,14 +81,11 @@
   let {
     entries = realtimeStore.entries,
     treatments = realtimeStore.treatments,
-    deviceStatuses = realtimeStore.deviceStatuses,
     demoMode = realtimeStore.demoMode,
     dateRange,
     defaultBasalRate = 1.0,
     carbRatio = 15,
-    isf = 50,
     showPredictions = true,
-    defaultFocusHours,
     predictionModel = "cone",
   }: ComponentProps = $props();
 
@@ -95,34 +95,6 @@
 
   // Server-side chart data (IOB, COB, basal)
   let serverChartData = $state<DashboardChartData | null>(null);
-
-  // Prediction display mode
-  type PredictionDisplayMode =
-    | "cone"
-    | "lines"
-    | "main"
-    | "iob"
-    | "zt"
-    | "uam"
-    | "cob";
-  // Sync prediction mode with algorithm settings model
-  const modelToMode: Record<string, PredictionDisplayMode> = {
-    ar2: "cone",
-    linear: "cone",
-    iob: "iob",
-    cob: "cob",
-    uam: "uam",
-    cone: "cone",
-    lines: "lines",
-  };
-
-  let predictionMode = $state<PredictionDisplayMode>(
-    modelToMode[predictionModel] ?? "cone"
-  );
-
-  // Suppress unused variable warnings
-  void isf;
-  void carbRatio;
 
   // Fetch predictions when enabled
   $effect(() => {
@@ -177,17 +149,8 @@
   });
 
   // Time range selection (in hours)
-  type TimeRangeOption = "2" | "4" | "6" | "12" | "24";
 
-  function getInitialTimeRange(hours?: number): TimeRangeOption {
-    const validOptions: TimeRangeOption[] = ["2", "4", "6", "12", "24"];
-    const hourStr = String(hours) as TimeRangeOption;
-    return validOptions.includes(hourStr) ? hourStr : "6";
-  }
-
-  let selectedTimeRange = $state<TimeRangeOption>(
-    getInitialTimeRange(defaultFocusHours)
-  );
+  // Time range selection (in hours)
 
   const timeRangeOptions: { value: TimeRangeOption; label: string }[] = [
     { value: "2", label: "2h" },
@@ -211,7 +174,8 @@
     from: dateRange
       ? normalizeDate(dateRange.from, new Date())
       : new Date(
-          realtimeStore.now - parseInt(selectedTimeRange) * 60 * 60 * 1000
+          realtimeStore.now -
+            parseInt(glucoseChartLookback.current) * 60 * 60 * 1000
         ),
     to: dateRange
       ? normalizeDate(dateRange.to, new Date())
@@ -500,15 +464,15 @@
   }
 </script>
 
-<Card class="bg-slate-950 border-slate-800">
+<Card class="bg-card border-border">
   <CardHeader class="pb-2">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2 text-slate-100">
+      <CardTitle class="flex items-center gap-2 text-card-foreground">
         Blood Glucose
         {#if displayDemoMode}
           <Badge
             variant="outline"
-            class="text-xs border-slate-700 text-slate-400"
+            class="text-xs border-border text-muted-foreground"
           >
             Demo
           </Badge>
@@ -517,21 +481,22 @@
 
       <div class="flex items-center gap-2">
         <!-- Prediction settings component with its own boundary -->
+        <!-- Prediction settings component with its own boundary -->
         <PredictionSettings
           {showPredictions}
-          bind:predictionMode
+          bind:predictionMode={predictionDisplayMode.current}
           {predictionModel}
         />
         <!-- Time range selector -->
         <ToggleGroup.Root
           type="single"
-          bind:value={selectedTimeRange}
-          class="bg-slate-900 rounded-lg p-0.5"
+          bind:value={glucoseChartLookback.current}
+          class="bg-muted rounded-lg p-0.5"
         >
           {#each timeRangeOptions as option}
             <ToggleGroup.Item
               value={option.value}
-              class="px-3 py-1 text-xs font-medium text-slate-400 data-[state=on]:bg-slate-700 data-[state=on]:text-slate-100 rounded-md transition-colors"
+              class="px-3 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-accent-foreground rounded-md transition-colors"
             >
               {option.label}
             </ToggleGroup.Item>
@@ -751,13 +716,13 @@
                   x={(d) => d.time}
                   y={(d) => glucoseScale(d.sgv)}
                   curve={curveMonotoneX}
-                  class="stroke-slate-500/50 stroke-1 fill-none animate-pulse"
+                  class="stroke-muted-foreground/50 stroke-1 fill-none animate-pulse"
                   stroke-dasharray="4,4"
                 />
                 <Text
                   x={chartXDomain.to.getTime() + 5 * 60 * 1000}
                   y={glucoseScale(Number(glucoseData.at(-1)?.sgv) ?? 100)}
-                  class="text-[9px] fill-slate-500 animate-pulse"
+                  class="text-[9px] fill-muted-foreground animate-pulse"
                 >
                   Loading predictions...
                 </Text>
@@ -776,7 +741,7 @@
               {/snippet}
 
               {#if showPredictions && predictionEnabled.current && predictionData}
-                {#if predictionMode === "cone" && predictionConeData.length > 0}
+                {#if predictionDisplayMode.current === "cone" && predictionConeData.length > 0}
                   <Area
                     data={predictionConeData}
                     x={(d) => d.time}
@@ -795,7 +760,7 @@
                     class="stroke-purple-400 stroke-1 fill-none"
                     stroke-dasharray="4,2"
                   />
-                {:else if predictionMode === "lines"}
+                {:else if predictionDisplayMode.current === "lines"}
                   {#if predictionCurveData.length > 0}
                     <Spline
                       data={predictionCurveData}
@@ -851,7 +816,7 @@
                       stroke-dasharray="4,2"
                     />
                   {/if}
-                {:else if predictionMode === "main" && predictionCurveData.length > 0}
+                {:else if predictionDisplayMode.current === "main" && predictionCurveData.length > 0}
                   <Spline
                     data={predictionCurveData}
                     x={(d) => d.time}
@@ -861,7 +826,7 @@
                     class="stroke-purple-400 stroke-2 fill-none"
                     stroke-dasharray="6,3"
                   />
-                {:else if predictionMode === "iob" && iobPredictionData.length > 0}
+                {:else if predictionDisplayMode.current === "iob" && iobPredictionData.length > 0}
                   <Spline
                     data={iobPredictionData}
                     x={(d) => d.time}
@@ -871,7 +836,7 @@
                     class="stroke-cyan-400 stroke-2 fill-none"
                     stroke-dasharray="6,3"
                   />
-                {:else if predictionMode === "zt" && zeroTempPredictionData.length > 0}
+                {:else if predictionDisplayMode.current === "zt" && zeroTempPredictionData.length > 0}
                   <Spline
                     data={zeroTempPredictionData}
                     x={(d) => d.time}
@@ -881,7 +846,7 @@
                     class="stroke-orange-400 stroke-2 fill-none"
                     stroke-dasharray="6,3"
                   />
-                {:else if predictionMode === "uam" && uamPredictionData.length > 0}
+                {:else if predictionDisplayMode.current === "uam" && uamPredictionData.length > 0}
                   <Spline
                     data={uamPredictionData}
                     x={(d) => d.time}
@@ -891,7 +856,7 @@
                     class="stroke-green-400 stroke-2 fill-none"
                     stroke-dasharray="6,3"
                   />
-                {:else if predictionMode === "cob" && cobPredictionData.length > 0}
+                {:else if predictionDisplayMode.current === "cob" && cobPredictionData.length > 0}
                   <Spline
                     data={cobPredictionData}
                     x={(d) => d.time}
@@ -1030,7 +995,7 @@
 
           <Tooltip.Root
             {context}
-            class="bg-slate-900/95 border border-slate-800 rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm"
+            class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm"
           >
             {#snippet children({ data })}
               {@const activeBasal = findBasalValue(basalData, data.time)}
@@ -1041,7 +1006,7 @@
               <Tooltip.Header
                 value={data?.time}
                 format="minute"
-                class="text-slate-100 border-b border-slate-800 pb-1 mb-1 text-sm font-semibold"
+                class="text-popover-foreground border-b border-border pb-1 mb-1 text-sm font-semibold"
               />
               <Tooltip.List>
                 {#if data?.sgv}
@@ -1050,7 +1015,7 @@
                     value={data.sgv}
                     format="integer"
                     color="var(--glucose-in-range)"
-                    class="text-slate-100 font-bold"
+                    class="text-popover-foreground font-bold"
                   />
                 {/if}
                 {#if nearbyBolus}

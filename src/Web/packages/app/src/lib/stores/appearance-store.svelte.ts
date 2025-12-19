@@ -217,7 +217,46 @@ export function setPredictionMinutes(minutes: number): void {
 /**
  * Set prediction enabled state
  */
+
+/**
+ * Set prediction enabled state
+ */
 export function setPredictionEnabled(enabled: boolean): void {
   predictionEnabled.current = enabled;
 }
+
+// ==========================================
+// Prediction Display Mode
+// ==========================================
+
+export type PredictionDisplayMode =
+  | "cone"
+  | "lines"
+  | "main"
+  | "iob"
+  | "zt"
+  | "uam"
+  | "cob";
+
+/**
+ * Prediction display mode preference
+ */
+export const predictionDisplayMode = new PersistedState<PredictionDisplayMode>(
+  "nocturne-prediction-display-mode",
+  "cone"
+);
+
+// ==========================================
+// Chart Lookback Settings
+// ==========================================
+
+export type TimeRangeOption = "2" | "4" | "6" | "12" | "24";
+
+/**
+ * Glucose chart lookback hours preference
+ */
+export const glucoseChartLookback = new PersistedState<TimeRangeOption>(
+  "nocturne-glucose-chart-lookback",
+  "6"
+);
 

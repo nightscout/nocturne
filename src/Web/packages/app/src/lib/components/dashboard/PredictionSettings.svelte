@@ -13,17 +13,8 @@
     predictionMinutes,
     predictionEnabled,
   } from "$lib/stores/appearance-store.svelte";
-  import { getPredictions } from "$lib/data/predictions.remote";
 
-  // Prediction display mode type
-  export type PredictionDisplayMode =
-    | "cone"
-    | "lines"
-    | "main"
-    | "iob"
-    | "zt"
-    | "uam"
-    | "cob";
+  import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
 
   interface Props {
     /** Whether to show prediction controls (from parent) */
@@ -48,13 +39,13 @@
     <!-- Loading state skeleton -->
     <div class="flex items-center gap-2">
       <!-- Skeleton for mode selector -->
-      <div class="bg-slate-900 rounded-lg p-0.5 flex gap-0.5">
+      <div class="bg-muted rounded-lg p-0.5 flex gap-0.5">
         {#each [1, 2, 3, 4, 5] as _}
           <Skeleton class="h-6 w-10 rounded-md" />
         {/each}
       </div>
       <!-- Skeleton for time selector -->
-      <div class="bg-slate-900 rounded-lg p-0.5">
+      <div class="bg-muted rounded-lg p-0.5">
         <Skeleton class="h-7 w-[90px] rounded-md" />
       </div>
     </div>
@@ -85,39 +76,39 @@
       <ToggleGroup.Root
         type="single"
         bind:value={predictionMode}
-        class="bg-slate-900 rounded-lg p-0.5"
+        class="bg-muted rounded-lg p-0.5"
       >
         <ToggleGroup.Item
           value="cone"
-          class="px-2 py-1 text-xs font-medium text-slate-400 data-[state=on]:bg-purple-700 data-[state=on]:text-slate-100 rounded-md transition-colors"
+          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-purple-700 data-[state=on]:text-white rounded-md transition-colors"
           title="Cone of probabilities"
         >
           Cone
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="lines"
-          class="px-2 py-1 text-xs font-medium text-slate-400 data-[state=on]:bg-purple-700 data-[state=on]:text-slate-100 rounded-md transition-colors"
+          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-purple-700 data-[state=on]:text-white rounded-md transition-colors"
           title="All prediction lines"
         >
           Lines
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="iob"
-          class="px-2 py-1 text-xs font-medium text-slate-400 data-[state=on]:bg-cyan-700 data-[state=on]:text-slate-100 rounded-md transition-colors"
+          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-cyan-700 data-[state=on]:text-white rounded-md transition-colors"
           title="IOB only"
         >
           IOB
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="zt"
-          class="px-2 py-1 text-xs font-medium text-slate-400 data-[state=on]:bg-orange-700 data-[state=on]:text-slate-100 rounded-md transition-colors"
+          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-orange-700 data-[state=on]:text-white rounded-md transition-colors"
           title="Zero Temp"
         >
           ZT
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="uam"
-          class="px-2 py-1 text-xs font-medium text-slate-400 data-[state=on]:bg-green-700 data-[state=on]:text-slate-100 rounded-md transition-colors"
+          class="px-2 py-1 text-xs font-medium text-muted-foreground data-[state=on]:bg-green-700 data-[state=on]:text-white rounded-md transition-colors"
           title="UAM"
         >
           UAM
@@ -127,7 +118,7 @@
 
     <!-- Prediction time/enable selector -->
     {#if showPredictions}
-      <div class="bg-slate-900 rounded-lg p-0.5">
+      <div class="bg-muted rounded-lg p-0.5">
         <Select
           type="single"
           value={predictionEnabled.current
@@ -143,11 +134,11 @@
           }}
         >
           <SelectTrigger
-            class="h-7 w-[90px] bg-transparent border-none text-xs text-slate-400 focus:ring-0 focus:ring-offset-0 px-2 data-[placeholder]:text-slate-400"
+            class="h-7 w-[90px] bg-transparent border-none text-xs text-muted-foreground focus:ring-0 focus:ring-offset-0 px-2 data-[placeholder]:text-muted-foreground"
           >
             <div class="flex items-center gap-1.5 truncate">
               {#if !predictionEnabled.current}
-                <span class="text-slate-500">Off</span>
+                <span class="text-muted-foreground">Off</span>
               {:else}
                 <span>
                   {predictionMinutes.current < 60

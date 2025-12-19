@@ -97,7 +97,13 @@
   // Get days data from backend response
   const daysData = $derived.by(() => {
     const currentData = punchCardQuery.current;
-    const monthData = currentData?.months?.[0];
+
+    // Find the month data that matches the current view
+    // The API might return multiple months (e.g. if start date falls in previous month due to timezone)
+    // so we need to explicitly find the one we're looking for
+    const monthData = currentData?.months?.find(
+      (m) => m.year === currentYear && m.month === currentMonth
+    );
     const daysMap = new Map<string, DayStats>();
 
     if (monthData) {
