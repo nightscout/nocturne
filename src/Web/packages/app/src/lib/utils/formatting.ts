@@ -42,12 +42,12 @@ export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number
  * @param units - Display units ("mg/dl" or "mmol")
  * @returns Formatted glucose string
  */
-export function formatGlucoseValue(mgdl: number, units: GlucoseUnits): string {
+export function formatGlucoseValue(mgdl: number, units: GlucoseUnits) {
   const value = convertToDisplayUnits(mgdl, units);
   if (units === "mmol") {
-    return value.toFixed(1);
+    return Number(value.toFixed(1));
   }
-  return Math.round(value).toString();
+  return Math.round(value);
 }
 
 /**
@@ -108,7 +108,7 @@ export function formatGlucoseRange(
  * @param mgdl - Glucose value in mg/dL
  * @returns Formatted glucose string in user's preferred units
  */
-export function bg(mgdl: number): string {
+export function bg(mgdl: number) {
   return formatGlucoseValue(mgdl, glucoseUnits.current);
 }
 

@@ -111,7 +111,7 @@
       icon: Clock,
     },
     {
-      title: "Food Database",
+      title: "Food",
       href: "/food",
       icon: Apple,
     },

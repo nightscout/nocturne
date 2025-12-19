@@ -37,13 +37,13 @@
     type DashboardChartData,
   } from "$lib/data/chart-data.remote";
   import {
-    glucoseUnits,
     predictionMinutes,
     predictionEnabled,
   } from "$lib/stores/appearance-store.svelte";
   import { bg } from "$lib/utils/formatting";
   import PredictionSettings from "./PredictionSettings.svelte";
   import { cn } from "$lib/utils";
+  import { goto } from "$app/navigation";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -82,7 +82,7 @@
     demoMode = realtimeStore.demoMode,
     dateRange,
     defaultBasalRate = 1.0,
-    carbRatio = 10,
+    carbRatio = 15,
     isf = 50,
     showPredictions = true,
     defaultFocusHours,
@@ -149,19 +149,14 @@
   // Calculate most recent basal data source time
   // This is used to detect if the basal data is stale (e.g. from an external service like Glooko that hasn't synced recently)
   const lastBasalSourceTime = $derived.by(() => {
-    // Check device statuses for pump status updates
-    const lastDeviceStatus = deviceStatuses[0];
-    const lastDeviceStatusTime = lastDeviceStatus?.mills ?? 0;
-
     // Check treatments for temp basals (which indicate active pump communication)
     const lastTempBasal = treatments.find((t) => t.eventType === "Temp Basal");
-    const lastTempBasalTime = lastTempBasal?.mills ?? 0;
+    const lastTempBasalTime =
+      lastTempBasal != null
+        ? (lastTempBasal.mills ?? 0) + (lastTempBasal.duration ?? 0)
+        : 0;
 
-    // Also consider entries as a proxy for connection if they are recent,
-    // but basal specifically might be stale even if entries are flowing (different pathways for some connectors)
-    // For now, let's stick to device status and treatments which are more indicative of pump control loop status
-
-    return Math.max(lastDeviceStatusTime, lastTempBasalTime);
+    return lastTempBasalTime;
   });
   const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -486,6 +481,23 @@
       carbs: t.carbs ?? 0,
     }))
   );
+
+  // Find treatments near a given time (within 5 minute window)
+  const TREATMENT_PROXIMITY_MS = 5 * 60 * 1000;
+
+  function findNearbyBolus(time: Date) {
+    return bolusMarkersForIob.find(
+      (b) =>
+        Math.abs(b.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
+    );
+  }
+
+  function findNearbyCarbs(time: Date) {
+    return carbMarkersForIob.find(
+      (c) =>
+        Math.abs(c.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
+    );
+  }
 </script>
 
 <Card class="bg-slate-950 border-slate-800">
@@ -543,87 +555,68 @@
         tooltip={{ mode: "quadtree-x" }}
       >
         {#snippet children({ context })}
-          <!-- Create remapped scales for basal, glucose, and IOB tracks -->
-          <!-- Layout from top to bottom: BASAL | GLUCOSE | IOB -->
-          {@const basalTrackHeight = context.height * trackRatios.basal}
-          {@const glucoseTrackHeight = context.height * trackRatios.glucose}
-          {@const iobTrackHeight = context.height * trackRatios.iob}
-
-          <!-- Track positions (y coordinates in SVG where 0 = top) -->
-          {@const basalTrackTop = 0}
-          {@const basalTrackBottom = basalTrackHeight}
-          {@const glucoseTrackTop = basalTrackBottom}
-          {@const glucoseTrackBottom = glucoseTrackTop + glucoseTrackHeight}
-          {@const iobTrackTop = glucoseTrackBottom}
-          {@const iobTrackBottom = iobTrackTop + iobTrackHeight}
-
-          <!-- The Chart's internal yScale maps [0, glucoseYMax] -> [height, 0] (standard D3 convention: 0 at bottom, max at top) -->
-          <!-- We need to create scales that output VALUES in the Chart's domain, so that when Chart applies its yScale, we get correct pixels -->
-
-          <!-- Chart's yScale: domain=[0, glucoseYMax], range=[height, 0] -->
-          <!-- So yScale(0) = height (bottom), yScale(glucoseYMax) = 0 (top) -->
-          <!-- To place something at pixel Y, we need to find the data value V where yScale(V) = Y -->
-          <!-- yScale inverse: pixelToData(Y) = glucoseYMax * (1 - Y/height) -->
-
-          <!-- Helper: convert a pixel Y position to the glucose data domain value that will render at that Y -->
-          {@const pixelToGlucoseDomain = (pixelY: number) =>
-            glucoseYMax * (1 - pixelY / context.height)}
-
-          <!-- Basal scale: TOP track, 0 at top (pixel 0), max at bottom (pixel basalTrackBottom) -->
-          <!-- Returns glucose-domain values that Chart will convert to correct pixels -->
-          {@const basalScale = (rate: number) => {
-            const pixelY =
-              basalTrackTop + (rate / maxBasalRate) * basalTrackHeight;
-            return pixelToGlucoseDomain(pixelY);
-          }}
-          {@const basalZero = pixelToGlucoseDomain(basalTrackTop)}
-          <!-- D3 scale for basal Axis (maps rate -> pixel Y directly) -->
-          {@const basalAxisScale = scaleLinear()
-            .domain([0, maxBasalRate])
-            .range([basalTrackTop, basalTrackBottom])}
-
-          <!-- Glucose scale: MIDDLE track, 0 at bottom of glucose track, max at top -->
-          {@const glucoseScale = scaleLinear()
-            .domain([0, glucoseYMax])
-            .range([
-              pixelToGlucoseDomain(glucoseTrackBottom),
-              pixelToGlucoseDomain(glucoseTrackTop),
-            ])}
-          <!-- D3 scale for glucose Axis (maps glucose -> pixel Y directly) -->
-          {@const glucoseAxisScale = scaleLinear()
-            .domain([0, glucoseYMax])
-            .range([glucoseTrackBottom, glucoseTrackTop])}
-
-          <!-- IOB scale: BOTTOM track, 0 at bottom (pixel iobTrackBottom), max at top (pixel iobTrackTop) -->
-          {@const iobScale = (value: number) => {
-            const pixelY = iobTrackBottom - (value / maxIOB) * iobTrackHeight;
-            return pixelToGlucoseDomain(pixelY);
-          }}
-          {@const iobZero = pixelToGlucoseDomain(iobTrackBottom)}
-          <!-- D3 scale for IOB Axis (maps IOB -> pixel Y directly) -->
-          {@const iobAxisScale = scaleLinear()
-            .domain([0, maxIOB])
-            .range([iobTrackBottom, iobTrackTop])}
-          {@const test = console.log({
-            totalHeight: context.height,
-            glucoseYMax,
-            // Track pixel positions
-            basalTrackTop,
-            basalTrackBottom: basalTrackBottom.toFixed(2),
-            glucoseTrackTop: glucoseTrackTop.toFixed(2),
-            glucoseTrackBottom: glucoseTrackBottom.toFixed(2),
-            iobTrackTop: iobTrackTop.toFixed(2),
-            iobTrackBottom: iobTrackBottom.toFixed(2),
-            // Domain values (what we pass to layerchart, which then converts to pixels)
-            basalZero: basalZero.toFixed(2),
-            basalScale1: basalScale(1).toFixed(2),
-            glucoseScale0: glucoseScale(0).toFixed(2),
-            glucoseScale100: glucoseScale(100).toFixed(2),
-            glucoseScaleMax: glucoseScale(glucoseYMax).toFixed(2),
-            iobZero: iobZero.toFixed(2),
-            iobScale1: iobScale(1).toFixed(2),
-          })}
           <Svg>
+            <!-- Create remapped scales for basal, glucose, and IOB tracks -->
+            <!-- Layout from top to bottom: BASAL | GLUCOSE | IOB -->
+            {@const basalTrackHeight = context.height * trackRatios.basal}
+            {@const glucoseTrackHeight = context.height * trackRatios.glucose}
+            {@const iobTrackHeight = context.height * trackRatios.iob}
+
+            <!-- Track positions (y coordinates in SVG where 0 = top) -->
+            {@const basalTrackTop = 0}
+            {@const basalTrackBottom = basalTrackHeight}
+            {@const glucoseTrackTop = basalTrackBottom}
+            {@const glucoseTrackBottom = glucoseTrackTop + glucoseTrackHeight}
+            {@const iobTrackTop = glucoseTrackBottom}
+            {@const iobTrackBottom = iobTrackTop + iobTrackHeight}
+
+            <!-- The Chart's internal yScale maps [0, glucoseYMax] -> [height, 0] (standard D3 convention: 0 at bottom, max at top) -->
+            <!-- We need to create scales that output VALUES in the Chart's domain, so that when Chart applies its yScale, we get correct pixels -->
+
+            <!-- Chart's yScale: domain=[0, glucoseYMax], range=[height, 0] -->
+            <!-- So yScale(0) = height (bottom), yScale(glucoseYMax) = 0 (top) -->
+            <!-- To place something at pixel Y, we need to find the data value V where yScale(V) = Y -->
+            <!-- yScale inverse: pixelToData(Y) = glucoseYMax * (1 - Y/height) -->
+
+            <!-- Helper: convert a pixel Y position to the glucose data domain value that will render at that Y -->
+            {@const pixelToGlucoseDomain = (pixelY: number) =>
+              glucoseYMax * (1 - pixelY / context.height)}
+
+            <!-- Basal scale: TOP track, 0 at top (pixel 0), max at bottom (pixel basalTrackBottom) -->
+            <!-- Returns glucose-domain values that Chart will convert to correct pixels -->
+            {@const basalScale = (rate: number) => {
+              const pixelY =
+                basalTrackTop + (rate / maxBasalRate) * basalTrackHeight;
+              return pixelToGlucoseDomain(pixelY);
+            }}
+            {@const basalZero = pixelToGlucoseDomain(basalTrackTop)}
+            <!-- D3 scale for basal Axis (maps rate -> pixel Y directly) -->
+            {@const basalAxisScale = scaleLinear()
+              .domain([0, maxBasalRate])
+              .range([basalTrackTop, basalTrackBottom])}
+
+            <!-- Glucose scale: MIDDLE track, 0 at bottom of glucose track, max at top -->
+            {@const glucoseScale = scaleLinear()
+              .domain([0, glucoseYMax])
+              .range([
+                pixelToGlucoseDomain(glucoseTrackBottom),
+                pixelToGlucoseDomain(glucoseTrackTop),
+              ])}
+            <!-- D3 scale for glucose Axis (maps glucose -> pixel Y directly) -->
+            {@const glucoseAxisScale = scaleLinear()
+              .domain([0, glucoseYMax])
+              .range([glucoseTrackBottom, glucoseTrackTop])}
+
+            <!-- IOB scale: BOTTOM track, 0 at bottom (pixel iobTrackBottom), max at top (pixel iobTrackTop) -->
+            {@const iobScale = (value: number) => {
+              const pixelY = iobTrackBottom - (value / maxIOB) * iobTrackHeight;
+              return pixelToGlucoseDomain(pixelY);
+            }}
+            {@const iobZero = pixelToGlucoseDomain(iobTrackBottom)}
+            <!-- D3 scale for IOB Axis (maps IOB -> pixel Y directly) -->
+            {@const iobAxisScale = scaleLinear()
+              .domain([0, maxIOB])
+              .range([iobTrackBottom, iobTrackTop])}
             <!-- ===== BASAL TRACK (TOP) ===== -->
             {#if staleBasalData}
               <ChartClipPath>
@@ -948,22 +941,30 @@
                 y1={(d) => iobScale(d.value)}
                 motion="spring"
                 curve={curveMonotoneX}
-                fill="var(--iob-basal)"
-                class="stroke-insulin stroke-1"
+                fill=""
+                class="fill-iob-basal/60"
               />
             {/if}
 
-            <!-- Bolus markers with values (triangles pointing up from IOB baseline) -->
+            <!-- X-Axis (bottom) -->
+            <Axis
+              placement="bottom"
+              format={(v) => (v instanceof Date ? formatTime(v) : String(v))}
+              tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
+            />
+
+            <!-- Bolus markers (on top layer) -->
             {#each bolusMarkersForIob as marker}
-              <Group x={marker.time.getTime()} y={iobZero}>
+              {@const xPos = context.xScale(marker.time)}
+              {@const yPos = context.yScale(iobScale(marker.insulin))}
+              <Group x={xPos} y={yPos + 0}>
                 <Polygon
                   points={[
-                    { x: 0, y: -10 },
+                    { x: 0, y: 10 },
                     { x: -5, y: 0 },
                     { x: 5, y: 0 },
                   ]}
-                  fill="var(--insulin-bolus)"
-                  class="opacity-90"
+                  class="opacity-90 fill-insulin-bolus"
                 />
                 <Text
                   y={-14}
@@ -975,12 +976,14 @@
               </Group>
             {/each}
 
-            <!-- Carb markers with values (triangles pointing down) -->
+            <!-- Carb markers (on top layer) -->
             {#each carbMarkersForIob as marker}
-              <Group x={marker.time.getTime()} y={iobZero}>
+              {@const xPos = context.xScale(marker.time)}
+              {@const yPos = context.yScale(iobScale(marker.carbs / carbRatio))}
+              <Group x={xPos} y={yPos}>
                 <Polygon
                   points={[
-                    { x: 0, y: 10 },
+                    { x: 0, y: -10 },
                     { x: -5, y: 0 },
                     { x: 5, y: 0 },
                   ]}
@@ -996,34 +999,32 @@
                 </Text>
               </Group>
             {/each}
-
-            <!-- X-Axis (bottom) -->
-            <Axis
-              placement="bottom"
-              format={(v) => (v instanceof Date ? formatTime(v) : String(v))}
-              tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
-            />
-
-            <!-- Glucose highlight (main) -->
-            <Highlight
-              data={glucoseData}
-              points
-              lines
-              y={(d) => glucoseScale(d.sgv)}
-            />
-
             <!-- Basal highlight with remapped scale -->
             <Highlight
-              data={basalData}
+              x={(d) => d.time}
+              y={(d) => {
+                const basal = findBasalValue(basalData, d.time);
+                return basalScale(basal?.rate ?? 0);
+              }}
               points={{ class: "fill-insulin-basal" }}
-              y={(d) => basalScale(d.rate)}
             />
 
             <!-- IOB highlight with remapped scale -->
             <Highlight
-              data={iobData}
+              x={(d) => d.time}
+              y={(d) => {
+                const iob = findSeriesValue(iobData, d.time);
+                if (!iob || iob.value <= 0) return null;
+                return iobScale(iob.value);
+              }}
               points={{ class: "fill-iob-basal" }}
-              y={(d) => iobScale(d.value)}
+            />
+            <!-- Glucose highlight (main) -->
+            <Highlight
+              x={(d) => d.time}
+              y={(d) => glucoseScale(d.sgv)}
+              points
+              lines
             />
           </Svg>
 
@@ -1034,6 +1035,8 @@
             {#snippet children({ data })}
               {@const activeBasal = findBasalValue(basalData, data.time)}
               {@const activeIob = findSeriesValue(iobData, data.time)}
+              {@const nearbyBolus = findNearbyBolus(data.time)}
+              {@const nearbyCarbs = findNearbyCarbs(data.time)}
 
               <Tooltip.Header
                 value={data?.time}
@@ -1048,6 +1051,22 @@
                     format="integer"
                     color="var(--glucose-in-range)"
                     class="text-slate-100 font-bold"
+                  />
+                {/if}
+                {#if nearbyBolus}
+                  <Tooltip.Item
+                    label="Bolus"
+                    value={`${nearbyBolus.insulin.toFixed(1)}U`}
+                    color="var(--insulin-bolus)"
+                    class="font-medium"
+                  />
+                {/if}
+                {#if nearbyCarbs}
+                  <Tooltip.Item
+                    label="Carbs"
+                    value={`${nearbyCarbs.carbs}g`}
+                    color="var(--carbs)"
+                    class="font-medium"
                   />
                 {/if}
                 {#if activeIob}
@@ -1080,6 +1099,23 @@
                   {/if}
                 {/if}
               </Tooltip.List>
+            {/snippet}
+          </Tooltip.Root>
+          <Tooltip.Root
+            x="data"
+            y={context.height + context.padding.top}
+            yOffset={2}
+            anchor="top"
+            variant="none"
+            class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap"
+          >
+            {#snippet children({ data })}
+              <Tooltip.Item
+                value={data?.time}
+                format="minute"
+                onclick={() =>
+                  goto(`/reports/day-in-review?date=${data?.time}`)}
+              />
             {/snippet}
           </Tooltip.Root>
         {/snippet}
