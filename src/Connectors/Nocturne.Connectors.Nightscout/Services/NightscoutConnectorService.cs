@@ -597,7 +597,6 @@ namespace Nocturne.Connectors.Nightscout.Services
                 }
 
                 var allSuccess = true;
-                var allSuccess = true;
                 var sinceTimestamp = since ?? DateTime.UtcNow.AddHours(-24);
 
                 // Try to get lastModified to optimize sync

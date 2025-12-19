@@ -91,7 +91,7 @@ public class Program
                     var connectorService =
                         scope.ServiceProvider.GetRequiredService<TidepoolConnectorService>();
 
-                    var since = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : null;
+                    DateTime? since = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : null;
                     logger.LogInformation(
                         "Manual sync triggered for Tidepool connector with lookback: {Days} days",
                         days

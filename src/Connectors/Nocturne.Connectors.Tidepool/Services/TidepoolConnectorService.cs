@@ -38,7 +38,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
     };
 
     /// <summary>
@@ -161,9 +161,12 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 else
                 {
                     // Extract session token from response header
-                    if (response.Headers.TryGetValues(
+                    if (
+                        response.Headers.TryGetValues(
                             TidepoolConstants.Headers.SessionToken,
-                            out var tokenValues))
+                            out var tokenValues
+                        )
+                    )
                     {
                         _sessionToken = tokenValues.FirstOrDefault();
                     }
@@ -238,10 +241,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
         // All attempts failed
         _failedRequestCount++;
-        _logger.LogError(
-            "Tidepool authentication failed after {MaxRetries} attempts",
-            maxRetries
-        );
+        _logger.LogError("Tidepool authentication failed after {MaxRetries} attempts", maxRetries);
 
         if (lastException != null)
         {
@@ -254,8 +254,8 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     private bool IsSessionExpired()
     {
         return string.IsNullOrEmpty(_sessionToken)
-               || string.IsNullOrEmpty(_userId)
-               || DateTime.UtcNow >= _sessionExpiresAt;
+            || string.IsNullOrEmpty(_userId)
+            || DateTime.UtcNow >= _sessionExpiresAt;
     }
 
     public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
@@ -331,7 +331,9 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
                     if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
-                        _logger.LogWarning("Tidepool session expired, attempting re-authentication");
+                        _logger.LogWarning(
+                            "Tidepool session expired, attempting re-authentication"
+                        );
                         _sessionToken = null;
                         _sessionExpiresAt = DateTime.MinValue;
 
@@ -443,10 +445,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             return new List<TidepoolBolus>();
         }
 
-        return await FetchDataAsync<TidepoolBolus>(
-            TidepoolConstants.DataTypes.Bolus,
-            since
-        );
+        return await FetchDataAsync<TidepoolBolus>(TidepoolConstants.DataTypes.Bolus, since);
     }
 
     /// <summary>
@@ -459,16 +458,15 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             return new List<TidepoolFood>();
         }
 
-        return await FetchDataAsync<TidepoolFood>(
-            TidepoolConstants.DataTypes.Food,
-            since
-        );
+        return await FetchDataAsync<TidepoolFood>(TidepoolConstants.DataTypes.Food, since);
     }
 
     /// <summary>
     /// Fetch physical activity data from Tidepool
     /// </summary>
-    public async Task<List<TidepoolPhysicalActivity>> FetchPhysicalActivityAsync(DateTime? since = null)
+    public async Task<List<TidepoolPhysicalActivity>> FetchPhysicalActivityAsync(
+        DateTime? since = null
+    )
     {
         if (IsSessionExpired() && !await AuthenticateAsync())
         {
@@ -564,7 +562,10 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         }
     }
 
-    private async Task SyncTreatmentsAsync(CancellationToken cancellationToken, DateTime? since = null)
+    private async Task SyncTreatmentsAsync(
+        CancellationToken cancellationToken,
+        DateTime? since = null
+    )
     {
         try
         {
@@ -577,14 +578,16 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
             foreach (var bolus in boluses.Where(b => b.Time.HasValue))
             {
-                treatments.Add(new Treatment
-                {
-                    Created_at = bolus.Time!.Value.ToString("o"),
-                    EventType = "Bolus",
-                    Insulin = bolus.TotalInsulin,
-                    Duration = bolus.Duration?.TotalMinutes,
-                    EnteredBy = "Tidepool",
-                });
+                treatments.Add(
+                    new Treatment
+                    {
+                        Created_at = bolus.Time!.Value.ToString("o"),
+                        EventType = "Bolus",
+                        Insulin = bolus.TotalInsulin,
+                        Duration = bolus.Duration?.TotalMinutes,
+                        EnteredBy = "Tidepool",
+                    }
+                );
             }
 
             // Fetch food data
@@ -594,13 +597,15 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 var carbs = food.Nutrition?.Carbohydrate?.Net;
                 if (carbs.HasValue && carbs > 0)
                 {
-                    treatments.Add(new Treatment
-                    {
-                        Created_at = food.Time!.Value.ToString("o"),
-                        EventType = "Meal Bolus",
-                        Carbs = carbs,
-                        EnteredBy = "Tidepool",
-                    });
+                    treatments.Add(
+                        new Treatment
+                        {
+                            Created_at = food.Time!.Value.ToString("o"),
+                            EventType = "Meal Bolus",
+                            Carbs = carbs,
+                            EnteredBy = "Tidepool",
+                        }
+                    );
                 }
             }
 
@@ -608,10 +613,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             {
                 _stateService?.SetState(ConnectorState.Syncing, "Uploading treatments...");
                 await PublishTreatmentDataAsync(treatments, _config, cancellationToken);
-                _logger.LogInformation(
-                    "Synced {Count} treatments from Tidepool",
-                    treatments.Count
-                );
+                _logger.LogInformation("Synced {Count} treatments from Tidepool", treatments.Count);
             }
             else
             {
@@ -619,7 +621,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             }
 
             // Fetch and sync physical activity data to Activity table
-            await SyncPhysicalActivityAsync(since, cancellationToken);
+            await SyncPhysicalActivityAsync(since.Value, cancellationToken);
 
             _stateService?.SetState(ConnectorState.Idle, "Tidepool sync complete");
         }
@@ -630,7 +632,10 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         }
     }
 
-    private async Task SyncPhysicalActivityAsync(DateTime since, CancellationToken cancellationToken)
+    private async Task SyncPhysicalActivityAsync(
+        DateTime since,
+        CancellationToken cancellationToken
+    )
     {
         try
         {

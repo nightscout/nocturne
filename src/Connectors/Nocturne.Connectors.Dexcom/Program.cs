@@ -100,7 +100,7 @@ public class Program
                     var connectorService =
                         scope.ServiceProvider.GetRequiredService<DexcomConnectorService>();
 
-                    var since = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : null;
+                    DateTime? since = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : null;
                     logger.LogInformation(
                         "Manual sync triggered for Dexcom connector with lookback: {Days} days",
                         days

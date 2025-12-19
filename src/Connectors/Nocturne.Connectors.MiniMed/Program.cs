@@ -91,7 +91,7 @@ public class Program
                     var connectorService =
                         scope.ServiceProvider.GetRequiredService<CareLinkConnectorService>();
 
-                    var since = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : null;
+                    DateTime? since = days.HasValue ? DateTime.UtcNow.AddDays(-days.Value) : null;
                     logger.LogInformation(
                         "Manual sync triggered for MiniMed connector with lookback: {Days} days",
                         days

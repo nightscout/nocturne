@@ -15182,6 +15182,7 @@ export interface AlarmProfileConfiguration {
     alarmType?: AlarmTriggerType;
     threshold?: number;
     thresholdHigh?: number | undefined;
+    forecastLeadTimeMinutes?: number | undefined;
     persistenceMinutes?: number;
     audio?: AlarmAudioSettings;
     vibration?: AlarmVibrationSettings;
@@ -15205,6 +15206,7 @@ export enum AlarmTriggerType {
     RisingFast = "RisingFast",
     FallingFast = "FallingFast",
     StaleData = "StaleData",
+    ForecastLow = "ForecastLow",
     Custom = "Custom",
 }
 

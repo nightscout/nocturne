@@ -263,6 +263,12 @@
   // Thresholds (convert to display units)
   const lowThreshold = $derived(Number(bg(chartConfig.low.threshold ?? 55)));
   const highThreshold = $derived(Number(bg(chartConfig.high.threshold ?? 180)));
+  const veryHighThreshold = $derived(
+    Number(bg(chartConfig.severeHigh.threshold ?? 250))
+  );
+  const veryLowThreshold = $derived(
+    Number(bg(chartConfig.severeLow.threshold ?? 40))
+  );
 
   const glucoseYMax = $derived.by(() => {
     const maxSgv = Math.max(...filteredEntries.map((e) => e.sgv ?? 0));
@@ -828,7 +834,7 @@
             yOffset={2}
             anchor="top"
             variant="none"
-            class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap"
+            class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap bg-background"
           >
             {#snippet children({ data })}
               <Tooltip.Item
@@ -845,55 +851,65 @@
 
     <!-- Legend -->
     <div
-      class="flex flex-wrap justify-center gap-4 text-[10px] text-muted-foreground pt-2"
+      class="flex flex-wrap justify-center gap-4 text-sm text-muted-foreground pt-2"
     >
       <div class="flex items-center gap-1">
-        <div
-          class="w-2 h-2 rounded-full"
-          style="background: var(--glucose-in-range)"
-        ></div>
+        <div class="w-2 h-2 rounded-full bg-glucose-in-range"></div>
         <span>In Range</span>
       </div>
+      <!-- only show if very high values are present -->
+      {#if glucoseData.some((d) => d.sgv > veryHighThreshold)}
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-glucose-very-high"></div>
+          <span>Very High</span>
+        </div>
+      {/if}
+      {#if glucoseData.some((d) => d.sgv > highThreshold && d.sgv <= veryHighThreshold)}
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-glucose-high"></div>
+          <span>High</span>
+        </div>
+      {/if}
+      {#if glucoseData.some((d) => d.sgv < lowThreshold && d.sgv >= veryLowThreshold)}
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-glucose-low"></div>
+          <span>Low</span>
+        </div>
+      {/if}
+      {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
+        <div class="flex items-center gap-1">
+          <div class="w-2 h-2 rounded-full bg-glucose-very-low"></div>
+          <span>Very Low</span>
+        </div>
+      {/if}
       <div class="flex items-center gap-1">
-        <div
-          class="w-2 h-2 rounded-full"
-          style="background: var(--glucose-high)"
-        ></div>
-        <span>High</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <div
-          class="w-2 h-2 rounded-full"
-          style="background: var(--glucose-very-low)"
-        ></div>
-        <span>Low</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <div
-          class="w-3 h-2"
-          style="background: var(--insulin-basal); border: 1px solid var(--insulin)"
-        ></div>
+        <div class="w-3 h-2 bg-insulin-basal border border-insulin"></div>
         <span>Basal</span>
       </div>
       <div class="flex items-center gap-1">
-        <div
-          class="w-3 h-2"
-          style="background: var(--iob-basal); border: 1px solid var(--insulin)"
-        ></div>
+        <div class="w-3 h-2 bg-iob-basal border border-insulin"></div>
         <span>IOB</span>
       </div>
       <div class="flex items-center gap-1">
-        <div
-          class="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent"
-          style="border-bottom-color: var(--insulin-bolus)"
-        ></div>
+        <svg
+          width="20"
+          height="10"
+          viewBox="0 0 10 10"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <polygon points="0,10  -5,0  5,0" class="fill-insulin-bolus" />
+        </svg>
         <span>Bolus</span>
       </div>
       <div class="flex items-center gap-1">
-        <div
-          class="w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent"
-          style="border-top-color: var(--carbs)"
-        ></div>
+        <svg
+          width="20"
+          height="10"
+          viewBox="0 0 10 10"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <polygon points="0,0  -5,10  5,10" class="fill-carbs" />
+        </svg>
         <span>Carbs</span>
       </div>
     </div>

@@ -18,6 +18,9 @@ import { glucoseUnits } from "./appearance-store.svelte";
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
+// Module-level singleton instance
+let singletonStore: RealtimeStore | null = null;
+
 export class RealtimeStore {
   private websocketClient!: WebSocketClient;
   private initialized = false;
@@ -126,6 +129,9 @@ export class RealtimeStore {
       return;
     }
 
+    // Set initialized flag immediately to prevent re-entry during reactive updates
+    this.initialized = true;
+
     // Start time ticker
     if (typeof window !== "undefined") {
       this.timeInterval = setInterval(() => {
@@ -137,12 +143,6 @@ export class RealtimeStore {
     if (!this.websocketClient.hasValidUrl()) {
       return;
     }
-
-    // Start with empty data
-    this.entries = [];
-    this.treatments = [];
-    this.deviceStatuses = [];
-    this.profile = null;
 
     try {
       // Fetch historical data using the properly configured API client
@@ -182,7 +182,6 @@ export class RealtimeStore {
 
     // Connect to WebSocket bridge
     this.websocketClient.connect();
-    this.initialized = true;
   }
 
   /** Setup WebSocket event handlers */
@@ -420,9 +419,16 @@ export class RealtimeStore {
   }
 }
 
-/** Creates a realtime store and sets it in context */
+/** Creates a realtime store and sets it in context (singleton - only creates once) */
 export function createRealtimeStore(config: WebSocketConfig): RealtimeStore {
+  // Return existing singleton if already created
+  if (singletonStore) {
+    setContext(REALTIME_STORE_KEY, singletonStore);
+    return singletonStore;
+  }
+
   const store = new RealtimeStore(config);
+  singletonStore = store;
   setContext(REALTIME_STORE_KEY, store);
   return store;
 }

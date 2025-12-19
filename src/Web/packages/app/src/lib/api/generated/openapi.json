@@ -17848,6 +17848,11 @@
             "format": "int32"
           },
           "thresholdHigh": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "forecastLeadTimeMinutes": {
             "type": "integer",
             "format": "int32",
             "nullable": true
@@ -17908,6 +17913,7 @@
           "RisingFast",
           "FallingFast",
           "StaleData",
+          "ForecastLow",
           "Custom"
         ],
         "enum": [
@@ -17918,6 +17924,7 @@
           "RisingFast",
           "FallingFast",
           "StaleData",
+          "ForecastLow",
           "Custom"
         ]
       },
