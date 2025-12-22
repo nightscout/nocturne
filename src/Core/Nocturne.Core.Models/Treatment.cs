@@ -273,6 +273,7 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the timestamp as an ISO 8601 string - optional field
     /// </summary>
     [JsonPropertyName("timestamp")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? Timestamp { get; set; }
 
     /// <summary>
