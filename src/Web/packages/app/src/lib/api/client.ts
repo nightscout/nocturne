@@ -21,7 +21,6 @@ export function getApiClient(): ApiClient {
 
   if (!clientApiClient) {
     const apiBaseUrl = publicEnv.PUBLIC_API_URL || "http://localhost:1612";
-    // Use the browser's native fetch
     const httpClient = { fetch: window.fetch.bind(window) };
     clientApiClient = new ApiClient(apiBaseUrl, httpClient);
   }

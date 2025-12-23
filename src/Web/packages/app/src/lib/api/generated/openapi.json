@@ -5040,6 +5040,605 @@
         }
       }
     },
+    "/api/v4/trackers/seed": {
+      "post": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Seed default tracker definitions for the current user",
+        "operationId": "Trackers_SeedDefaults",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/definitions": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get all tracker definitions for the current user",
+        "operationId": "Trackers_GetDefinitions",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TrackerCategory"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackerDefinitionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Create a new tracker definition",
+        "operationId": "Trackers_CreateDefinition",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTrackerDefinitionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerDefinitionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/definitions/{id}": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get a specific tracker definition",
+        "operationId": "Trackers_GetDefinition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerDefinitionDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Update a tracker definition",
+        "operationId": "Trackers_UpdateDefinition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTrackerDefinitionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerDefinitionDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Delete a tracker definition",
+        "operationId": "Trackers_DeleteDefinition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/instances": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get active tracker instances",
+        "operationId": "Trackers_GetActiveInstances",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackerInstanceDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Start a new tracker instance",
+        "operationId": "Trackers_StartInstance",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTrackerInstanceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerInstanceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/instances/history": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get completed tracker instances (history)",
+        "operationId": "Trackers_GetInstanceHistory",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackerInstanceDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/instances/upcoming": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get upcoming tracker expirations for calendar",
+        "operationId": "Trackers_GetUpcomingInstances",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackerInstanceDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/instances/{id}/complete": {
+      "put": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Complete a tracker instance",
+        "operationId": "Trackers_CompleteInstance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteTrackerInstanceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerInstanceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/instances/{id}/ack": {
+      "post": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Acknowledge/snooze a tracker notification",
+        "operationId": "Trackers_AckInstance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AckTrackerRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/instances/{id}": {
+      "delete": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Delete a tracker instance",
+        "operationId": "Trackers_DeleteInstance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/presets": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get all presets for the current user",
+        "operationId": "Trackers_GetPresets",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackerPresetDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Create a new preset",
+        "operationId": "Trackers_CreatePreset",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTrackerPresetRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerPresetDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/presets/{id}/apply": {
+      "post": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Apply a preset (starts a new instance)",
+        "operationId": "Trackers_ApplyPreset",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyPresetRequest"
+              }
+            }
+          },
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerInstanceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/presets/{id}": {
+      "delete": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Delete a preset",
+        "operationId": "Trackers_DeletePreset",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/ui-settings": {
       "get": {
         "tags": [
@@ -7976,332 +8575,6 @@
         "responses": {
           "200": {
             "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/DeviceAge/cannula": {
-      "get": {
-        "tags": [
-          "DeviceAge"
-        ],
-        "summary": "Get cannula age information based on site change treatments",
-        "operationId": "DeviceAge_GetCannulaAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "description": "Info threshold in hours (default: 44)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "description": "Warning threshold in hours (default: 48)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "description": "Urgent threshold in hours (default: 72)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "description": "Display format: hours or days (default: hours)",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "description": "Enable alert notifications (default: false)",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Cannula age information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/DeviceAge/sensor": {
-      "get": {
-        "tags": [
-          "DeviceAge"
-        ],
-        "summary": "Get sensor age information based on sensor start and sensor change treatments",
-        "operationId": "DeviceAge_GetSensorAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "description": "Info threshold in hours (default: 144)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "description": "Warning threshold in hours (default: 164)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "description": "Urgent threshold in hours (default: 166)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "description": "Display format: hours or days (default: days)",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "description": "Enable alert notifications (default: false)",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Sensor age information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SensorAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/DeviceAge/battery": {
-      "get": {
-        "tags": [
-          "DeviceAge"
-        ],
-        "summary": "Get battery age information based on battery change treatments",
-        "operationId": "DeviceAge_GetBatteryAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "description": "Info threshold in hours (default: 312)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "description": "Warning threshold in hours (default: 336)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "description": "Urgent threshold in hours (default: 360)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "description": "Display format: hours or days (default: days)",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "description": "Enable alert notifications (default: false)",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Battery age information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/DeviceAge/calibration": {
-      "get": {
-        "tags": [
-          "DeviceAge"
-        ],
-        "summary": "Get calibration age information based on BG Check and Calibration treatments",
-        "operationId": "DeviceAge_GetCalibrationAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "description": "Info threshold in hours (default: 24)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "description": "Warning threshold in hours (default: 48)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "description": "Urgent threshold in hours (default: 72)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "description": "Display format: hours or days (default: hours)",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "description": "Enable alert notifications (default: false)",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Calibration age information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/DeviceAge/all": {
-      "get": {
-        "tags": [
-          "DeviceAge"
-        ],
-        "summary": "Get all device ages in a single request",
-        "operationId": "DeviceAge_GetAllDeviceAges",
-        "responses": {
-          "200": {
-            "description": "Combined device age information",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -17501,6 +17774,441 @@
           }
         }
       },
+      "TrackerDefinitionDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "triggerEventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "triggerNotesContains": {
+            "type": "string",
+            "nullable": true
+          },
+          "lifespanHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "infoHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "warnHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "hazardHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "urgentHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isFavorite": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "TrackerCategory": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "CreateTrackerDefinitionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "triggerEventTypes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "triggerNotesContains": {
+            "type": "string",
+            "nullable": true
+          },
+          "lifespanHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "infoHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "warnHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "hazardHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "urgentHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isFavorite": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateTrackerDefinitionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerCategory"
+              }
+            ]
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "triggerEventTypes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "triggerNotesContains": {
+            "type": "string",
+            "nullable": true
+          },
+          "lifespanHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "infoHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "warnHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "hazardHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "urgentHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "isFavorite": {
+            "type": "boolean",
+            "nullable": true
+          }
+        }
+      },
+      "TrackerInstanceDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "definitionName": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "expectedEndAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "startNotes": {
+            "type": "string",
+            "nullable": true
+          },
+          "completionNotes": {
+            "type": "string",
+            "nullable": true
+          },
+          "completionReason": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompletionReason"
+              }
+            ]
+          },
+          "ageHours": {
+            "type": "number",
+            "format": "double"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "lastAckedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "ackSnoozeMins": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "CompletionReason": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Completed",
+          "Expired",
+          "Other",
+          "Failed",
+          "FellOff",
+          "ReplacedEarly",
+          "Empty",
+          "Refilled",
+          "Attended",
+          "Rescheduled",
+          "Cancelled",
+          "Missed"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ]
+      },
+      "StartTrackerInstanceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "definitionId"
+        ],
+        "properties": {
+          "definitionId": {
+            "type": "string",
+            "format": "guid",
+            "minLength": 1
+          },
+          "startNotes": {
+            "type": "string",
+            "nullable": true
+          },
+          "startTreatmentId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CompleteTrackerInstanceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/CompletionReason"
+          },
+          "completionNotes": {
+            "type": "string",
+            "nullable": true
+          },
+          "completeTreatmentId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AckTrackerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "snoozeMins": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "global": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TrackerPresetDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "definitionName": {
+            "type": "string"
+          },
+          "defaultStartNotes": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateTrackerPresetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "definitionId"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid",
+            "minLength": 1
+          },
+          "defaultStartNotes": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ApplyPresetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "overrideNotes": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "UISettingsConfiguration": {
         "type": "object",
         "additionalProperties": false,
@@ -20892,92 +21600,6 @@
             "type": "integer",
             "description": "Number of records matching the query criteria",
             "format": "int64"
-          }
-        }
-      },
-      "DeviceAgeInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "found": {
-            "type": "boolean"
-          },
-          "age": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "days": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "hours": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "treatmentDate": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
-          },
-          "minFractions": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "level": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "display": {
-            "type": "string"
-          },
-          "notification": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/DeviceAgeNotification"
-              }
-            ]
-          }
-        }
-      },
-      "DeviceAgeNotification": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "pushoverSound": {
-            "type": "string"
-          },
-          "level": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "group": {
-            "type": "string"
-          }
-        }
-      },
-      "SensorAgeInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "Sensor Start": {
-            "$ref": "#/components/schemas/DeviceAgeInfo"
-          },
-          "Sensor Change": {
-            "$ref": "#/components/schemas/DeviceAgeInfo"
-          },
-          "min": {
-            "type": "string"
           }
         }
       },

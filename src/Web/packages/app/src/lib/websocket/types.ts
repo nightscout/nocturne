@@ -1,18 +1,18 @@
 // WebSocket integration types using existing API client types
-import type { 
-  Entry, 
-  Treatment, 
+import type {
+  Entry,
+  Treatment,
   WebSocketEvents,
-  WebSocketEventsMetadata 
+  WebSocketEventsMetadata
 } from '$lib/api/generated/nocturne-api-client';
 
 // Re-export API client types for convenience
 export type { Entry, Treatment, WebSocketEvents, WebSocketEventsMetadata };
 
 // WebSocket connection states
-export type WebSocketConnectionStatus = 
+export type WebSocketConnectionStatus =
   | 'connecting'
-  | 'connected' 
+  | 'connected'
   | 'disconnected'
   | 'reconnecting'
   | 'error';
@@ -66,6 +66,24 @@ export interface StatusEvent {
   timestamp?: string;
 }
 
+export interface TrackerUpdateEvent {
+  action: 'create' | 'update' | 'delete' | 'complete' | 'ack';
+  instance: {
+    id: string;
+    definitionId: string;
+    definitionName: string;
+    category: number;
+    ageHours: number;
+    startedAt: string;
+    completedAt?: string;
+    expectedEndAt?: string;
+    infoHours?: number;
+    warnHours?: number;
+    hazardHours?: number;
+    urgentHours?: number;
+  };
+}
+
 // WebSocket client statistics
 export interface WebSocketStats {
   connectedClients: number;
@@ -84,18 +102,21 @@ export interface WebSocketEventHandlers {
   reconnect: (attemptNumber: number) => void;
   reconnect_failed: () => void;
   connect_ack: (info: ConnectionInfo) => void;
-  
+
   // Data events
   dataUpdate: (event: DataUpdateEvent) => void;
   create: (event: StorageEvent) => void;
   update: (event: StorageEvent) => void;
   delete: (event: StorageEvent) => void;
-  
-  // Notification events  
+
+  // Notification events
   announcement: (event: AnnouncementEvent) => void;
   alarm: (event: AlarmEvent) => void;
   clear_alarm: () => void;
   status: (event: StatusEvent) => void;
+
+  // Tracker events
+  trackerUpdate: (event: TrackerUpdateEvent) => void;
 }
 
 // Error types

@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as Alert from "$lib/components/ui/alert";
   import { Clock, RefreshCw, X } from "lucide-svelte";
-  import { formatSessionExpiry } from "$lib/stores/auth.svelte";
+  import { formatSessionExpiry } from "$lib/stores/auth-store.svelte";
   import { refreshSession } from "../../../routes/auth/auth.remote";
 
   interface Props {

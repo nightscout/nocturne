@@ -1409,7 +1409,7 @@ namespace Nocturne.Connectors.Glooko.Services
             // Process Carbs
             if (series.CarbAll != null)
             {
-                foreach (var carb in series.CarbAll)
+                foreach (var carb in series.CarbAll.Where(c => c.Y.HasValue && c.Y > 0))
                 {
                     var timestamp = DateTimeOffset.FromUnixTimeSeconds(carb.X).UtcDateTime;
                     treatments.Add(new Treatment

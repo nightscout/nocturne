@@ -20,7 +20,7 @@ import {
   ActivityClient,
   AlexaClient,
   CountClient,
-  DeviceAgeClient,
+  TrackersClient,
   TimeQueryClient,
   NotificationsClient,
   IobClient,
@@ -67,7 +67,8 @@ export class ApiClient {
   public readonly activity: ActivityClient;
   public readonly alexa: AlexaClient;
   public readonly count: CountClient;
-  public readonly deviceAge: DeviceAgeClient;
+  public readonly trackers: TrackersClient;
+
   public readonly v1Notifications: NotificationsClient;
   public readonly timeQuery: TimeQueryClient;
   public readonly iob: IobClient;
@@ -120,7 +121,7 @@ export class ApiClient {
     this.activity = new ActivityClient(apiBaseUrl, http);
     this.alexa = new AlexaClient(apiBaseUrl, http);
     this.count = new CountClient(apiBaseUrl, http);
-    this.deviceAge = new DeviceAgeClient(apiBaseUrl, http);
+    this.trackers = new TrackersClient(apiBaseUrl, http);
     this.v1Notifications = new NotificationsClient(apiBaseUrl, http);
     this.timeQuery = new TimeQueryClient(apiBaseUrl, http);
     this.iob = new IobClient(apiBaseUrl, http);

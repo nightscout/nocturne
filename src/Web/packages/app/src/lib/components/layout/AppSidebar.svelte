@@ -2,7 +2,11 @@
   import { page } from "$app/state";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import { SidebarGlucoseWidget, UserMenu } from "./index";
+  import {
+    SidebarGlucoseWidget,
+    SidebarNotifications,
+    UserMenu,
+  } from "./index";
   import {
     Home,
     BarChart3,
@@ -31,8 +35,9 @@
     Terminal,
     TestTube,
     Palette,
+    Timer,
   } from "lucide-svelte";
-  import type { AuthUser } from "$lib/stores/auth.svelte";
+  import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
   interface Props {
     /** Current authenticated user (passed from layout data) */
@@ -148,6 +153,7 @@
         { title: "Algorithm", href: "/settings/algorithm", icon: Brain },
         { title: "Features", href: "/settings/features", icon: Sparkles },
         { title: "Notifications", href: "/settings/notifications", icon: Bell },
+        { title: "Trackers", href: "/settings/trackers", icon: Timer },
         { title: "Services", href: "/settings/services", icon: Plug },
         {
           title: "Support & Community",
@@ -283,7 +289,8 @@
 
   <Sidebar.Footer class="p-2">
     <Sidebar.Menu>
-      <Sidebar.MenuItem>
+      <Sidebar.MenuItem class="flex items-center gap-2">
+        <SidebarNotifications />
         <UserMenu {user} />
       </Sidebar.MenuItem>
     </Sidebar.Menu>

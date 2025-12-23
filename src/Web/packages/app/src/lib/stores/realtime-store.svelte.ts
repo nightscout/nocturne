@@ -8,8 +8,9 @@ import type {
   StorageEvent,
   AnnouncementEvent,
   AlarmEvent,
+  TrackerUpdateEvent,
 } from "$lib/websocket/types";
-import type { DeviceStatus, Profile } from "$lib/api";
+import type { DeviceStatus, Profile, TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
@@ -34,6 +35,8 @@ export class RealtimeStore {
   treatments = $state<Treatment[]>([]);
   deviceStatuses = $state<DeviceStatus[]>([]);
   profile = $state<Profile | null>(null);
+  trackerInstances = $state<TrackerInstanceDto[]>([]);
+  trackerDefinitions = $state<TrackerDefinitionDto[]>([]);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -118,6 +121,23 @@ export class RealtimeStore {
     );
   });
 
+  /** Active tracker notifications (warn level and above) */
+  trackerNotifications = $derived.by(() => {
+    return this.trackerInstances
+      .map((instance) => {
+        const def = this.trackerDefinitions.find((d) => d.id === instance.definitionId);
+        if (!def || !instance.ageHours) return null;
+        let level: "info" | "warn" | "hazard" | "urgent" | null = null;
+        if (def.urgentHours && instance.ageHours >= def.urgentHours) level = "urgent";
+        else if (def.hazardHours && instance.ageHours >= def.hazardHours) level = "hazard";
+        else if (def.warnHours && instance.ageHours >= def.warnHours) level = "warn";
+        else if (def.infoHours && instance.ageHours >= def.infoHours) level = "info";
+        if (!level || level === "info") return null;
+        return { ...instance, level };
+      })
+      .filter((n): n is TrackerInstanceDto & { level: "warn" | "hazard" | "urgent" } => n !== null);
+  });
+
   constructor(config: WebSocketConfig) {
     this.websocketClient = new WebSocketClient(config);
     this.setupEventHandlers();
@@ -147,11 +167,13 @@ export class RealtimeStore {
     try {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
-      const [historicalEntries, historicalTreatments, deviceStatusData, profileData] = await Promise.all([
+      const [historicalEntries, historicalTreatments, deviceStatusData, profileData, trackerDefs, trackerActive] = await Promise.all([
         apiClient.entries.getEntries2(undefined, 1000),
         apiClient.treatments.getTreatments2(undefined, 500),
         apiClient.deviceStatus.getDeviceStatus2(undefined, 100).catch(() => []),
         apiClient.profile.getProfiles2(1).catch(() => []),
+        apiClient.trackers.getDefinitions().catch(() => []),
+        apiClient.trackers.getActiveInstances().catch(() => []),
       ]);
 
       if (historicalEntries && historicalEntries.length > 0) {
@@ -174,6 +196,14 @@ export class RealtimeStore {
 
       if (profileData && profileData.length > 0) {
         this.profile = profileData[0];
+      }
+
+      if (trackerDefs && trackerDefs.length > 0) {
+        this.trackerDefinitions = trackerDefs;
+      }
+
+      if (trackerActive && trackerActive.length > 0) {
+        this.trackerInstances = trackerActive;
       }
     } catch (error) {
       console.error("Failed to fetch historical data:", error);
@@ -224,6 +254,10 @@ export class RealtimeStore {
 
     this.websocketClient.on("clear_alarm", () => {
       this.handleClearAlarm();
+    });
+
+    this.websocketClient.on("trackerUpdate", (event: TrackerUpdateEvent) => {
+      this.handleTrackerUpdate(event);
     });
   }
 
@@ -364,6 +398,59 @@ export class RealtimeStore {
   /** Handle alarm clearing */
   private handleClearAlarm(): void {
     toast.success("Glucose alarm cleared");
+  }
+
+  /** Handle tracker updates from SignalR */
+  private handleTrackerUpdate(event: TrackerUpdateEvent): void {
+    const { action, instance } = event;
+
+    switch (action) {
+      case "create":
+        // Add new instance if not exists
+        if (!this.trackerInstances.some((i) => i.id === instance.id)) {
+          this.trackerInstances = [
+            {
+              id: instance.id,
+              definitionId: instance.definitionId,
+              definitionName: instance.definitionName,
+              category: instance.category,
+              ageHours: instance.ageHours,
+              startedAt: new Date(instance.startedAt),
+              completedAt: instance.completedAt ? new Date(instance.completedAt) : undefined,
+              expectedEndAt: instance.expectedEndAt ? new Date(instance.expectedEndAt) : undefined,
+              isActive: true,
+            } as TrackerInstanceDto,
+            ...this.trackerInstances,
+          ];
+          toast.info(`Tracker started: ${instance.definitionName}`);
+        }
+        break;
+
+      case "update":
+      case "ack":
+        // Update existing instance
+        const updateIndex = this.trackerInstances.findIndex((i) => i.id === instance.id);
+        if (updateIndex !== -1) {
+          this.trackerInstances = [
+            ...this.trackerInstances.slice(0, updateIndex),
+            {
+              ...this.trackerInstances[updateIndex],
+              ageHours: instance.ageHours,
+            } as TrackerInstanceDto,
+            ...this.trackerInstances.slice(updateIndex + 1),
+          ];
+        }
+        break;
+
+      case "complete":
+      case "delete":
+        // Remove from active instances
+        this.trackerInstances = this.trackerInstances.filter((i) => i.id !== instance.id);
+        if (action === "complete") {
+          toast.success(`Tracker completed: ${instance.definitionName}`);
+        }
+        break;
+    }
   }
 
   /* Type guards for runtime type checking */

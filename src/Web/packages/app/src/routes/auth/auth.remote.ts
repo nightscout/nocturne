@@ -20,7 +20,7 @@ const emailSchema = z.email("Please enter a valid email address");
 
 const passwordSchema = z
   .string()
-  .min(12, "Password must be at least 12 characters");
+  .min(4, "Password must be at least 4 characters");
 
 const loginSchema = z.object({
   email: emailSchema,
@@ -263,8 +263,13 @@ export const loginForm = form(loginSchema, async (data, issue) => {
       invalid(issue("Invalid email or password"));
     }
   }
+
+  // Return success result instead of redirect - this ensures Set-Cookie headers
+  // are properly sent in the response before any navigation occurs.
+  // The client-side enhance() callback will handle the navigation.
   if (loginSucceeded) {
-    redirect(303, data.returnUrl || "/");
+    console.log(`[AUTH] LoginForm: Login succeeded, returning success for redirect to ${data.returnUrl || "/"}`);
+    return { success: true, returnUrl: data.returnUrl || "/" };
   }
 });
 

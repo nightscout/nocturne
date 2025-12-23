@@ -284,9 +284,12 @@ class Program
         // Add the SvelteKit web application (with integrated WebSocket bridge)
         var webPackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "app");
 
+        #pragma warning disable ASPIRECERTIFICATES001
         var web = Aspire.Hosting.JavaScriptHostingExtensions.AddViteApp(builder, ServiceNames.NocturneWeb, webPackagePath)
             .WithPnpm()
             .WithExternalHttpEndpoints()
+            .WithHttpsEndpoint(env: "PORT")
+            .WithHttpsDeveloperCertificate()
             .WaitFor(api)
             .WaitFor(bridge)
             .WithReference(api)
@@ -324,6 +327,7 @@ class Program
                 builder.Configuration["Oidc:Cookie:RefreshTokenName"] ?? ".Nocturne.RefreshToken"
             );
 
+        #pragma warning restore ASPIRECERTIFICATES001
         apiSecret.WithParentRelationship(web);
 
         bridge.WithParentRelationship(web);

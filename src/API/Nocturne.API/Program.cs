@@ -237,12 +237,6 @@ builder.Services.AddScoped<IDataSourceService, DataSourceService>();
 // Connector sync service for triggering granular syncs
 builder.Services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
 
-// Device age tracking services
-builder.Services.AddScoped<ICannulaAgeService, CannulaAgeService>();
-builder.Services.AddScoped<ISensorAgeService, SensorAgeService>();
-builder.Services.AddScoped<IBatteryAgeService, BatteryAgeService>();
-builder.Services.AddScoped<ICalibrationAgeService, CalibrationAgeService>();
-
 // Configure JWT authentication
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName);
 var secretKey = jwtOptions["SecretKey"] ?? "DefaultSecretKeyForNocturneWhichShouldBeChanged";
@@ -294,6 +288,9 @@ builder.Services.AddSignalR();
 
 // Register SignalR broadcast service
 builder.Services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
+
+// Register tracker seed service for creating default definitions
+builder.Services.AddScoped<ITrackerSeedService, TrackerSeedService>();
 
 // Register demo mode service for querying demo mode status
 // This service is used by EntryService, TreatmentService, and StatusService to filter data

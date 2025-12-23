@@ -4,7 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { User, LogOut, Settings, Shield, ChevronDown } from "lucide-svelte";
   import { goto } from "$app/navigation";
-  import type { AuthUser } from "$lib/stores/auth.svelte";
+  import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
   interface Props {
     user: AuthUser | null;

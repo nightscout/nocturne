@@ -19,6 +19,7 @@
     Settings,
     User,
     Palette,
+    Timer,
   } from "lucide-svelte";
 
   type SettingsSection = {
@@ -80,6 +81,13 @@
       description: "Configure alarms, alerts, and notification preferences",
       icon: Bell,
       href: "/settings/notifications",
+    },
+    {
+      id: "trackers",
+      title: "Trackers",
+      description: "Track consumables, appointments, and custom reminders",
+      icon: Timer,
+      href: "/settings/trackers",
     },
     {
       id: "services",

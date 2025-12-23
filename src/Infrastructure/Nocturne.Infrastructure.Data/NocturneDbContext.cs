@@ -138,6 +138,23 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<DataSourceMetadataEntity> DataSourceMetadata { get; set; }
 
+    // Tracker entities
+
+    /// <summary>
+    /// Gets or sets the TrackerDefinitions table for reusable tracker templates
+    /// </summary>
+    public DbSet<TrackerDefinitionEntity> TrackerDefinitions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the TrackerInstances table for active/completed tracking sessions
+    /// </summary>
+    public DbSet<TrackerInstanceEntity> TrackerInstances { get; set; }
+
+    /// <summary>
+    /// Gets or sets the TrackerPresets table for quick-apply saved configurations
+    /// </summary>
+    public DbSet<TrackerPresetEntity> TrackerPresets { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -637,6 +654,66 @@ public class NocturneDbContext : DbContext
             .HasIndex(d => d.CreatedAt)
             .HasDatabaseName("ix_data_source_metadata_created_at");
 
+        // Tracker Definitions indexes - optimized for user queries
+        modelBuilder
+            .Entity<TrackerDefinitionEntity>()
+            .HasIndex(d => d.UserId)
+            .HasDatabaseName("ix_tracker_definitions_user_id");
+
+        modelBuilder
+            .Entity<TrackerDefinitionEntity>()
+            .HasIndex(d => new { d.UserId, d.Category })
+            .HasDatabaseName("ix_tracker_definitions_user_category");
+
+        modelBuilder
+            .Entity<TrackerDefinitionEntity>()
+            .HasIndex(d => d.IsFavorite)
+            .HasDatabaseName("ix_tracker_definitions_is_favorite");
+
+        modelBuilder
+            .Entity<TrackerDefinitionEntity>()
+            .HasIndex(d => d.CreatedAt)
+            .HasDatabaseName("ix_tracker_definitions_created_at");
+
+        // Tracker Instances indexes - optimized for active and history queries
+        modelBuilder
+            .Entity<TrackerInstanceEntity>()
+            .HasIndex(i => i.UserId)
+            .HasDatabaseName("ix_tracker_instances_user_id");
+
+        modelBuilder
+            .Entity<TrackerInstanceEntity>()
+            .HasIndex(i => i.DefinitionId)
+            .HasDatabaseName("ix_tracker_instances_definition_id");
+
+        modelBuilder
+            .Entity<TrackerInstanceEntity>()
+            .HasIndex(i => i.CompletedAt)
+            .HasDatabaseName("ix_tracker_instances_completed_at")
+            .HasFilter("completed_at IS NULL"); // Partial index for active instances
+
+        modelBuilder
+            .Entity<TrackerInstanceEntity>()
+            .HasIndex(i => new { i.UserId, i.CompletedAt })
+            .HasDatabaseName("ix_tracker_instances_user_completed");
+
+        modelBuilder
+            .Entity<TrackerInstanceEntity>()
+            .HasIndex(i => i.StartedAt)
+            .HasDatabaseName("ix_tracker_instances_started_at")
+            .IsDescending();
+
+        // Tracker Presets indexes
+        modelBuilder
+            .Entity<TrackerPresetEntity>()
+            .HasIndex(p => p.UserId)
+            .HasDatabaseName("ix_tracker_presets_user_id");
+
+        modelBuilder
+            .Entity<TrackerPresetEntity>()
+            .HasIndex(p => p.DefinitionId)
+            .HasDatabaseName("ix_tracker_presets_definition_id");
+
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -719,6 +796,20 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<AuthAuditLogEntity>()
             .Property(a => a.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        // Tracker entity UUID generators
+        modelBuilder
+            .Entity<TrackerDefinitionEntity>()
+            .Property(d => d.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<TrackerInstanceEntity>()
+            .Property(i => i.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<TrackerPresetEntity>()
+            .Property(p => p.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 
         // Configure automatic timestamp updates

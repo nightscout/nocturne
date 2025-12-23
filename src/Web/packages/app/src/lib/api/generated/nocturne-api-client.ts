@@ -6432,6 +6432,738 @@ export class StatusClient {
     }
 }
 
+export class TrackersClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Seed default tracker definitions for the current user
+     */
+    seedDefaults(signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/trackers/seed";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSeedDefaults(_response);
+        });
+    }
+
+    protected processSeedDefaults(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+
+    /**
+     * Get all tracker definitions for the current user
+     * @param category (optional) 
+     */
+    getDefinitions(category?: TrackerCategory | null | undefined, signal?: AbortSignal): Promise<TrackerDefinitionDto[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/definitions?";
+        if (category !== undefined && category !== null)
+            url_ += "category=" + encodeURIComponent("" + category) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDefinitions(_response);
+        });
+    }
+
+    protected processGetDefinitions(response: Response): Promise<TrackerDefinitionDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerDefinitionDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerDefinitionDto[]>(null as any);
+    }
+
+    /**
+     * Create a new tracker definition
+     */
+    createDefinition(request: CreateTrackerDefinitionRequest, signal?: AbortSignal): Promise<TrackerDefinitionDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/definitions";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateDefinition(_response);
+        });
+    }
+
+    protected processCreateDefinition(response: Response): Promise<TrackerDefinitionDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerDefinitionDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerDefinitionDto>(null as any);
+    }
+
+    /**
+     * Get a specific tracker definition
+     */
+    getDefinition(id: string, signal?: AbortSignal): Promise<TrackerDefinitionDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/definitions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDefinition(_response);
+        });
+    }
+
+    protected processGetDefinition(response: Response): Promise<TrackerDefinitionDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerDefinitionDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerDefinitionDto>(null as any);
+    }
+
+    /**
+     * Update a tracker definition
+     */
+    updateDefinition(id: string, request: UpdateTrackerDefinitionRequest, signal?: AbortSignal): Promise<TrackerDefinitionDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/definitions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateDefinition(_response);
+        });
+    }
+
+    protected processUpdateDefinition(response: Response): Promise<TrackerDefinitionDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerDefinitionDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerDefinitionDto>(null as any);
+    }
+
+    /**
+     * Delete a tracker definition
+     */
+    deleteDefinition(id: string, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/trackers/definitions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteDefinition(_response);
+        });
+    }
+
+    protected processDeleteDefinition(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+
+    /**
+     * Get active tracker instances
+     */
+    getActiveInstances(signal?: AbortSignal): Promise<TrackerInstanceDto[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetActiveInstances(_response);
+        });
+    }
+
+    protected processGetActiveInstances(response: Response): Promise<TrackerInstanceDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerInstanceDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerInstanceDto[]>(null as any);
+    }
+
+    /**
+     * Start a new tracker instance
+     */
+    startInstance(request: StartTrackerInstanceRequest, signal?: AbortSignal): Promise<TrackerInstanceDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processStartInstance(_response);
+        });
+    }
+
+    protected processStartInstance(response: Response): Promise<TrackerInstanceDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerInstanceDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerInstanceDto>(null as any);
+    }
+
+    /**
+     * Get completed tracker instances (history)
+     * @param limit (optional) 
+     */
+    getInstanceHistory(limit?: number | undefined, signal?: AbortSignal): Promise<TrackerInstanceDto[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances/history?";
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetInstanceHistory(_response);
+        });
+    }
+
+    protected processGetInstanceHistory(response: Response): Promise<TrackerInstanceDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerInstanceDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerInstanceDto[]>(null as any);
+    }
+
+    /**
+     * Get upcoming tracker expirations for calendar
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getUpcomingInstances(from?: Date | null | undefined, to?: Date | null | undefined, signal?: AbortSignal): Promise<TrackerInstanceDto[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances/upcoming?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent(from ? "" + from.toISOString() : "") + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent(to ? "" + to.toISOString() : "") + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetUpcomingInstances(_response);
+        });
+    }
+
+    protected processGetUpcomingInstances(response: Response): Promise<TrackerInstanceDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerInstanceDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerInstanceDto[]>(null as any);
+    }
+
+    /**
+     * Complete a tracker instance
+     */
+    completeInstance(id: string, request: CompleteTrackerInstanceRequest, signal?: AbortSignal): Promise<TrackerInstanceDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}/complete";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCompleteInstance(_response);
+        });
+    }
+
+    protected processCompleteInstance(response: Response): Promise<TrackerInstanceDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerInstanceDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerInstanceDto>(null as any);
+    }
+
+    /**
+     * Acknowledge/snooze a tracker notification
+     */
+    ackInstance(id: string, request: AckTrackerRequest, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}/ack";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAckInstance(_response);
+        });
+    }
+
+    protected processAckInstance(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+
+    /**
+     * Delete a tracker instance
+     */
+    deleteInstance(id: string, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteInstance(_response);
+        });
+    }
+
+    protected processDeleteInstance(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+
+    /**
+     * Get all presets for the current user
+     */
+    getPresets(signal?: AbortSignal): Promise<TrackerPresetDto[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/presets";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPresets(_response);
+        });
+    }
+
+    protected processGetPresets(response: Response): Promise<TrackerPresetDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerPresetDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerPresetDto[]>(null as any);
+    }
+
+    /**
+     * Create a new preset
+     */
+    createPreset(request: CreateTrackerPresetRequest, signal?: AbortSignal): Promise<TrackerPresetDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/presets";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreatePreset(_response);
+        });
+    }
+
+    protected processCreatePreset(response: Response): Promise<TrackerPresetDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerPresetDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerPresetDto>(null as any);
+    }
+
+    /**
+     * Apply a preset (starts a new instance)
+     * @param request (optional) 
+     */
+    applyPreset(id: string, request?: ApplyPresetRequest | undefined, signal?: AbortSignal): Promise<TrackerInstanceDto> {
+        let url_ = this.baseUrl + "/api/v4/trackers/presets/{id}/apply";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processApplyPreset(_response);
+        });
+    }
+
+    protected processApplyPreset(response: Response): Promise<TrackerInstanceDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerInstanceDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerInstanceDto>(null as any);
+    }
+
+    /**
+     * Delete a preset
+     */
+    deletePreset(id: string, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/trackers/presets/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeletePreset(_response);
+        });
+    }
+
+    protected processDeletePreset(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+}
+
 export class UISettingsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -11977,272 +12709,6 @@ export class CountClient {
     }
 }
 
-export class DeviceAgeClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Get cannula age information based on site change treatments
-     * @param info (optional) Info threshold in hours (default: 44)
-     * @param warn (optional) Warning threshold in hours (default: 48)
-     * @param urgent (optional) Urgent threshold in hours (default: 72)
-     * @param display (optional) Display format: hours or days (default: hours)
-     * @param enableAlerts (optional) Enable alert notifications (default: false)
-     * @return Cannula age information
-     */
-    getCannulaAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/DeviceAge/cannula?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetCannulaAge(_response);
-        });
-    }
-
-    protected processGetCannulaAge(response: Response): Promise<DeviceAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceAgeInfo>(null as any);
-    }
-
-    /**
-     * Get sensor age information based on sensor start and sensor change treatments
-     * @param info (optional) Info threshold in hours (default: 144)
-     * @param warn (optional) Warning threshold in hours (default: 164)
-     * @param urgent (optional) Urgent threshold in hours (default: 166)
-     * @param display (optional) Display format: hours or days (default: days)
-     * @param enableAlerts (optional) Enable alert notifications (default: false)
-     * @return Sensor age information
-     */
-    getSensorAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<SensorAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/DeviceAge/sensor?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetSensorAge(_response);
-        });
-    }
-
-    protected processGetSensorAge(response: Response): Promise<SensorAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<SensorAgeInfo>(null as any);
-    }
-
-    /**
-     * Get battery age information based on battery change treatments
-     * @param info (optional) Info threshold in hours (default: 312)
-     * @param warn (optional) Warning threshold in hours (default: 336)
-     * @param urgent (optional) Urgent threshold in hours (default: 360)
-     * @param display (optional) Display format: hours or days (default: days)
-     * @param enableAlerts (optional) Enable alert notifications (default: false)
-     * @return Battery age information
-     */
-    getBatteryAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/DeviceAge/battery?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetBatteryAge(_response);
-        });
-    }
-
-    protected processGetBatteryAge(response: Response): Promise<DeviceAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceAgeInfo>(null as any);
-    }
-
-    /**
-     * Get calibration age information based on BG Check and Calibration treatments
-     * @param info (optional) Info threshold in hours (default: 24)
-     * @param warn (optional) Warning threshold in hours (default: 48)
-     * @param urgent (optional) Urgent threshold in hours (default: 72)
-     * @param display (optional) Display format: hours or days (default: hours)
-     * @param enableAlerts (optional) Enable alert notifications (default: false)
-     * @return Calibration age information
-     */
-    getCalibrationAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/DeviceAge/calibration?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetCalibrationAge(_response);
-        });
-    }
-
-    protected processGetCalibrationAge(response: Response): Promise<DeviceAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceAgeInfo>(null as any);
-    }
-
-    /**
-     * Get all device ages in a single request
-     * @return Combined device age information
-     */
-    getAllDeviceAges(signal?: AbortSignal): Promise<FileResponse> {
-        let url_ = this.baseUrl + "/api/v1/DeviceAge/all";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/octet-stream"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetAllDeviceAges(_response);
-        });
-    }
-
-    protected processGetAllDeviceAges(response: Response): Promise<FileResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<FileResponse>(null as any);
-    }
-}
-
 export class IobClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -15140,6 +15606,131 @@ export interface StatusResponse {
     head?: string | undefined;
 }
 
+export interface TrackerDefinitionDto {
+    id?: string;
+    name?: string;
+    description?: string | undefined;
+    category?: TrackerCategory;
+    icon?: string;
+    triggerEventTypes?: string[];
+    triggerNotesContains?: string | undefined;
+    lifespanHours?: number | undefined;
+    infoHours?: number | undefined;
+    warnHours?: number | undefined;
+    hazardHours?: number | undefined;
+    urgentHours?: number | undefined;
+    isFavorite?: boolean;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export enum TrackerCategory {
+    Consumable = 0,
+    Reservoir = 1,
+    Appointment = 2,
+    Reminder = 3,
+    Custom = 4,
+}
+
+export interface CreateTrackerDefinitionRequest {
+    name: string;
+    description?: string | undefined;
+    category?: TrackerCategory;
+    icon?: string | undefined;
+    triggerEventTypes?: string[] | undefined;
+    triggerNotesContains?: string | undefined;
+    lifespanHours?: number | undefined;
+    infoHours?: number | undefined;
+    warnHours?: number | undefined;
+    hazardHours?: number | undefined;
+    urgentHours?: number | undefined;
+    isFavorite?: boolean;
+}
+
+export interface UpdateTrackerDefinitionRequest {
+    name?: string | undefined;
+    description?: string | undefined;
+    category?: TrackerCategory | undefined;
+    icon?: string | undefined;
+    triggerEventTypes?: string[] | undefined;
+    triggerNotesContains?: string | undefined;
+    lifespanHours?: number | undefined;
+    infoHours?: number | undefined;
+    warnHours?: number | undefined;
+    hazardHours?: number | undefined;
+    urgentHours?: number | undefined;
+    isFavorite?: boolean | undefined;
+}
+
+export interface TrackerInstanceDto {
+    id?: string;
+    definitionId?: string;
+    definitionName?: string;
+    category?: TrackerCategory;
+    icon?: string;
+    startedAt?: Date;
+    completedAt?: Date | undefined;
+    expectedEndAt?: Date | undefined;
+    startNotes?: string | undefined;
+    completionNotes?: string | undefined;
+    completionReason?: CompletionReason | undefined;
+    ageHours?: number;
+    isActive?: boolean;
+    lastAckedAt?: Date | undefined;
+    ackSnoozeMins?: number | undefined;
+}
+
+export enum CompletionReason {
+    Completed = 0,
+    Expired = 1,
+    Other = 2,
+    Failed = 3,
+    FellOff = 4,
+    ReplacedEarly = 5,
+    Empty = 6,
+    Refilled = 7,
+    Attended = 8,
+    Rescheduled = 9,
+    Cancelled = 10,
+    Missed = 11,
+}
+
+export interface StartTrackerInstanceRequest {
+    definitionId: string;
+    startNotes?: string | undefined;
+    startTreatmentId?: string | undefined;
+}
+
+export interface CompleteTrackerInstanceRequest {
+    reason: CompletionReason;
+    completionNotes?: string | undefined;
+    completeTreatmentId?: string | undefined;
+}
+
+export interface AckTrackerRequest {
+    snoozeMins?: number;
+    global?: boolean;
+}
+
+export interface TrackerPresetDto {
+    id?: string;
+    name?: string;
+    definitionId?: string;
+    definitionName?: string;
+    defaultStartNotes?: string | undefined;
+    createdAt?: Date;
+}
+
+export interface CreateTrackerPresetRequest {
+    name: string;
+    definitionId: string;
+    defaultStartNotes?: string | undefined;
+}
+
+export interface ApplyPresetRequest {
+    overrideNotes?: string | undefined;
+}
+
 export interface UISettingsConfiguration {
     devices?: DeviceSettings;
     algorithm?: AlgorithmSettings;
@@ -16140,33 +16731,6 @@ export interface AlexaSlot {
 export interface CountResponse {
     /** Number of records matching the query criteria */
     count?: number;
-}
-
-export interface DeviceAgeInfo {
-    found?: boolean;
-    age?: number;
-    days?: number;
-    hours?: number;
-    treatmentDate?: number | undefined;
-    notes?: string | undefined;
-    minFractions?: number;
-    level?: number;
-    display?: string;
-    notification?: DeviceAgeNotification | undefined;
-}
-
-export interface DeviceAgeNotification {
-    title?: string;
-    message?: string;
-    pushoverSound?: string;
-    level?: number;
-    group?: string;
-}
-
-export interface SensorAgeInfo {
-    "Sensor Start"?: DeviceAgeInfo;
-    "Sensor Change"?: DeviceAgeInfo;
-    min?: string;
 }
 
 export interface AsyncProcessingResponse {

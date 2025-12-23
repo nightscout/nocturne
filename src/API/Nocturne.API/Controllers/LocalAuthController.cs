@@ -184,6 +184,7 @@ public class LocalAuthController : ControllerBase
 
         if (!result.Success)
         {
+            _logger.LogWarning("Login failed for user {Email}. Error: {Error}, Message: {Message}", request.Email, result.ErrorCode, result.ErrorMessage);
             var response = new ErrorResponse
             {
                 Error = result.ErrorCode ?? "auth_failed",

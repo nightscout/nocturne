@@ -143,19 +143,15 @@
             <!-- Local auth form using remote functions -->
             <!-- Use enhance() to handle the server-side redirect response -->
             <form
-              {...loginForm.enhance(async () => {
-                try {
+              {...loginForm.enhance(async ({ submit }) => {
+                await submit();
+                // After submission, check the result
+                const result = loginForm.result;
+                if (result?.success) {
+                  const targetUrl =
+                    (result as { returnUrl?: string }).returnUrl || returnUrl;
                   await invalidateAll();
-                  await goto(returnUrl, { invalidateAll: true });
-                } catch (e) {
-                  if (e && typeof e === "object" && "location" in e) {
-                    await invalidateAll();
-                    await goto((e as { location: string }).location, {
-                      invalidateAll: true,
-                    });
-                    return;
-                  }
-                  throw e;
+                  await goto(targetUrl, { invalidateAll: true });
                 }
               })}
               class="space-y-4"

@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
+  import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { onMount, onDestroy } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
@@ -31,6 +32,7 @@
   const { data, children } = $props<{ data: LayoutData; children: any }>();
 
   const realtimeStore = createRealtimeStore(config);
+  const authStore = createAuthStore();
 
   // Create settings store in context for the entire app
   // This makes feature settings available on all pages including the main dashboard

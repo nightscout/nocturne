@@ -60,6 +60,11 @@ public interface ISignalRBroadcastService
     /// Broadcast storage delete event (replaces socket.io 'delete' event in storage namespace)
     /// </summary>
     Task BroadcastStorageDeleteAsync(string collectionName, object data);
+
+    /// <summary>
+    /// Broadcast tracker update to authorized clients (for real-time tracker notifications)
+    /// </summary>
+    Task BroadcastTrackerUpdateAsync(string action, object trackerInstance);
 }
 
 /// <summary>
@@ -273,6 +278,27 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 "Error broadcasting storage delete event for collection {Collection}",
                 collectionName
             );
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastTrackerUpdateAsync(string action, object trackerInstance)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Broadcasting tracker update event: {Action}",
+                action
+            );
+            var payload = new { action, instance = trackerInstance };
+            await _dataHubContext
+                .Clients.Group("authorized")
+                .SendCoreAsync("trackerUpdate", new[] { payload });
+            _logger.LogDebug("Tracker update broadcast completed for action {Action}", action);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting tracker update event");
         }
     }
 }

@@ -217,7 +217,7 @@ namespace Nocturne.Connectors.Glooko.Models
     public class GlookoV3InsulinDataPoint : GlookoV3DataPointBase
     {
         [JsonPropertyName("y")]
-        public double Y { get; set; }
+        public double? Y { get; set; }
 
         [JsonPropertyName("label")]
         public string? Label { get; set; }
@@ -232,7 +232,7 @@ namespace Nocturne.Connectors.Glooko.Models
         /// Basal rate (U/hr)
         /// </summary>
         [JsonPropertyName("y")]
-        public double Y { get; set; }
+        public double? Y { get; set; }
 
         /// <summary>
         /// Duration in seconds
@@ -253,7 +253,7 @@ namespace Nocturne.Connectors.Glooko.Models
         /// Carbs in grams
         /// </summary>
         [JsonPropertyName("y")]
-        public double Y { get; set; }
+        public double? Y { get; set; }
 
         [JsonPropertyName("mealTag")]
         public string? MealTag { get; set; }

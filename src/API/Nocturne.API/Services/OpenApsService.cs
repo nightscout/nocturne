@@ -192,18 +192,18 @@ public class OpenApsService : IOpenApsService
     )
     {
         if (!preferences.EnableAlerts)
-            return Levels.NONE;
+            return 0; // NONE
 
         if (analysisResult.LastLoopMoment == null)
         {
             _logger.LogInformation("OpenAPS hasn't reported a loop yet");
-            return Levels.NONE;
+            return 0; // NONE
         }
 
         if (offlineMarker != null)
         {
             _logger.LogInformation("OpenAPS known offline, not checking for alerts");
-            return Levels.NONE;
+            return 0; // NONE
         }
 
         var urgentTime = analysisResult.LastLoopMoment.Value.AddMinutes(preferences.Urgent);
@@ -211,14 +211,14 @@ public class OpenApsService : IOpenApsService
 
         if (urgentTime < currentTime)
         {
-            return Levels.URGENT;
+            return 2; // URGENT
         }
         else if (warningTime < currentTime)
         {
-            return Levels.WARN;
+            return 1; // WARN
         }
 
-        return Levels.NONE;
+        return 0; // NONE
     }
 
     /// <summary>
