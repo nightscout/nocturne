@@ -7,6 +7,8 @@ export { default as SAGEPill } from './SAGEPill.svelte';
 export { default as BasalPill } from './BasalPill.svelte';
 export { default as LoopPill } from './LoopPill.svelte';
 export { default as StatusPillBar } from './StatusPillBar.svelte';
+export { default as TrackerPill } from './TrackerPill.svelte';
+export { default as TrackerPillBar } from './TrackerPillBar.svelte';
 
 // Re-export types
 export type {

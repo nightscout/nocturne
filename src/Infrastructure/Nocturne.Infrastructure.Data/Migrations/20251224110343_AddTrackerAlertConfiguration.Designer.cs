@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251224110343_AddTrackerAlertConfiguration")]
+    partial class AddTrackerAlertConfiguration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2212,10 +2215,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
-
-                    b.Property<int>("DashboardVisibility")
-                        .HasColumnType("integer")
-                        .HasColumnName("dashboard_visibility");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)

@@ -43,6 +43,7 @@
     NotificationUrgency,
     TrackerCategory,
     CompletionReason,
+    DashboardVisibility,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -71,6 +72,9 @@
   let formLifespanHours = $state<number | undefined>(undefined);
   let formNotifications = $state<TrackerNotification[]>([]);
   let formIsFavorite = $state(false);
+  let formDashboardVisibility = $state<DashboardVisibility>(
+    DashboardVisibility.Always
+  );
 
   // Helper to convert API format to notifications array
   function definitionToNotifications(
@@ -351,6 +355,7 @@
     formLifespanHours = undefined;
     formNotifications = [];
     formIsFavorite = false;
+    formDashboardVisibility = DashboardVisibility.Always;
     isDefinitionDialogOpen = true;
   }
 
@@ -364,6 +369,8 @@
     formLifespanHours = def.lifespanHours;
     formNotifications = definitionToNotifications(def);
     formIsFavorite = def.isFavorite ?? false;
+    formDashboardVisibility =
+      def.dashboardVisibility ?? DashboardVisibility.Always;
     isDefinitionDialogOpen = true;
   }
 
@@ -380,6 +387,7 @@
         lifespanHours: formLifespanHours,
         notificationThresholds: notificationThresholds,
         isFavorite: formIsFavorite,
+        dashboardVisibility: formDashboardVisibility,
       };
 
       if (isNewDefinition) {
@@ -843,6 +851,58 @@
       </div>
 
       <TrackerNotificationEditor bind:notifications={formNotifications} />
+
+      <div class="space-y-2">
+        <Label for="dashboardVisibility">Dashboard Visibility</Label>
+        <Select.Root type="single" bind:value={formDashboardVisibility}>
+          <Select.Trigger>
+            {#if formDashboardVisibility === DashboardVisibility.Off}
+              Off - Don't show on dashboard
+            {:else if formDashboardVisibility === DashboardVisibility.Always}
+              Always show
+            {:else if formDashboardVisibility === DashboardVisibility.Info}
+              Show after Info threshold
+            {:else if formDashboardVisibility === DashboardVisibility.Warn}
+              Show after Warn threshold
+            {:else if formDashboardVisibility === DashboardVisibility.Hazard}
+              Show after Hazard threshold
+            {:else if formDashboardVisibility === DashboardVisibility.Urgent}
+              Show after Urgent threshold
+            {:else}
+              Always show
+            {/if}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item
+              value={DashboardVisibility.Off}
+              label="Off - Don't show on dashboard"
+            />
+            <Select.Item
+              value={DashboardVisibility.Always}
+              label="Always show"
+            />
+            <Select.Item
+              value={DashboardVisibility.Info}
+              label="Show after Info threshold"
+            />
+            <Select.Item
+              value={DashboardVisibility.Warn}
+              label="Show after Warn threshold"
+            />
+            <Select.Item
+              value={DashboardVisibility.Hazard}
+              label="Show after Hazard threshold"
+            />
+            <Select.Item
+              value={DashboardVisibility.Urgent}
+              label="Show after Urgent threshold"
+            />
+          </Select.Content>
+        </Select.Root>
+        <p class="text-xs text-muted-foreground">
+          When to show this tracker as a pill on the dashboard
+        </p>
+      </div>
     </div>
 
     <Dialog.Footer>

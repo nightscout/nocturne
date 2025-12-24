@@ -205,6 +205,12 @@ public class FeatureSettings
 
     [JsonPropertyName("battery")]
     public BatteryDisplaySettings Battery { get; set; } = new();
+
+    /// <summary>
+    /// Settings for displaying tracker age pills on the dashboard
+    /// </summary>
+    [JsonPropertyName("trackerPills")]
+    public TrackerPillsSettings TrackerPills { get; set; } = new();
 }
 
 public class DisplaySettings
@@ -301,6 +307,25 @@ public class PluginSettings
 
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Settings for displaying tracker age pills on the dashboard
+/// </summary>
+public class TrackerPillsSettings
+{
+    /// <summary>
+    /// Whether to show tracker pills on the dashboard
+    /// </summary>
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Visibility threshold for tracker pills: "always", "info", "warn", "hazard", "urgent"
+    /// Only shows pills at or above the specified notification level
+    /// </summary>
+    [JsonPropertyName("visibility")]
+    public string Visibility { get; set; } = "always";
 }
 
 #endregion

@@ -2,6 +2,7 @@
 import type {
   Entry,
   Treatment,
+  TrackerInstanceDto,
   WebSocketEvents,
   WebSocketEventsMetadata
 } from '$lib/api/generated/nocturne-api-client';
@@ -68,20 +69,7 @@ export interface StatusEvent {
 
 export interface TrackerUpdateEvent {
   action: 'create' | 'update' | 'delete' | 'complete' | 'ack';
-  instance: {
-    id: string;
-    definitionId: string;
-    definitionName: string;
-    category: number;
-    ageHours: number;
-    startedAt: string;
-    completedAt?: string;
-    expectedEndAt?: string;
-    infoHours?: number;
-    warnHours?: number;
-    hazardHours?: number;
-    urgentHours?: number;
-  };
+  instance: TrackerInstanceDto;
 }
 
 // WebSocket client statistics

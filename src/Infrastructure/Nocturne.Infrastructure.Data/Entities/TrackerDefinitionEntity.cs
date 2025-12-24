@@ -78,6 +78,13 @@ public class TrackerDefinitionEntity
     public bool IsFavorite { get; set; } = false;
 
     /// <summary>
+    /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
+    /// "Off" = never show, "Always" = always show, others = show when age reaches that notification level
+    /// </summary>
+    [Column("dashboard_visibility")]
+    public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
+
+    /// <summary>
     /// When this definition was created
     /// </summary>
     [Column("created_at")]

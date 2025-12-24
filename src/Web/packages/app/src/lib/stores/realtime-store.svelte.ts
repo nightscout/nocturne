@@ -11,6 +11,7 @@ import type {
   TrackerUpdateEvent,
 } from "$lib/websocket/types";
 import type { DeviceStatus, Profile, TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
+import { NotificationUrgency } from "$lib/api";
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
@@ -126,12 +127,27 @@ export class RealtimeStore {
     return this.trackerInstances
       .map((instance) => {
         const def = this.trackerDefinitions.find((d) => d.id === instance.definitionId);
-        if (!def || !instance.ageHours) return null;
+        if (!def || !instance.ageHours || !def.notificationThresholds) return null;
+
+        // Determine level from notificationThresholds
         let level: "info" | "warn" | "hazard" | "urgent" | null = null;
-        if (def.urgentHours && instance.ageHours >= def.urgentHours) level = "urgent";
-        else if (def.hazardHours && instance.ageHours >= def.hazardHours) level = "hazard";
-        else if (def.warnHours && instance.ageHours >= def.warnHours) level = "warn";
-        else if (def.infoHours && instance.ageHours >= def.infoHours) level = "info";
+        const age = instance.ageHours;
+
+        // Sort thresholds by hours descending to find the highest triggered level
+        const sortedThresholds = [...def.notificationThresholds].sort(
+          (a, b) => (b.hours ?? 0) - (a.hours ?? 0)
+        );
+
+        for (const threshold of sortedThresholds) {
+          if (threshold.hours && age >= threshold.hours) {
+            const urgency = threshold.urgency;
+            if (urgency === NotificationUrgency.Urgent) { level = "urgent"; break; }
+            if (urgency === NotificationUrgency.Hazard) { level = "hazard"; break; }
+            if (urgency === NotificationUrgency.Warn) { level = "warn"; break; }
+            if (urgency === NotificationUrgency.Info) { level = "info"; break; }
+          }
+        }
+
         if (!level || level === "info") return null;
         return { ...instance, level };
       })
@@ -408,20 +424,7 @@ export class RealtimeStore {
       case "create":
         // Add new instance if not exists
         if (!this.trackerInstances.some((i) => i.id === instance.id)) {
-          this.trackerInstances = [
-            {
-              id: instance.id,
-              definitionId: instance.definitionId,
-              definitionName: instance.definitionName,
-              category: instance.category,
-              ageHours: instance.ageHours,
-              startedAt: new Date(instance.startedAt),
-              completedAt: instance.completedAt ? new Date(instance.completedAt) : undefined,
-              expectedEndAt: instance.expectedEndAt ? new Date(instance.expectedEndAt) : undefined,
-              isActive: true,
-            } as TrackerInstanceDto,
-            ...this.trackerInstances,
-          ];
+          this.trackerInstances = [instance, ...this.trackerInstances];
           toast.info(`Tracker started: ${instance.definitionName}`);
         }
         break;
@@ -436,7 +439,7 @@ export class RealtimeStore {
             {
               ...this.trackerInstances[updateIndex],
               ageHours: instance.ageHours,
-            } as TrackerInstanceDto,
+            },
             ...this.trackerInstances.slice(updateIndex + 1),
           ];
         }

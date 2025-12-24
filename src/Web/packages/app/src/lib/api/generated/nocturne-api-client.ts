@@ -6432,6 +6432,93 @@ export class StatusClient {
     }
 }
 
+export class TrackerAlertsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get pending tracker alerts for the current user
+     * @return List of pending alerts that need attention
+     */
+    getPendingAlerts(signal?: AbortSignal): Promise<TrackerAlertDto[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/alerts/pending";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPendingAlerts(_response);
+        });
+    }
+
+    protected processGetPendingAlerts(response: Response): Promise<TrackerAlertDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerAlertDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerAlertDto[]>(null as any);
+    }
+
+    /**
+     * Get available alert sounds
+     * @return List of available sound preset names
+     */
+    getAvailableSounds(signal?: AbortSignal): Promise<string[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/alerts/sounds";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetAvailableSounds(_response);
+        });
+    }
+
+    protected processGetAvailableSounds(response: Response): Promise<string[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as string[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<string[]>(null as any);
+    }
+}
+
 export class TrackersClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -12871,6 +12958,260 @@ export class IobClient {
     }
 }
 
+export class LegacyDeviceAgeClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get cannula/site age (CAGE) - equivalent to LegacyApp cage plugin
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getCannulaAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
+        let url_ = this.baseUrl + "/api/v1/deviceage/cannula?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetCannulaAge(_response);
+        });
+    }
+
+    protected processGetCannulaAge(response: Response): Promise<DeviceAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceAgeInfo>(null as any);
+    }
+
+    /**
+     * Get sensor age (SAGE) - equivalent to LegacyApp sage plugin
+    Returns both Sensor Start and Sensor Change events
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getSensorAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<SensorAgeInfo> {
+        let url_ = this.baseUrl + "/api/v1/deviceage/sensor?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSensorAge(_response);
+        });
+    }
+
+    protected processGetSensorAge(response: Response): Promise<SensorAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SensorAgeInfo>(null as any);
+    }
+
+    /**
+     * Get insulin reservoir age (IAGE) - equivalent to LegacyApp iage plugin
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getInsulinAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
+        let url_ = this.baseUrl + "/api/v1/deviceage/insulin?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetInsulinAge(_response);
+        });
+    }
+
+    protected processGetInsulinAge(response: Response): Promise<DeviceAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceAgeInfo>(null as any);
+    }
+
+    /**
+     * Get pump battery age (BAGE) - equivalent to LegacyApp bage plugin
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getBatteryAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
+        let url_ = this.baseUrl + "/api/v1/deviceage/battery?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetBatteryAge(_response);
+        });
+    }
+
+    protected processGetBatteryAge(response: Response): Promise<DeviceAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceAgeInfo>(null as any);
+    }
+
+    /**
+     * Get all device ages in a single call
+     */
+    getAllDeviceAges(signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v1/deviceage/all";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetAllDeviceAges(_response);
+        });
+    }
+
+    protected processGetAllDeviceAges(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+}
+
 export class TimeQueryClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -15606,6 +15947,27 @@ export interface StatusResponse {
     head?: string | undefined;
 }
 
+/** DTO for tracker alerts returned to the frontend */
+export interface TrackerAlertDto {
+    instanceId?: string;
+    definitionId?: string;
+    thresholdId?: string;
+    trackerName?: string;
+    urgency?: NotificationUrgency;
+    message?: string;
+    pushEnabled?: boolean;
+    audioEnabled?: boolean;
+    audioSound?: string | undefined;
+    vibrateEnabled?: boolean;
+}
+
+export enum NotificationUrgency {
+    Info = "Info",
+    Warn = "Warn",
+    Hazard = "Hazard",
+    Urgent = "Urgent",
+}
+
 export interface TrackerDefinitionDto {
     id?: string;
     name?: string;
@@ -15617,6 +15979,8 @@ export interface TrackerDefinitionDto {
     lifespanHours?: number | undefined;
     notificationThresholds?: NotificationThresholdDto[];
     isFavorite?: boolean;
+    /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
+    dashboardVisibility?: DashboardVisibility;
     createdAt?: Date;
     updatedAt?: Date | undefined;
 }
@@ -15635,9 +15999,18 @@ export interface NotificationThresholdDto {
     hours?: number;
     description?: string | undefined;
     displayOrder?: number;
+    pushEnabled?: boolean;
+    audioEnabled?: boolean;
+    audioSound?: string | undefined;
+    vibrateEnabled?: boolean;
+    repeatIntervalMins?: number;
+    maxRepeats?: number;
+    respectQuietHours?: boolean;
 }
 
-export enum NotificationUrgency {
+export enum DashboardVisibility {
+    Off = "Off",
+    Always = "Always",
     Info = "Info",
     Warn = "Warn",
     Hazard = "Hazard",
@@ -15654,6 +16027,8 @@ export interface CreateTrackerDefinitionRequest {
     lifespanHours?: number | undefined;
     notificationThresholds?: CreateNotificationThresholdRequest[] | undefined;
     isFavorite?: boolean;
+    /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
+    dashboardVisibility?: DashboardVisibility;
 }
 
 export interface CreateNotificationThresholdRequest {
@@ -15661,6 +16036,13 @@ export interface CreateNotificationThresholdRequest {
     hours?: number;
     description?: string | undefined;
     displayOrder?: number;
+    pushEnabled?: boolean;
+    audioEnabled?: boolean;
+    audioSound?: string | undefined;
+    vibrateEnabled?: boolean;
+    repeatIntervalMins?: number;
+    maxRepeats?: number;
+    respectQuietHours?: boolean;
 }
 
 export interface UpdateTrackerDefinitionRequest {
@@ -15673,6 +16055,8 @@ export interface UpdateTrackerDefinitionRequest {
     lifespanHours?: number | undefined;
     notificationThresholds?: CreateNotificationThresholdRequest[] | undefined;
     isFavorite?: boolean | undefined;
+    /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
+    dashboardVisibility?: DashboardVisibility | undefined;
 }
 
 export interface TrackerInstanceDto {
@@ -15821,6 +16205,7 @@ export interface FeatureSettings {
     dashboardWidgets?: DashboardWidgets;
     plugins?: { [key: string]: PluginSettings; };
     battery?: BatteryDisplaySettings;
+    trackerPills?: TrackerPillsSettings;
 }
 
 export interface DisplaySettings {
@@ -15854,6 +16239,11 @@ export interface BatteryDisplaySettings {
     recentMinutes?: number;
     showVoltage?: boolean;
     showStatistics?: boolean;
+}
+
+export interface TrackerPillsSettings {
+    enabled?: boolean;
+    visibility?: string;
 }
 
 export interface NotificationSettings {
@@ -16787,6 +17177,33 @@ export interface HourlyIobData {
     totalIOB?: number;
     bolusIOB?: number;
     basalIOB?: number;
+}
+
+export interface DeviceAgeInfo {
+    found?: boolean;
+    age?: number;
+    days?: number;
+    hours?: number;
+    treatmentDate?: number | undefined;
+    notes?: string | undefined;
+    minFractions?: number;
+    level?: number;
+    display?: string;
+    notification?: DeviceAgeNotification | undefined;
+}
+
+export interface DeviceAgeNotification {
+    title?: string;
+    message?: string;
+    pushoverSound?: string;
+    level?: number;
+    group?: string;
+}
+
+export interface SensorAgeInfo {
+    "Sensor Start"?: DeviceAgeInfo;
+    "Sensor Change"?: DeviceAgeInfo;
+    min?: string;
 }
 
 export interface NotificationAckResponse {

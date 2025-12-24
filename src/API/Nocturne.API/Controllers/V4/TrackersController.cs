@@ -110,6 +110,7 @@ public class TrackersController : ControllerBase
             TriggerNotesContains = request.TriggerNotesContains,
             LifespanHours = request.LifespanHours,
             IsFavorite = request.IsFavorite,
+            DashboardVisibility = request.DashboardVisibility,
         };
 
         // Add notification thresholds if provided
@@ -123,6 +124,14 @@ public class TrackersController : ControllerBase
                     Hours = threshold.Hours,
                     Description = threshold.Description,
                     DisplayOrder = threshold.DisplayOrder,
+                    // Alert configuration
+                    PushEnabled = threshold.PushEnabled,
+                    AudioEnabled = threshold.AudioEnabled,
+                    AudioSound = threshold.AudioSound,
+                    VibrateEnabled = threshold.VibrateEnabled,
+                    RepeatIntervalMins = threshold.RepeatIntervalMins,
+                    MaxRepeats = threshold.MaxRepeats,
+                    RespectQuietHours = threshold.RespectQuietHours,
                 });
             }
         }
@@ -169,6 +178,7 @@ public class TrackersController : ControllerBase
         existing.TriggerNotesContains = request.TriggerNotesContains ?? existing.TriggerNotesContains;
         existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
         existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
+        existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
 
         // Handle notification thresholds update (replaces all existing if provided)
         if (request.NotificationThresholds != null)
@@ -182,6 +192,14 @@ public class TrackersController : ControllerBase
                     Hours = t.Hours,
                     Description = t.Description,
                     DisplayOrder = t.DisplayOrder,
+                    // Alert configuration
+                    PushEnabled = t.PushEnabled,
+                    AudioEnabled = t.AudioEnabled,
+                    AudioSound = t.AudioSound,
+                    VibrateEnabled = t.VibrateEnabled,
+                    RepeatIntervalMins = t.RepeatIntervalMins,
+                    MaxRepeats = t.MaxRepeats,
+                    RespectQuietHours = t.RespectQuietHours,
                 }).ToList(),
                 HttpContext.RequestAborted
             );
@@ -519,6 +537,15 @@ public class NotificationThresholdDto
     public string? Description { get; set; }
     public int DisplayOrder { get; set; }
 
+    // Alert configuration
+    public bool PushEnabled { get; set; }
+    public bool AudioEnabled { get; set; }
+    public string? AudioSound { get; set; }
+    public bool VibrateEnabled { get; set; }
+    public int RepeatIntervalMins { get; set; }
+    public int MaxRepeats { get; set; }
+    public bool RespectQuietHours { get; set; }
+
     public static NotificationThresholdDto FromEntity(TrackerNotificationThresholdEntity entity) =>
         new()
         {
@@ -527,6 +554,14 @@ public class NotificationThresholdDto
             Hours = entity.Hours,
             Description = entity.Description,
             DisplayOrder = entity.DisplayOrder,
+            // Alert configuration
+            PushEnabled = entity.PushEnabled,
+            AudioEnabled = entity.AudioEnabled,
+            AudioSound = entity.AudioSound,
+            VibrateEnabled = entity.VibrateEnabled,
+            RepeatIntervalMins = entity.RepeatIntervalMins,
+            MaxRepeats = entity.MaxRepeats,
+            RespectQuietHours = entity.RespectQuietHours,
         };
 }
 
@@ -545,6 +580,12 @@ public class TrackerDefinitionDto
     public List<NotificationThresholdDto> NotificationThresholds { get; set; } = [];
 
     public bool IsFavorite { get; set; }
+
+    /// <summary>
+    /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
+    /// </summary>
+    public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
@@ -565,6 +606,7 @@ public class TrackerDefinitionDto
                 .Select(NotificationThresholdDto.FromEntity)
                 .ToList() ?? [],
             IsFavorite = entity.IsFavorite,
+            DashboardVisibility = entity.DashboardVisibility,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
         };
@@ -648,6 +690,10 @@ public class CreateTrackerDefinitionRequest
     // Notification thresholds (many-to-one relationship)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool IsFavorite { get; set; }
+    /// <summary>
+    /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
+    /// </summary>
+    public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 }
 
 public class UpdateTrackerDefinitionRequest
@@ -662,6 +708,10 @@ public class UpdateTrackerDefinitionRequest
     // Notification thresholds (if provided, replaces all existing thresholds)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool? IsFavorite { get; set; }
+    /// <summary>
+    /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
+    /// </summary>
+    public DashboardVisibility? DashboardVisibility { get; set; }
 }
 
 public class CreateNotificationThresholdRequest
@@ -670,6 +720,15 @@ public class CreateNotificationThresholdRequest
     public int Hours { get; set; }
     public string? Description { get; set; }
     public int DisplayOrder { get; set; }
+
+    // Alert configuration (optional, defaults to disabled)
+    public bool PushEnabled { get; set; }
+    public bool AudioEnabled { get; set; }
+    public string? AudioSound { get; set; }
+    public bool VibrateEnabled { get; set; }
+    public int RepeatIntervalMins { get; set; }
+    public int MaxRepeats { get; set; } = 3;
+    public bool RespectQuietHours { get; set; } = true;
 }
 
 public class StartTrackerInstanceRequest

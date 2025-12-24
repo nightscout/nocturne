@@ -26,8 +26,6 @@
     Clock,
     Pill,
     Droplets,
-    Battery,
-    Timer,
     AlertCircle,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
@@ -262,7 +260,8 @@
       </CardHeader>
       <CardContent>
         <div class="space-y-1">
-          {#each Object.entries(store.features.plugins ?? {}) as [key, plugin]}
+          <!-- Age-related plugins (cage, sage, iage, bage, upbat) are now managed in Appearance > Tracker Pills -->
+          {#each Object.entries(store.features.plugins ?? {}).filter(([key]) => !["cage", "sage", "iage", "bage", "upbat"].includes(key)) as [key, plugin]}
             <div
               class="flex items-center justify-between py-3 border-b last:border-0"
             >
@@ -275,10 +274,6 @@
                   <Syringe class="h-4 w-4 text-muted-foreground" />
                 {:else if key === "cob"}
                   <Droplets class="h-4 w-4 text-muted-foreground" />
-                {:else if key === "cage" || key === "sage" || key === "iage"}
-                  <Timer class="h-4 w-4 text-muted-foreground" />
-                {:else if key === "bage" || key === "upbat"}
-                  <Battery class="h-4 w-4 text-muted-foreground" />
                 {:else}
                   <Pill class="h-4 w-4 text-muted-foreground" />
                 {/if}

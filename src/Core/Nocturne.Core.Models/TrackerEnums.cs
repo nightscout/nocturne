@@ -136,3 +136,40 @@ public enum NotificationUrgency
     /// </summary>
     Urgent
 }
+
+/// <summary>
+/// Dashboard visibility threshold for tracker pills
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<DashboardVisibility>))]
+public enum DashboardVisibility
+{
+    /// <summary>
+    /// Never show on dashboard
+    /// </summary>
+    Off,
+
+    /// <summary>
+    /// Always show on dashboard
+    /// </summary>
+    Always,
+
+    /// <summary>
+    /// Show when age reaches info threshold
+    /// </summary>
+    Info,
+
+    /// <summary>
+    /// Show when age reaches warn threshold
+    /// </summary>
+    Warn,
+
+    /// <summary>
+    /// Show when age reaches hazard threshold
+    /// </summary>
+    Hazard,
+
+    /// <summary>
+    /// Show when age reaches urgent threshold
+    /// </summary>
+    Urgent
+}

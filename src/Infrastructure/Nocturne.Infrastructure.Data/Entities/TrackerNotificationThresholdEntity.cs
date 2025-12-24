@@ -49,6 +49,53 @@ public class TrackerNotificationThresholdEntity
     [Column("display_order")]
     public int DisplayOrder { get; set; }
 
+    #region Alert Configuration
+
+    /// <summary>
+    /// Whether this threshold should trigger active push notifications
+    /// </summary>
+    [Column("push_enabled")]
+    public bool PushEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Whether this threshold should play an audio alert (for in-app/web)
+    /// </summary>
+    [Column("audio_enabled")]
+    public bool AudioEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Audio file/preset to play (e.g., "chime", "alarm", "urgent")
+    /// </summary>
+    [Column("audio_sound")]
+    [MaxLength(100)]
+    public string? AudioSound { get; set; }
+
+    /// <summary>
+    /// Whether to vibrate on mobile devices
+    /// </summary>
+    [Column("vibrate_enabled")]
+    public bool VibrateEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Repeat interval in minutes (0 = no repeat)
+    /// </summary>
+    [Column("repeat_interval_mins")]
+    public int RepeatIntervalMins { get; set; } = 0;
+
+    /// <summary>
+    /// Maximum number of repeats (0 = unlimited until acknowledged)
+    /// </summary>
+    [Column("max_repeats")]
+    public int MaxRepeats { get; set; } = 3;
+
+    /// <summary>
+    /// Whether this notification respects quiet hours
+    /// </summary>
+    [Column("respect_quiet_hours")]
+    public bool RespectQuietHours { get; set; } = true;
+
+    #endregion
+
     /// <summary>
     /// Navigation property to the parent tracker definition
     /// </summary>

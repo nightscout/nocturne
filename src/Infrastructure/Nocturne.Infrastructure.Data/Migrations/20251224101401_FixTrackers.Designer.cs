@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,13 +12,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251224101401_FixTrackers")]
+    partial class FixTrackers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.1")
+                .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2213,10 +2216,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<int>("DashboardVisibility")
-                        .HasColumnType("integer")
-                        .HasColumnName("dashboard_visibility");
-
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -2363,15 +2362,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("AudioEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("audio_enabled");
-
-                    b.Property<string>("AudioSound")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("audio_sound");
-
                     b.Property<Guid?>("DefinitionId")
                         .HasColumnType("uuid");
 
@@ -2388,22 +2378,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("hours");
 
-                    b.Property<int>("MaxRepeats")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_repeats");
-
-                    b.Property<bool>("PushEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("push_enabled");
-
-                    b.Property<int>("RepeatIntervalMins")
-                        .HasColumnType("integer")
-                        .HasColumnName("repeat_interval_mins");
-
-                    b.Property<bool>("RespectQuietHours")
-                        .HasColumnType("boolean")
-                        .HasColumnName("respect_quiet_hours");
-
                     b.Property<Guid>("TrackerDefinitionId")
                         .HasColumnType("uuid")
                         .HasColumnName("tracker_definition_id");
@@ -2411,10 +2385,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int>("Urgency")
                         .HasColumnType("integer")
                         .HasColumnName("urgency");
-
-                    b.Property<bool>("VibrateEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("vibrate_enabled");
 
                     b.HasKey("Id");
 

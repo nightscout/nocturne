@@ -1,10 +1,12 @@
 <script lang="ts">
-  import type { Entry } from "$lib/api";
+  import type { Entry, Treatment } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
-  import { StatusPillBar } from "$lib/components/status-pills";
+  import { StatusPillBar, TrackerPillBar } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
+  import { TrackerCompletionDialog } from "$lib/components/trackers";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
@@ -13,7 +15,6 @@
   import { Clock } from "lucide-svelte";
   import TreatmentEditDialog from "$lib/components/treatments/TreatmentEditDialog.svelte";
   import { createTreatment } from "../../../routes/reports/treatments/data.remote";
-  import type { Treatment } from "$lib/api";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -40,6 +41,12 @@
   }: ComponentProps = $props();
 
   const realtimeStore = getRealtimeStore();
+  const settingsStore = getSettingsStore();
+
+  // Tracker pills global enable setting (visibility is now per-tracker-definition)
+  const trackerPillsEnabled = $derived(
+    settingsStore.features?.trackerPills?.enabled ?? true
+  );
 
   // Use realtime store values as fallback when props not provided
   const rawCurrentBG = $derived(currentBG ?? realtimeStore.currentBG);
@@ -148,6 +155,23 @@
       isSavingTreatment = false;
     }
   }
+
+  // Tracker Completion Dialog State
+  let showCompletionDialog = $state(false);
+  let completingInstanceId = $state<string | null>(null);
+  let completingInstanceName = $state("");
+
+  function handleTrackerComplete(instanceId: string, instanceName: string) {
+    completingInstanceId = instanceId;
+    completingInstanceName = instanceName;
+    showCompletionDialog = true;
+  }
+
+  function handleCompletionDialogClose() {
+    showCompletionDialog = false;
+    completingInstanceId = null;
+    completingInstanceName = "";
+  }
 </script>
 
 <div class="flex items-center justify-between">
@@ -215,6 +239,14 @@
       units={unitLabel}
       onAddTreatment={handleAddTreatment}
     />
+    {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
+      <TrackerPillBar
+        instances={realtimeStore.trackerInstances}
+        definitions={realtimeStore.trackerDefinitions}
+        onComplete={handleTrackerComplete}
+        class="mt-2"
+      />
+    {/if}
   </div>
 {/if}
 
@@ -225,4 +257,11 @@
   isLoading={isSavingTreatment}
   onClose={() => (showTreatmentDialog = false)}
   onSave={handleSaveTreatment}
+/>
+
+<TrackerCompletionDialog
+  bind:open={showCompletionDialog}
+  instanceId={completingInstanceId}
+  instanceName={completingInstanceName}
+  onClose={handleCompletionDialogClose}
 />

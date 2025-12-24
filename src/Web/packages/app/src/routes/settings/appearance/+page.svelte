@@ -40,6 +40,7 @@
     Clock,
     Globe,
     AlertCircle,
+    Timer,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
@@ -318,6 +319,49 @@
             }}
           />
         </div>
+      </CardContent>
+    </Card>
+
+    <!-- Tracker Pills -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Timer class="h-5 w-5" />
+          Tracker Pills
+        </CardTitle>
+        <CardDescription>
+          Show active tracker ages on the dashboard
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-6">
+        <div class="flex items-center justify-between">
+          <div class="space-y-0.5">
+            <Label>Show tracker pills</Label>
+            <p class="text-sm text-muted-foreground">
+              Display active tracker ages (sensor, pump site, etc.) on homepage
+            </p>
+          </div>
+          <Switch
+            checked={store.features?.trackerPills?.enabled ?? true}
+            onCheckedChange={(checked) => {
+              if (!store.features) return;
+              if (!store.features.trackerPills) {
+                store.features.trackerPills = {
+                  enabled: true,
+                };
+              }
+              store.features.trackerPills.enabled = checked;
+              store.markChanged();
+            }}
+          />
+        </div>
+
+        <p class="text-xs text-muted-foreground">
+          Each tracker's dashboard visibility is configured in
+          <a href="/settings/trackers" class="text-primary hover:underline">
+            Settings → Trackers
+          </a>
+        </p>
       </CardContent>
     </Card>
 
