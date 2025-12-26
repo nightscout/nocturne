@@ -32,8 +32,7 @@ namespace Nocturne.Connectors.Glooko.Services
         private readonly IRateLimitingStrategy _rateLimitingStrategy;
         private readonly IRetryDelayStrategy _retryDelayStrategy;
         private readonly IConnectorFileService<GlookoBatchData>? _fileService;
-        private string? _sessionCookie;
-        private GlookoUserData? _userData;
+        private readonly GlookoAuthTokenProvider _tokenProvider;
         private int _failedRequestCount = 0;
 
         /// <summary>
@@ -72,6 +71,7 @@ namespace Nocturne.Connectors.Glooko.Services
             ILogger<GlookoConnectorService> logger,
             IRetryDelayStrategy retryDelayStrategy,
             IRateLimitingStrategy rateLimitingStrategy,
+            GlookoAuthTokenProvider tokenProvider,
             IConnectorFileService<GlookoBatchData>? fileService = null,
             IApiDataSubmitter? apiDataSubmitter = null,
             IConnectorMetricsTracker? metricsTracker = null,
@@ -86,178 +86,20 @@ namespace Nocturne.Connectors.Glooko.Services
                 rateLimitingStrategy
                 ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
             _fileService = fileService;
+            _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         }
 
         public override async Task<bool> AuthenticateAsync()
         {
-            try
+            var token = await _tokenProvider.GetValidTokenAsync();
+            if (token == null)
             {
-                _logger.LogInformation(
-                    $"Authenticating with Glooko server: {_config.GlookoServer}"
-                );
-
-                // Setup headers to mimic browser behavior (based on legacy implementation)
-                var loginHeaders = new Dictionary<string, string>
-                {
-                    { "Accept", "application/json, text/plain, */*" },
-                    { "Accept-Encoding", "gzip, deflate, br" },
-                    {
-                        "User-Agent",
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15"
-                    },
-                    { "Referer", "https://eu.my.glooko.com/" },
-                    { "Origin", "https://eu.my.glooko.com" },
-                    { "Connection", "keep-alive" },
-                    { "Accept-Language", "en-GB,en;q=0.9" },
-                };
-
-                var loginData = new
-                {
-                    userLogin = new
-                    {
-                        email = _config.GlookoUsername,
-                        password = _config.GlookoPassword,
-                    },
-                    deviceInformation = new
-                    {
-                        applicationType = "logbook",
-                        os = "android",
-                        osVersion = "33",
-                        device = "Google Pixel 8 Pro",
-                        deviceManufacturer = "Google",
-                        deviceModel = "Pixel 8 Pro",
-                        serialNumber = "HIDDEN",
-                        clinicalResearch = false,
-                        deviceId = "HIDDEN",
-                        applicationVersion = "6.1.3",
-                        buildNumber = "0",
-                        gitHash = "g4fbed2011b",
-                    },
-                };
-
-                var json = JsonSerializer.Serialize(loginData);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/users/sign_in")
-                {
-                    Content = content,
-                };
-
-                // Add headers
-                foreach (var header in loginHeaders)
-                {
-                    request.Headers.TryAddWithoutValidation(header.Key, header.Value);
-                }
-
-                var response = await _httpClient.SendAsync(request);
-                if (response.IsSuccessStatusCode)
-                {
-                    // Read response as bytes first to handle compression properly
-                    var responseBytes = await response.Content.ReadAsByteArrayAsync();
-
-                    // Decompress if needed (check for gzip magic number 0x1F 0x8B)
-                    string responseJson;
-                    if (
-                        responseBytes.Length >= 2
-                        && responseBytes[0] == 0x1F
-                        && responseBytes[1] == 0x8B
-                    )
-                    {
-                        using var compressedStream = new MemoryStream(responseBytes);
-                        using var gzipStream = new System.IO.Compression.GZipStream(
-                            compressedStream,
-                            System.IO.Compression.CompressionMode.Decompress
-                        );
-                        using var decompressedStream = new MemoryStream();
-                        await gzipStream.CopyToAsync(decompressedStream);
-                        responseJson = Encoding.UTF8.GetString(decompressedStream.ToArray());
-                    }
-                    else
-                    {
-                        responseJson = Encoding.UTF8.GetString(responseBytes);
-                    }
-
-                    _logger.LogDebug("GLOOKO AUTH response received and decompressed");
-
-                    // Extract session cookie from response headers
-                    if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
-                    {
-                        foreach (var cookie in cookies)
-                        {
-                            if (cookie.StartsWith("_logbook-web_session="))
-                            {
-                                _sessionCookie = cookie.Split(';')[0]; // Get just the session part
-                                _logger.LogInformation("Session cookie extracted successfully");
-                                break;
-                            }
-                        }
-                    }
-
-                    // Parse user data
-                    try
-                    {
-                        _userData = JsonSerializer.Deserialize<GlookoUserData>(responseJson);
-                        if (_userData?.UserLogin?.GlookoCode != null)
-                        {
-                            _logger.LogInformation(
-                                "User data parsed successfully. Glooko code: {GlookoCode}",
-                                _userData.UserLogin.GlookoCode
-                            );
-                            return true;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning($"Could not parse user data: {ex.Message}");
-                        _logger.LogDebug(
-                            "Response JSON: {ResponseJson}",
-                            responseJson.Substring(0, Math.Min(500, responseJson.Length))
-                        );
-                    }
-
-                    if (!string.IsNullOrEmpty(_sessionCookie))
-                    {
-                        _logger.LogInformation("Glooko authentication successful");
-                        return true;
-                    }
-                }
-
-                _logger.LogError($"Glooko authentication failed: {response.StatusCode}");
-
-                // Try to read error response with decompression
-                try
-                {
-                    var errorBytes = await response.Content.ReadAsByteArrayAsync();
-                    string errorContent;
-                    if (errorBytes.Length >= 2 && errorBytes[0] == 0x1F && errorBytes[1] == 0x8B)
-                    {
-                        using var compressedStream = new MemoryStream(errorBytes);
-                        using var gzipStream = new System.IO.Compression.GZipStream(
-                            compressedStream,
-                            System.IO.Compression.CompressionMode.Decompress
-                        );
-                        using var decompressedStream = new MemoryStream();
-                        await gzipStream.CopyToAsync(decompressedStream);
-                        errorContent = Encoding.UTF8.GetString(decompressedStream.ToArray());
-                    }
-                    else
-                    {
-                        errorContent = Encoding.UTF8.GetString(errorBytes);
-                    }
-                    _logger.LogError($"Error response: {errorContent}");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError($"Could not read error response: {ex.Message}");
-                }
-
+                _failedRequestCount++;
                 return false;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Glooko authentication error: {ex.Message}");
-                return false;
-            }
+
+            _failedRequestCount = 0;
+            return true;
         }
 
         protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -455,13 +297,13 @@ namespace Nocturne.Connectors.Glooko.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(_sessionCookie))
+                if (string.IsNullOrEmpty(_tokenProvider.SessionCookie))
                 {
                     throw new InvalidOperationException(
                         "Not authenticated with Glooko. Call AuthenticateAsync first."
                     );
                 }
-                if (_userData?.UserLogin?.GlookoCode == null)
+                if (_tokenProvider.UserData?.UserLogin?.GlookoCode == null)
                 {
                     _logger.LogWarning("Missing Glooko user code, cannot fetch data");
                     return null;
@@ -883,7 +725,7 @@ namespace Nocturne.Connectors.Glooko.Services
 
         private string ConstructGlookoUrl(string endpoint, DateTime startDate, DateTime endDate)
         {
-            var patientCode = _userData?.UserLogin?.GlookoCode;
+            var patientCode = _tokenProvider.UserData?.UserLogin?.GlookoCode;
 
             // Add the required parameters matching the legacy implementation
             var lastGuid = "1e0c094e-1e54-4a4f-8e6a-f94484b53789"; // hardcoded as per legacy
@@ -914,7 +756,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 request.Headers.TryAddWithoutValidation("Origin", "https://eu.my.glooko.com");
                 request.Headers.TryAddWithoutValidation("Connection", "keep-alive");
                 request.Headers.TryAddWithoutValidation("Accept-Language", "en-GB,en;q=0.9");
-                request.Headers.TryAddWithoutValidation("Cookie", _sessionCookie);
+                request.Headers.TryAddWithoutValidation("Cookie", _tokenProvider.SessionCookie);
                 request.Headers.TryAddWithoutValidation("Host", _config.GlookoServer);
                 request.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "empty");
                 request.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "cors");
@@ -1136,19 +978,30 @@ namespace Nocturne.Connectors.Glooko.Services
             };
         }
 
+        /// <summary>
+        /// Get corrected Glooko timestamp. Glooko reports local time as if it were UTC.
+        /// </summary>
         private DateTime GetCorrectedGlookoTime(DateTime rawDate)
         {
-            // The time is local time, but marked as UTC.
             var offsetHours = _config.TimezoneOffset;
             var corrected = rawDate.AddHours(-offsetHours);
-            _logger.LogInformation("GetCorrectedGlookoTime: Raw={Raw}, ConfigOffset={ConfigOffset}, Result={Result}",
+            _logger.LogDebug("GetCorrectedGlookoTime: Raw={Raw}, ConfigOffset={ConfigOffset}, Result={Result}",
                 rawDate, _config.TimezoneOffset, corrected);
             return corrected;
         }
 
+        /// <summary>
+        /// Get corrected Glooko timestamp from unix seconds.
+        /// </summary>
+        private DateTime GetCorrectedGlookoTime(long unixSeconds)
+        {
+            var rawUtc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime;
+            return GetCorrectedGlookoTime(rawUtc);
+        }
+
         private bool IsSessionExpired()
         {
-            return string.IsNullOrEmpty(_sessionCookie);
+            return string.IsNullOrEmpty(_tokenProvider.SessionCookie);
         }
 
         private DateTime GetRawGlookoDate(string timestamp, string? pumpTimestamp)
@@ -1171,7 +1024,7 @@ namespace Nocturne.Connectors.Glooko.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(_sessionCookie))
+                if (string.IsNullOrEmpty(_tokenProvider.SessionCookie))
                 {
                     throw new InvalidOperationException("Not authenticated with Glooko. Call AuthenticateAsync first.");
                 }
@@ -1208,12 +1061,12 @@ namespace Nocturne.Connectors.Glooko.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(_sessionCookie))
+                if (string.IsNullOrEmpty(_tokenProvider.SessionCookie))
                 {
                     throw new InvalidOperationException("Not authenticated with Glooko. Call AuthenticateAsync first.");
                 }
 
-                if (_userData?.UserLogin?.GlookoCode == null)
+                if (_tokenProvider.UserData?.UserLogin?.GlookoCode == null)
                 {
                     _logger.LogWarning("Missing Glooko user code, cannot fetch v3 data");
                     return null;
@@ -1272,7 +1125,7 @@ namespace Nocturne.Connectors.Glooko.Services
         /// </summary>
         private string ConstructV3GraphUrl(DateTime startDate, DateTime endDate)
         {
-            var patientCode = _userData?.UserLogin?.GlookoCode;
+            var patientCode = _tokenProvider.UserData?.UserLogin?.GlookoCode;
 
             // Series to request
             var series = new[]
@@ -1322,7 +1175,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 foreach (var bolus in series.AutomaticBolus)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(bolus.X).UtcDateTime;
+                    var timestamp = GetCorrectedGlookoTime(bolus.X);
                     treatments.Add(new Treatment
                     {
                         Id = GenerateTreatmentId("Automatic Bolus", timestamp, $"insulin:{bolus.Y}"),
@@ -1340,7 +1193,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 foreach (var bolus in series.DeliveredBolus)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(bolus.X).UtcDateTime;
+                    var timestamp = GetCorrectedGlookoTime(bolus.X);
                     var carbsInput = bolus.Data?.CarbsInput;
 
                     treatments.Add(new Treatment
@@ -1360,7 +1213,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 foreach (var alarm in series.PumpAlarm)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(alarm.X).UtcDateTime;
+                    var timestamp = GetCorrectedGlookoTime(alarm.X);
                     treatments.Add(new Treatment
                     {
                         Id = GenerateTreatmentId("Pump Alarm", timestamp, $"type:{alarm.AlarmType}"),
@@ -1377,7 +1230,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 foreach (var change in series.ReservoirChange)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
+                    var timestamp = GetCorrectedGlookoTime(change.X);
                     treatments.Add(new Treatment
                     {
                         Id = GenerateTreatmentId("Reservoir Change", timestamp, null),
@@ -1394,7 +1247,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 foreach (var change in series.SetSiteChange)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
+                    var timestamp = GetCorrectedGlookoTime(change.X);
                     treatments.Add(new Treatment
                     {
                         Id = GenerateTreatmentId("Site Change", timestamp, null),
@@ -1406,18 +1259,39 @@ namespace Nocturne.Connectors.Glooko.Services
                 }
             }
 
-            // Process Carbs
+            // Process Carbs - but skip entries that are already included in deliveredBolus
+            // The carbAll series duplicates carbs from bolus entries, so we need to filter them
             if (series.CarbAll != null)
             {
-                foreach (var carb in series.CarbAll.Where(c => c.Y.HasValue && c.Y > 0))
+                // Build a set of timestamps that already have carbs from deliveredBolus
+                var bolusTimestamps = new HashSet<long>();
+                if (series.DeliveredBolus != null)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(carb.X).UtcDateTime;
+                    foreach (var bolus in series.DeliveredBolus.Where(b => b.Data?.CarbsInput > 0))
+                    {
+                        bolusTimestamps.Add(bolus.X);
+                    }
+                }
+
+                // Only add carb entries that don't already exist in deliveredBolus
+                foreach (var carb in series.CarbAll.Where(c => c.ActualCarbs.HasValue && c.ActualCarbs > 0))
+                {
+                    // Skip if this carb entry is already covered by a bolus entry
+                    if (bolusTimestamps.Contains(carb.X))
+                    {
+                        _logger.LogDebug("[{ConnectorSource}] Skipping duplicate carbAll entry at {Timestamp} (already in deliveredBolus)",
+                            ConnectorSource, carb.Timestamp);
+                        continue;
+                    }
+
+                    var timestamp = GetCorrectedGlookoTime(carb.X);
+                    var actualCarbs = carb.ActualCarbs!.Value;
                     treatments.Add(new Treatment
                     {
-                        Id = GenerateTreatmentId("Carb Correction", timestamp, $"carbs:{carb.Y}"),
+                        Id = GenerateTreatmentId("Carb Correction", timestamp, $"carbs:{actualCarbs}"),
                         EventType = "Carb Correction",
                         CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Carbs = carb.Y,
+                        Carbs = actualCarbs,
                         DataSource = ConnectorSource
                     });
                 }
@@ -1428,7 +1302,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 foreach (var change in series.ProfileChange)
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
+                    var timestamp = GetCorrectedGlookoTime(change.X);
                     treatments.Add(new Treatment
                     {
                         Id = GenerateTreatmentId("Profile Switch", timestamp, $"profile:{change.ProfileName}"),
@@ -1467,7 +1341,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 if (reading.Calculated)
                     continue; // Skip interpolated values
 
-                var timestamp = DateTimeOffset.FromUnixTimeSeconds(reading.X).UtcDateTime;
+                var timestamp = GetCorrectedGlookoTime(reading.X);
                 var sgvMgdl = ConvertToMgdl(reading.Y);
 
                 entries.Add(new Entry
@@ -1502,3 +1376,4 @@ namespace Nocturne.Connectors.Glooko.Services
         #endregion
     }
 }
+

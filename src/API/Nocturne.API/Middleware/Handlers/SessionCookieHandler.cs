@@ -44,28 +44,35 @@ public class SessionCookieHandler : IAuthHandler
     /// <inheritdoc />
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
+
+
         if (!_options.Enabled)
         {
+            _logger.LogInformation("[SessionCookieHandler] OIDC is disabled, skipping");
             return AuthResult.Skip();
         }
 
         // Check for access token in session cookie
         var accessToken = context.Request.Cookies[_options.Cookie.AccessTokenName];
+        _logger.LogInformation("[SessionCookieHandler] Looking for cookie '{CookieName}': {Found}",
+            _options.Cookie.AccessTokenName,
+            !string.IsNullOrEmpty(accessToken) ? "Found (" + accessToken.Length + " chars)" : "NOT FOUND");
+
+        // Log all cookies received for debugging
+        var allCookies = context.Request.Cookies.Keys;
+        _logger.LogInformation("[SessionCookieHandler] All cookies received: {Cookies}", string.Join(", ", allCookies));
+
+        using var scope = _scopeFactory.CreateScope();
 
         if (!string.IsNullOrEmpty(accessToken))
         {
             // Try to validate the access token
-            using var scope = _scopeFactory.CreateScope();
             var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
 
             var validationResult = jwtService.ValidateAccessToken(accessToken);
 
             if (validationResult.IsValid && validationResult.Claims != null)
             {
-                _logger.LogDebug(
-                    "Session cookie authentication successful for subject {SubjectId}",
-                    validationResult.Claims.SubjectId
-                );
 
                 return AuthResult.Success(
                     BuildAuthContextFromClaims(validationResult.Claims, accessToken)
@@ -81,12 +88,20 @@ public class SessionCookieHandler : IAuthHandler
                     return refreshResult;
                 }
             }
-
-            // Token validation failed, clear cookies and let other handlers try
-            _logger.LogDebug(
-                "Session cookie access token invalid: {Error}",
-                validationResult.Error
-            );
+            ClearSessionCookies(context);
+        }
+        else
+        {
+            // No access token, but check if we have a refresh token we can use
+            var refreshToken = context.Request.Cookies[_options.Cookie.RefreshTokenName];
+            if (!string.IsNullOrEmpty(refreshToken))
+            {
+                var refreshResult = await TryRefreshSessionAsync(context, scope);
+                if (refreshResult != null)
+                {
+                    return refreshResult;
+                }
+            }
             ClearSessionCookies(context);
         }
 
@@ -119,7 +134,6 @@ public class SessionCookieHandler : IAuthHandler
 
             if (newTokens == null)
             {
-                _logger.LogDebug("Session refresh failed - refresh token invalid or expired");
                 ClearSessionCookies(context);
                 return null;
             }
@@ -133,10 +147,6 @@ public class SessionCookieHandler : IAuthHandler
 
             if (validationResult.IsValid && validationResult.Claims != null)
             {
-                _logger.LogDebug(
-                    "Session refreshed successfully for subject {SubjectId}",
-                    validationResult.Claims.SubjectId
-                );
 
                 return AuthResult.Success(
                     BuildAuthContextFromClaims(validationResult.Claims, newTokens.AccessToken)

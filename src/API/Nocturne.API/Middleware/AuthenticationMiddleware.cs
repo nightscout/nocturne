@@ -29,12 +29,6 @@ public class AuthenticationMiddleware
 
         // Sort handlers by priority (lowest first)
         _handlers = handlers.OrderBy(h => h.Priority).ToArray();
-
-        _logger.LogInformation(
-            "Authentication middleware initialized with {Count} handlers: {Handlers}",
-            _handlers.Length,
-            string.Join(", ", _handlers.Select(h => $"{h.Name}({h.Priority})"))
-        );
     }
 
     /// <summary>
@@ -59,6 +53,35 @@ public class AuthenticationMiddleware
 
             // Also set the legacy AuthenticationContext for backward compatibility
             context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
+
+            // Set HttpContext.User for [Authorize] attribute to work
+            if (authContext.IsAuthenticated)
+            {
+                var claims = new List<System.Security.Claims.Claim>
+                {
+                    new(System.Security.Claims.ClaimTypes.NameIdentifier, authContext.SubjectId?.ToString() ?? ""),
+                    new(System.Security.Claims.ClaimTypes.Name, authContext.SubjectName ?? ""),
+                };
+
+                if (!string.IsNullOrEmpty(authContext.Email))
+                {
+                    claims.Add(new(System.Security.Claims.ClaimTypes.Email, authContext.Email));
+                }
+
+                foreach (var role in authContext.Roles)
+                {
+                    claims.Add(new(System.Security.Claims.ClaimTypes.Role, role));
+                }
+
+                foreach (var permission in authContext.Permissions)
+                {
+                    claims.Add(new("permission", permission));
+                }
+
+                var identity = new System.Security.Claims.ClaimsIdentity(claims, "Nocturne");
+                context.User = new System.Security.Claims.ClaimsPrincipal(identity);
+
+            }
         }
         catch (Exception ex)
         {
@@ -82,11 +105,6 @@ public class AuthenticationMiddleware
 
                 if (result.Succeeded)
                 {
-                    _logger.LogDebug(
-                        "Request authenticated by {Handler} for subject {Subject}",
-                        handler.Name,
-                        result.AuthContext?.SubjectName ?? "unknown"
-                    );
 
                     return result.AuthContext!;
                 }
@@ -113,8 +131,6 @@ public class AuthenticationMiddleware
             }
         }
 
-        // No handler authenticated the request
-        _logger.LogDebug("No authentication credentials found");
         return AuthContext.Unauthenticated();
     }
 

@@ -31,9 +31,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     private readonly TidepoolConnectorConfiguration _config;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
-    private string? _sessionToken;
-    private string? _userId;
-    private DateTime _sessionExpiresAt;
+    private readonly TidepoolAuthTokenProvider _tokenProvider;
     private int _failedRequestCount = 0;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -80,6 +78,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         ILogger<TidepoolConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
+        TidepoolAuthTokenProvider tokenProvider,
         IApiDataSubmitter? apiDataSubmitter = null,
         IConnectorMetricsTracker? metricsTracker = null,
         IConnectorStateService? stateService = null
@@ -91,178 +90,20 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy =
             rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
+        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
     }
 
     public override async Task<bool> AuthenticateAsync()
     {
-        const int maxRetries = 3;
-        HttpRequestException? lastException = null;
-
-        for (int attempt = 0; attempt < maxRetries; attempt++)
+        var token = await _tokenProvider.GetValidTokenAsync();
+        if (token == null)
         {
-            try
-            {
-                _logger.LogInformation(
-                    "Authenticating with Tidepool for account: {Username} (attempt {Attempt}/{MaxRetries})",
-                    _config.TidepoolUsername,
-                    attempt + 1,
-                    maxRetries
-                );
-
-                // Tidepool uses Basic authentication for login
-                var authString = Convert.ToBase64String(
-                    Encoding.UTF8.GetBytes($"{_config.TidepoolUsername}:{_config.TidepoolPassword}")
-                );
-
-                var request = new HttpRequestMessage(
-                    HttpMethod.Post,
-                    TidepoolConstants.Endpoints.Login
-                );
-                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authString);
-
-                var response = await _httpClient.SendAsync(request);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-
-                    // Check for rate limiting or temporary errors
-                    if (
-                        response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
-                        || response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable
-                        || response.StatusCode == System.Net.HttpStatusCode.InternalServerError
-                    )
-                    {
-                        lastException = new HttpRequestException(
-                            $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}"
-                        );
-                        _logger.LogWarning(
-                            "Tidepool authentication failed with retryable error on attempt {Attempt}: {StatusCode} - {Error}",
-                            attempt + 1,
-                            response.StatusCode,
-                            errorContent
-                        );
-
-                        if (attempt < maxRetries - 1)
-                        {
-                            _logger.LogInformation(
-                                "Applying retry backoff before attempt {NextAttempt}",
-                                attempt + 2
-                            );
-                            await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        // Non-retryable error (e.g., invalid credentials)
-                        _logger.LogError(
-                            "Tidepool authentication failed with non-retryable error: {StatusCode} - {Error}",
-                            response.StatusCode,
-                            errorContent
-                        );
-                        _failedRequestCount++;
-                        return false;
-                    }
-                }
-                else
-                {
-                    // Extract session token from response header
-                    if (
-                        response.Headers.TryGetValues(
-                            TidepoolConstants.Headers.SessionToken,
-                            out var tokenValues
-                        )
-                    )
-                    {
-                        _sessionToken = tokenValues.FirstOrDefault();
-                    }
-
-                    if (string.IsNullOrEmpty(_sessionToken))
-                    {
-                        _logger.LogError("Tidepool authentication returned empty session token");
-                        _failedRequestCount++;
-                        return false;
-                    }
-
-                    // Parse response body for user ID
-                    var jsonContent = await response.Content.ReadAsStringAsync();
-                    var authResponse = JsonSerializer.Deserialize<TidepoolAuthResponse>(
-                        jsonContent,
-                        JsonOptions
-                    );
-
-                    if (authResponse == null || string.IsNullOrEmpty(authResponse.UserId))
-                    {
-                        _logger.LogError("Tidepool authentication returned empty user ID");
-                        _failedRequestCount++;
-                        return false;
-                    }
-
-                    _userId = authResponse.UserId;
-
-                    // Set session expiration (Tidepool sessions typically last 24 hours)
-                    _sessionExpiresAt = DateTime.UtcNow.AddHours(23);
-
-                    // Reset failed request count on successful authentication
-                    _failedRequestCount = 0;
-
-                    _logger.LogInformation(
-                        "Tidepool authentication successful for user {UserId}, session expires at {ExpiresAt}",
-                        _userId,
-                        _sessionExpiresAt
-                    );
-                    return true;
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                lastException = ex;
-                _logger.LogWarning(
-                    ex,
-                    "HTTP error during Tidepool authentication attempt {Attempt}: {Message}",
-                    attempt + 1,
-                    ex.Message
-                );
-
-                if (attempt < maxRetries - 1)
-                {
-                    _logger.LogInformation(
-                        "Applying retry backoff before attempt {NextAttempt}",
-                        attempt + 2
-                    );
-                    await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Unexpected error during Tidepool authentication attempt {Attempt}",
-                    attempt + 1
-                );
-                _failedRequestCount++;
-                return false;
-            }
+            _failedRequestCount++;
+            return false;
         }
 
-        // All attempts failed
-        _failedRequestCount++;
-        _logger.LogError("Tidepool authentication failed after {MaxRetries} attempts", maxRetries);
-
-        if (lastException != null)
-        {
-            throw lastException;
-        }
-
-        return false;
-    }
-
-    private bool IsSessionExpired()
-    {
-        return string.IsNullOrEmpty(_sessionToken)
-            || string.IsNullOrEmpty(_userId)
-            || DateTime.UtcNow >= _sessionExpiresAt;
+        _failedRequestCount = 0;
+        return true;
     }
 
     protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(DateTime? from, DateTime? to)
@@ -270,7 +111,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         try
         {
             // Check if session is expired and re-authenticate if needed
-            if (IsSessionExpired())
+            if (_tokenProvider.IsTokenExpired)
             {
                 _logger.LogInformation(
                     "[{ConnectorSource}] Session expired, attempting to re-authenticate",
@@ -330,10 +171,10 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 var types = $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}";
 
                 var url =
-                    $"{string.Format(TidepoolConstants.Endpoints.DataFormat, _userId)}?type={types}&startDate={startDate:o}&endDate={endDate:o}";
+                    $"{string.Format(TidepoolConstants.Endpoints.DataFormat, _tokenProvider.UserId)}?type={types}&startDate={startDate:o}&endDate={endDate:o}";
 
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add(TidepoolConstants.Headers.SessionToken, _sessionToken);
+                request.Headers.Add(TidepoolConstants.Headers.SessionToken, (await _tokenProvider.GetValidTokenAsync()));
 
                 var response = await _httpClient.SendAsync(request);
 
@@ -346,8 +187,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                         _logger.LogWarning(
                             "Tidepool session expired, attempting re-authentication"
                         );
-                        _sessionToken = null;
-                        _sessionExpiresAt = DateTime.MinValue;
+                        _tokenProvider.InvalidateToken();
 
                         if (await AuthenticateAsync())
                         {
@@ -455,7 +295,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     /// </summary>
     public async Task<List<TidepoolBolus>> FetchBolusDataAsync(DateTime? start, DateTime? end)
     {
-        if (IsSessionExpired() && !await AuthenticateAsync())
+        if (_tokenProvider.IsTokenExpired && !await AuthenticateAsync())
         {
             return new List<TidepoolBolus>();
         }
@@ -471,7 +311,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     /// </summary>
     public async Task<List<TidepoolFood>> FetchFoodDataAsync(DateTime? start, DateTime? end)
     {
-        if (IsSessionExpired() && !await AuthenticateAsync())
+        if (_tokenProvider.IsTokenExpired && !await AuthenticateAsync())
         {
             return new List<TidepoolFood>();
         }
@@ -490,7 +330,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         DateTime? end
     )
     {
-        if (IsSessionExpired() && !await AuthenticateAsync())
+        if (_tokenProvider.IsTokenExpired && !await AuthenticateAsync())
         {
             return new List<TidepoolPhysicalActivity>();
         }
@@ -512,10 +352,10 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             var endDate = end ?? DateTime.UtcNow;
 
             var url =
-                $"{string.Format(TidepoolConstants.Endpoints.DataFormat, _userId)}?type={dataType}&startDate={startDate:o}&endDate={endDate:o}";
+                $"{string.Format(TidepoolConstants.Endpoints.DataFormat, _tokenProvider.UserId)}?type={dataType}&startDate={startDate:o}&endDate={endDate:o}";
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add(TidepoolConstants.Headers.SessionToken, _sessionToken);
+            request.Headers.Add(TidepoolConstants.Headers.SessionToken, (await _tokenProvider.GetValidTokenAsync()));
 
             var response = await _httpClient.SendAsync(request);
 
@@ -631,3 +471,4 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     }
 
 }
+

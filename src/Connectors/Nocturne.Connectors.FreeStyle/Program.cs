@@ -61,6 +61,11 @@ public class Program
 
         builder.Services.AddHttpClient<LibreConnectorService>().ConfigureLibreLinkUpClient(server);
 
+        // Register the token provider for authentication
+        builder.Services.AddHttpClient<LibreLinkAuthTokenProvider>().ConfigureLibreLinkUpClient(server);
+        builder.Services.AddSingleton<IAuthTokenProvider>(sp =>
+            sp.GetRequiredService<LibreLinkAuthTokenProvider>());
+
 
 
         // Configure API data submitter for HTTP-based data submission

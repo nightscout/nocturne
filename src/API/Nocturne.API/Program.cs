@@ -265,12 +265,18 @@ builder
 
 builder.Services.AddAuthorization();
 
-// Configure CORS for frontend
+// Configure CORS for frontend with credentials support
+// Note: AllowAnyOrigin() cannot be combined with AllowCredentials() per CORS spec
+// Using SetIsOriginAllowed to dynamically allow origins while supporting cookies
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        policy
+            .SetIsOriginAllowed(_ => true) // Allow any origin (development-friendly, restrict in production)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials(); // Required for cookies/auth to work cross-origin
     });
 });
 
@@ -291,6 +297,12 @@ builder.Services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
 
 // Register tracker seed service for creating default definitions
 builder.Services.AddScoped<ITrackerSeedService, TrackerSeedService>();
+
+// Register tracker alert service for evaluating tracker thresholds and generating alerts
+builder.Services.AddScoped<ITrackerAlertService, TrackerAlertService>();
+
+// Register legacy device age service (bridges Tracker system to legacy deviceage endpoints)
+builder.Services.AddScoped<ILegacyDeviceAgeService, LegacyDeviceAgeService>();
 
 // Register demo mode service for querying demo mode status
 // This service is used by EntryService, TreatmentService, and StatusService to filter data

@@ -250,13 +250,36 @@ namespace Nocturne.Connectors.Glooko.Models
     public class GlookoV3CarbDataPoint : GlookoV3DataPointBase
     {
         /// <summary>
-        /// Carbs in grams
+        /// Y value for graphing (normalized to 50, do NOT use for actual carbs)
         /// </summary>
         [JsonPropertyName("y")]
         public double? Y { get; set; }
 
+        /// <summary>
+        /// Original carb value in grams (use this for actual carbs)
+        /// </summary>
+        [JsonPropertyName("yOrig")]
+        public double? YOrig { get; set; }
+
+        /// <summary>
+        /// Alternative carb value field (use as fallback if yOrig is null)
+        /// </summary>
+        [JsonPropertyName("carbs")]
+        public double? Carbs { get; set; }
+
+        /// <summary>
+        /// Gets the actual carb value, preferring yOrig, then carbs
+        /// </summary>
+        public double? ActualCarbs => YOrig ?? Carbs;
+
         [JsonPropertyName("mealTag")]
         public string? MealTag { get; set; }
+
+        /// <summary>
+        /// Name/source of the carb entry
+        /// </summary>
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
     }
 
     /// <summary>

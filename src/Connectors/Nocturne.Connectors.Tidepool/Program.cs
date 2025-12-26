@@ -46,6 +46,26 @@ public class Program
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
             });
 
+        // Register the token provider for authentication
+        // Use a singleton instance with proper HttpClient configuration
+        builder.Services
+            .AddHttpClient<TidepoolAuthTokenProvider>()
+            .ConfigureHttpClient(client =>
+            {
+                client.BaseAddress = new Uri(tidepoolConfig.TidepoolServer);
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+            });
+        builder.Services.AddSingleton(sp =>
+        {
+            // Create instance via HttpClientFactory to get properly configured HttpClient
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = factory.CreateClient(nameof(TidepoolAuthTokenProvider));
+            var config = sp.GetRequiredService<IOptions<TidepoolConnectorConfiguration>>();
+            var logger = sp.GetRequiredService<ILogger<TidepoolAuthTokenProvider>>();
+            var retryStrategy = sp.GetRequiredService<IRetryDelayStrategy>();
+            return new TidepoolAuthTokenProvider(config, httpClient, logger, retryStrategy);
+        });
+
 
 
         // Configure API data submitter for HTTP-based data submission

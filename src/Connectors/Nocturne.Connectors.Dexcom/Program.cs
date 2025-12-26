@@ -57,6 +57,11 @@ public class Program
 
         builder.Services.AddHttpClient<DexcomConnectorService>().ConfigureDexcomClient(serverUrl);
 
+        // Register the token provider for authentication
+        builder.Services.AddHttpClient<DexcomAuthTokenProvider>().ConfigureDexcomClient(serverUrl);
+        builder.Services.AddSingleton<IAuthTokenProvider>(sp =>
+            sp.GetRequiredService<DexcomAuthTokenProvider>());
+
         // Register metrics tracker
 
 

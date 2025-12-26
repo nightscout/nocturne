@@ -288,7 +288,7 @@ class Program
         var web = Aspire.Hosting.JavaScriptHostingExtensions.AddViteApp(builder, ServiceNames.NocturneWeb, webPackagePath)
             .WithPnpm()
             .WithExternalHttpEndpoints()
-            .WithHttpsEndpoint(env: "PORT")
+            .WithHttpsEndpoint()
             .WithHttpsDeveloperCertificate()
             .WaitFor(api)
             .WaitFor(bridge)

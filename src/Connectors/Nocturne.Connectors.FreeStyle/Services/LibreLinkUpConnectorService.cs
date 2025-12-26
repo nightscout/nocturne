@@ -32,8 +32,7 @@ namespace Nocturne.Connectors.FreeStyle.Services
         private readonly LibreLinkUpConnectorConfiguration _config;
         private readonly IRetryDelayStrategy _retryDelayStrategy;
         private readonly IRateLimitingStrategy _rateLimitingStrategy;
-        private string? _authToken;
-        private DateTime _tokenExpiresAt;
+        private readonly IAuthTokenProvider _tokenProvider;
         private LibreUserConnection? _selectedConnection;
         private int _failedRequestCount = 0;
 
@@ -75,6 +74,7 @@ namespace Nocturne.Connectors.FreeStyle.Services
             ILogger<LibreConnectorService> logger,
             IRetryDelayStrategy retryDelayStrategy,
             IRateLimitingStrategy rateLimitingStrategy,
+            IAuthTokenProvider tokenProvider,
             IApiDataSubmitter? apiDataSubmitter = null,
             IConnectorMetricsTracker? metricsTracker = null,
             IConnectorStateService? stateService = null
@@ -87,171 +87,27 @@ namespace Nocturne.Connectors.FreeStyle.Services
             _rateLimitingStrategy =
                 rateLimitingStrategy
                 ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
+            _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         }
 
         public override async Task<bool> AuthenticateAsync()
         {
-            const int maxRetries = LibreLinkUpConstants.Configuration.MaxRetries;
-            HttpRequestException? lastException = null;
-
-            for (int attempt = 0; attempt < maxRetries; attempt++)
+            var token = await _tokenProvider.GetValidTokenAsync();
+            if (token == null)
             {
-                try
-                {
-                    _logger.LogInformation(
-                        "Authenticating with LibreLinkUp for user: {Username} (attempt {Attempt}/{MaxRetries})",
-                        _config.LibreUsername,
-                        attempt + 1,
-                        maxRetries
-                    );
-
-                    var loginPayload = new
-                    {
-                        email = _config.LibreUsername,
-                        password = _config.LibrePassword,
-                    };
-
-                    var json = JsonSerializer.Serialize(loginPayload);
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                    var response = await _httpClient.PostAsync(
-                        LibreLinkUpConstants.ApiPaths.Login,
-                        content
-                    );
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        var errorContent = await response.Content.ReadAsStringAsync();
-
-                        // Check for rate limiting or temporary errors
-                        if (
-                            response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
-                            || response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable
-                            || response.StatusCode == System.Net.HttpStatusCode.InternalServerError
-                        )
-                        {
-                            lastException = new HttpRequestException(
-                                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}"
-                            );
-                            _logger.LogWarning(
-                                "LibreLinkUp authentication failed with retryable error on attempt {Attempt}: {StatusCode} - {Error}",
-                                attempt + 1,
-                                response.StatusCode,
-                                errorContent
-                            );
-
-                            if (attempt < maxRetries - 1)
-                            {
-                                _logger.LogInformation(
-                                    "Applying retry backoff before attempt {NextAttempt}",
-                                    attempt + 2
-                                );
-                                await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                                continue;
-                            }
-                        }
-                        else
-                        {
-                            // Non-retryable error (e.g., invalid credentials)
-                            _logger.LogError(
-                                "LibreLinkUp authentication failed with non-retryable error: {StatusCode} - {Error}",
-                                response.StatusCode,
-                                errorContent
-                            );
-                            _failedRequestCount++;
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        var responseContent = await response.Content.ReadAsStringAsync();
-                        var loginResponse = JsonSerializer.Deserialize<LibreLoginResponse>(
-                            responseContent
-                        );
-
-                        if (loginResponse?.Data?.AuthTicket?.Token == null)
-                        {
-                            _logger.LogError(
-                                "LibreLinkUp authentication failed: Invalid response structure"
-                            );
-                            _failedRequestCount++;
-                            return false;
-                        }
-
-                        _authToken = loginResponse.Data.AuthTicket.Token;
-
-                        // Set token expiration (LibreLinkUp tokens typically last 24 hours)
-                        _tokenExpiresAt = DateTime.UtcNow.AddHours(23); // Add buffer
-
-                        // Add authorization header for subsequent requests
-                        _httpClient.DefaultRequestHeaders.Remove("Authorization");
-                        _httpClient.DefaultRequestHeaders.Add(
-                            "Authorization",
-                            $"Bearer {_authToken}"
-                        );
-
-                        // Get connections to find the patient data
-                        await LoadConnectionsAsync();
-
-                        // Reset failed request count on successful authentication
-                        _failedRequestCount = 0;
-
-                        _logger.LogInformation(
-                            "LibreLinkUp authentication successful, token expires at {ExpiresAt}",
-                            _tokenExpiresAt
-                        );
-                        return true;
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    lastException = ex;
-                    _logger.LogWarning(
-                        ex,
-                        "HTTP error during LibreLinkUp authentication attempt {Attempt}: {Message}",
-                        attempt + 1,
-                        ex.Message
-                    );
-
-                    if (attempt < maxRetries - 1)
-                    {
-                        _logger.LogInformation(
-                            "Applying retry backoff before attempt {NextAttempt}",
-                            attempt + 2
-                        );
-                        await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Unexpected error during LibreLinkUp authentication attempt {Attempt}",
-                        attempt + 1
-                    );
-                    _failedRequestCount++;
-                    return false;
-                }
+                _failedRequestCount++;
+                return false;
             }
 
-            // All attempts failed
-            _failedRequestCount++;
-            _logger.LogError(
-                "LibreLinkUp authentication failed after {MaxRetries} attempts",
-                maxRetries
-            );
+            // Set up authorization header for subsequent requests
+            _httpClient.DefaultRequestHeaders.Remove("Authorization");
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
 
-            if (lastException != null)
-            {
-                throw lastException;
-            }
+            // Get connections to find the patient data
+            await LoadConnectionsAsync();
 
-            return false;
-        }
-
-        private bool IsTokenExpired()
-        {
-            return string.IsNullOrEmpty(_authToken) || DateTime.UtcNow >= _tokenExpiresAt;
+            _failedRequestCount = 0;
+            return true;
         }
 
         private async Task LoadConnectionsAsync()
@@ -313,7 +169,7 @@ namespace Nocturne.Connectors.FreeStyle.Services
             try
             {
                 // Check if we need to authenticate or re-authenticate
-                if (IsTokenExpired() || _selectedConnection == null)
+                if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
                 {
                     _logger.LogInformation(
                         "Token expired or missing connection, attempting to re-authenticate"
@@ -410,9 +266,8 @@ namespace Nocturne.Connectors.FreeStyle.Services
                             _logger.LogWarning(
                                 "LibreLinkUp returned unauthorized, clearing token and attempting re-authentication"
                             );
-                            _authToken = null;
+                            _tokenProvider.InvalidateToken();
                             _selectedConnection = null;
-                            _tokenExpiresAt = DateTime.MinValue;
 
                             // Try to re-authenticate once
                             if (await AuthenticateAsync())
@@ -525,7 +380,7 @@ namespace Nocturne.Connectors.FreeStyle.Services
         /// </summary>
         public bool IsHealthy =>
             _failedRequestCount < LibreLinkUpConstants.Configuration.MaxHealthFailures
-            && !IsTokenExpired();
+            && !_tokenProvider.IsTokenExpired;
 
         /// <summary>
         /// Get the current failed request count

@@ -86,130 +86,8 @@ namespace Nocturne.Connectors.Nightscout.Services
                 ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         }
 
-        /// <summary>
-        /// Cached JWT token for v3 API authentication
-        /// </summary>
-        private string? _jwtToken;
-        private DateTime _jwtTokenExpiry = DateTime.MinValue;
-
-        /// <summary>
-        /// Hash API secret using SHA1 to match Nightscout's expected format
-        /// </summary>
-        private static string HashApiSecret(string apiSecret)
-        {
-            using var sha1 = System.Security.Cryptography.SHA1.Create();
-            var hashBytes = sha1.ComputeHash(System.Text.Encoding.UTF8.GetBytes(apiSecret));
-            return Convert.ToHexString(hashBytes).ToLowerInvariant();
-        }
-
-        /// <summary>
-        /// Gets a JWT token for v3 API authentication
-        /// </summary>
-        private async Task<string?> GetJwtTokenAsync()
-        {
-            // Return cached token if still valid
-            if (!string.IsNullOrEmpty(_jwtToken) && DateTime.UtcNow < _jwtTokenExpiry)
-            {
-                return _jwtToken;
-            }
-
-            try
-            {
-                var subjectToken = _config.SubjectToken;
-                if (string.IsNullOrEmpty(subjectToken))
-                {
-                    _logger.LogDebug("No Subject Token configured, skipping JWT authentication");
-                    return null;
-                }
-
-                var tokenUrl = $"/api/v2/authorization/request/{subjectToken}";
-                _logger.LogDebug("Requesting JWT token from {Url}", tokenUrl);
-
-                var response = await _httpClient.GetAsync(tokenUrl);
-                if (response.IsSuccessStatusCode)
-                {
-                    var content = await response.Content.ReadAsStringAsync();
-                    var authResponse = JsonSerializer.Deserialize<JsonElement>(content);
-
-                    if (authResponse.TryGetProperty("token", out var tokenElement))
-                    {
-                        _jwtToken = tokenElement.GetString();
-                        // JWT tokens typically expire in 1 hour, refresh at 50 minutes
-                        _jwtTokenExpiry = DateTime.UtcNow.AddMinutes(50);
-                        _logger.LogInformation("Successfully obtained JWT token for v3 API");
-                        return _jwtToken;
-                    }
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning(
-                        "Failed to get JWT token using configured Subject Token: {StatusCode} - {Error}",
-                        response.StatusCode,
-                        errorContent
-                    );
-                }
-
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error obtaining JWT token for v3 API");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Adds JWT authentication header to request for v3 API calls
-        /// </summary>
-        private async Task<bool> AddJwtAuthHeaderAsync(HttpRequestMessage request)
-        {
-            var token = await GetJwtTokenAsync();
-            if (string.IsNullOrEmpty(token))
-            {
-                return false;
-            }
-
-            request.Headers.Add("Authorization", $"Bearer {token}");
-            return true;
-        }
-
-        /// <summary>
-        /// Adds API secret header to request for v1 API calls that require authentication
-        /// </summary>
-        private void AddApiSecretHeader(HttpRequestMessage request)
-        {
-            var apiSecret = _config.SourceApiSecret;
-            if (!string.IsNullOrEmpty(apiSecret))
-            {
-                // Nightscout v1 API expects SHA1 hashed secret in the api-secret header
-                var hashedSecret = HashApiSecret(apiSecret);
-                request.Headers.Add("api-secret", hashedSecret);
-                _logger.LogDebug("Added api-secret header with hashed secret");
-            }
-            else
-            {
-                _logger.LogWarning("No API secret configured for authentication");
-            }
-        }
-
-        /// <summary>
-        /// Builds a URL with secret query parameter for v1 API authentication
-        /// Some Nightscout endpoints require authentication via query parameter
-        /// </summary>
-        private string BuildAuthenticatedUrl(string baseUrl)
-        {
-            var apiSecret = _config.SourceApiSecret;
-            if (string.IsNullOrEmpty(apiSecret))
-            {
-                _logger.LogWarning("No API secret configured for URL authentication");
-                return baseUrl;
-            }
-
-            var hashedSecret = HashApiSecret(apiSecret);
-            var separator = baseUrl.Contains('?') ? "&" : "?";
-            return $"{baseUrl}{separator}secret={hashedSecret}";
-        }
+        // Note: Authentication is now handled by NightscoutAuthHandler (DelegatingHandler)
+        // JWT token management and API-secret header injection are centralized there
 
         /// <summary>
         /// Checks if the source Nightscout supports v3 API
@@ -371,21 +249,8 @@ namespace Nocturne.Connectors.Nightscout.Services
         {
             try
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, "/api/v3/lastModified");
-                if (!await AddJwtAuthHeaderAsync(request))
-                {
-                    if (string.IsNullOrEmpty(_config.SubjectToken))
-                    {
-                        _logger.LogDebug("Skipping lastModified check (no subject token configured)");
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Could not add JWT auth for lastModified request");
-                    }
-                    return null;
-                }
-
-                var response = await _httpClient.SendAsync(request);
+                // Auth headers are automatically added by NightscoutAuthHandler
+                var response = await _httpClient.GetAsync("/api/v3/lastModified");
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
@@ -462,48 +327,22 @@ namespace Nocturne.Connectors.Nightscout.Services
                         urlBuilder.Append($"&srvModified$gte={sinceMs}");
                     }
 
-                    var request = new HttpRequestMessage(HttpMethod.Get, urlBuilder.ToString());
-                    if (!await AddJwtAuthHeaderAsync(request))
-                    {
-                        if (string.IsNullOrEmpty(_config.SubjectToken))
-                        {
-                            _logger.LogDebug(
-                                "Skipping JWT auth for {Collection} (no subject token configured), using V1 fallback",
-                                collection
-                            );
-                        }
-                        else
-                        {
-                            _logger.LogWarning(
-                                "Could not add JWT auth for {Collection} fetch, attempting v1 fallback",
-                                collection
-                            );
-                        }
-
-                        return await FetchCollectionV1Async<T>(
-                            collection,
-                            since,
-                            limit,
-                            sortField ?? "date"
-                        );
-                    }
-
                     _logger.LogDebug(
                         "Fetching {Collection} from v3 API: {Url}",
                         collection,
                         urlBuilder.ToString()
                     );
 
-                    var response = await _httpClient.SendAsync(request);
+                    // Auth headers are automatically added by NightscoutAuthHandler
+                    var response = await _httpClient.GetAsync(urlBuilder.ToString());
 
                     if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
+                        // Handler already tried to refresh JWT; fall back to v1 API
                         _logger.LogWarning(
-                            "JWT auth failed for {Collection} fetch, attempting v1 fallback",
+                            "v3 API returned 401 for {Collection} after auth retry, falling back to v1 API",
                             collection
                         );
-                        // Force token refresh on next attempt
-                        _jwtToken = null;
                         return await FetchCollectionV1Async<T>(
                             collection,
                             since,
@@ -591,12 +430,10 @@ namespace Nocturne.Connectors.Nightscout.Services
                     urlBuilder.Append($"&find[{dateField}][$gte]={sinceMs}");
                 }
 
-                var request = new HttpRequestMessage(HttpMethod.Get, urlBuilder.ToString());
-                AddApiSecretHeader(request);
-
                 _logger.LogDebug("Fetching from v1 API: {Url}", urlBuilder.ToString());
 
-                var response = await _httpClient.SendAsync(request);
+                // Auth headers are automatically added by NightscoutAuthHandler
+                var response = await _httpClient.GetAsync(urlBuilder.ToString());
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();

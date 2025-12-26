@@ -30,9 +30,7 @@ namespace Nocturne.Connectors.MiniMed.Services
         private readonly CareLinkConnectorConfiguration _config;
         private readonly IRetryDelayStrategy _retryDelayStrategy;
         private readonly IRateLimitingStrategy _rateLimitingStrategy;
-        private string? _authToken;
-        private CarelinkUserProfile? _userProfile;
-        private DateTime _sessionExpiresAt;
+        private readonly IAuthTokenProvider _tokenProvider;
         private int _failedRequestCount = 0;
 
         private static readonly Dictionary<string, string> KnownServers = new()
@@ -89,6 +87,7 @@ namespace Nocturne.Connectors.MiniMed.Services
             ILogger<CareLinkConnectorService> logger,
             IRetryDelayStrategy retryDelayStrategy,
             IRateLimitingStrategy rateLimitingStrategy,
+            IAuthTokenProvider tokenProvider,
             IApiDataSubmitter? apiDataSubmitter = null,
             IConnectorMetricsTracker? metricsTracker = null,
             IConnectorStateService? stateService = null
@@ -101,116 +100,24 @@ namespace Nocturne.Connectors.MiniMed.Services
             _rateLimitingStrategy =
                 rateLimitingStrategy
                 ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
+            _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         }
 
         public override async Task<bool> AuthenticateAsync()
         {
-            var attempt = 0;
-            const int maxRetries = 3;
-
-            while (attempt < maxRetries)
+            var token = await _tokenProvider.GetValidTokenAsync();
+            if (token == null)
             {
-                try
-                {
-                    _logger.LogInformation(
-                        "Authenticating with MiniMed CareLink for user: {Username} (attempt {Attempt}/{MaxRetries})",
-                        _config.CareLinkUsername,
-                        attempt + 1,
-                        maxRetries
-                    );
-
-                    // Step 1: Get login flow
-                    var loginFlow = await GetLoginFlowAsync();
-                    if (loginFlow == null)
-                    {
-                        if (IsRetryableError(null))
-                        {
-                            await ApplyRetryDelay(attempt);
-                            attempt++;
-                            continue;
-                        }
-                        return false;
-                    }
-
-                    // Step 2: Submit credentials
-                    var authResult = await SubmitLoginAsync(loginFlow);
-                    if (authResult == null)
-                    {
-                        if (IsRetryableError(null))
-                        {
-                            await ApplyRetryDelay(attempt);
-                            attempt++;
-                            continue;
-                        }
-                        return false;
-                    }
-
-                    // Step 3: Handle consent step
-                    var consentResult = await HandleConsentAsync(authResult);
-                    if (consentResult == null)
-                    {
-                        if (IsRetryableError(null))
-                        {
-                            await ApplyRetryDelay(attempt);
-                            attempt++;
-                            continue;
-                        }
-                        return false;
-                    }
-
-                    _authToken = consentResult.Token;
-                    _sessionExpiresAt = DateTime.UtcNow.AddHours(4); // CareLink sessions typically last 4 hours
-
-                    // Step 4: Get user profile
-                    await LoadUserProfileAsync();
-
-                    _failedRequestCount = 0;
-                    _logger.LogInformation("MiniMed CareLink authentication successful");
-                    return true;
-                }
-                catch (HttpRequestException ex) when (IsRetryableError(ex))
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Retryable error during CareLink authentication (attempt {Attempt}/{MaxRetries}): {Message}",
-                        attempt + 1,
-                        maxRetries,
-                        ex.Message
-                    );
-
-                    await ApplyRetryDelay(attempt);
-                    attempt++;
-                }
-                catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Timeout during CareLink authentication (attempt {Attempt}/{MaxRetries})",
-                        attempt + 1,
-                        maxRetries
-                    );
-
-                    await ApplyRetryDelay(attempt);
-                    attempt++;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Non-retryable error during MiniMed CareLink authentication: {Message}",
-                        ex.Message
-                    );
-                    _failedRequestCount++;
-                    return false;
-                }
+                _failedRequestCount++;
+                return false;
             }
 
-            _logger.LogError(
-                "Failed to authenticate with MiniMed CareLink after {MaxRetries} attempts",
-                maxRetries
-            );
-            _failedRequestCount++;
-            return false;
+            // Set up authorization header for subsequent requests
+            _httpClient.DefaultRequestHeaders.Remove("Authorization");
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+
+            _failedRequestCount = 0;
+            return true;
         }
 
         private async Task ApplyRetryDelay(int attempt)
@@ -421,7 +328,7 @@ namespace Nocturne.Connectors.MiniMed.Services
             try
             {
                 _httpClient.DefaultRequestHeaders.Remove("Authorization");
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_authToken}");
+                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {(await _tokenProvider.GetValidTokenAsync())}");
 
                 var response = await _httpClient.GetAsync("/patient/users/me/profile");
 
@@ -435,7 +342,8 @@ namespace Nocturne.Connectors.MiniMed.Services
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                _userProfile = JsonSerializer.Deserialize<CarelinkUserProfile>(responseContent);
+                // User profile loaded through token provider, no local storage needed
+                _logger.LogDebug("User profile response received: {Length} chars", responseContent.Length);
             }
             catch (Exception ex)
             {
@@ -454,8 +362,8 @@ namespace Nocturne.Connectors.MiniMed.Services
                 { // Apply rate limiting before each attempt
                     await _rateLimitingStrategy.ApplyDelayAsync(attempt);
 
-                    // Check session validity
-                    if (string.IsNullOrEmpty(_authToken) || DateTime.UtcNow >= _sessionExpiresAt)
+                    // Check session validity using token provider
+                    if (_tokenProvider.IsTokenExpired)
                     {
                         _logger.LogInformation(
                             "Session expired or invalid, attempting to re-authenticate"
@@ -626,7 +534,7 @@ namespace Nocturne.Connectors.MiniMed.Services
             {
                 var payload = new
                 {
-                    username = _userProfile?.Username ?? _config.CareLinkUsername,
+                    username = _config.CareLinkUsername,
                     role = string.IsNullOrEmpty(_config.CareLinkPatientUsername)
                         ? "patient"
                         : "carepartner",
@@ -755,3 +663,4 @@ namespace Nocturne.Connectors.MiniMed.Services
         }
     }
 }
+

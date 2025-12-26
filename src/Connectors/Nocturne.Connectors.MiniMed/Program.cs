@@ -45,6 +45,11 @@ public class Program
 
         builder.Services.AddHttpClient<CareLinkConnectorService>().ConfigureCareLinkClient(server);
 
+        // Register the token provider for authentication
+        builder.Services.AddHttpClient<CareLinkAuthTokenProvider>().ConfigureCareLinkClient(server);
+        builder.Services.AddSingleton<IAuthTokenProvider>(sp =>
+            sp.GetRequiredService<CareLinkAuthTokenProvider>());
+
 
 
         // Configure API data submitter for HTTP-based data submission

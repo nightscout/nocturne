@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Health;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Nightscout.Handlers;
 using Nocturne.Connectors.Nightscout.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -39,12 +40,16 @@ public class Program
         );
         builder.Services.AddSingleton(nightscoutConfig);
 
+        // Register the auth handler for DI
+        builder.Services.AddTransient<NightscoutAuthHandler>();
+
         builder
             .Services.AddHttpClient<NightscoutConnectorService>()
             .ConfigureNightscoutClient(
                 nightscoutConfig.SourceEndpoint,
                 nightscoutConfig.SourceApiSecret
-            );
+            )
+            .AddHttpMessageHandler<NightscoutAuthHandler>();  // Wire up the auth handler
 
 
 

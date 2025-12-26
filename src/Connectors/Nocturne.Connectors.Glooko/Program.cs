@@ -61,6 +61,21 @@ public class Program
 
         builder.Services.AddHttpClient<GlookoConnectorService>().ConfigureGlookoClient(server);
 
+        // Register the token provider for authentication
+        // Use a singleton instance with proper HttpClient configuration
+        builder.Services.AddHttpClient<GlookoAuthTokenProvider>().ConfigureGlookoClient(server);
+        builder.Services.AddSingleton(sp =>
+        {
+            // Create instance via HttpClientFactory to get properly configured HttpClient
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = factory.CreateClient(nameof(GlookoAuthTokenProvider));
+            var config = sp.GetRequiredService<IOptions<GlookoConnectorConfiguration>>();
+            var logger = sp.GetRequiredService<ILogger<GlookoAuthTokenProvider>>();
+            return new GlookoAuthTokenProvider(config, httpClient, logger);
+        });
+        builder.Services.AddSingleton<IAuthTokenProvider>(sp =>
+            sp.GetRequiredService<GlookoAuthTokenProvider>());
+
         builder.Services.AddSingleton(
             typeof(IConnectorFileService<>),
             typeof(ConnectorFileService<>)

@@ -31,9 +31,8 @@ namespace Nocturne.Connectors.Dexcom.Services
         private readonly DexcomConnectorConfiguration _config;
         private readonly IRetryDelayStrategy _retryDelayStrategy;
         private readonly IRateLimitingStrategy _rateLimitingStrategy;
+        private readonly IAuthTokenProvider _tokenProvider;
         private readonly IConnectorFileService<DexcomEntry[]>? _fileService = null; // Optional file service for data persistence
-        private string? _sessionId;
-        private DateTime _sessionExpiresAt;
         private int _failedRequestCount = 0;
         private static readonly Dictionary<string, string> KnownServers = new()
         {
@@ -88,6 +87,7 @@ namespace Nocturne.Connectors.Dexcom.Services
             ILogger<DexcomConnectorService> logger,
             IRetryDelayStrategy retryDelayStrategy,
             IRateLimitingStrategy rateLimitingStrategy,
+            IAuthTokenProvider tokenProvider,
             IApiDataSubmitter? apiDataSubmitter = null,
             IConnectorMetricsTracker? metricsTracker = null,
             IConnectorStateService? stateService = null
@@ -100,231 +100,20 @@ namespace Nocturne.Connectors.Dexcom.Services
             _rateLimitingStrategy =
                 rateLimitingStrategy
                 ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
+            _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         }
 
         public override async Task<bool> AuthenticateAsync()
         {
-            const int maxRetries = 3;
-            HttpRequestException? lastException = null;
-
-            for (int attempt = 0; attempt < maxRetries; attempt++)
+            var token = await _tokenProvider.GetValidTokenAsync();
+            if (token == null)
             {
-                try
-                {
-                    _logger.LogInformation(
-                        "Authenticating with Dexcom Share for account: {Username} (attempt {Attempt}/{MaxRetries})",
-                        _config.DexcomUsername,
-                        attempt + 1,
-                        maxRetries
-                    );
-
-                    var authPayload = new
-                    {
-                        password = _config.DexcomPassword,
-                        applicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db",
-                        accountName = _config.DexcomUsername,
-                    };
-
-                    var json = JsonSerializer.Serialize(authPayload);
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                    var response = await _httpClient.PostAsync(
-                        "/ShareWebServices/Services/General/AuthenticatePublisherAccount",
-                        content
-                    );
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        var errorContent = await response.Content.ReadAsStringAsync();
-
-                        // Check for rate limiting or temporary errors
-                        if (
-                            response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
-                            || response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable
-                            || response.StatusCode == System.Net.HttpStatusCode.InternalServerError
-                        )
-                        {
-                            lastException = new HttpRequestException(
-                                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}"
-                            );
-                            _logger.LogWarning(
-                                "Dexcom authentication failed with retryable error on attempt {Attempt}: {StatusCode} - {Error}",
-                                attempt + 1,
-                                response.StatusCode,
-                                errorContent
-                            );
-
-                            if (attempt < maxRetries - 1)
-                            {
-                                _logger.LogInformation(
-                                    "Applying retry backoff before attempt {NextAttempt}",
-                                    attempt + 2
-                                );
-                                await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                                continue;
-                            }
-                        }
-                        else
-                        {
-                            // Non-retryable error (e.g., invalid credentials)
-                            _logger.LogError(
-                                "Dexcom authentication failed with non-retryable error: {StatusCode} - {Error}",
-                                response.StatusCode,
-                                errorContent
-                            );
-                            _failedRequestCount++;
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        var accountId = await response.Content.ReadAsStringAsync();
-                        accountId = accountId.Trim('"'); // Remove quotes from JSON string
-
-                        if (string.IsNullOrEmpty(accountId))
-                        {
-                            _logger.LogError("Dexcom authentication returned empty account ID");
-                            _failedRequestCount++;
-                            return false;
-                        }
-
-                        // Now get session ID
-                        var sessionPayload = new
-                        {
-                            password = _config.DexcomPassword,
-                            applicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db",
-                            accountId = accountId,
-                        };
-
-                        json = JsonSerializer.Serialize(sessionPayload);
-                        content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                        response = await _httpClient.PostAsync(
-                            "/ShareWebServices/Services/General/LoginPublisherAccountById",
-                            content
-                        );
-
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var errorContent = await response.Content.ReadAsStringAsync();
-
-                            // Check for retryable errors in session creation
-                            if (
-                                response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
-                                || response.StatusCode
-                                    == System.Net.HttpStatusCode.ServiceUnavailable
-                                || response.StatusCode
-                                    == System.Net.HttpStatusCode.InternalServerError
-                            )
-                            {
-                                lastException = new HttpRequestException(
-                                    $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}"
-                                );
-                                _logger.LogWarning(
-                                    "Dexcom session creation failed with retryable error on attempt {Attempt}: {StatusCode} - {Error}",
-                                    attempt + 1,
-                                    response.StatusCode,
-                                    errorContent
-                                );
-
-                                if (attempt < maxRetries - 1)
-                                {
-                                    _logger.LogInformation(
-                                        "Applying retry backoff before attempt {NextAttempt}",
-                                        attempt + 2
-                                    );
-                                    await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                                    continue;
-                                }
-                            }
-                            else
-                            {
-                                _logger.LogError(
-                                    "Dexcom session creation failed with non-retryable error: {StatusCode} - {Error}",
-                                    response.StatusCode,
-                                    errorContent
-                                );
-                                _failedRequestCount++;
-                                return false;
-                            }
-                        }
-                        else
-                        {
-                            _sessionId = await response.Content.ReadAsStringAsync();
-                            _sessionId = _sessionId.Trim('"'); // Remove quotes from JSON string
-
-                            if (string.IsNullOrEmpty(_sessionId))
-                            {
-                                _logger.LogError(
-                                    "Dexcom session creation returned empty session ID"
-                                );
-                                _failedRequestCount++;
-                                return false;
-                            }
-
-                            // Set session expiration (Dexcom sessions typically last 24 hours)
-                            _sessionExpiresAt = DateTime.UtcNow.AddHours(23); // Add buffer
-
-                            // Reset failed request count on successful authentication
-                            _failedRequestCount = 0;
-
-                            _logger.LogInformation(
-                                "Dexcom Share authentication successful, session expires at {ExpiresAt}",
-                                _sessionExpiresAt
-                            );
-                            return true;
-                        }
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    lastException = ex;
-                    _logger.LogWarning(
-                        ex,
-                        "HTTP error during Dexcom authentication attempt {Attempt}: {Message}",
-                        attempt + 1,
-                        ex.Message
-                    );
-
-                    if (attempt < maxRetries - 1)
-                    {
-                        _logger.LogInformation(
-                            "Applying retry backoff before attempt {NextAttempt}",
-                            attempt + 2
-                        );
-                        await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Unexpected error during Dexcom authentication attempt {Attempt}",
-                        attempt + 1
-                    );
-                    _failedRequestCount++;
-                    return false;
-                }
+                _failedRequestCount++;
+                return false;
             }
 
-            // All attempts failed
-            _failedRequestCount++;
-            _logger.LogError(
-                "Dexcom authentication failed after {MaxRetries} attempts",
-                maxRetries
-            );
-
-            if (lastException != null)
-            {
-                throw lastException;
-            }
-
-            return false;
-        }
-
-        private bool IsSessionExpired()
-        {
-            return string.IsNullOrEmpty(_sessionId) || DateTime.UtcNow >= _sessionExpiresAt;
+            _failedRequestCount = 0;
+            return true;
         }
 
         public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
@@ -366,24 +155,22 @@ namespace Nocturne.Connectors.Dexcom.Services
         {
             try
             {
-                // Check if session is expired and re-authenticate if needed
-                if (IsSessionExpired())
+                // Get valid session token from provider
+                var sessionId = await _tokenProvider.GetValidTokenAsync();
+                if (string.IsNullOrEmpty(sessionId))
                 {
-                    _logger.LogInformation(
-                        "[{ConnectorSource}] Session expired, attempting to re-authenticate",
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] Failed to get valid session, authentication failed",
                         ConnectorSource
                     );
-                    if (!await AuthenticateAsync())
-                    {
-                        _failedRequestCount++;
-                        return null;
-                    }
+                    _failedRequestCount++;
+                    return null;
                 }
 
                 // Apply rate limiting
                 await _rateLimitingStrategy.ApplyDelayAsync(0);
 
-                var result = await FetchRawDataWithRetryAsync(since);
+                var result = await FetchRawDataWithRetryAsync(sessionId, since);
 
                 // Log batch data summary
                 if (result != null)
@@ -416,7 +203,7 @@ namespace Nocturne.Connectors.Dexcom.Services
             }
         }
 
-        private async Task<DexcomEntry[]?> FetchRawDataWithRetryAsync(DateTime? since = null)
+        private async Task<DexcomEntry[]?> FetchRawDataWithRetryAsync(string sessionId, DateTime? since = null)
         {
             const int maxRetries = 3;
             HttpRequestException? lastException = null;
@@ -442,7 +229,7 @@ namespace Nocturne.Connectors.Dexcom.Services
                     var minutes = (int)(maxCount * 5);
 
                     var url =
-                        $"/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues?sessionID={_sessionId}&minutes={minutes}&maxCount={(int)maxCount}";
+                        $"/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues?sessionID={sessionId}&minutes={minutes}&maxCount={(int)maxCount}";
 
                     var response = await _httpClient.PostAsync(
                         url,
@@ -457,22 +244,19 @@ namespace Nocturne.Connectors.Dexcom.Services
                         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                         {
                             _logger.LogWarning(
-                                "Dexcom session expired, attempting re-authentication"
+                                "Dexcom session expired, invalidating token and retrying"
                             );
-                            _sessionId = null;
-                            _sessionExpiresAt = DateTime.MinValue;
+                            _tokenProvider.InvalidateToken();
 
-                            if (await AuthenticateAsync())
-                            {
-                                // Retry with new session on same attempt
-                                continue;
-                            }
-                            else
+                            // Get new token for retry
+                            sessionId = await _tokenProvider.GetValidTokenAsync() ?? string.Empty;
+                            if (string.IsNullOrEmpty(sessionId))
                             {
                                 _logger.LogError("Failed to re-authenticate with Dexcom Share");
                                 _failedRequestCount++;
                                 return null;
                             }
+                            continue; // Retry with new session
                         }
 
                         // Check for retryable errors
