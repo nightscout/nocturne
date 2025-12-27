@@ -21,13 +21,15 @@
     Svg,
     Area,
     Spline,
-    Rule,
     Points,
     Highlight,
     Text,
     Tooltip,
     AnnotationRange,
     ChartClipPath,
+    AnnotationLine,
+    Rule,
+    AnnotationPoint,
   } from "layerchart";
   import { chartConfig } from "$lib/constants";
   import { curveStepAfter, curveMonotoneX, bisector } from "d3";
@@ -41,6 +43,10 @@
     type DashboardChartData,
   } from "$lib/data/chart-data.remote";
   import {
+    getChartStateData,
+    type ChartStateData,
+  } from "$lib/data/state-spans.remote";
+  import {
     predictionMinutes,
     predictionEnabled,
     predictionDisplayMode,
@@ -52,6 +58,15 @@
   import PredictionVisualizations from "./PredictionVisualizations.svelte";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
+  import {
+    SystemEventIcon,
+    PumpModeIcon,
+    DeviceEventIcon,
+    BatteryIcon,
+    ReservoirIcon,
+    SensorIcon,
+    SiteChangeIcon,
+  } from "$lib/components/icons";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -97,6 +112,9 @@
 
   // Server-side chart data (IOB, COB, basal)
   let serverChartData = $state<DashboardChartData | null>(null);
+
+  // State span and system event data
+  let stateData = $state<ChartStateData | null>(null);
 
   // Track if initial data has loaded to prevent effect loops during hydration
   let hasMounted = $state(false);
@@ -214,6 +232,16 @@
       .catch((err) => {
         console.error("Failed to fetch chart data:", err);
         serverChartData = null;
+      });
+
+    // Also fetch state span data
+    getChartStateData({ startTime, endTime })
+      .then((data) => {
+        stateData = data;
+      })
+      .catch((err) => {
+        console.error("Failed to fetch state data:", err);
+        stateData = null;
       });
   });
 
@@ -407,6 +435,41 @@
     }))
   );
 
+  // Filter pump mode spans to visible range and clip to display bounds
+  const pumpModeSpans = $derived.by(() => {
+    if (!stateData?.pumpModeSpans) return [];
+    const rangeStart = displayDateRange.from.getTime();
+    const rangeEnd = displayDateRange.to.getTime();
+
+    return stateData.pumpModeSpans
+      .filter((span) => {
+        const spanStart = span.startTime.getTime();
+        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
+        // Include if overlaps with visible range
+        return spanEnd > rangeStart && spanStart < rangeEnd;
+      })
+      .map((span) => ({
+        ...span,
+        // Clip start/end to visible range
+        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
+        displayEnd: new Date(
+          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
+        ),
+      }));
+  });
+
+  // Filter system events to visible range
+  const systemEvents = $derived.by(() => {
+    if (!stateData?.systemEvents) return [];
+    const rangeStart = displayDateRange.from.getTime();
+    const rangeEnd = displayDateRange.to.getTime();
+
+    return stateData.systemEvents.filter((event) => {
+      const eventTime = event.time.getTime();
+      return eventTime >= rangeStart && eventTime <= rangeEnd;
+    });
+  });
+
   function getGlucoseColor(sgv: number): string {
     const low = chartConfig.low.threshold ?? 55;
     const target = chartConfig.target.threshold ?? 80;
@@ -569,7 +632,7 @@
     return parts.join(" • ") || "Treatment";
   }
 
-  // Legacy single-item finders (kept for tooltip usage)
+  // Find nearby treatments for tooltip display
   function findNearbyBolus(time: Date) {
     return bolusMarkersForIob.find(
       (b) =>
@@ -581,6 +644,24 @@
     return carbMarkersForIob.find(
       (c) =>
         Math.abs(c.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
+    );
+  }
+
+  // Find active pump mode span at a given time
+  function findActivePumpMode(time: Date) {
+    const timeMs = time.getTime();
+    return pumpModeSpans.find((span) => {
+      const spanStart = span.startTime.getTime();
+      const spanEnd = span.endTime?.getTime() ?? Date.now();
+      return timeMs >= spanStart && timeMs <= spanEnd;
+    });
+  }
+
+  // Find nearby system event
+  function findNearbySystemEvent(time: Date) {
+    return systemEvents.find(
+      (event) =>
+        Math.abs(event.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
     );
   }
 </script>
@@ -703,6 +784,32 @@
               .domain([0, maxIOB])
               .range([iobTrackBottom, iobTrackTop])}
             <!-- ===== BASAL TRACK (TOP) ===== -->
+            <!-- Pump mode background bands (render first, behind everything else) -->
+            {#each pumpModeSpans as span (span.id)}
+              {@const spanXPos = context.xScale(span.displayStart)}
+              <AnnotationRange
+                x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+                y={[basalScale(maxBasalRate), basalZero]}
+                fill={span.color}
+                class="opacity-20"
+              />
+              <!-- Pump mode icon at the start of each span -->
+              <Group
+                x={spanXPos}
+                y={context.yScale(basalScale(maxBasalRate) + 6)}
+              >
+                <foreignObject x="2" y="-8" width="16" height="16">
+                  <div class="flex items-center justify-center w-full h-full">
+                    <PumpModeIcon
+                      state={span.state}
+                      size={12}
+                      color={span.color}
+                    />
+                  </div>
+                </foreignObject>
+              </Group>
+            {/each}
+
             {#if staleBasalData}
               <ChartClipPath>
                 <AnnotationRange
@@ -720,10 +827,18 @@
                   }}
                 />
               </ChartClipPath>
-              <Rule
+              <AnnotationLine
                 x={staleBasalData.start}
                 class="stroke-yellow-500/50 stroke-1"
                 stroke-dasharray="2,2"
+              />
+              <AnnotationPoint
+                x={staleBasalData.start.getTime()}
+                y={basalScale(maxBasalRate)}
+                label="Last pump sync"
+                labelPlacement="bottom-right"
+                fill="yellow"
+                class="hover:bg-background hover:text-foreground"
               />
             {/if}
 
@@ -944,60 +1059,34 @@
                   stroke-width="2"
                   class="opacity-95"
                 />
-                <!-- Icon based on event type -->
-                {#if marker.eventType === "Sensor Start" || marker.eventType === "Sensor Change"}
-                  <!-- Sensor icon: circle with wave/signal lines -->
-                  <g
-                    fill="none"
-                    stroke={marker.config.color}
-                    stroke-width="1.5"
-                  >
-                    <circle cx="0" cy="0" r="3" fill={marker.config.color} />
-                    <path d="M -5 -5 Q 0 -8 5 -5" />
-                    <path d="M -7 -8 Q 0 -12 7 -8" />
-                  </g>
-                {:else if marker.eventType === "Sensor Stop"}
-                  <!-- Sensor stop: X over sensor icon -->
-                  <g stroke={marker.config.color} stroke-width="1.5">
-                    <circle cx="0" cy="0" r="3" fill="none" />
-                    <line x1="-5" y1="-5" x2="5" y2="5" />
-                    <line x1="5" y1="-5" x2="-5" y2="5" />
-                  </g>
-                {:else if marker.eventType === "Site Change"}
-                  <!-- Site change: simplified infusion set icon (circle with needle) -->
-                  <g
-                    fill="none"
-                    stroke={marker.config.color}
-                    stroke-width="1.5"
-                  >
-                    <circle cx="0" cy="-2" r="4" />
-                    <line x1="0" y1="2" x2="0" y2="7" />
-                    <line x1="-2" y1="5" x2="2" y2="5" />
-                  </g>
-                {:else if marker.eventType === "Insulin Change"}
-                  <!-- Insulin/Reservoir change: syringe/vial icon -->
-                  <g
-                    fill="none"
-                    stroke={marker.config.color}
-                    stroke-width="1.5"
-                  >
-                    <rect x="-3" y="-6" width="6" height="10" rx="1" />
-                    <line x1="-2" y1="-3" x2="2" y2="-3" />
-                    <line x1="0" y1="4" x2="0" y2="7" />
-                  </g>
-                {:else if marker.eventType === "Pump Battery Change"}
-                  <!-- Battery icon -->
-                  <g
-                    fill="none"
-                    stroke={marker.config.color}
-                    stroke-width="1.5"
-                  >
-                    <rect x="-5" y="-4" width="10" height="8" rx="1" />
-                    <rect x="5" y="-2" width="2" height="4" rx="0.5" />
-                    <line x1="-2" y1="0" x2="2" y2="0" />
-                    <line x1="0" y1="-2" x2="0" y2="2" />
-                  </g>
-                {/if}
+                <!-- Icon using foreignObject to embed Lucide component -->
+                <foreignObject x="-10" y="-10" width="20" height="20">
+                  <div class="flex items-center justify-center w-full h-full">
+                    <DeviceEventIcon
+                      eventType={marker.eventType}
+                      size={16}
+                      color={marker.config.color}
+                    />
+                  </div>
+                </foreignObject>
+              </Group>
+            {/each}
+
+            <!-- System event markers (alarms, warnings) positioned at glucose track bottom -->
+            {#each systemEvents as event (event.id)}
+              {@const xPos = context.xScale(event.time)}
+              {@const yPos = context.yScale(glucoseScale(lowThreshold * 0.8))}
+              <Group x={xPos} y={yPos}>
+                <!-- Icon using foreignObject to embed Lucide component -->
+                <foreignObject x="-8" y="-8" width="16" height="16">
+                  <div class="flex items-center justify-center w-full h-full">
+                    <SystemEventIcon
+                      eventType={event.eventType}
+                      size={16}
+                      color={event.color}
+                    />
+                  </div>
+                </foreignObject>
               </Group>
             {/each}
 
@@ -1040,6 +1129,8 @@
               {@const nearbyBolus = findNearbyBolus(data.time)}
               {@const nearbyCarbs = findNearbyCarbs(data.time)}
               {@const nearbyDeviceEvent = findNearbyDeviceEvent(data.time)}
+              {@const activePumpMode = findActivePumpMode(data.time)}
+              {@const nearbySystemEvent = findNearbySystemEvent(data.time)}
 
               <Tooltip.Header
                 value={data?.time}
@@ -1108,6 +1199,24 @@
                       color="var(--muted-foreground)"
                     />
                   {/if}
+                {/if}
+                {#if activePumpMode}
+                  <Tooltip.Item
+                    label="Pump Mode"
+                    value={activePumpMode.state}
+                    color={activePumpMode.color}
+                    class="font-medium"
+                  />
+                {/if}
+                {#if nearbySystemEvent}
+                  <Tooltip.Item
+                    label={nearbySystemEvent.eventType}
+                    value={nearbySystemEvent.description ||
+                      nearbySystemEvent.code ||
+                      ""}
+                    color={nearbySystemEvent.color}
+                    class="font-medium"
+                  />
                 {/if}
               </Tooltip.List>
             {/snippet}
@@ -1199,151 +1308,53 @@
       <!-- Device event legend items (only show if present in current view) -->
       {#if deviceEventMarkers.some((m) => m.eventType === "Sensor Start" || m.eventType === "Sensor Change")}
         <div class="flex items-center gap-1">
-          <svg
-            width="18"
-            height="18"
-            viewBox="-10 -10 20 20"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              r="8"
-              fill="var(--background)"
-              stroke="var(--glucose-in-range)"
-              stroke-width="1.5"
-            />
-            <circle cx="0" cy="0" r="2" fill="var(--glucose-in-range)" />
-            <path
-              d="M -3.5 -3.5 Q 0 -5.5 3.5 -3.5"
-              fill="none"
-              stroke="var(--glucose-in-range)"
-              stroke-width="1"
-            />
-          </svg>
+          <SensorIcon size={16} color="var(--glucose-in-range)" />
           <span>Sensor</span>
         </div>
       {/if}
       {#if deviceEventMarkers.some((m) => m.eventType === "Site Change")}
         <div class="flex items-center gap-1">
-          <svg
-            width="18"
-            height="18"
-            viewBox="-10 -10 20 20"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              r="8"
-              fill="var(--background)"
-              stroke="var(--insulin-bolus)"
-              stroke-width="1.5"
-            />
-            <circle
-              cx="0"
-              cy="-1.5"
-              r="3"
-              fill="none"
-              stroke="var(--insulin-bolus)"
-              stroke-width="1"
-            />
-            <line
-              x1="0"
-              y1="1.5"
-              x2="0"
-              y2="5"
-              stroke="var(--insulin-bolus)"
-              stroke-width="1"
-            />
-          </svg>
+          <SiteChangeIcon size={16} color="var(--insulin-bolus)" />
           <span>Site</span>
         </div>
       {/if}
       {#if deviceEventMarkers.some((m) => m.eventType === "Insulin Change")}
         <div class="flex items-center gap-1">
-          <svg
-            width="18"
-            height="18"
-            viewBox="-10 -10 20 20"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              r="8"
-              fill="var(--background)"
-              stroke="var(--insulin-basal)"
-              stroke-width="1.5"
-            />
-            <rect
-              x="-2"
-              y="-4"
-              width="4"
-              height="7"
-              rx="0.5"
-              fill="none"
-              stroke="var(--insulin-basal)"
-              stroke-width="1"
-            />
-            <line
-              x1="-1"
-              y1="-2"
-              x2="1"
-              y2="-2"
-              stroke="var(--insulin-basal)"
-              stroke-width="1"
-            />
-          </svg>
+          <ReservoirIcon size={16} color="var(--insulin-basal)" />
           <span>Reservoir</span>
         </div>
       {/if}
       {#if deviceEventMarkers.some((m) => m.eventType === "Pump Battery Change")}
         <div class="flex items-center gap-1">
-          <svg
-            width="18"
-            height="18"
-            viewBox="-10 -10 20 20"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              r="8"
-              fill="var(--background)"
-              stroke="var(--carbs)"
-              stroke-width="1.5"
-            />
-            <rect
-              x="-3.5"
-              y="-2.5"
-              width="7"
-              height="5"
-              rx="0.5"
-              fill="none"
-              stroke="var(--carbs)"
-              stroke-width="1"
-            />
-            <rect
-              x="3.5"
-              y="-1"
-              width="1"
-              height="2"
-              rx="0.25"
-              fill="var(--carbs)"
-            />
-            <line
-              x1="-1"
-              y1="0"
-              x2="1"
-              y2="0"
-              stroke="var(--carbs)"
-              stroke-width="1"
-            />
-            <line
-              x1="0"
-              y1="-1"
-              x2="0"
-              y2="1"
-              stroke="var(--carbs)"
-              stroke-width="1"
-            />
-          </svg>
+          <BatteryIcon size={16} color="var(--carbs)" />
           <span>Battery</span>
         </div>
       {/if}
+      <!-- Pump mode legend items (only show if present in current view) -->
+      {#each [...new Set(pumpModeSpans.map((s) => s.state))] as state}
+        {@const span = pumpModeSpans.find((s) => s.state === state)}
+        {#if span}
+          <div class="flex items-center gap-1">
+            <PumpModeIcon
+              {state}
+              size={14}
+              class="opacity-70"
+              color={span.color}
+            />
+            <span>{state}</span>
+          </div>
+        {/if}
+      {/each}
+      <!-- System event legend items (only show if present in current view) -->
+      {#each [...new Set(systemEvents.map((e) => e.eventType))] as eventType}
+        {@const event = systemEvents.find((e) => e.eventType === eventType)}
+        {#if event}
+          <div class="flex items-center gap-1">
+            <SystemEventIcon {eventType} size={14} color={event.color} />
+            <span>{eventType}</span>
+          </div>
+        {/if}
+      {/each}
     </div>
   </CardContent>
 </Card>
