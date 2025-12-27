@@ -36,6 +36,8 @@ import {
   ConnectorStatusClient,
   MetadataClient,
   ChartDataClient,
+  StateSpansClient,
+  SystemEventsClient,
 } from "./generated/nocturne-api-client";
 
 /**
@@ -84,6 +86,8 @@ export class ApiClient {
   public readonly connectorStatus: ConnectorStatusClient;
   public readonly metadata: MetadataClient;
   public readonly chartData: ChartDataClient;
+  public readonly stateSpans: StateSpansClient;
+  public readonly systemEvents: SystemEventsClient;
 
   constructor(
     baseUrl: string,
@@ -131,6 +135,8 @@ export class ApiClient {
     this.connectorStatus = new ConnectorStatusClient(apiBaseUrl, http);
     this.metadata = new MetadataClient(apiBaseUrl, http);
     this.chartData = new ChartDataClient(apiBaseUrl, http);
+    this.stateSpans = new StateSpansClient(apiBaseUrl, http);
+    this.systemEvents = new SystemEventsClient(apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */

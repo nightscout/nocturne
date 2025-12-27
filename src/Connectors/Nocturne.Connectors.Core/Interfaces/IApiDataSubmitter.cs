@@ -108,4 +108,30 @@ public interface IApiDataSubmitter
         string source,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Submit state spans to the API (pump modes, connectivity, profiles, overrides)
+    /// </summary>
+    /// <param name="stateSpans">State spans to submit</param>
+    /// <param name="source">Source connector identifier</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if submission was successful</returns>
+    Task<bool> SubmitStateSpansAsync(
+        IEnumerable<StateSpan> stateSpans,
+        string source,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Submit system events to the API (alarms, warnings, info)
+    /// </summary>
+    /// <param name="systemEvents">System events to submit</param>
+    /// <param name="source">Source connector identifier</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if submission was successful</returns>
+    Task<bool> SubmitSystemEventsAsync(
+        IEnumerable<SystemEvent> systemEvents,
+        string source,
+        CancellationToken cancellationToken = default
+    );
 }

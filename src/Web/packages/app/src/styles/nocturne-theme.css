@@ -28,6 +28,23 @@
   --iob-basal: oklch(0.646 0.222 41.116);
   --iob-bolus: oklch(0.769 0.188 70.08);
   --iob-temporary: oklch(0.6 0.118 184.704);
+
+  /* Pump Mode States */
+  --pump-mode-automatic: oklch(0.6 0.118 184.704);     /* Green - full automation */
+  --pump-mode-limited: oklch(0.7 0.12 220);            /* Light blue - partial automation */
+  --pump-mode-manual: oklch(0.6 0.03 270);             /* Gray - open loop */
+  --pump-mode-boost: oklch(0.7 0.2 50);                /* Orange - aggressive delivery */
+  --pump-mode-ease-off: oklch(0.65 0.15 100);          /* Yellow-green - reduced delivery */
+  --pump-mode-sleep: oklch(0.5 0.1 280);               /* Purple - sleep mode */
+  --pump-mode-exercise: oklch(0.65 0.18 140);          /* Teal - activity mode */
+  --pump-mode-suspended: oklch(0.6 0.22 30);           /* Red-orange - insulin suspended */
+  --pump-mode-off: oklch(0.4 0.05 270);                /* Dark gray - pump off */
+
+  /* System Event Severity */
+  --system-event-alarm: oklch(0.577 0.245 27.325);     /* Red - critical alarm */
+  --system-event-hazard: oklch(0.646 0.222 41.116);    /* Orange - hazard */
+  --system-event-warning: oklch(0.769 0.188 70.08);    /* Yellow - warning */
+  --system-event-info: oklch(0.6 0.118 184.704);       /* Green - informational */
 }
 
 .dark {

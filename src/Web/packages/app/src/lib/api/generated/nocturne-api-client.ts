@@ -6263,6 +6263,424 @@ export class ServicesClient {
     }
 }
 
+export class StateSpansClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Query all state spans with optional filtering
+     * @param category (optional) 
+     * @param state (optional) 
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param source (optional) 
+     * @param active (optional) 
+     * @param count (optional) 
+     * @param skip (optional) 
+     */
+    getStateSpans(category?: StateSpanCategory | null | undefined, state?: string | null | undefined, from?: number | null | undefined, to?: number | null | undefined, source?: string | null | undefined, active?: boolean | null | undefined, count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans?";
+        if (category !== undefined && category !== null)
+            url_ += "category=" + encodeURIComponent("" + category) + "&";
+        if (state !== undefined && state !== null)
+            url_ += "state=" + encodeURIComponent("" + state) + "&";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        if (active !== undefined && active !== null)
+            url_ += "active=" + encodeURIComponent("" + active) + "&";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStateSpans(_response);
+        });
+    }
+
+    protected processGetStateSpans(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Create a new state span (manual entry)
+     */
+    createStateSpan(request: CreateStateSpanRequest, signal?: AbortSignal): Promise<StateSpan> {
+        let url_ = this.baseUrl + "/api/v4/state-spans";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateStateSpan(_response);
+        });
+    }
+
+    protected processCreateStateSpan(response: Response): Promise<StateSpan> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan>(null as any);
+    }
+
+    /**
+     * Get pump mode state spans
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getPumpModes(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/pump-modes?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPumpModes(_response);
+        });
+    }
+
+    protected processGetPumpModes(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get connectivity state spans
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getConnectivity(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/connectivity?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetConnectivity(_response);
+        });
+    }
+
+    protected processGetConnectivity(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get override state spans
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getOverrides(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/overrides?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetOverrides(_response);
+        });
+    }
+
+    protected processGetOverrides(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get profile state spans
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getProfiles(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/profiles?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetProfiles(_response);
+        });
+    }
+
+    protected processGetProfiles(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get a specific state span by ID
+     */
+    getStateSpan(id: string, signal?: AbortSignal): Promise<StateSpan> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStateSpan(_response);
+        });
+    }
+
+    protected processGetStateSpan(response: Response): Promise<StateSpan> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan>(null as any);
+    }
+
+    /**
+     * Update an existing state span
+     */
+    updateStateSpan(id: string, request: UpdateStateSpanRequest, signal?: AbortSignal): Promise<StateSpan> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateStateSpan(_response);
+        });
+    }
+
+    protected processUpdateStateSpan(response: Response): Promise<StateSpan> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan>(null as any);
+    }
+
+    /**
+     * Delete a state span
+     */
+    deleteStateSpan(id: string, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteStateSpan(_response);
+        });
+    }
+
+    protected processDeleteStateSpan(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+}
+
 export class StatusClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -6410,6 +6828,205 @@ export class StatusClient {
     }
 
     protected processGetStatus22(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+}
+
+export class SystemEventsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Query system events with optional filtering
+     * @param type (optional) 
+     * @param category (optional) 
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param source (optional) 
+     * @param count (optional) 
+     * @param skip (optional) 
+     */
+    getSystemEvents(type?: SystemEventType | null | undefined, category?: SystemEventCategory | null | undefined, from?: number | null | undefined, to?: number | null | undefined, source?: string | null | undefined, count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<SystemEvent[]> {
+        let url_ = this.baseUrl + "/api/v4/system-events?";
+        if (type !== undefined && type !== null)
+            url_ += "type=" + encodeURIComponent("" + type) + "&";
+        if (category !== undefined && category !== null)
+            url_ += "category=" + encodeURIComponent("" + category) + "&";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSystemEvents(_response);
+        });
+    }
+
+    protected processGetSystemEvents(response: Response): Promise<SystemEvent[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SystemEvent[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SystemEvent[]>(null as any);
+    }
+
+    /**
+     * Create a new system event (manual entry or import)
+     */
+    createSystemEvent(request: CreateSystemEventRequest, signal?: AbortSignal): Promise<SystemEvent> {
+        let url_ = this.baseUrl + "/api/v4/system-events";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateSystemEvent(_response);
+        });
+    }
+
+    protected processCreateSystemEvent(response: Response): Promise<SystemEvent> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SystemEvent;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SystemEvent>(null as any);
+    }
+
+    /**
+     * Get a specific system event by ID
+     */
+    getSystemEvent(id: string, signal?: AbortSignal): Promise<SystemEvent> {
+        let url_ = this.baseUrl + "/api/v4/system-events/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSystemEvent(_response);
+        });
+    }
+
+    protected processGetSystemEvent(response: Response): Promise<SystemEvent> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SystemEvent;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SystemEvent>(null as any);
+    }
+
+    /**
+     * Delete a system event
+     */
+    deleteSystemEvent(id: string, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/system-events/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteSystemEvent(_response);
+        });
+    }
+
+    protected processDeleteSystemEvent(response: Response): Promise<FileResponse> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 200 || status === 206) {
@@ -14644,11 +15261,25 @@ export interface Treatment extends ProcessableDocumentBase {
     type?: string | undefined;
     bolusType?: string | undefined;
     data_source?: string | undefined;
+    insulinRecommendationForCarbs?: number | undefined;
+    insulinRecommendationForCorrection?: number | undefined;
+    insulinProgrammed?: number | undefined;
+    insulinDelivered?: number | undefined;
+    insulinOnBoard?: number | undefined;
+    bloodGlucoseInput?: number | undefined;
+    bloodGlucoseInputSource?: string | undefined;
+    calculationType?: CalculationType | undefined;
     additional_properties?: { [key: string]: any; } | undefined;
 }
 
 export function isTreatment(object: any): object is Treatment {
     return object && object[''] === 'Treatment';
+}
+
+export enum CalculationType {
+    Suggested = "Suggested",
+    Manual = "Manual",
+    Automatic = "Automatic",
 }
 
 export interface OverallAverages {
@@ -15931,6 +16562,45 @@ export interface ConnectorSyncStatus {
     queriedAt?: Date;
 }
 
+export interface StateSpan {
+    id?: string | undefined;
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    startMills?: number;
+    endMills?: number | undefined;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+}
+
+export enum StateSpanCategory {
+    PumpMode = "PumpMode",
+    PumpConnectivity = "PumpConnectivity",
+    Override = "Override",
+    Profile = "Profile",
+}
+
+export interface CreateStateSpanRequest {
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    startMills?: number;
+    endMills?: number | undefined;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
+}
+
+export interface UpdateStateSpanRequest {
+    category?: StateSpanCategory | undefined;
+    state?: string | undefined;
+    startMills?: number | undefined;
+    endMills?: number | undefined;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+}
+
 export interface StatusResponse {
     status?: string;
     name?: string | undefined;
@@ -15945,6 +16615,43 @@ export interface StatusResponse {
     extendedSettings?: { [key: string]: any; } | undefined;
     careportalEnabled?: boolean | undefined;
     head?: string | undefined;
+}
+
+export interface SystemEvent {
+    id?: string | undefined;
+    eventType?: SystemEventType;
+    category?: SystemEventCategory;
+    code?: string | undefined;
+    description?: string | undefined;
+    mills?: number;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
+    createdAt?: Date | undefined;
+}
+
+export enum SystemEventType {
+    Alarm = "Alarm",
+    Hazard = "Hazard",
+    Warning = "Warning",
+    Info = "Info",
+}
+
+export enum SystemEventCategory {
+    Pump = "Pump",
+    Cgm = "Cgm",
+    Connectivity = "Connectivity",
+}
+
+export interface CreateSystemEventRequest {
+    eventType?: SystemEventType;
+    category?: SystemEventCategory;
+    code?: string | undefined;
+    description?: string | undefined;
+    mills?: number;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
 }
 
 /** DTO for tracker alerts returned to the frontend */

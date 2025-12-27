@@ -279,6 +279,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AlertHistoryRepository>();
         services.AddScoped<NotificationPreferencesRepository>();
         services.AddScoped<TrackerRepository>();
+        services.AddScoped<StateSpanRepository>();
+        services.AddScoped<SystemEventRepository>();
         return services;
     }
 }

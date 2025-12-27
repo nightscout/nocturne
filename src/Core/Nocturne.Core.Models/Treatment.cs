@@ -607,6 +607,56 @@ public class Treatment : ProcessableDocumentBase
     [NocturneOnly]
     public string? DataSource { get; set; }
 
+    // === APS/Bolus Calculator Fields ===
+
+    /// <summary>
+    /// Insulin recommended by bolus calculator specifically for carbohydrate coverage
+    /// </summary>
+    [JsonPropertyName("insulinRecommendationForCarbs")]
+    public double? InsulinRecommendationForCarbs { get; set; }
+
+    /// <summary>
+    /// Insulin recommended by bolus calculator for glucose correction
+    /// </summary>
+    [JsonPropertyName("insulinRecommendationForCorrection")]
+    public double? InsulinRecommendationForCorrection { get; set; }
+
+    /// <summary>
+    /// Total insulin amount programmed for delivery (may differ from delivered if interrupted)
+    /// </summary>
+    [JsonPropertyName("insulinProgrammed")]
+    public double? InsulinProgrammed { get; set; }
+
+    /// <summary>
+    /// Actual insulin amount delivered (may be less than programmed if delivery was interrupted)
+    /// </summary>
+    [JsonPropertyName("insulinDelivered")]
+    public double? InsulinDelivered { get; set; }
+
+    /// <summary>
+    /// Insulin on board at the time of this treatment
+    /// </summary>
+    [JsonPropertyName("insulinOnBoard")]
+    public double? InsulinOnBoard { get; set; }
+
+    /// <summary>
+    /// Blood glucose input value used for bolus calculation
+    /// </summary>
+    [JsonPropertyName("bloodGlucoseInput")]
+    public double? BloodGlucoseInput { get; set; }
+
+    /// <summary>
+    /// Source of blood glucose input (e.g., "Finger", "Sensor", "CGM")
+    /// </summary>
+    [JsonPropertyName("bloodGlucoseInputSource")]
+    public string? BloodGlucoseInputSource { get; set; }
+
+    /// <summary>
+    /// How this bolus was calculated/initiated
+    /// </summary>
+    [JsonPropertyName("calculationType")]
+    public CalculationType? CalculationType { get; set; }
+
     /// <summary>
     /// Gets or sets additional properties for the treatment
     /// </summary>

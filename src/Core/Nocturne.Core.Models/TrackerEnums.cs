@@ -173,3 +173,25 @@ public enum DashboardVisibility
     /// </summary>
     Urgent
 }
+
+/// <summary>
+/// How a bolus was calculated/initiated by an APS system
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<CalculationType>))]
+public enum CalculationType
+{
+    /// <summary>
+    /// User requested, system calculated recommended dose
+    /// </summary>
+    Suggested,
+
+    /// <summary>
+    /// User entered amount directly without system calculation
+    /// </summary>
+    Manual,
+
+    /// <summary>
+    /// AID system initiated automatically (auto-bolus)
+    /// </summary>
+    Automatic
+}

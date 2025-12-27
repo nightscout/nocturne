@@ -366,6 +366,58 @@ public class TreatmentEntity
     [MaxLength(50)]
     public string? DataSource { get; set; }
 
+    // === APS/Bolus Calculator Fields ===
+
+    /// <summary>
+    /// Insulin recommended by bolus calculator specifically for carbohydrate coverage
+    /// </summary>
+    [Column("insulin_recommendation_for_carbs")]
+    public double? InsulinRecommendationForCarbs { get; set; }
+
+    /// <summary>
+    /// Insulin recommended by bolus calculator for glucose correction
+    /// </summary>
+    [Column("insulin_recommendation_for_correction")]
+    public double? InsulinRecommendationForCorrection { get; set; }
+
+    /// <summary>
+    /// Total insulin amount programmed for delivery
+    /// </summary>
+    [Column("insulin_programmed")]
+    public double? InsulinProgrammed { get; set; }
+
+    /// <summary>
+    /// Actual insulin amount delivered
+    /// </summary>
+    [Column("insulin_delivered")]
+    public double? InsulinDelivered { get; set; }
+
+    /// <summary>
+    /// Insulin on board at the time of this treatment
+    /// </summary>
+    [Column("insulin_on_board")]
+    public double? InsulinOnBoard { get; set; }
+
+    /// <summary>
+    /// Blood glucose input value used for bolus calculation
+    /// </summary>
+    [Column("blood_glucose_input")]
+    public double? BloodGlucoseInput { get; set; }
+
+    /// <summary>
+    /// Source of blood glucose input (e.g., "Finger", "Sensor", "CGM")
+    /// </summary>
+    [Column("blood_glucose_input_source")]
+    [MaxLength(50)]
+    public string? BloodGlucoseInputSource { get; set; }
+
+    /// <summary>
+    /// How this bolus was calculated/initiated (Suggested, Manual, Automatic)
+    /// </summary>
+    [Column("calculation_type")]
+    [MaxLength(20)]
+    public string? CalculationType { get; set; }
+
     /// <summary>
     /// Remote carb entry amount in grams (for Loop remote commands)
     /// </summary>

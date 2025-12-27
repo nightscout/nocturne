@@ -5000,6 +5000,436 @@
         }
       }
     },
+    "/api/v4/state-spans": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Query all state spans with optional filtering",
+        "operationId": "StateSpans_GetStateSpans",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/StateSpanCategory"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 1
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 5
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 7
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 8
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Create a new state span (manual entry)",
+        "operationId": "StateSpans_CreateStateSpan",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStateSpanRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateSpan"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/pump-modes": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get pump mode state spans",
+        "operationId": "StateSpans_GetPumpModes",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/connectivity": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get connectivity state spans",
+        "operationId": "StateSpans_GetConnectivity",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/overrides": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get override state spans",
+        "operationId": "StateSpans_GetOverrides",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/profiles": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get profile state spans",
+        "operationId": "StateSpans_GetProfiles",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/{id}": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get a specific state span by ID",
+        "operationId": "StateSpans_GetStateSpan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateSpan"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Update an existing state span",
+        "operationId": "StateSpans_UpdateStateSpan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStateSpanRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateSpan"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Delete a state span",
+        "operationId": "StateSpans_DeleteStateSpan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/Status": {
       "get": {
         "tags": [
@@ -5034,6 +5464,209 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/system-events": {
+      "get": {
+        "tags": [
+          "SystemEvents"
+        ],
+        "summary": "Query system events with optional filtering",
+        "operationId": "SystemEvents_GetSystemEvents",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SystemEventType"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 1
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SystemEventCategory"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 2
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 5
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 6
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 7
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SystemEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SystemEvents"
+        ],
+        "summary": "Create a new system event (manual entry or import)",
+        "operationId": "SystemEvents_CreateSystemEvent",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSystemEventRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/system-events/{id}": {
+      "get": {
+        "tags": [
+          "SystemEvents"
+        ],
+        "summary": "Get a specific system event by ID",
+        "operationId": "SystemEvents_GetSystemEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemEvent"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "SystemEvents"
+        ],
+        "summary": "Delete a system event",
+        "operationId": "SystemEvents_DeleteSystemEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           }
@@ -14065,6 +14698,48 @@
                 "type": "string",
                 "nullable": true
               },
+              "insulinRecommendationForCarbs": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "insulinRecommendationForCorrection": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "insulinProgrammed": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "insulinDelivered": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "insulinOnBoard": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "bloodGlucoseInput": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "bloodGlucoseInputSource": {
+                "type": "string",
+                "nullable": true
+              },
+              "calculationType": {
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CalculationType"
+                  }
+                ]
+              },
               "additional_properties": {
                 "type": "object",
                 "nullable": true,
@@ -14072,6 +14747,20 @@
               }
             }
           }
+        ]
+      },
+      "CalculationType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Suggested",
+          "Manual",
+          "Automatic"
+        ],
+        "enum": [
+          "Suggested",
+          "Manual",
+          "Automatic"
         ]
       },
       "OverallAverages": {
@@ -18056,6 +18745,143 @@
           }
         }
       },
+      "StateSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "StateSpanCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile"
+        ],
+        "enum": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile"
+        ]
+      },
+      "CreateStateSpanRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UpdateStateSpanRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StateSpanCategory"
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          }
+        }
+      },
       "StatusResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -18115,6 +18941,119 @@
             "nullable": true
           },
           "head": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SystemEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/SystemEventType"
+          },
+          "category": {
+            "$ref": "#/components/schemas/SystemEventCategory"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SystemEventType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Alarm",
+          "Hazard",
+          "Warning",
+          "Info"
+        ],
+        "enum": [
+          "Alarm",
+          "Hazard",
+          "Warning",
+          "Info"
+        ]
+      },
+      "SystemEventCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pump",
+          "Cgm",
+          "Connectivity"
+        ],
+        "enum": [
+          "Pump",
+          "Cgm",
+          "Connectivity"
+        ]
+      },
+      "CreateSystemEventRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventType": {
+            "$ref": "#/components/schemas/SystemEventType"
+          },
+          "category": {
+            "$ref": "#/components/schemas/SystemEventCategory"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
             "type": "string",
             "nullable": true
           }

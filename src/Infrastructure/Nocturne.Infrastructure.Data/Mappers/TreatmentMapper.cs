@@ -76,6 +76,14 @@ public static class TreatmentMapper
             Timeshift = treatment.Timeshift,
             TransmitterId = treatment.TransmitterId,
             DataSource = treatment.DataSource,
+            InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs,
+            InsulinRecommendationForCorrection = treatment.InsulinRecommendationForCorrection,
+            InsulinProgrammed = treatment.InsulinProgrammed,
+            InsulinDelivered = treatment.InsulinDelivered,
+            InsulinOnBoard = treatment.InsulinOnBoard,
+            BloodGlucoseInput = treatment.BloodGlucoseInput,
+            BloodGlucoseInputSource = treatment.BloodGlucoseInputSource,
+            CalculationType = treatment.CalculationType?.ToString(),
             AdditionalPropertiesJson =
                 treatment.AdditionalProperties != null
                     ? JsonSerializer.Serialize(treatment.AdditionalProperties)
@@ -145,6 +153,14 @@ public static class TreatmentMapper
             Timeshift = entity.Timeshift,
             TransmitterId = entity.TransmitterId,
             DataSource = entity.DataSource,
+            InsulinRecommendationForCarbs = entity.InsulinRecommendationForCarbs,
+            InsulinRecommendationForCorrection = entity.InsulinRecommendationForCorrection,
+            InsulinProgrammed = entity.InsulinProgrammed,
+            InsulinDelivered = entity.InsulinDelivered,
+            InsulinOnBoard = entity.InsulinOnBoard,
+            BloodGlucoseInput = entity.BloodGlucoseInput,
+            BloodGlucoseInputSource = entity.BloodGlucoseInputSource,
+            CalculationType = Enum.TryParse<CalculationType>(entity.CalculationType, out var calcType) ? calcType : null,
             AdditionalProperties = DeserializeJsonProperty<Dictionary<string, object>>(
                 entity.AdditionalPropertiesJson
             ),
@@ -211,6 +227,14 @@ public static class TreatmentMapper
         entity.Timeshift = treatment.Timeshift;
         entity.TransmitterId = treatment.TransmitterId;
         entity.DataSource = treatment.DataSource;
+        entity.InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs;
+        entity.InsulinRecommendationForCorrection = treatment.InsulinRecommendationForCorrection;
+        entity.InsulinProgrammed = treatment.InsulinProgrammed;
+        entity.InsulinDelivered = treatment.InsulinDelivered;
+        entity.InsulinOnBoard = treatment.InsulinOnBoard;
+        entity.BloodGlucoseInput = treatment.BloodGlucoseInput;
+        entity.BloodGlucoseInputSource = treatment.BloodGlucoseInputSource;
+        entity.CalculationType = treatment.CalculationType?.ToString();
         entity.AdditionalPropertiesJson =
             treatment.AdditionalProperties != null
                 ? JsonSerializer.Serialize(treatment.AdditionalProperties)

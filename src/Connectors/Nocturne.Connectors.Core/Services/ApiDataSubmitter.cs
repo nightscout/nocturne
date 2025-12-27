@@ -522,6 +522,142 @@ public class ApiDataSubmitter : IApiDataSubmitter
         return syncStatus?.LatestTreatmentTimestamp;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> SubmitStateSpansAsync(
+        IEnumerable<StateSpan> stateSpans,
+        string source,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var stateSpansArray = stateSpans.ToArray();
+        if (stateSpansArray.Length == 0)
+        {
+            _logger?.LogDebug("No state spans to submit");
+            return true;
+        }
+
+        // Ensure Source is set on all state spans
+        foreach (var span in stateSpansArray)
+        {
+            if (string.IsNullOrEmpty(span.Source))
+            {
+                span.Source = source;
+            }
+        }
+
+        return await _retryPipeline.ExecuteAsync(
+            async ct =>
+            {
+                // Submit each state span individually via POST
+                var successCount = 0;
+                foreach (var span in stateSpansArray)
+                {
+                    var url = $"{_baseUrl}/api/v4/state-spans";
+                    var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    {
+                        Content = JsonContent.Create(span),
+                    };
+
+                    AddAuthenticationHeader(request);
+
+                    var response = await _httpClient.SendAsync(request, ct);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        successCount++;
+                    }
+                    else
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync(ct);
+                        _logger?.LogWarning(
+                            "Failed to submit state span. Status: {StatusCode}, Response: {Response}",
+                            response.StatusCode,
+                            errorContent
+                        );
+                    }
+                }
+
+                _logger?.LogInformation(
+                    "Successfully submitted {SuccessCount}/{TotalCount} state spans from {Source}",
+                    successCount,
+                    stateSpansArray.Length,
+                    source
+                );
+
+                return successCount == stateSpansArray.Length;
+            },
+            cancellationToken
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SubmitSystemEventsAsync(
+        IEnumerable<SystemEvent> systemEvents,
+        string source,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var eventsArray = systemEvents.ToArray();
+        if (eventsArray.Length == 0)
+        {
+            _logger?.LogDebug("No system events to submit");
+            return true;
+        }
+
+        // Ensure Source is set on all events
+        foreach (var evt in eventsArray)
+        {
+            if (string.IsNullOrEmpty(evt.Source))
+            {
+                evt.Source = source;
+            }
+        }
+
+        return await _retryPipeline.ExecuteAsync(
+            async ct =>
+            {
+                // Submit each event individually via POST
+                var successCount = 0;
+                foreach (var evt in eventsArray)
+                {
+                    var url = $"{_baseUrl}/api/v4/system-events";
+                    var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    {
+                        Content = JsonContent.Create(evt),
+                    };
+
+                    AddAuthenticationHeader(request);
+
+                    var response = await _httpClient.SendAsync(request, ct);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        successCount++;
+                    }
+                    else
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync(ct);
+                        _logger?.LogWarning(
+                            "Failed to submit system event. Status: {StatusCode}, Response: {Response}",
+                            response.StatusCode,
+                            errorContent
+                        );
+                    }
+                }
+
+                _logger?.LogInformation(
+                    "Successfully submitted {SuccessCount}/{TotalCount} system events from {Source}",
+                    successCount,
+                    eventsArray.Length,
+                    source
+                );
+
+                return successCount == eventsArray.Length;
+            },
+            cancellationToken
+        );
+    }
+
     /// <summary>
     /// Gets the full sync status for a connector from the API
     /// </summary>

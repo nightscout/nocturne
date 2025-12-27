@@ -842,6 +842,104 @@ namespace Nocturne.Connectors.Core.Services
             }
         }
 
+        /// <summary>
+        /// Submits state span data directly to the API via HTTP
+        /// </summary>
+        protected virtual async Task<bool> PublishStateSpanDataAsync(
+            IEnumerable<StateSpan> stateSpans,
+            TConfig config,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (_apiDataSubmitter == null)
+            {
+                _logger?.LogWarning(
+                    "API data submitter not available for state span submission"
+                );
+                return false;
+            }
+
+            var stateSpansArray = stateSpans.ToArray();
+            if (stateSpansArray.Length == 0)
+            {
+                _logger?.LogInformation("No state spans to submit");
+                return true;
+            }
+
+            try
+            {
+                var success = await _apiDataSubmitter.SubmitStateSpansAsync(
+                    stateSpansArray,
+                    ConnectorSource,
+                    cancellationToken
+                );
+
+                if (success)
+                {
+                    _logger?.LogInformation(
+                        "Successfully submitted {Count} state spans",
+                        stateSpansArray.Length
+                    );
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to submit state span data");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Submits system event data directly to the API via HTTP
+        /// </summary>
+        protected virtual async Task<bool> PublishSystemEventDataAsync(
+            IEnumerable<SystemEvent> systemEvents,
+            TConfig config,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (_apiDataSubmitter == null)
+            {
+                _logger?.LogWarning(
+                    "API data submitter not available for system event submission"
+                );
+                return false;
+            }
+
+            var eventsArray = systemEvents.ToArray();
+            if (eventsArray.Length == 0)
+            {
+                _logger?.LogInformation("No system events to submit");
+                return true;
+            }
+
+            try
+            {
+                var success = await _apiDataSubmitter.SubmitSystemEventsAsync(
+                    eventsArray,
+                    ConnectorSource,
+                    cancellationToken
+                );
+
+                if (success)
+                {
+                    _logger?.LogInformation(
+                        "Successfully submitted {Count} system events",
+                        eventsArray.Length
+                    );
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to submit system event data");
+                return false;
+            }
+        }
+
 
         /// <summary>
         /// Publishes messages in batches to optimize throughput

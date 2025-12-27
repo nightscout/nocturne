@@ -160,6 +160,18 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<TrackerNotificationThresholdEntity> TrackerNotificationThresholds { get; set; }
 
+    // StateSpan entities
+
+    /// <summary>
+    /// Gets or sets the StateSpans table for time-ranged system states (pump modes, connectivity)
+    /// </summary>
+    public DbSet<StateSpanEntity> StateSpans { get; set; }
+
+    /// <summary>
+    /// Gets or sets the SystemEvents table for point-in-time system events (alarms, warnings)
+    /// </summary>
+    public DbSet<SystemEventEntity> SystemEvents { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -730,6 +742,73 @@ public class NocturneDbContext : DbContext
             .HasIndex(t => new { t.TrackerDefinitionId, t.DisplayOrder })
             .HasDatabaseName("ix_tracker_notification_thresholds_def_order");
 
+        // StateSpan indexes - optimized for time range and category queries
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => s.StartMills)
+            .HasDatabaseName("ix_state_spans_start_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => s.Category)
+            .HasDatabaseName("ix_state_spans_category");
+
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => s.EndMills)
+            .HasDatabaseName("ix_state_spans_end_mills")
+            .HasFilter("end_mills IS NULL"); // Partial index for active spans
+
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => new { s.Category, s.StartMills })
+            .HasDatabaseName("ix_state_spans_category_start")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => s.Source)
+            .HasDatabaseName("ix_state_spans_source");
+
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => s.OriginalId)
+            .HasDatabaseName("ix_state_spans_original_id");
+
+        // SystemEvent indexes - optimized for time range and type queries
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_system_events_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .HasIndex(e => e.EventType)
+            .HasDatabaseName("ix_system_events_event_type");
+
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .HasIndex(e => e.Category)
+            .HasDatabaseName("ix_system_events_category");
+
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .HasIndex(e => new { e.Category, e.Mills })
+            .HasDatabaseName("ix_system_events_category_mills")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .HasIndex(e => e.Source)
+            .HasDatabaseName("ix_system_events_source");
+
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .HasIndex(e => e.OriginalId)
+            .HasDatabaseName("ix_system_events_original_id");
+
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -830,6 +909,16 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()
             .Property(t => t.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .Property(s => s.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        modelBuilder
+            .Entity<SystemEventEntity>()
+            .Property(e => e.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 
 

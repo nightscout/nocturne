@@ -197,6 +197,30 @@ namespace Nocturne.Connectors.Glooko.Services
                                             ConnectorSource, v3Entries.Count);
                                     }
                                 }
+
+                                // Transform and publish StateSpans (pump modes, connectivity, profiles)
+                                var stateSpans = TransformV3ToStateSpans(v3Data);
+                                if (stateSpans.Any())
+                                {
+                                    var stateSpanSuccess = await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
+                                    if (stateSpanSuccess)
+                                    {
+                                        _logger.LogInformation("[{ConnectorSource}] Published {Count} state spans from v3",
+                                            ConnectorSource, stateSpans.Count);
+                                    }
+                                }
+
+                                // Transform and publish SystemEvents (alarms, warnings)
+                                var systemEvents = TransformV3ToSystemEvents(v3Data);
+                                if (systemEvents.Any())
+                                {
+                                    var eventSuccess = await PublishSystemEventDataAsync(systemEvents, config, cancellationToken);
+                                    if (eventSuccess)
+                                    {
+                                        _logger.LogInformation("[{ConnectorSource}] Published {Count} system events from v3",
+                                            ConnectorSource, systemEvents.Count);
+                                    }
+                                }
                             }
                         }
                         catch (Exception v3Ex)
@@ -1184,6 +1208,12 @@ namespace Nocturne.Connectors.Glooko.Services
                         EventType = "Automatic Bolus",
                         CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                         Insulin = bolus.Y,
+                        InsulinDelivered = bolus.Data?.DeliveredUnits ?? bolus.Y,
+                        InsulinProgrammed = bolus.Data?.ProgrammedUnits,
+                        InsulinRecommendationForCorrection = bolus.Data?.CorrectionUnits,
+                        InsulinRecommendationForCarbs = bolus.Data?.FoodUnits,
+                        BloodGlucoseInput = bolus.Data?.BgInput,
+                        CalculationType = CalculationType.Automatic,
                         DataSource = ConnectorSource,
                         Notes = "AID automatic bolus"
                     });
@@ -1207,6 +1237,12 @@ namespace Nocturne.Connectors.Glooko.Services
                         CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                         Insulin = bolus.Y,
                         Carbs = carbsInput > 0 ? carbsInput : null,
+                        InsulinDelivered = bolus.Data?.DeliveredUnits ?? bolus.Y,
+                        InsulinProgrammed = bolus.Data?.ProgrammedUnits,
+                        InsulinRecommendationForCorrection = bolus.Data?.CorrectionUnits,
+                        InsulinRecommendationForCarbs = bolus.Data?.FoodUnits,
+                        BloodGlucoseInput = bolus.Data?.BgInput,
+                        CalculationType = CalculationType.Suggested,
                         DataSource = ConnectorSource
                     });
                 }
@@ -1380,6 +1416,200 @@ namespace Nocturne.Connectors.Glooko.Services
                 return value * 18.0182;
             }
             return value;
+        }
+
+        /// <summary>
+        /// Transform v3 graph data to StateSpan objects for pump modes and connectivity
+        /// </summary>
+        public List<StateSpan> TransformV3ToStateSpans(GlookoV3GraphResponse graphData)
+        {
+            var stateSpans = new List<StateSpan>();
+
+            if (graphData?.Series == null)
+                return stateSpans;
+
+            var series = graphData.Series;
+
+            // Process Suspend Basals as pump mode state spans
+            if (series.SuspendBasal != null)
+            {
+                foreach (var suspend in series.SuspendBasal)
+                {
+                    var startTimestamp = GetCorrectedGlookoTime(suspend.X);
+                    var durationSeconds = suspend.Duration ?? 0;
+                    var endMills = durationSeconds > 0
+                        ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds() + (durationSeconds * 1000)
+                        : (long?)null;
+
+                    stateSpans.Add(new StateSpan
+                    {
+                        OriginalId = $"glooko_suspend_{suspend.X}",
+                        Category = StateSpanCategory.PumpMode,
+                        State = PumpModeState.Suspended.ToString(),
+                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
+                        EndMills = endMills,
+                        Source = ConnectorSource,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            { "label", suspend.Label ?? "Suspended" },
+                            { "durationSeconds", durationSeconds }
+                        }
+                    });
+                }
+            }
+
+            // Process LGS/PLGS events as pump mode state spans
+            if (series.LgsPlgs != null)
+            {
+                foreach (var lgsEvent in series.LgsPlgs)
+                {
+                    var startTimestamp = GetCorrectedGlookoTime(lgsEvent.X);
+                    var durationSeconds = lgsEvent.Duration ?? 0;
+                    var endMills = durationSeconds > 0
+                        ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds() + (durationSeconds * 1000)
+                        : (long?)null;
+
+                    // Map LGS/PLGS event types to pump mode states
+                    var stateValue = lgsEvent.EventType?.ToUpperInvariant() switch
+                    {
+                        "LGS" => PumpModeState.Limited.ToString(),
+                        "PLGS" => PumpModeState.Limited.ToString(),
+                        "SUSPEND" => PumpModeState.Suspended.ToString(),
+                        _ => PumpModeState.Limited.ToString()
+                    };
+
+                    stateSpans.Add(new StateSpan
+                    {
+                        OriginalId = $"glooko_lgsplgs_{lgsEvent.X}",
+                        Category = StateSpanCategory.PumpMode,
+                        State = stateValue,
+                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
+                        EndMills = endMills,
+                        Source = ConnectorSource,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            { "label", lgsEvent.Label ?? lgsEvent.EventType ?? "LGS/PLGS" },
+                            { "eventType", lgsEvent.EventType ?? "unknown" },
+                            { "durationSeconds", durationSeconds }
+                        }
+                    });
+                }
+            }
+
+            // Process Profile Changes as profile state spans
+            if (series.ProfileChange != null)
+            {
+                var profileChanges = series.ProfileChange.OrderBy(p => p.X).ToList();
+                for (int i = 0; i < profileChanges.Count; i++)
+                {
+                    var change = profileChanges[i];
+                    var startTimestamp = GetCorrectedGlookoTime(change.X);
+
+                    // End time is when the next profile change occurs, or null if this is the last one
+                    long? endMills = null;
+                    if (i < profileChanges.Count - 1)
+                    {
+                        endMills = new DateTimeOffset(GetCorrectedGlookoTime(profileChanges[i + 1].X)).ToUnixTimeMilliseconds();
+                    }
+
+                    stateSpans.Add(new StateSpan
+                    {
+                        OriginalId = $"glooko_profile_{change.X}",
+                        Category = StateSpanCategory.Profile,
+                        State = ProfileState.Active.ToString(),
+                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
+                        EndMills = endMills,
+                        Source = ConnectorSource,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            { "profileName", change.ProfileName ?? change.Label ?? "Unknown" }
+                        }
+                    });
+                }
+            }
+
+            _logger.LogInformation("[{ConnectorSource}] Transformed {Count} state spans from v3 data",
+                ConnectorSource, stateSpans.Count);
+
+            return stateSpans;
+        }
+
+        /// <summary>
+        /// Transform v3 graph data to SystemEvent objects for alarms and warnings
+        /// </summary>
+        public List<SystemEvent> TransformV3ToSystemEvents(GlookoV3GraphResponse graphData)
+        {
+            var events = new List<SystemEvent>();
+
+            if (graphData?.Series == null)
+                return events;
+
+            var series = graphData.Series;
+
+            // Process Pump Alarms as system events
+            if (series.PumpAlarm != null)
+            {
+                foreach (var alarm in series.PumpAlarm)
+                {
+                    var timestamp = GetCorrectedGlookoTime(alarm.X);
+
+                    // Determine event type based on alarm type/code
+                    var eventType = DetermineAlarmEventType(alarm.AlarmType, alarm.Data?.AlarmCode);
+
+                    events.Add(new SystemEvent
+                    {
+                        OriginalId = $"glooko_alarm_{alarm.X}",
+                        EventType = eventType,
+                        Category = SystemEventCategory.Pump,
+                        Code = alarm.Data?.AlarmCode ?? alarm.AlarmType,
+                        Description = alarm.Data?.AlarmDescription ?? alarm.Label ?? alarm.AlarmType ?? "Unknown alarm",
+                        Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
+                        Source = ConnectorSource,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            { "alarmType", alarm.AlarmType ?? "unknown" },
+                            { "label", alarm.Label ?? "" }
+                        }
+                    });
+                }
+            }
+
+            _logger.LogInformation("[{ConnectorSource}] Transformed {Count} system events from v3 data",
+                ConnectorSource, events.Count);
+
+            return events;
+        }
+
+        /// <summary>
+        /// Determine SystemEventType based on alarm type and code
+        /// </summary>
+        private static SystemEventType DetermineAlarmEventType(string? alarmType, string? alarmCode)
+        {
+            var type = (alarmType ?? "").ToUpperInvariant();
+            var code = (alarmCode ?? "").ToUpperInvariant();
+
+            // Critical/hazard keywords
+            if (type.Contains("OCCLUSION") || type.Contains("EMPTY") ||
+                code.Contains("OCCLUSION") || code.Contains("EMPTY"))
+            {
+                return SystemEventType.Alarm;
+            }
+
+            // Warning keywords
+            if (type.Contains("LOW") || type.Contains("BATTERY") ||
+                code.Contains("LOW") || code.Contains("BATTERY"))
+            {
+                return SystemEventType.Warning;
+            }
+
+            // Info keywords
+            if (type.Contains("INFO") || type.Contains("REMINDER"))
+            {
+                return SystemEventType.Info;
+            }
+
+            // Default to warning for unknown alarms
+            return SystemEventType.Warning;
         }
 
         #endregion
