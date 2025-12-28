@@ -104,6 +104,13 @@ public class LocalUserEntity
     public bool PendingApproval { get; set; } = false;
 
     /// <summary>
+    /// Whether the user must change their password on next login
+    /// Set by admin when providing a temporary password
+    /// </summary>
+    [Column("require_password_change")]
+    public bool RequirePasswordChange { get; set; } = false;
+
+    /// <summary>
     /// Notes from admin (e.g., approval notes)
     /// </summary>
     [Column("admin_notes")]

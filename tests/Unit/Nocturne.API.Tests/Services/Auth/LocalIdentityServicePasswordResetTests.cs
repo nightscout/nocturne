@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts;
 using Nocturne.Infrastructure.Data;
@@ -26,10 +27,7 @@ public class LocalIdentityServicePasswordResetTests
 
         var subjectService = new Mock<ISubjectService>();
         var emailService = new Mock<IEmailService>();
-        var adminNotificationService = new Mock<IAdminNotificationService>();
-        adminNotificationService
-            .Setup(s => s.DismissNotificationsForEntityAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ReturnsAsync(0);
+        var signalRBroadcastService = new Mock<ISignalRBroadcastService>();
 
         var options = Options.Create(
             new LocalIdentityOptions
@@ -44,7 +42,7 @@ public class LocalIdentityServicePasswordResetTests
             _dbContext,
             subjectService.Object,
             emailService.Object,
-            adminNotificationService.Object,
+            signalRBroadcastService.Object,
             options,
             emailOptions,
             logger.Object

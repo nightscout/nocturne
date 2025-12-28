@@ -1,5 +1,6 @@
 import {
   Client,
+  AdminNotificationsClient,
   AuthenticationClient,
   AuthorizationClient,
   StatisticsClient,
@@ -48,6 +49,7 @@ import {
 export class ApiClient {
   public readonly baseUrl: string;
   public readonly client: Client;
+  public readonly adminNotifications: AdminNotificationsClient;
   public readonly authentication: AuthenticationClient;
   public readonly authorization: AuthorizationClient;
   public readonly statistics: StatisticsClient;
@@ -98,6 +100,7 @@ export class ApiClient {
 
     // Initialize all client instances with the custom fetch function
     this.client = new Client(apiBaseUrl, http);
+    this.adminNotifications = new AdminNotificationsClient(apiBaseUrl, http);
     this.authentication = new AuthenticationClient(apiBaseUrl, http);
     this.authorization = new AuthorizationClient(apiBaseUrl, http);
     this.statistics = new StatisticsClient(apiBaseUrl, http);

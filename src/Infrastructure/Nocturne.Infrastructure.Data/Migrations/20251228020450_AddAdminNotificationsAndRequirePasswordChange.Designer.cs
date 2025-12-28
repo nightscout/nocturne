@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251228020450_AddAdminNotificationsAndRequirePasswordChange")]
+    partial class AddAdminNotificationsAndRequirePasswordChange
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -113,6 +116,61 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_activities_type_mills");
 
                     b.ToTable("activities");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AdminNotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("Dismissed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("dismissed");
+
+                    b.Property<DateTime?>("DismissedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dismissed_at");
+
+                    b.Property<Guid?>("DismissedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dismissed_by_id");
+
+                    b.Property<Guid?>("RelatedEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("related_entity_id");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("related_entity_type");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Dismissed")
+                        .HasDatabaseName("ix_admin_notifications_active")
+                        .HasFilter("dismissed = false");
+
+                    b.HasIndex("DismissedById");
+
+                    b.HasIndex("Type")
+                        .HasDatabaseName("ix_admin_notifications_type");
+
+                    b.ToTable("admin_notifications");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertHistoryEntity", b =>
@@ -2981,6 +3039,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_treatments_event_type_mills");
 
                     b.ToTable("treatments");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AdminNotificationEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "DismissedBy")
+                        .WithMany()
+                        .HasForeignKey("DismissedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DismissedBy");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertHistoryEntity", b =>

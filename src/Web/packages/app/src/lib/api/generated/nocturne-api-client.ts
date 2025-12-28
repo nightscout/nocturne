@@ -1512,6 +1512,136 @@ export class LocalAuthClient {
         }
         return Promise.resolve<ResendVerificationResponse>(null as any);
     }
+
+    /**
+     * Get pending password reset requests (admin only)
+     */
+    getPendingPasswordResets(signal?: AbortSignal): Promise<PasswordResetRequestListResponse> {
+        let url_ = this.baseUrl + "/auth/local/admin/password-resets";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPendingPasswordResets(_response);
+        });
+    }
+
+    protected processGetPendingPasswordResets(response: Response): Promise<PasswordResetRequestListResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PasswordResetRequestListResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PasswordResetRequestListResponse>(null as any);
+    }
+
+    /**
+     * Set a temporary password for a user (admin only)
+     */
+    setTemporaryPassword(request: SetTemporaryPasswordRequest, signal?: AbortSignal): Promise<SetTemporaryPasswordResponse> {
+        let url_ = this.baseUrl + "/auth/local/admin/set-temporary-password";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSetTemporaryPassword(_response);
+        });
+    }
+
+    protected processSetTemporaryPassword(response: Response): Promise<SetTemporaryPasswordResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SetTemporaryPasswordResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SetTemporaryPasswordResponse>(null as any);
+    }
+
+    /**
+     * Handle a password reset request by generating a reset link (admin only)
+     */
+    handlePasswordReset(requestId: string, signal?: AbortSignal): Promise<HandlePasswordResetResponse> {
+        let url_ = this.baseUrl + "/auth/local/admin/handle-password-reset/{requestId}";
+        if (requestId === undefined || requestId === null)
+            throw new globalThis.Error("The parameter 'requestId' must be defined.");
+        url_ = url_.replace("{requestId}", encodeURIComponent("" + requestId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processHandlePasswordReset(_response);
+        });
+    }
+
+    protected processHandlePasswordReset(response: Response): Promise<HandlePasswordResetResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as HandlePasswordResetResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<HandlePasswordResetResponse>(null as any);
+    }
 }
 
 export class MetadataClient {
@@ -14765,6 +14895,7 @@ export interface LoginResponse {
     refreshToken?: string;
     expiresIn?: number;
     user?: UserInfoDto;
+    requirePasswordChange?: boolean;
 }
 
 /** User info */
@@ -14833,6 +14964,39 @@ export interface ResendVerificationResponse {
 /** Resend verification request */
 export interface ResendVerificationRequest {
     email?: string;
+}
+
+/** Response for pending password reset requests */
+export interface PasswordResetRequestListResponse {
+    requests?: PasswordResetRequestDto[];
+    totalCount?: number;
+}
+
+/** Password reset request info for admin view */
+export interface PasswordResetRequestDto {
+    id?: string;
+    email?: string;
+    displayName?: string | undefined;
+    requestedFromIp?: string | undefined;
+    userAgent?: string | undefined;
+    createdAt?: Date;
+}
+
+/** Response for setting a temporary password */
+export interface SetTemporaryPasswordResponse {
+    success?: boolean;
+}
+
+/** Request to set a temporary password */
+export interface SetTemporaryPasswordRequest {
+    email?: string;
+    temporaryPassword?: string;
+}
+
+/** Response for handling password reset */
+export interface HandlePasswordResetResponse {
+    success?: boolean;
+    resetUrl?: string;
 }
 
 /** Metadata about available WebSocket events */

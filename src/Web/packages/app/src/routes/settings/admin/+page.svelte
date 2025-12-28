@@ -34,7 +34,12 @@
   } from "lucide-svelte";
   import * as Alert from "$lib/components/ui/alert";
   import * as authorizationRemote from "$lib/data/authorization.remote";
-  import type { Subject, Role } from "$api";
+  import * as adminRemote from "$lib/data/admin.remote";
+  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import type { Subject, Role, PasswordResetRequestDto } from "$api";
+
+  // Get the realtime store for reactive admin events
+  const realtimeStore = getRealtimeStore();
 
   // State
   let activeTab = $state("accounts");
@@ -64,6 +69,21 @@
   let roleSaving = $state(false);
   let roleCreatedFromSubjectDialog = $state(false); // Track if we opened role dialog from subject dialog
 
+  // Password reset state
+  let pendingResets = $state<PasswordResetRequestDto[]>([]);
+  let pendingResetCount = $state(0);
+
+  // Set password dialog state
+  let isSetPasswordDialogOpen = $state(false);
+  let selectedResetRequest = $state<PasswordResetRequestDto | null>(null);
+  let tempPassword = $state("");
+  let setPasswordSaving = $state(false);
+
+  // Reset link dialog state
+  let isResetLinkDialogOpen = $state(false);
+  let generatedResetLink = $state("");
+  let resetLinkCopied = $state(false);
+
   // Derived: check if admin role is selected (shows warning)
   const hasAdminRoleSelected = $derived(
     subjectFormRoles.includes("admin") ||
@@ -90,15 +110,18 @@
     loading = true;
     error = null;
     try {
-      const [subs, rols] = await Promise.all([
+      const [subs, rols, resetSummary] = await Promise.all([
         authorizationRemote.getSubjects(),
         authorizationRemote.getRoles(),
+        adminRemote.getPendingPasswordResets(),
       ]);
       subjects = subs || [];
       roles = rols || [];
+      pendingResets = resetSummary?.requests ?? [];
+      pendingResetCount = resetSummary?.totalCount ?? 0;
     } catch (err) {
-      console.error("Failed to load authorization data:", err);
-      error = "Failed to load authorization data";
+      console.error("Failed to load admin data:", err);
+      error = "Failed to load admin data";
     } finally {
       loading = false;
     }
@@ -107,6 +130,16 @@
   // Initial load
   $effect(() => {
     loadData();
+  });
+
+  // Reload password resets when counter changes (via SignalR through realtime store)
+  $effect(() => {
+    // Track the counter to trigger reload
+    const _count = realtimeStore.passwordResetRequestCount;
+    // Skip initial load (handled by loadData)
+    if (_count > 0) {
+      loadPasswordResets();
+    }
   });
 
   // Format date
@@ -321,6 +354,65 @@
     }
   }
 
+  // ============================================================================
+  // Password reset handlers
+  // ============================================================================
+
+  async function loadPasswordResets() {
+    try {
+      const response = await adminRemote.getPendingPasswordResets();
+      pendingResets = response?.requests ?? [];
+      pendingResetCount = response?.totalCount ?? 0;
+    } catch (err) {
+      console.error("Failed to load password resets:", err);
+    }
+  }
+
+  function openSetPasswordDialog(request: PasswordResetRequestDto) {
+    selectedResetRequest = request;
+    tempPassword = "";
+    isSetPasswordDialogOpen = true;
+  }
+
+  async function handleSetPassword() {
+    if (!selectedResetRequest) return;
+    setPasswordSaving = true;
+    try {
+      await adminRemote.setTemporaryPassword({
+        email: selectedResetRequest.email,
+        temporaryPassword: tempPassword,
+      });
+      isSetPasswordDialogOpen = false;
+      await loadPasswordResets();
+    } catch (err) {
+      console.error("Failed to set temporary password:", err);
+    } finally {
+      setPasswordSaving = false;
+    }
+  }
+
+  async function generateResetLink(requestId: string | undefined) {
+    if (!requestId) return;
+    try {
+      const result = await adminRemote.handlePasswordReset(requestId);
+      generatedResetLink = result.resetUrl ?? "";
+      resetLinkCopied = false;
+      isResetLinkDialogOpen = true;
+      await loadPasswordResets();
+    } catch (err) {
+      console.error("Failed to generate reset link:", err);
+    }
+  }
+
+  async function copyResetLink() {
+    if (!generatedResetLink) return;
+    await navigator.clipboard.writeText(generatedResetLink);
+    resetLinkCopied = true;
+    setTimeout(() => {
+      resetLinkCopied = false;
+    }, 2000);
+  }
+
   // Known permission categories for the picker
   const permissionCategories = [
     {
@@ -419,7 +511,7 @@
     </Card>
   {:else}
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class="grid w-full grid-cols-3">
+      <Tabs.List class="grid w-full grid-cols-4">
         <Tabs.Trigger value="accounts" class="gap-2">
           <Users class="h-4 w-4" />
           Accounts
@@ -437,6 +529,15 @@
         <Tabs.Trigger value="tokens" class="gap-2">
           <KeyRound class="h-4 w-4" />
           Tokens
+        </Tabs.Trigger>
+        <Tabs.Trigger value="password-resets" class="gap-2">
+          <Lock class="h-4 w-4" />
+          Password Resets
+          {#if pendingResetCount > 0}
+            <Badge variant="destructive" class="ml-1">
+              {pendingResetCount}
+            </Badge>
+          {/if}
         </Tabs.Trigger>
       </Tabs.List>
 
@@ -710,6 +811,70 @@
                 </div>
               {/if}
             </div>
+          </CardContent>
+        </Card>
+      </Tabs.Content>
+
+      <!-- Password Resets Tab -->
+      <Tabs.Content value="password-resets">
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending Password Resets</CardTitle>
+            <CardDescription>
+              Review password reset requests and provide temporary access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {#if pendingResets.length === 0}
+              <div class="text-center py-8 text-muted-foreground">
+                <Lock class="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>No pending password reset requests</p>
+              </div>
+            {:else}
+              <div class="space-y-3">
+                {#each pendingResets as request}
+                  <div
+                    class="flex items-center justify-between p-4 rounded-lg border"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div class="p-2 rounded-lg bg-muted">
+                        <Lock class="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div class="font-medium">
+                          {request.displayName ?? request.email}
+                        </div>
+                        <div class="text-sm text-muted-foreground">
+                          {request.email}
+                        </div>
+                        <div class="text-xs text-muted-foreground mt-1">
+                          Requested: {formatDate(request.createdAt)}
+                          {#if request.requestedFromIp}
+                            IP: {request.requestedFromIp}
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => openSetPasswordDialog(request)}
+                      >
+                        Set Password
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onclick={() => generateResetLink(request.id)}
+                      >
+                        Generate Link
+                      </Button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </CardContent>
         </Card>
       </Tabs.Content>
@@ -1007,3 +1172,83 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Set Password Dialog -->
+<Dialog.Root bind:open={isSetPasswordDialogOpen}>
+  <Dialog.Content class="max-w-md">
+    <Dialog.Header>
+      <Dialog.Title>Set Temporary Password</Dialog.Title>
+      <Dialog.Description>
+        Set a temporary password for {selectedResetRequest?.email}. They will be
+        required to change it on next login.
+      </Dialog.Description>
+    </Dialog.Header>
+
+    <div class="space-y-4 py-4">
+      <div class="space-y-2">
+        <Label for="temp-password">Temporary Password</Label>
+        <Input
+          id="temp-password"
+          type="text"
+          bind:value={tempPassword}
+          placeholder="Leave empty for no password"
+        />
+        <p class="text-xs text-muted-foreground">
+          Leave empty to allow login with no password. The user must set a new
+          password on their next login.
+        </p>
+      </div>
+    </div>
+
+    <Dialog.Footer>
+      <Button
+        variant="outline"
+        onclick={() => (isSetPasswordDialogOpen = false)}
+        disabled={setPasswordSaving}
+      >
+        Cancel
+      </Button>
+      <Button onclick={handleSetPassword} disabled={setPasswordSaving}>
+        {#if setPasswordSaving}
+          <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+        {/if}
+        Set Password
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Reset Link Dialog -->
+<Dialog.Root bind:open={isResetLinkDialogOpen}>
+  <Dialog.Content class="max-w-lg">
+    <Dialog.Header>
+      <Dialog.Title>Password Reset Link</Dialog.Title>
+      <Dialog.Description>
+        Share this link securely with the user.
+      </Dialog.Description>
+    </Dialog.Header>
+
+    <div class="space-y-4 py-4">
+      <div class="p-4 rounded-lg bg-muted font-mono text-sm break-all">
+        {generatedResetLink}
+      </div>
+      <Button class="w-full" onclick={copyResetLink} disabled={!generatedResetLink}>
+        {#if resetLinkCopied}
+          <Check class="h-4 w-4 mr-2" />
+          Copied!
+        {:else}
+          <Copy class="h-4 w-4 mr-2" />
+          Copy to Clipboard
+        {/if}
+      </Button>
+    </div>
+
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (isResetLinkDialogOpen = false)}>
+        Close
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+

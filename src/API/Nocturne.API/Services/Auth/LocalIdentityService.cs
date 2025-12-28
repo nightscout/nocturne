@@ -4,6 +4,7 @@ using Konscious.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -19,6 +20,7 @@ public class LocalIdentityService : ILocalIdentityService
     private readonly NocturneDbContext _dbContext;
     private readonly ISubjectService _subjectService;
     private readonly IEmailService _emailService;
+    private readonly ISignalRBroadcastService _signalRBroadcastService;
     private readonly LocalIdentityOptions _options;
     private readonly EmailOptions _emailOptions;
     private readonly ILogger<LocalIdentityService> _logger;
@@ -30,6 +32,7 @@ public class LocalIdentityService : ILocalIdentityService
         NocturneDbContext dbContext,
         ISubjectService subjectService,
         IEmailService emailService,
+        ISignalRBroadcastService signalRBroadcastService,
         IOptions<LocalIdentityOptions> options,
         IOptions<EmailOptions> emailOptions,
         ILogger<LocalIdentityService> logger
@@ -38,6 +41,7 @@ public class LocalIdentityService : ILocalIdentityService
         _dbContext = dbContext;
         _subjectService = subjectService;
         _emailService = emailService;
+        _signalRBroadcastService = signalRBroadcastService;
         _options = options.Value;
         _emailOptions = emailOptions.Value;
         _logger = logger;
@@ -170,11 +174,12 @@ public class LocalIdentityService : ILocalIdentityService
         _dbContext.LocalUsers.Add(user);
 
         // Assign roles - first user gets admin, others get default roles
+        var assignedRoleIds = new HashSet<Guid>();
         if (isFirstUser)
         {
             // First user is automatically admin
             var adminRole = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == "admin");
-            if (adminRole != null)
+            if (adminRole != null && assignedRoleIds.Add(adminRole.Id))
             {
                 _dbContext.SubjectRoles.Add(
                     new SubjectRoleEntity
@@ -194,10 +199,13 @@ public class LocalIdentityService : ILocalIdentityService
         else
         {
             // Assign default roles for non-first users
-            foreach (var roleName in _options.Registration.DefaultRoles)
+            foreach (var roleName in _options.Registration.DefaultRoles
+                .Select(name => name.Trim())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var role = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
-                if (role != null)
+                if (role != null && assignedRoleIds.Add(role.Id))
                 {
                     _dbContext.SubjectRoles.Add(
                         new SubjectRoleEntity
@@ -459,7 +467,8 @@ public class LocalIdentityService : ILocalIdentityService
 
         return LocalAuthResult.Succeeded(
             MapToModel(user),
-            user.SubjectId ?? throw new InvalidOperationException("User has no associated subject")
+            user.SubjectId ?? throw new InvalidOperationException("User has no associated subject"),
+            user.RequirePasswordChange
         );
     }
 
@@ -554,6 +563,9 @@ public class LocalIdentityService : ILocalIdentityService
             _dbContext.PasswordResetRequests.Add(resetRequest);
             await _dbContext.SaveChangesAsync();
 
+            // Broadcast to admin subscribers via SignalR
+            await _signalRBroadcastService.BroadcastPasswordResetRequestAsync();
+
             // Notify admin
             await _emailService.SendAdminPasswordResetRequestNotificationAsync(
                 user.Email,
@@ -596,6 +608,7 @@ public class LocalIdentityService : ILocalIdentityService
         user.PasswordHash = HashPassword(newPassword);
         user.PasswordResetTokenHash = null;
         user.PasswordResetTokenExpiresAt = null;
+        user.RequirePasswordChange = false;
         user.PasswordChangedAt = DateTime.UtcNow;
         user.FailedLoginAttempts = 0;
         user.LockedUntil = null;
@@ -639,6 +652,7 @@ public class LocalIdentityService : ILocalIdentityService
 
         user.PasswordHash = HashPassword(newPassword);
         user.PasswordChangedAt = DateTime.UtcNow;
+        user.RequirePasswordChange = false;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync();
@@ -808,6 +822,9 @@ public class LocalIdentityService : ILocalIdentityService
 
         await _dbContext.SaveChangesAsync();
 
+        // Broadcast update to refresh admin UI
+        await _signalRBroadcastService.BroadcastPasswordResetRequestAsync();
+
         var baseUrl = _emailOptions.BaseUrl?.TrimEnd('/') ?? "";
         var resetUrl = $"{baseUrl}/auth/reset-password?token={resetToken}";
 
@@ -818,6 +835,89 @@ public class LocalIdentityService : ILocalIdentityService
         );
 
         return resetUrl;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetTemporaryPasswordAsync(
+        Guid userId,
+        string temporaryPassword,
+        Guid adminId
+    )
+    {
+        var user = await _dbContext.LocalUsers.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+        {
+            _logger.LogWarning("SetTemporaryPassword failed: User {UserId} not found", userId);
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(temporaryPassword))
+        {
+            var validation = ValidatePassword(temporaryPassword);
+            if (!validation.IsValid)
+            {
+                _logger.LogWarning(
+                    "SetTemporaryPassword failed: Password validation failed for user {UserId}",
+                    userId
+                );
+                return false;
+            }
+        }
+
+        user.PasswordHash = HashPassword(temporaryPassword);
+        user.RequirePasswordChange = true;
+        user.PasswordChangedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        user.FailedLoginAttempts = 0;
+        user.LockedUntil = null;
+
+        user.PasswordResetTokenHash = null;
+        user.PasswordResetTokenExpiresAt = null;
+
+        var pendingRequests = await _dbContext
+            .PasswordResetRequests.Where(r => r.LocalUserId == userId && !r.Handled)
+            .ToListAsync();
+
+        foreach (var request in pendingRequests)
+        {
+            request.Handled = true;
+            request.HandledById = adminId;
+            request.HandledAt = DateTime.UtcNow;
+        }
+
+        await _dbContext.SaveChangesAsync();
+
+        // Broadcast update if we cleared any pending requests
+        if (pendingRequests.Count > 0)
+        {
+            await _signalRBroadcastService.BroadcastPasswordResetRequestAsync();
+        }
+
+        _logger.LogInformation(
+            "Admin {AdminId} set temporary password for user {UserId} ({Email})",
+            adminId,
+            userId,
+            user.Email
+        );
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ClearRequirePasswordChangeAsync(Guid userId)
+    {
+        var user = await _dbContext.LocalUsers.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+        {
+            return false;
+        }
+
+        user.RequirePasswordChange = false;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync();
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -986,7 +1086,7 @@ public class LocalIdentityService : ILocalIdentityService
         rng.GetBytes(salt);
 
         // Hash with Argon2id
-        using var argon2 = new Argon2id(Encoding.UTF8.GetBytes(password))
+        using var argon2 = new Argon2id(GetPasswordBytes(password))
         {
             Salt = salt,
             DegreeOfParallelism = 4,
@@ -1017,7 +1117,7 @@ public class LocalIdentityService : ILocalIdentityService
             Buffer.BlockCopy(combined, 0, salt, 0, 16);
             Buffer.BlockCopy(combined, 16, hash, 0, 32);
 
-            using var argon2 = new Argon2id(Encoding.UTF8.GetBytes(password))
+            using var argon2 = new Argon2id(GetPasswordBytes(password))
             {
                 Salt = salt,
                 DegreeOfParallelism = 4,
@@ -1034,6 +1134,13 @@ public class LocalIdentityService : ILocalIdentityService
         }
     }
 
+    private static byte[] GetPasswordBytes(string password)
+    {
+        return string.IsNullOrEmpty(password)
+            ? new byte[] { 0 }
+            : Encoding.UTF8.GetBytes(password);
+    }
+
     private static LocalUser MapToModel(LocalUserEntity entity)
     {
         return new LocalUser
@@ -1044,6 +1151,7 @@ public class LocalIdentityService : ILocalIdentityService
             EmailVerified = entity.EmailVerified,
             IsActive = entity.IsActive,
             PendingApproval = entity.PendingApproval,
+            RequirePasswordChange = entity.RequirePasswordChange,
             SubjectId = entity.SubjectId,
             LastLoginAt = entity.LastLoginAt,
             CreatedAt = entity.CreatedAt,

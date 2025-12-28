@@ -257,6 +257,7 @@ public class LocalAuthController : ControllerBase
                     DisplayName = result.User.DisplayName,
                     Roles = roles,
                 },
+                RequirePasswordChange = result.RequirePasswordChange,
             }
         );
     }
@@ -536,6 +537,103 @@ public class LocalAuthController : ControllerBase
         );
     }
 
+    // ============================================================================
+    // Admin endpoints
+    // ============================================================================
+
+    /// <summary>
+    /// Get pending password reset requests (admin only)
+    /// </summary>
+    [HttpGet("admin/password-resets")]
+    [Authorize]
+    [RequireAdmin]
+    [ProducesResponseType(typeof(PasswordResetRequestListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PasswordResetRequestListResponse>> GetPendingPasswordResets()
+    {
+        var requests = await _identityService.GetPendingPasswordResetRequestsAsync();
+        var items = requests
+            .Select(r => new PasswordResetRequestDto
+            {
+                Id = r.Id,
+                Email = r.Email,
+                DisplayName = r.DisplayName,
+                RequestedFromIp = r.RequestedFromIp,
+                UserAgent = r.UserAgent,
+                CreatedAt = r.CreatedAt,
+            })
+            .ToList();
+
+        return Ok(new PasswordResetRequestListResponse { Requests = items, TotalCount = items.Count });
+    }
+
+    /// <summary>
+    /// Set a temporary password for a user (admin only)
+    /// </summary>
+    [HttpPost("admin/set-temporary-password")]
+    [Authorize]
+    [RequireAdmin]
+    [ProducesResponseType(typeof(SetTemporaryPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<SetTemporaryPasswordResponse>> SetTemporaryPassword(
+        [FromBody] SetTemporaryPasswordRequest request
+    )
+    {
+        var auth = HttpContext.GetAuthContext();
+        if (auth?.SubjectId == null)
+        {
+            return Unauthorized();
+        }
+
+        var user = await _identityService.GetUserByEmailAsync(request.Email);
+        if (user == null)
+        {
+            return BadRequest(new ErrorResponse { Error = "user_not_found", Message = string.Empty });
+        }
+
+        var success = await _identityService.SetTemporaryPasswordAsync(
+            user.Id,
+            request.TemporaryPassword,
+            auth.SubjectId.Value
+        );
+
+        if (!success)
+        {
+            return BadRequest(
+                new ErrorResponse { Error = "set_password_failed", Message = string.Empty }
+            );
+        }
+
+        return Ok(new SetTemporaryPasswordResponse { Success = true });
+    }
+
+    /// <summary>
+    /// Handle a password reset request by generating a reset link (admin only)
+    /// </summary>
+    [HttpPost("admin/handle-password-reset/{requestId:guid}")]
+    [Authorize]
+    [RequireAdmin]
+    [ProducesResponseType(typeof(HandlePasswordResetResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<HandlePasswordResetResponse>> HandlePasswordReset(Guid requestId)
+    {
+        var auth = HttpContext.GetAuthContext();
+        if (auth?.SubjectId == null)
+        {
+            return Unauthorized();
+        }
+
+        var resetUrl = await _identityService.HandlePasswordResetRequestAsync(
+            requestId,
+            auth.SubjectId.Value
+        );
+        if (resetUrl == null)
+        {
+            return BadRequest(new ErrorResponse { Error = "handle_failed", Message = string.Empty });
+        }
+
+        return Ok(new HandlePasswordResetResponse { Success = true, ResetUrl = resetUrl });
+    }
+
     #region Private Helpers
 
     private void SetAuthCookies(string accessToken, string refreshToken)
@@ -690,6 +788,7 @@ public class LoginResponse
     public string RefreshToken { get; set; } = string.Empty;
     public int ExpiresIn { get; set; }
     public UserInfoDto User { get; set; } = new();
+    public bool RequirePasswordChange { get; set; }
 }
 
 /// <summary>
@@ -755,6 +854,54 @@ public class ChangePasswordResponse
 {
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Password reset request info for admin view
+/// </summary>
+public class PasswordResetRequestDto
+{
+    public Guid Id { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public string? RequestedFromIp { get; set; }
+    public string? UserAgent { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Response for pending password reset requests
+/// </summary>
+public class PasswordResetRequestListResponse
+{
+    public List<PasswordResetRequestDto> Requests { get; set; } = new();
+    public int TotalCount { get; set; }
+}
+
+/// <summary>
+/// Request to set a temporary password
+/// </summary>
+public class SetTemporaryPasswordRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string TemporaryPassword { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Response for setting a temporary password
+/// </summary>
+public class SetTemporaryPasswordResponse
+{
+    public bool Success { get; set; }
+}
+
+/// <summary>
+/// Response for handling password reset
+/// </summary>
+public class HandlePasswordResetResponse
+{
+    public bool Success { get; set; }
+    public string ResetUrl { get; set; } = string.Empty;
 }
 
 /// <summary>

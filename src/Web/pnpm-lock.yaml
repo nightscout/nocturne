@@ -41,6 +41,9 @@ importers:
       '@layerstack/utils':
         specifier: 2.0.0-next.14
         version: 2.0.0-next.14
+      '@microsoft/signalr':
+        specifier: ^10.0.0
+        version: 10.0.0
       '@nocturne/bridge':
         specifier: workspace:*
         version: link:../bridge
@@ -600,6 +603,9 @@ packages:
     resolution: {integrity: sha512-aqTOMjBjf/HNwrhggRdb83T0QslZdpJTyTwr/chtXTGw7u4Hcu4zQb/5uA+csF0KKawKWVnsNI1MdHEHeEXTcQ==}
     peerDependencies:
       svelte: ^5.37.0
+
+  '@microsoft/signalr@10.0.0':
+    resolution: {integrity: sha512-0BRqz/uCx3JdrOqiqgFhih/+hfTERaUfCZXFB52uMaZJrKaPRzHzMuqVsJC/V3pt7NozcNXGspjKiQEK+X7P2w==}
 
   '@microsoft/signalr@8.0.17':
     resolution: {integrity: sha512-5pM6xPtKZNJLO0Tq5nQasVyPFwi/WBY3QB5uc/v3dIPTpS1JXQbaXAQAPxFoQ5rTBFE094w8bbqkp17F9ReQvA==}
@@ -4079,6 +4085,18 @@ snapshots:
   '@lucide/svelte@0.555.0(svelte@5.45.2)':
     dependencies:
       svelte: 5.45.2
+
+  '@microsoft/signalr@10.0.0':
+    dependencies:
+      abort-controller: 3.0.0
+      eventsource: 2.0.2
+      fetch-cookie: 2.2.0
+      node-fetch: 2.7.0
+      ws: 7.5.10
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - utf-8-validate
 
   '@microsoft/signalr@8.0.17':
     dependencies:

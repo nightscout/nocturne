@@ -38,6 +38,9 @@ export class RealtimeStore {
   trackerInstances = $state.raw<TrackerInstanceDto[]>([]);
   trackerDefinitions = $state.raw<TrackerDefinitionDto[]>([]);
 
+  /** Password reset request counter - increments on each request to trigger refreshes */
+  passwordResetRequestCount = $state(0);
+
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
     this.websocketClient?.connectionStatus || "disconnected"
@@ -278,6 +281,11 @@ export class RealtimeStore {
 
     this.websocketClient.on("trackerUpdate", (event: TrackerUpdateEvent) => {
       this.handleTrackerUpdate(event);
+    });
+
+    // Admin events - password reset requests
+    this.websocketClient.on("passwordResetRequested", () => {
+      this.passwordResetRequestCount++;
     });
   }
 

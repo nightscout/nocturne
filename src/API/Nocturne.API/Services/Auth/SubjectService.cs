@@ -114,10 +114,14 @@ public class SubjectService : ISubjectService
         // Assign default roles if specified
         if (defaultRoles != null)
         {
-            foreach (var roleName in defaultRoles)
+            var assignedRoleIds = new HashSet<Guid>();
+            foreach (var roleName in defaultRoles
+                .Select(name => name.Trim())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var role = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
-                if (role != null)
+                if (role != null && assignedRoleIds.Add(role.Id))
                 {
                     _dbContext.SubjectRoles.Add(
                         new SubjectRoleEntity
@@ -176,10 +180,14 @@ public class SubjectService : ISubjectService
         await _dbContext.SaveChangesAsync();
 
         // Assign roles
-        foreach (var role in subject.Roles)
+        var assignedRoleIds = new HashSet<Guid>();
+        foreach (var roleName in subject.Roles
+            .Select(role => role.Name.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var roleEntity = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == role.Name);
-            if (roleEntity != null)
+            var roleEntity = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+            if (roleEntity != null && assignedRoleIds.Add(roleEntity.Id))
             {
                 _dbContext.SubjectRoles.Add(
                     new SubjectRoleEntity

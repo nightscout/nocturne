@@ -148,8 +148,22 @@
                 // After submission, check the result
                 const result = loginForm.result;
                 if (result?.success) {
-                  const targetUrl =
-                    (result as { returnUrl?: string }).returnUrl || returnUrl;
+                  const typedResult = result as {
+                    returnUrl?: string;
+                    requirePasswordChange?: boolean;
+                  };
+                  const targetUrl = typedResult.returnUrl || returnUrl;
+                  if (typedResult.requirePasswordChange) {
+                    const params = new URLSearchParams();
+                    params.set("required", "true");
+                    if (targetUrl && targetUrl !== "/") {
+                      params.set("returnUrl", targetUrl);
+                    }
+                    await goto(`/auth/change-password?${params.toString()}`, {
+                      replaceState: true,
+                    });
+                    return;
+                  }
                   await invalidateAll();
                   await goto(targetUrl, { invalidateAll: true });
                 }

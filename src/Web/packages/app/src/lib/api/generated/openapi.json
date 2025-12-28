@@ -1165,6 +1165,113 @@
         }
       }
     },
+    "/auth/local/admin/password-resets": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get pending password reset requests (admin only)",
+        "operationId": "LocalAuth_GetPendingPasswordResets",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetRequestListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/local/admin/set-temporary-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Set a temporary password for a user (admin only)",
+        "operationId": "LocalAuth_SetTemporaryPassword",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTemporaryPasswordRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetTemporaryPasswordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/local/admin/handle-password-reset/{requestId}": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Handle a password reset request by generating a reset link (admin only)",
+        "operationId": "LocalAuth_HandlePasswordReset",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandlePasswordResetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Metadata/websocket-events": {
       "get": {
         "tags": [
@@ -13028,6 +13135,9 @@
           },
           "user": {
             "$ref": "#/components/schemas/UserInfoDto"
+          },
+          "requirePasswordChange": {
+            "type": "boolean"
           }
         }
       },
@@ -13182,6 +13292,89 @@
         "additionalProperties": false,
         "properties": {
           "email": {
+            "type": "string"
+          }
+        }
+      },
+      "PasswordResetRequestListResponse": {
+        "type": "object",
+        "description": "Response for pending password reset requests",
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasswordResetRequestDto"
+            }
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PasswordResetRequestDto": {
+        "type": "object",
+        "description": "Password reset request info for admin view",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedFromIp": {
+            "type": "string",
+            "nullable": true
+          },
+          "userAgent": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SetTemporaryPasswordResponse": {
+        "type": "object",
+        "description": "Response for setting a temporary password",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetTemporaryPasswordRequest": {
+        "type": "object",
+        "description": "Request to set a temporary password",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "temporaryPassword": {
+            "type": "string"
+          }
+        }
+      },
+      "HandlePasswordResetResponse": {
+        "type": "object",
+        "description": "Response for handling password reset",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "resetUrl": {
             "type": "string"
           }
         }

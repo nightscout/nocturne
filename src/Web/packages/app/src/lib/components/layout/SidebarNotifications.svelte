@@ -10,40 +10,81 @@
     AlertCircle,
     Info,
     ChevronRight,
+    Shield,
+    KeyRound,
+    ExternalLink,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import * as trackersRemote from "$lib/data/trackers.remote";
+  import * as adminRemote from "$lib/data/admin.remote";
   import {
     type TrackerInstanceDto,
+    type PasswordResetRequestDto,
     CompletionReason,
   } from "$lib/api/generated/nocturne-api-client";
+  import { goto } from "$app/navigation";
 
   // Get the realtime store for reactive tracker data
   const realtimeStore = getRealtimeStore();
 
   // State
   let isOpen = $state(false);
+  let pendingResets = $state<PasswordResetRequestDto[]>([]);
 
   // Use tracker notifications from realtime store
-  const notifications = $derived(realtimeStore.trackerNotifications);
+  const trackerNotifications = $derived(realtimeStore.trackerNotifications);
 
   // Get auth store
   const authStore = getAuthStore();
 
+  // Check if user is an admin
+  const isAdmin = $derived(authStore.hasRole("admin"));
+
+  // Load pending password resets for admin users
+  async function loadPendingResets() {
+    if (!isAdmin) {
+      pendingResets = [];
+      return;
+    }
+    try {
+      const result = await adminRemote.getPendingPasswordResets();
+      pendingResets = result?.requests ?? [];
+    } catch {
+      pendingResets = [];
+    }
+  }
+
+  // Reload when password reset request counter changes (via SignalR)
+  $effect(() => {
+    // Track the counter to trigger reload
+    const _count = realtimeStore.passwordResetRequestCount;
+    if (isAdmin) {
+      loadPendingResets();
+    }
+  });
+
   // Count by level for badge
   const urgentCount = $derived(
-    notifications.filter((n) => n.level === "urgent").length
+    trackerNotifications.filter((n) => n.level === "urgent").length
   );
   const hazardCount = $derived(
-    notifications.filter((n) => n.level === "hazard").length
+    trackerNotifications.filter((n) => n.level === "hazard").length
   );
 
-  // Badge color based on highest severity
-  const badgeCount = $derived(notifications.length);
+  // Combined badge count (tracker + pending password resets)
+  const totalTrackerCount = $derived(trackerNotifications.length);
+  const pendingResetCount = $derived(pendingResets.length);
+  const badgeCount = $derived(totalTrackerCount + pendingResetCount);
+
+  // Badge color based on highest severity (pending resets are always high priority)
   const badgeVariant = $derived<"destructive" | "warning" | "secondary">(
-    urgentCount > 0 ? "destructive" : hazardCount > 0 ? "warning" : "secondary"
+    pendingResetCount > 0 || urgentCount > 0
+      ? "destructive"
+      : hazardCount > 0
+        ? "warning"
+        : "secondary"
   );
 
   // Check if user can globally acknowledge
@@ -180,7 +221,7 @@
   <Popover.Content align="end" class="w-80 p-0">
     <div class="flex items-center justify-between border-b px-4 py-3">
       <h4 class="text-sm font-semibold">Notifications</h4>
-      {#if notifications.length > 0}
+      {#if trackerNotifications.length > 0}
         <a
           href="/settings/trackers"
           class="text-xs text-muted-foreground hover:underline"
@@ -190,7 +231,7 @@
       {/if}
     </div>
 
-    {#if notifications.length === 0}
+    {#if badgeCount === 0}
       <div class="flex flex-col items-center justify-center py-8 text-center">
         <Bell class="h-8 w-8 text-muted-foreground/50 mb-2" />
         <p class="text-sm text-muted-foreground">No active notifications</p>
@@ -202,64 +243,129 @@
         </a>
       </div>
     {:else}
-      <div class="max-h-[300px] overflow-y-auto">
-        {#each notifications as notification (notification.id)}
-          {@const LevelIcon = getLevelIcon(notification.level)}
-          <div
-            class={cn(
-              "flex items-start gap-3 border-b p-3 last:border-b-0",
-              getLevelClass(notification.level)
-            )}
-          >
-            <div class="flex-shrink-0 mt-0.5">
-              <LevelIcon class="h-4 w-4" />
+      <div class="max-h-[350px] overflow-y-auto">
+        <!-- Pending Password Resets Section (for admins) -->
+        {#if pendingResets.length > 0}
+          <div class="border-b">
+            <div class="px-3 py-2 bg-destructive/5">
+              <span
+                class="text-xs font-medium text-destructive flex items-center gap-1"
+              >
+                <Shield class="h-3 w-3" />
+                Admin Actions Required ({pendingResets.length})
+              </span>
             </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-medium truncate">
-                  {notification.definitionName}
-                </span>
-                <span class="text-xs opacity-75 whitespace-nowrap">
-                  {formatAge(notification.ageHours ?? 0)}
-                </span>
+            {#each pendingResets as request (request.id)}
+              <div
+                class="flex items-start gap-3 border-b p-3 last:border-b-0 text-red-500 bg-red-500/10 border-red-500/20"
+              >
+                <div class="flex-shrink-0 mt-0.5">
+                  <KeyRound class="h-4 w-4" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-medium">
+                      Password Reset Request
+                    </span>
+                    <span class="text-xs opacity-75 whitespace-nowrap">
+                      {request.createdAt
+                        ? new Date(request.createdAt).toLocaleDateString()
+                        : ""}
+                    </span>
+                  </div>
+                  <p class="text-xs mt-0.5 opacity-75">
+                    {request.displayName ?? request.email}
+                  </p>
+                  <div class="flex items-center gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-6 text-xs px-2"
+                      onclick={() => {
+                        isOpen = false;
+                        goto("/settings/admin?tab=password-resets");
+                      }}
+                    >
+                      <ExternalLink class="h-3 w-3 mr-1" />
+                      Handle
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <p class="text-xs mt-0.5 opacity-75">
-                {buildMessage(notification)}
-              </p>
-              <div class="flex items-center gap-2 mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-6 text-xs px-2"
-                  onclick={() => handleSnooze(notification.id!, 30)}
-                >
-                  <Clock class="h-3 w-3 mr-1" />
-                  Snooze
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-6 text-xs px-2"
-                  onclick={() => handleComplete(notification.id!)}
-                >
-                  <Check class="h-3 w-3 mr-1" />
-                  Done
-                </Button>
-                {#if canGlobalAck}
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Tracker Notifications Section -->
+        {#if trackerNotifications.length > 0}
+          {#if pendingResets.length > 0}
+            <div class="px-3 py-2 bg-muted/50">
+              <span
+                class="text-xs font-medium text-muted-foreground flex items-center gap-1"
+              >
+                <Timer class="h-3 w-3" />
+                Tracker Alerts ({trackerNotifications.length})
+              </span>
+            </div>
+          {/if}
+          {#each trackerNotifications as notification (notification.id)}
+            {@const LevelIcon = getLevelIcon(notification.level)}
+            <div
+              class={cn(
+                "flex items-start gap-3 border-b p-3 last:border-b-0",
+                getLevelClass(notification.level)
+              )}
+            >
+              <div class="flex-shrink-0 mt-0.5">
+                <LevelIcon class="h-4 w-4" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium truncate">
+                    {notification.definitionName}
+                  </span>
+                  <span class="text-xs opacity-75 whitespace-nowrap">
+                    {formatAge(notification.ageHours ?? 0)}
+                  </span>
+                </div>
+                <p class="text-xs mt-0.5 opacity-75">
+                  {buildMessage(notification)}
+                </p>
+                <div class="flex items-center gap-2 mt-2">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     class="h-6 text-xs px-2"
-                    onclick={() => handleGlobalAck(notification.id!)}
-                    title="Acknowledge for all devices"
+                    onclick={() => handleSnooze(notification.id!, 30)}
                   >
-                    Ack All
+                    <Clock class="h-3 w-3 mr-1" />
+                    Snooze
                   </Button>
-                {/if}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-6 text-xs px-2"
+                    onclick={() => handleComplete(notification.id!)}
+                  >
+                    <Check class="h-3 w-3 mr-1" />
+                    Done
+                  </Button>
+                  {#if canGlobalAck}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="h-6 text-xs px-2"
+                      onclick={() => handleGlobalAck(notification.id!)}
+                      title="Acknowledge for all devices"
+                    >
+                      Ack All
+                    </Button>
+                  {/if}
+                </div>
               </div>
             </div>
-          </div>
-        {/each}
+          {/each}
+        {/if}
       </div>
     {/if}
 

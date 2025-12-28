@@ -141,6 +141,23 @@ public interface ILocalIdentityService
     Task<string?> HandlePasswordResetRequestAsync(Guid requestId, Guid adminId);
 
     /// <summary>
+    /// Set a temporary password for a user (admin function)
+    /// Sets the RequirePasswordChange flag to true
+    /// </summary>
+    /// <param name="userId">User ID</param>
+    /// <param name="temporaryPassword">Temporary password (can be empty string)</param>
+    /// <param name="adminId">Admin performing the action</param>
+    /// <returns>True if successful</returns>
+    Task<bool> SetTemporaryPasswordAsync(Guid userId, string temporaryPassword, Guid adminId);
+
+    /// <summary>
+    /// Clear the require password change flag after user changes password
+    /// </summary>
+    /// <param name="userId">User ID</param>
+    /// <returns>True if successful</returns>
+    Task<bool> ClearRequirePasswordChangeAsync(Guid userId);
+
+    /// <summary>
     /// Check if an email is allowed to register based on allowlist
     /// </summary>
     /// <param name="email">Email to check</param>
@@ -280,12 +297,19 @@ public class LocalAuthResult
     /// </summary>
     public DateTime? LockedUntil { get; set; }
 
-    public static LocalAuthResult Succeeded(LocalUser user, Guid subjectId) =>
+    public bool RequirePasswordChange { get; set; }
+
+    public static LocalAuthResult Succeeded(
+        LocalUser user,
+        Guid subjectId,
+        bool requirePasswordChange = false
+    ) =>
         new()
         {
             Success = true,
             User = user,
             SubjectId = subjectId,
+            RequirePasswordChange = requirePasswordChange,
         };
 
     public static LocalAuthResult Failed(
@@ -342,6 +366,7 @@ public class LocalUser
     public bool EmailVerified { get; set; }
     public bool IsActive { get; set; }
     public bool PendingApproval { get; set; }
+    public bool RequirePasswordChange { get; set; }
     public Guid? SubjectId { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }

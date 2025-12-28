@@ -9,7 +9,7 @@ import { z } from "zod";
 import { query, form, getRequestEvent } from "$app/server";
 
 import { invalid } from "@sveltejs/kit";
-import type { LoginResponse, OidcProviderInfo, RegisterResponse } from "$lib/api/generated/nocturne-api-client";
+import type { OidcProviderInfo, RegisterResponse } from "$lib/api/generated/nocturne-api-client";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 
 // ============================================================================
@@ -44,6 +44,13 @@ const resetPasswordSchema = z.object({
   token: z.string().min(1, "Reset token is required"),
   _password: passwordSchema,
   confirmPassword: z.string(),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: passwordSchema,
+  _password: passwordSchema,
+  confirmPassword: z.string(),
+  returnUrl: z.string().optional().default("/"),
 });
 
 const verifyEmailSchema = z.object({
@@ -191,6 +198,7 @@ export const loginForm = form(loginSchema, async (data, issue) => {
     throw new Error("Request event not available");
   }
   let loginSucceeded = false;
+  let requirePasswordChange = false;
 
   try {
     const response = await api.localAuth.login({
@@ -237,6 +245,7 @@ export const loginForm = form(loginSchema, async (data, issue) => {
       maxAge: response.expiresIn || 3600,
     });
     loginSucceeded = true;
+    requirePasswordChange = response.requirePasswordChange ?? false;
   } catch (error) {
     const message = parseApiError(error);
 
@@ -269,7 +278,11 @@ export const loginForm = form(loginSchema, async (data, issue) => {
   // The client-side enhance() callback will handle the navigation.
   if (loginSucceeded) {
     console.log(`[AUTH] LoginForm: Login succeeded, returning success for redirect to ${data.returnUrl || "/"}`);
-    return { success: true, returnUrl: data.returnUrl || "/" };
+    return {
+      success: true,
+      returnUrl: data.returnUrl || "/",
+      requirePasswordChange,
+    };
   }
 });
 
@@ -401,6 +414,46 @@ export const resetPasswordForm = form(
         invalid(issue._password(message));
       } else {
         invalid(issue("Failed to reset password: " + message));
+      }
+    }
+  }
+);
+
+/**
+ * Change password form handler
+ * Updates password for authenticated local users
+ */
+export const changePasswordForm = form(
+  changePasswordSchema,
+  async (data, issue) => {
+    if (data._password !== data.confirmPassword) {
+      invalid(issue.confirmPassword("Passwords do not match"));
+      return;
+    }
+
+    const api = getApiClient();
+
+    try {
+      const response = await api.localAuth.changePassword({
+        currentPassword: data.currentPassword,
+        newPassword: data._password,
+      });
+
+      if (!response.success) {
+        invalid(issue("Failed to change password."));
+        return;
+      }
+
+      return { success: true, returnUrl: data.returnUrl || "/" };
+    } catch (error) {
+      const message = parseApiError(error);
+
+      if (message.includes("incorrect")) {
+        invalid(issue.currentPassword("Current password is incorrect"));
+      } else if (message.includes("password")) {
+        invalid(issue._password(message));
+      } else {
+        invalid(issue("Failed to change password."));
       }
     }
   }
@@ -595,7 +648,11 @@ export const logoutSession = query(z.string().optional(), async (_providerId) =>
 // Type Exports for Components
 // ============================================================================
 
-export type LoginFormResult = LoginResponse;
+export type LoginFormResult = {
+  success?: boolean;
+  returnUrl?: string;
+  requirePasswordChange?: boolean;
+};
 export type RegisterFormResult = RegisterResponse;
 export type ForgotPasswordFormResult = {
   success: boolean;
@@ -605,6 +662,10 @@ export type ForgotPasswordFormResult = {
 export type ResetPasswordFormResult = {
   success: boolean;
   message: string;
+};
+export type ChangePasswordFormResult = {
+  success: boolean;
+  returnUrl?: string;
 };
 export type VerifyEmailFormResult = {
   success: boolean;

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Contracts;
 
@@ -83,6 +84,17 @@ public class DataHub : Hub
             {
                 // Add connection to authorized group
                 await Groups.AddToGroupAsync(Context.ConnectionId, "authorized");
+
+                // If user is admin, also add to admin group for admin-specific notifications
+                var httpContext = Context.GetHttpContext();
+                if (httpContext?.IsAdmin() == true)
+                {
+                    await Groups.AddToGroupAsync(Context.ConnectionId, "admin");
+                    _logger.LogDebug(
+                        "Client {ConnectionId} added to admin group",
+                        Context.ConnectionId
+                    );
+                }
 
                 _logger.LogInformation(
                     "Client {ConnectionId} authorized successfully",

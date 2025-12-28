@@ -17,46 +17,35 @@ public class SignalRBroadcastServiceTests
 {
     private readonly Mock<IHubContext<DataHub>> _mockDataHubContext;
     private readonly Mock<IHubContext<AlarmHub>> _mockAlarmHubContext;
-    private readonly Mock<IHubContext<AdminNotificationsHub>> _mockAdminHubContext;
     private readonly Mock<ILogger<SignalRBroadcastService>> _mockLogger;
     private readonly Mock<IHubClients> _mockDataClients;
     private readonly Mock<IHubClients> _mockAlarmClients;
-    private readonly Mock<IHubClients> _mockAdminClients;
     private readonly Mock<IClientProxy> _mockDataGroupProxy;
     private readonly Mock<IClientProxy> _mockAlarmGroupProxy;
-    private readonly Mock<IClientProxy> _mockAdminGroupProxy;
     private readonly SignalRBroadcastService _service;
 
     public SignalRBroadcastServiceTests()
     {
         _mockDataHubContext = new Mock<IHubContext<DataHub>>();
         _mockAlarmHubContext = new Mock<IHubContext<AlarmHub>>();
-        _mockAdminHubContext = new Mock<IHubContext<AdminNotificationsHub>>();
         _mockLogger = new Mock<ILogger<SignalRBroadcastService>>();
         _mockDataClients = new Mock<IHubClients>();
         _mockAlarmClients = new Mock<IHubClients>();
-        _mockAdminClients = new Mock<IHubClients>();
         _mockDataGroupProxy = new Mock<IClientProxy>();
         _mockAlarmGroupProxy = new Mock<IClientProxy>();
-        _mockAdminGroupProxy = new Mock<IClientProxy>();
 
         _mockDataHubContext.Setup(x => x.Clients).Returns(_mockDataClients.Object);
         _mockAlarmHubContext.Setup(x => x.Clients).Returns(_mockAlarmClients.Object);
-        _mockAdminHubContext.Setup(x => x.Clients).Returns(_mockAdminClients.Object);
         _mockDataClients
             .Setup(x => x.Group(It.IsAny<string>()))
             .Returns(_mockDataGroupProxy.Object);
         _mockAlarmClients
             .Setup(x => x.Group(It.IsAny<string>()))
             .Returns(_mockAlarmGroupProxy.Object);
-        _mockAdminClients
-            .Setup(x => x.Group(It.IsAny<string>()))
-            .Returns(_mockAdminGroupProxy.Object);
 
         _service = new SignalRBroadcastService(
             _mockDataHubContext.Object,
             _mockAlarmHubContext.Object,
-            _mockAdminHubContext.Object,
             _mockLogger.Object
         );
     }
@@ -305,21 +294,18 @@ public class SignalRBroadcastServiceTests
 
     [Fact]
     [Parity]
-    public async Task BroadcastAdminNotificationsUpdatedAsync_ShouldSendToAdminGroup()
+    public async Task BroadcastPasswordResetRequestAsync_ShouldSendToAdminGroup()
     {
-        // Arrange
-        var payload = new { action = "created" };
-
         // Act
-        await _service.BroadcastAdminNotificationsUpdatedAsync(payload);
+        await _service.BroadcastPasswordResetRequestAsync();
 
         // Assert
-        _mockAdminClients.Verify(x => x.Group("admin-notifications"), Times.Once);
-        _mockAdminGroupProxy.Verify(
+        _mockDataClients.Verify(x => x.Group("admin"), Times.Once);
+        _mockDataGroupProxy.Verify(
             x =>
                 x.SendCoreAsync(
-                    "adminNotificationsUpdated",
-                    It.Is<object[]>(args => args[0] == payload),
+                    "passwordResetRequested",
+                    It.Is<object[]>(args => args.Length == 0),
                     default
                 ),
             Times.Once

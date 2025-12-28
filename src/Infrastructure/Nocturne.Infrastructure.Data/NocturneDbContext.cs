@@ -1325,6 +1325,7 @@ public class NocturneDbContext : DbContext
                 .HasForeignKey(e => e.HandledById)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
     }
 
     /// <summary>

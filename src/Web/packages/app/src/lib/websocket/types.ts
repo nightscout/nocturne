@@ -105,6 +105,9 @@ export interface WebSocketEventHandlers {
 
   // Tracker events
   trackerUpdate: (event: TrackerUpdateEvent) => void;
+
+  // Admin events (for admin users subscribed to admin group)
+  passwordResetRequested: () => void;
 }
 
 // Error types
