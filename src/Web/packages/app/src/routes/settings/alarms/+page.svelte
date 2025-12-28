@@ -240,16 +240,16 @@
 </script>
 
 <svelte:head>
-  <title>Notifications - Settings - Nocturne</title>
+  <title>Alarms - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="container mx-auto p-6 max-w-4xl space-y-6">
   <!-- Header -->
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Notifications</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Alarms</h1>
       <p class="text-muted-foreground">
-        Configure alarms, alerts, and notification preferences
+        Configure glucose alarms, alerts, and notification preferences
       </p>
     </div>
     {#if store.isSaving}
