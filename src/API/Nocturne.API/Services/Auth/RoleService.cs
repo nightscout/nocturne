@@ -33,6 +33,7 @@ public class RoleService : IRoleService
                 "api:profile:read",
                 "api:food:read",
                 "api:activity:read",
+                "api:trackers:read",
             }
         ),
         ["public"] = (
@@ -45,6 +46,7 @@ public class RoleService : IRoleService
                 "api:profile:read",
                 "api:food:read",
                 "api:activity:read",
+                "api:trackers:read",
             }
         ),
         ["api"] = (
@@ -60,6 +62,7 @@ public class RoleService : IRoleService
                 "api:devicestatus:read",
                 "api:profile:read",
                 "careportal:*",
+                "api:trackers:*",
             }
         ),
         ["denied"] = ("No access", Array.Empty<string>()),

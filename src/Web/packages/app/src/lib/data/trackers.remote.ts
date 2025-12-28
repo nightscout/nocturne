@@ -330,6 +330,28 @@ export const applyPreset = command(
 );
 
 /**
+ * Create a new preset
+ */
+export const createPreset = command(
+	z.object({
+		name: z.string(),
+		definitionId: z.string(),
+		defaultStartNotes: z.string().optional(),
+	}),
+	async (request) => {
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
+
+		try {
+			return await apiClient.trackers.createPreset(request);
+		} catch (err) {
+			console.error('Error creating tracker preset:', err);
+			throw error(500, 'Failed to create tracker preset');
+		}
+	}
+);
+
+/**
  * Delete a preset
  */
 export const deletePreset = command(z.string(), async (id) => {

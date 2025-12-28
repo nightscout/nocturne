@@ -48,6 +48,7 @@
     TrackerCategory,
     CompletionReason,
     DashboardVisibility,
+    TrackerVisibility,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -73,6 +74,15 @@
   let deletingDefinitionId = $state<string | null>(null);
   let isDeleteInstanceDialogOpen = $state(false);
   let deletingInstanceId = $state<string | null>(null);
+  let isDeletePresetDialogOpen = $state(false);
+  let deletingPresetId = $state<string | null>(null);
+
+  // Preset dialog state
+  let isPresetDialogOpen = $state(false);
+  let isNewPreset = $state(false);
+  let formPresetName = $state("");
+  let formPresetDefinitionId = $state<string | undefined>(undefined);
+  let formPresetDefaultStartNotes = $state("");
 
   // Form state for definition
   let formName = $state("");
@@ -85,6 +95,7 @@
   let formDashboardVisibility = $state<DashboardVisibility>(
     DashboardVisibility.Always
   );
+  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Public);
   let formStartEventType = $state<string | undefined>(undefined);
   let formCompletionEventType = $state<string | undefined>(undefined);
 
@@ -366,6 +377,7 @@
     formNotifications = [];
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
+    formVisibility = TrackerVisibility.Public;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
     isDefinitionDialogOpen = true;
@@ -383,6 +395,7 @@
     formIsFavorite = def.isFavorite ?? false;
     formDashboardVisibility =
       def.dashboardVisibility ?? DashboardVisibility.Always;
+    formVisibility = def.visibility ?? TrackerVisibility.Public;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
     isDefinitionDialogOpen = true;
@@ -402,6 +415,7 @@
         notificationThresholds: notificationThresholds,
         isFavorite: formIsFavorite,
         dashboardVisibility: formDashboardVisibility,
+        visibility: formVisibility,
         startEventType: formStartEventType || undefined,
         completionEventType: formCompletionEventType || undefined,
       };
@@ -515,6 +529,51 @@
       await tick();
     } catch (err) {
       console.error("Failed to apply preset:", err);
+    }
+  }
+
+  // Create preset
+  function openNewPreset() {
+    isNewPreset = true;
+    formPresetName = "";
+    formPresetDefinitionId = definitions[0]?.id ?? undefined;
+    formPresetDefaultStartNotes = "";
+    isPresetDialogOpen = true;
+  }
+
+  async function savePreset() {
+    if (!formPresetName || !formPresetDefinitionId) return;
+    try {
+      // API only supports create, not update - so always create
+      await trackersRemote.createPreset({
+        name: formPresetName,
+        definitionId: formPresetDefinitionId,
+        defaultStartNotes: formPresetDefaultStartNotes || undefined,
+      });
+      await loadData();
+      await tick();
+      isPresetDialogOpen = false;
+    } catch (err) {
+      console.error("Failed to save preset:", err);
+    }
+  }
+
+  // Delete preset
+  function openDeletePresetDialog(id: string) {
+    deletingPresetId = id;
+    isDeletePresetDialogOpen = true;
+  }
+
+  async function confirmDeletePreset() {
+    if (!deletingPresetId) return;
+    try {
+      await trackersRemote.deletePreset(deletingPresetId);
+      await loadData();
+      await tick();
+      isDeletePresetDialogOpen = false;
+      deletingPresetId = null;
+    } catch (err) {
+      console.error("Failed to delete preset:", err);
     }
   }
 </script>
@@ -806,9 +865,17 @@
       <!-- Presets Tab -->
       <Tabs.Content value="presets">
         <Card>
-          <CardHeader>
-            <CardTitle>Quick Presets</CardTitle>
-            <CardDescription>One-click tracker activation</CardDescription>
+          <CardHeader class="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Quick Presets</CardTitle>
+              <CardDescription>One-click tracker activation</CardDescription>
+            </div>
+            {#if definitions.length > 0}
+              <Button onclick={openNewPreset}>
+                <Plus class="h-4 w-4 mr-2" />
+                New Preset
+              </Button>
+            {/if}
           </CardHeader>
           <CardContent>
             {#if presets.length === 0}
@@ -816,18 +883,26 @@
                 <Bookmark class="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No presets yet</p>
                 <p class="text-sm">
-                  Create presets from the API for quick access
+                  Create presets for one-click tracker activation
                 </p>
-              </div>
-            {:else}
-              <div class="grid gap-3 md:grid-cols-2">
-                {#each presets as preset}
+                {#if definitions.length > 0}
                   <Button
                     variant="outline"
-                    class="h-auto p-4 justify-start"
-                    onclick={() => applyPresetHandler(preset.id!)}
+                    class="mt-4"
+                    onclick={openNewPreset}
                   >
-                    <div class="text-left">
+                    <Plus class="h-4 w-4 mr-2" />
+                    Create Preset
+                  </Button>
+                {/if}
+              </div>
+            {:else}
+              <div class="space-y-3">
+                {#each presets as preset}
+                  <div
+                    class="flex items-center justify-between p-4 rounded-lg border"
+                  >
+                    <div class="flex-1">
                       <div class="font-medium">{preset.name}</div>
                       <div class="text-sm text-muted-foreground">
                         {preset.definitionName}
@@ -836,7 +911,24 @@
                         {/if}
                       </div>
                     </div>
-                  </Button>
+                    <div class="flex items-center gap-2">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onclick={() => applyPresetHandler(preset.id!)}
+                      >
+                        <Play class="h-4 w-4 mr-1" />
+                        Apply
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onclick={() => openDeletePresetDialog(preset.id!)}
+                      >
+                        <Trash2 class="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 {/each}
               </div>
             {/if}
@@ -958,6 +1050,35 @@
         </Select.Root>
         <p class="text-xs text-muted-foreground">
           When to show this tracker as a pill on the dashboard
+        </p>
+      </div>
+
+      <!-- Visibility (Public/Private) -->
+      <div class="space-y-2">
+        <Label for="visibility">Public Visibility</Label>
+        <Select.Root type="single" bind:value={formVisibility}>
+          <Select.Trigger>
+            {#if formVisibility === TrackerVisibility.Public}
+              Public - Visible to everyone
+            {:else if formVisibility === TrackerVisibility.Private}
+              Private - Only you can see
+            {:else}
+              Public - Visible to everyone
+            {/if}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item
+              value={TrackerVisibility.Public}
+              label="Public - Visible to everyone"
+            />
+            <Select.Item
+              value={TrackerVisibility.Private}
+              label="Private - Only you can see"
+            />
+          </Select.Content>
+        </Select.Root>
+        <p class="text-xs text-muted-foreground">
+          Controls whether this tracker is visible to unauthenticated users
         </p>
       </div>
 
@@ -1203,6 +1324,95 @@
       </AlertDialog.Cancel>
       <AlertDialog.Action
         onclick={confirmDeleteInstance}
+        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+      >
+        Delete
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Preset Dialog -->
+<Dialog.Root bind:open={isPresetDialogOpen}>
+  <Dialog.Content class="sm:max-w-[425px]">
+    <Dialog.Header>
+      <Dialog.Title>
+        {isNewPreset ? "New Preset" : "Edit Preset"}
+      </Dialog.Title>
+      <Dialog.Description>
+        Create a quick preset for one-click tracker activation.
+      </Dialog.Description>
+    </Dialog.Header>
+    <div class="grid gap-4 py-4">
+      <div class="space-y-2">
+        <Label for="presetName">Preset Name</Label>
+        <Input
+          id="presetName"
+          bind:value={formPresetName}
+          placeholder="e.g., G7 Sensor (Left Arm)"
+        />
+      </div>
+      <div class="space-y-2">
+        <Label for="presetDefinition">Tracker Definition</Label>
+        <Select.Root type="single" bind:value={formPresetDefinitionId}>
+          <Select.Trigger>
+            {definitions.find((d) => d.id === formPresetDefinitionId)?.name ??
+              "Select a definition"}
+          </Select.Trigger>
+          <Select.Content>
+            {#each definitions as def}
+              <Select.Item value={def.id ?? ""} label={def.name ?? ""} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="presetNotes">Default Start Notes (optional)</Label>
+        <Textarea
+          id="presetNotes"
+          bind:value={formPresetDefaultStartNotes}
+          placeholder="e.g., Left arm, upper"
+        />
+        <p class="text-xs text-muted-foreground">
+          These notes will be pre-filled when applying this preset.
+        </p>
+      </div>
+    </div>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (isPresetDialogOpen = false)}>
+        Cancel
+      </Button>
+      <Button
+        onclick={savePreset}
+        disabled={!formPresetName || !formPresetDefinitionId}
+      >
+        {isNewPreset ? "Create" : "Save"}
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Delete Preset Confirmation Dialog -->
+<AlertDialog.Root bind:open={isDeletePresetDialogOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Delete Preset</AlertDialog.Title>
+      <AlertDialog.Description>
+        Are you sure you want to delete this preset? This action cannot be
+        undone.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel
+        onclick={() => {
+          isDeletePresetDialogOpen = false;
+          deletingPresetId = null;
+        }}
+      >
+        Cancel
+      </AlertDialog.Cancel>
+      <AlertDialog.Action
+        onclick={confirmDeletePreset}
         class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
       >
         Delete

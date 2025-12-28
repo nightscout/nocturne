@@ -151,10 +151,115 @@ export const getChartStateData = query(stateDataSchema, async ({ startTime, endT
 			color: getSystemEventColor(event.eventType ?? SystemEventType.Info),
 		}));
 
+		// ===== MOCK TEST DATA - REMOVE AFTER TESTING =====
+		const now = Date.now();
+		const hour = 60 * 60 * 1000;
+
+		// Add one of each pump mode state for testing
+		const mockPumpModes: StateSpanChartData[] = [
+			{
+				id: 'mock-automatic',
+				category: StateSpanCategory.PumpMode,
+				state: 'Automatic',
+				startTime: new Date(now - 23 * hour),
+				endTime: new Date(now - 20 * hour),
+				color: getPumpModeColor('Automatic'),
+			},
+			{
+				id: 'mock-boost',
+				category: StateSpanCategory.PumpMode,
+				state: 'Boost',
+				startTime: new Date(now - 20 * hour),
+				endTime: new Date(now - 18 * hour),
+				color: getPumpModeColor('Boost'),
+			},
+			{
+				id: 'mock-sleep',
+				category: StateSpanCategory.PumpMode,
+				state: 'Sleep',
+				startTime: new Date(now - 18 * hour),
+				endTime: new Date(now - 10 * hour),
+				color: getPumpModeColor('Sleep'),
+			},
+			{
+				id: 'mock-exercise',
+				category: StateSpanCategory.PumpMode,
+				state: 'Exercise',
+				startTime: new Date(now - 10 * hour),
+				endTime: new Date(now - 8 * hour),
+				color: getPumpModeColor('Exercise'),
+			},
+			{
+				id: 'mock-manual',
+				category: StateSpanCategory.PumpMode,
+				state: 'Manual',
+				startTime: new Date(now - 8 * hour),
+				endTime: new Date(now - 6 * hour),
+				color: getPumpModeColor('Manual'),
+			},
+			{
+				id: 'mock-suspended',
+				category: StateSpanCategory.PumpMode,
+				state: 'Suspended',
+				startTime: new Date(now - 6 * hour),
+				endTime: new Date(now - 5 * hour),
+				color: getPumpModeColor('Suspended'),
+			},
+			{
+				id: 'mock-automatic-2',
+				category: StateSpanCategory.PumpMode,
+				state: 'Automatic',
+				startTime: new Date(now - 5 * hour),
+				endTime: null, // Currently active
+				color: getPumpModeColor('Automatic'),
+			},
+		];
+
+		// Add one of each system event type for testing
+		const mockSystemEvents: SystemEventChartData[] = [
+			{
+				id: 'mock-alarm',
+				eventType: SystemEventType.Alarm,
+				category: SystemEventCategory.Pump,
+				time: new Date(now - 4 * hour),
+				code: 'A33',
+				description: 'Occlusion detected',
+				color: getSystemEventColor(SystemEventType.Alarm),
+			},
+			{
+				id: 'mock-hazard',
+				eventType: SystemEventType.Hazard,
+				category: SystemEventCategory.Cgm,
+				time: new Date(now - 3 * hour),
+				code: 'H12',
+				description: 'Sensor signal loss',
+				color: getSystemEventColor(SystemEventType.Hazard),
+			},
+			{
+				id: 'mock-warning',
+				eventType: SystemEventType.Warning,
+				category: SystemEventCategory.Pump,
+				time: new Date(now - 2 * hour),
+				code: 'W05',
+				description: 'Low reservoir',
+				color: getSystemEventColor(SystemEventType.Warning),
+			},
+			{
+				id: 'mock-info',
+				eventType: SystemEventType.Info,
+				category: SystemEventCategory.Pump,
+				time: new Date(now - 1 * hour),
+				code: 'I01',
+				description: 'Bolus delivered',
+				color: getSystemEventColor(SystemEventType.Info),
+			},
+		];
+		// ===== END MOCK TEST DATA =====
+
 		return {
-			pumpModeSpans: processedPumpModes,
+			pumpModeSpans: [...processedPumpModes, ...mockPumpModes],
 			connectivitySpans: processedConnectivity,
-			systemEvents: processedEvents,
+			systemEvents: [...processedEvents, ...mockSystemEvents],
 		} satisfies ChartStateData;
 	} catch (err) {
 		console.error('Error loading state data:', err);

@@ -14,7 +14,6 @@ namespace Nocturne.API.Controllers.V4;
 /// Controller for flexible tracker management (consumables, appointments, reminders)
 /// </summary>
 [ApiController]
-[Authorize]
 [Route("api/v4/trackers")]
 [Tags("V4 Trackers")]
 public class TrackersController : ControllerBase
@@ -41,6 +40,7 @@ public class TrackersController : ControllerBase
     /// Seed default tracker definitions for the current user
     /// </summary>
     [HttpPost("seed")]
+    [Authorize]
     public async Task<ActionResult> SeedDefaults()
     {
         var userId = HttpContext.GetSubjectIdString()!;
@@ -48,33 +48,77 @@ public class TrackersController : ControllerBase
         return Ok(new { message = "Default definitions seeded successfully" });
     }
 
+    #region Helpers
+
+    /// <summary>
+    /// Check if current user can view a tracker based on visibility settings
+    /// </summary>
+    private bool CanViewTracker(TrackerDefinitionEntity tracker)
+    {
+        // Admins can see everything
+        if (HttpContext.IsAdmin())
+            return true;
+
+        // Public trackers visible to everyone
+        if (tracker.Visibility == TrackerVisibility.Public)
+            return true;
+
+        // Private trackers only visible to owner
+        var currentUserId = HttpContext.GetSubjectIdString();
+        if (tracker.Visibility == TrackerVisibility.Private && tracker.UserId == currentUserId)
+            return true;
+
+        // TODO: RoleRestricted visibility check
+        return false;
+    }
+
+    #endregion
+
     #region Definitions
 
     /// <summary>
-    /// Get all tracker definitions for the current user
+    /// Get all tracker definitions. Returns public trackers for unauthenticated users,
+    /// or all visible trackers for authenticated users.
     /// </summary>
     [HttpGet("definitions")]
+    [AllowAnonymous]
     public async Task<ActionResult<TrackerDefinitionDto[]>> GetDefinitions(
         [FromQuery] TrackerCategory? category = null
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
+        var userId = HttpContext.GetSubjectIdString();
+        var isAuthenticated = HttpContext.IsAuthenticated();
 
-        var definitions = category.HasValue
-            ? await _repository.GetDefinitionsByCategoryAsync(
-                userId,
-                category.Value,
-                HttpContext.RequestAborted
-            )
-            : await _repository.GetDefinitionsForUserAsync(userId, HttpContext.RequestAborted);
+        List<TrackerDefinitionEntity> definitions;
 
-        return Ok(definitions.Select(TrackerDefinitionDto.FromEntity).ToArray());
+        if (isAuthenticated && userId != null)
+        {
+            // Authenticated: get user's trackers
+            definitions = category.HasValue
+                ? await _repository.GetDefinitionsByCategoryAsync(
+                    userId,
+                    category.Value,
+                    HttpContext.RequestAborted
+                )
+                : await _repository.GetDefinitionsForUserAsync(userId, HttpContext.RequestAborted);
+        }
+        else
+        {
+            // Unauthenticated: get all definitions and filter to public only
+            definitions = await _repository.GetAllDefinitionsAsync(HttpContext.RequestAborted);
+        }
+
+        // Filter by visibility
+        var visible = definitions.Where(CanViewTracker).ToArray();
+
+        return Ok(visible.Select(TrackerDefinitionDto.FromEntity).ToArray());
     }
 
     /// <summary>
     /// Get a specific tracker definition
     /// </summary>
     [HttpGet("definitions/{id:guid}")]
+    [AllowAnonymous]
     public async Task<ActionResult<TrackerDefinitionDto>> GetDefinition(Guid id)
     {
         var definition = await _repository.GetDefinitionByIdAsync(id, HttpContext.RequestAborted);
@@ -82,8 +126,7 @@ public class TrackersController : ControllerBase
         if (definition == null)
             return NotFound();
 
-        var userId = HttpContext.GetSubjectIdString()!;
-        if (definition.UserId != userId && !HttpContext.IsAdmin())
+        if (!CanViewTracker(definition))
             return Forbid();
 
         return Ok(TrackerDefinitionDto.FromEntity(definition));
@@ -93,6 +136,7 @@ public class TrackersController : ControllerBase
     /// Create a new tracker definition
     /// </summary>
     [HttpPost("definitions")]
+    [Authorize]
     public async Task<ActionResult<TrackerDefinitionDto>> CreateDefinition(
         [FromBody] CreateTrackerDefinitionRequest request
     )
@@ -111,6 +155,7 @@ public class TrackersController : ControllerBase
             LifespanHours = request.LifespanHours,
             IsFavorite = request.IsFavorite,
             DashboardVisibility = request.DashboardVisibility,
+            Visibility = request.Visibility,
             StartEventType = request.StartEventType,
             CompletionEventType = request.CompletionEventType,
         };
@@ -157,6 +202,7 @@ public class TrackersController : ControllerBase
     /// Update a tracker definition
     /// </summary>
     [HttpPut("definitions/{id:guid}")]
+    [Authorize]
     public async Task<ActionResult<TrackerDefinitionDto>> UpdateDefinition(
         Guid id,
         [FromBody] UpdateTrackerDefinitionRequest request
@@ -181,6 +227,7 @@ public class TrackersController : ControllerBase
         existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
         existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
         existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
+        existing.Visibility = request.Visibility ?? existing.Visibility;
         existing.StartEventType = request.StartEventType ?? existing.StartEventType;
         existing.CompletionEventType = request.CompletionEventType ?? existing.CompletionEventType;
 
@@ -218,6 +265,7 @@ public class TrackersController : ControllerBase
     /// Delete a tracker definition
     /// </summary>
     [HttpDelete("definitions/{id:guid}")]
+    [Authorize]
     public async Task<ActionResult> DeleteDefinition(Guid id)
     {
         var existing = await _repository.GetDefinitionByIdAsync(id, HttpContext.RequestAborted);
@@ -243,6 +291,7 @@ public class TrackersController : ControllerBase
     /// Get active tracker instances
     /// </summary>
     [HttpGet("instances")]
+    [Authorize]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetActiveInstances()
     {
         var userId = HttpContext.GetSubjectIdString()!;
@@ -255,6 +304,7 @@ public class TrackersController : ControllerBase
     /// Get completed tracker instances (history)
     /// </summary>
     [HttpGet("instances/history")]
+    [Authorize]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetInstanceHistory(
         [FromQuery] int limit = 100
     )
@@ -273,6 +323,7 @@ public class TrackersController : ControllerBase
     /// Get upcoming tracker expirations for calendar
     /// </summary>
     [HttpGet("instances/upcoming")]
+    [Authorize]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetUpcomingInstances(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null
@@ -296,6 +347,7 @@ public class TrackersController : ControllerBase
     /// Start a new tracker instance
     /// </summary>
     [HttpPost("instances")]
+    [Authorize]
     public async Task<ActionResult<TrackerInstanceDto>> StartInstance(
         [FromBody] StartTrackerInstanceRequest request
     )
@@ -342,6 +394,7 @@ public class TrackersController : ControllerBase
     /// Complete a tracker instance
     /// </summary>
     [HttpPut("instances/{id:guid}/complete")]
+    [Authorize]
     public async Task<ActionResult<TrackerInstanceDto>> CompleteInstance(
         Guid id,
         [FromBody] CompleteTrackerInstanceRequest request
@@ -382,6 +435,7 @@ public class TrackersController : ControllerBase
     /// Acknowledge/snooze a tracker notification
     /// </summary>
     [HttpPost("instances/{id:guid}/ack")]
+    [Authorize]
     public async Task<ActionResult> AckInstance(Guid id, [FromBody] AckTrackerRequest request)
     {
         var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
@@ -411,6 +465,7 @@ public class TrackersController : ControllerBase
     /// Delete a tracker instance
     /// </summary>
     [HttpDelete("instances/{id:guid}")]
+    [Authorize]
     public async Task<ActionResult> DeleteInstance(Guid id)
     {
         var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
@@ -439,6 +494,7 @@ public class TrackersController : ControllerBase
     /// Get all presets for the current user
     /// </summary>
     [HttpGet("presets")]
+    [Authorize]
     public async Task<ActionResult<TrackerPresetDto[]>> GetPresets()
     {
         var userId = HttpContext.GetSubjectIdString()!;
@@ -451,6 +507,7 @@ public class TrackersController : ControllerBase
     /// Create a new preset
     /// </summary>
     [HttpPost("presets")]
+    [Authorize]
     public async Task<ActionResult<TrackerPresetDto>> CreatePreset(
         [FromBody] CreateTrackerPresetRequest request
     )
@@ -487,6 +544,7 @@ public class TrackersController : ControllerBase
     /// Apply a preset (starts a new instance)
     /// </summary>
     [HttpPost("presets/{id:guid}/apply")]
+    [Authorize]
     public async Task<ActionResult<TrackerInstanceDto>> ApplyPreset(
         Guid id,
         [FromBody] ApplyPresetRequest? request = null
@@ -513,6 +571,7 @@ public class TrackersController : ControllerBase
     /// Delete a preset
     /// </summary>
     [HttpDelete("presets/{id:guid}")]
+    [Authorize]
     public async Task<ActionResult> DeletePreset(Guid id)
     {
         var existing = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);
@@ -591,6 +650,11 @@ public class TrackerDefinitionDto
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
+    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// </summary>
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+
+    /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
     /// </summary>
     public string? StartEventType { get; set; }
@@ -621,6 +685,7 @@ public class TrackerDefinitionDto
                 .ToList() ?? [],
             IsFavorite = entity.IsFavorite,
             DashboardVisibility = entity.DashboardVisibility,
+            Visibility = entity.Visibility,
             StartEventType = entity.StartEventType,
             CompletionEventType = entity.CompletionEventType,
             CreatedAt = entity.CreatedAt,
@@ -711,6 +776,10 @@ public class CreateTrackerDefinitionRequest
     /// </summary>
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
     /// <summary>
+    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// </summary>
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+    /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
     /// </summary>
     public string? StartEventType { get; set; }
@@ -736,6 +805,10 @@ public class UpdateTrackerDefinitionRequest
     /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
     /// </summary>
     public DashboardVisibility? DashboardVisibility { get; set; }
+    /// <summary>
+    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// </summary>
+    public TrackerVisibility? Visibility { get; set; }
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
     /// </summary>

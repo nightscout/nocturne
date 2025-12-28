@@ -21,7 +21,7 @@ public class TrackerRepository
     /// <summary>
     /// Get all tracker definitions for a user
     /// </summary>
-    public virtual async Task<TrackerDefinitionEntity[]> GetDefinitionsForUserAsync(
+    public virtual async Task<List<TrackerDefinitionEntity>> GetDefinitionsForUserAsync(
         string userId,
         CancellationToken cancellationToken = default
     )
@@ -31,13 +31,27 @@ public class TrackerRepository
             .Include(d => d.NotificationThresholds)
             .Where(d => d.UserId == userId)
             .OrderBy(d => d.Name)
-            .ToArrayAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Get all tracker definitions (for anonymous/public access filtering)
+    /// </summary>
+    public virtual async Task<List<TrackerDefinitionEntity>> GetAllDefinitionsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await _context
+            .TrackerDefinitions
+            .Include(d => d.NotificationThresholds)
+            .OrderBy(d => d.Name)
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>
     /// Get tracker definitions by category
     /// </summary>
-    public virtual async Task<TrackerDefinitionEntity[]> GetDefinitionsByCategoryAsync(
+    public virtual async Task<List<TrackerDefinitionEntity>> GetDefinitionsByCategoryAsync(
         string userId,
         TrackerCategory category,
         CancellationToken cancellationToken = default
@@ -48,7 +62,7 @@ public class TrackerRepository
             .Include(d => d.NotificationThresholds)
             .Where(d => d.UserId == userId && d.Category == category)
             .OrderBy(d => d.Name)
-            .ToArrayAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>
