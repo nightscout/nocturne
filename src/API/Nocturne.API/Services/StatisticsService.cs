@@ -1974,4 +1974,203 @@ public class StatisticsService : IStatisticsService
     }
 
     #endregion
+
+    #region Site Change Analysis
+
+    /// <summary>
+    /// Analyze glucose patterns around site changes to identify impact of site age on control
+    /// </summary>
+    /// <param name="entries">Glucose entries</param>
+    /// <param name="treatments">Treatments including site changes</param>
+    /// <param name="hoursBeforeChange">Hours before site change to analyze (default: 12)</param>
+    /// <param name="hoursAfterChange">Hours after site change to analyze (default: 24)</param>
+    /// <param name="bucketSizeMinutes">Time bucket size for averaging (default: 30)</param>
+    /// <returns>Site change impact analysis with averaged glucose patterns</returns>
+    public SiteChangeImpactAnalysis CalculateSiteChangeImpact(
+        IEnumerable<Entry> entries,
+        IEnumerable<Treatment> treatments,
+        int hoursBeforeChange = 12,
+        int hoursAfterChange = 24,
+        int bucketSizeMinutes = 30
+    )
+    {
+        var result = new SiteChangeImpactAnalysis
+        {
+            HoursBeforeChange = hoursBeforeChange,
+            HoursAfterChange = hoursAfterChange,
+            BucketSizeMinutes = bucketSizeMinutes,
+        };
+
+        // Filter for site changes and pod changes
+        var siteChanges = treatments
+            .Where(t =>
+            {
+                var eventType = t.EventType?.ToLower() ?? "";
+                return eventType.Contains("site change")
+                       || eventType.Contains("sitechange")
+                       || eventType.Contains("pod change")
+                       || eventType.Contains("podchange")
+                       || t.EventType == TreatmentEventType.SiteChange.ToString()
+                       || t.EventType == TreatmentEventType.PodChange.ToString();
+            })
+            .OrderBy(t => t.Date ?? t.Mills)
+            .ToList();
+
+        result.SiteChangeCount = siteChanges.Count;
+
+        if (siteChanges.Count < 2)
+        {
+            result.HasSufficientData = false;
+            return result;
+        }
+
+        // Convert entries to a list with timestamps for efficient lookup
+        var entriesList = entries
+            .Select(e => new
+            {
+                Entry = e,
+                Mills = e.Mills > 0
+                    ? e.Mills
+                    : (e.Date?.Ticks / TimeSpan.TicksPerMillisecond ?? 0),
+                Glucose = e.Sgv ?? (e.Mgdl > 0 ? e.Mgdl : 0)
+            })
+            .Where(e => e.Glucose > 0 && e.Glucose < 600) // Filter invalid readings
+            .OrderBy(e => e.Mills)
+            .ToList();
+
+        if (entriesList.Count < 100)
+        {
+            result.HasSufficientData = false;
+            return result;
+        }
+
+        // Calculate time buckets
+        var minutesBefore = hoursBeforeChange * 60;
+        var minutesAfter = hoursAfterChange * 60;
+        var totalBuckets = (minutesBefore + minutesAfter) / bucketSizeMinutes;
+
+        // Initialize bucket data structure
+        var buckets = new Dictionary<int, List<double>>();
+        for (int i = 0; i < totalBuckets; i++)
+        {
+            var minutesFromChange = (i * bucketSizeMinutes) - minutesBefore;
+            buckets[minutesFromChange] = new List<double>();
+        }
+
+        // For each site change, collect glucose readings into corresponding buckets
+        foreach (var siteChange in siteChanges)
+        {
+            var changeTime = siteChange.Date ?? siteChange.Mills;
+            if (changeTime == 0) continue;
+
+            // Find glucose readings in the window around this site change
+            var windowStart = changeTime - (minutesBefore * 60 * 1000); // Convert minutes to milliseconds
+            var windowEnd = changeTime + (minutesAfter * 60 * 1000);
+
+            var windowEntries = entriesList
+                .Where(e => e.Mills >= windowStart && e.Mills <= windowEnd)
+                .ToList();
+
+            foreach (var entry in windowEntries)
+            {
+                var minutesFromChange = (entry.Mills - changeTime) / (60.0 * 1000.0);
+
+                // Find the appropriate bucket
+                var bucketMinutes = ((int)Math.Floor(minutesFromChange / bucketSizeMinutes)) * bucketSizeMinutes;
+
+                // Clamp to valid range
+                if (bucketMinutes < -minutesBefore) bucketMinutes = -minutesBefore;
+                if (bucketMinutes >= minutesAfter) bucketMinutes = minutesAfter - bucketSizeMinutes;
+
+                if (buckets.ContainsKey(bucketMinutes))
+                {
+                    buckets[bucketMinutes].Add(entry.Glucose);
+                }
+            }
+        }
+
+        // Calculate statistics for each bucket
+        var dataPoints = new List<SiteChangeImpactDataPoint>();
+        var beforeValues = new List<double>();
+        var afterValues = new List<double>();
+
+        foreach (var kvp in buckets.OrderBy(b => b.Key))
+        {
+            var minutesFromChange = kvp.Key;
+            var values = kvp.Value;
+
+            if (values.Count == 0) continue;
+
+            var sorted = values.OrderBy(v => v).ToList();
+            var mean = values.Average();
+            var variance = values.Sum(v => Math.Pow(v - mean, 2)) / values.Count;
+            var stdDev = Math.Sqrt(variance);
+
+            dataPoints.Add(new SiteChangeImpactDataPoint
+            {
+                MinutesFromChange = minutesFromChange,
+                AverageGlucose = Math.Round(mean, 1),
+                MedianGlucose = Math.Round(CalculatePercentile(sorted, 50), 1),
+                StdDev = Math.Round(stdDev, 1),
+                Count = values.Count,
+                Percentile10 = Math.Round(CalculatePercentile(sorted, 10), 1),
+                Percentile25 = Math.Round(CalculatePercentile(sorted, 25), 1),
+                Percentile75 = Math.Round(CalculatePercentile(sorted, 75), 1),
+                Percentile90 = Math.Round(CalculatePercentile(sorted, 90), 1),
+            });
+
+            // Collect values for before/after summary
+            if (minutesFromChange < 0)
+            {
+                beforeValues.AddRange(values);
+            }
+            else
+            {
+                afterValues.AddRange(values);
+            }
+        }
+
+        result.DataPoints = dataPoints;
+        result.HasSufficientData = dataPoints.Count >= 10 && beforeValues.Count >= 50 && afterValues.Count >= 50;
+
+        if (!result.HasSufficientData)
+        {
+            // Insufficient data flag already set
+        }
+
+        // Calculate summary statistics
+        if (beforeValues.Count > 0 && afterValues.Count > 0)
+        {
+            var avgBefore = beforeValues.Average();
+            var avgAfter = afterValues.Average();
+
+            // Calculate time in range
+            var tirBefore = (double)beforeValues.Count(v => v >= 70 && v <= 180) / beforeValues.Count * 100;
+            var tirAfter = (double)afterValues.Count(v => v >= 70 && v <= 180) / afterValues.Count * 100;
+
+            // Calculate CV (coefficient of variation)
+            var stdDevBefore = Math.Sqrt(beforeValues.Sum(v => Math.Pow(v - avgBefore, 2)) / beforeValues.Count);
+            var stdDevAfter = Math.Sqrt(afterValues.Sum(v => Math.Pow(v - avgAfter, 2)) / afterValues.Count);
+            var cvBefore = avgBefore > 0 ? (stdDevBefore / avgBefore) * 100 : 0;
+            var cvAfter = avgAfter > 0 ? (stdDevAfter / avgAfter) * 100 : 0;
+
+            result.Summary = new SiteChangeImpactSummary
+            {
+                AvgGlucoseBeforeChange = Math.Round(avgBefore, 1),
+                AvgGlucoseAfterChange = Math.Round(avgAfter, 1),
+                PercentImprovement = avgBefore > 0
+                    ? Math.Round((avgBefore - avgAfter) / avgBefore * 100, 1)
+                    : 0,
+                TimeInRangeBeforeChange = Math.Round(tirBefore, 1),
+                TimeInRangeAfterChange = Math.Round(tirAfter, 1),
+                CvBeforeChange = Math.Round(cvBefore, 1),
+                CvAfterChange = Math.Round(cvAfter, 1),
+            };
+        }
+
+        return result;
+    }
+
+    #endregion
 }
+

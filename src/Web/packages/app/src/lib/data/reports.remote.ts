@@ -237,3 +237,85 @@ export const getReportsData = query(
 		};
 	}
 );
+
+/**
+ * Input schema for site change impact analysis
+ */
+const SiteChangeImpactSchema = z.object({
+	days: z.number().optional(),
+	from: z.string().optional(),
+	to: z.string().optional(),
+	hoursBeforeChange: z.number().optional().default(12),
+	hoursAfterChange: z.number().optional().default(24),
+	bucketSizeMinutes: z.number().optional().default(30),
+});
+
+export type SiteChangeImpactInput = z.infer<typeof SiteChangeImpactSchema>;
+
+/**
+ * Get site change impact analysis
+ * Analyzes glucose patterns around pump site changes
+ */
+export const getSiteChangeImpact = query(
+	SiteChangeImpactSchema.optional(),
+	async (input) => {
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
+		const { startDate, endDate } = calculateDateRange(input);
+
+		const entriesQuery = JSON.stringify({
+			date: {
+				$gte: startDate.toISOString(),
+				$lte: endDate.toISOString(),
+			},
+		});
+		const treatmentsQuery = JSON.stringify({
+			created_at: {
+				$gte: startDate.toISOString(),
+				$lte: endDate.toISOString(),
+			},
+		});
+
+		// Fetch entries
+		const entries = await apiClient.entries.getEntries2(entriesQuery);
+
+		// Paginate treatments to get all site changes
+		const pageSize = 1000;
+		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments2>> = [];
+		let offset = 0;
+		let hasMore = true;
+
+		while (hasMore) {
+			const batch = await apiClient.treatments.getTreatments2(treatmentsQuery, pageSize, offset);
+			allTreatments = allTreatments.concat(batch);
+
+			if (batch.length < pageSize) {
+				hasMore = false;
+			} else {
+				offset += pageSize;
+			}
+
+			if (offset >= 50000) {
+				console.warn('Treatment fetch reached safety limit of 50,000 records');
+				hasMore = false;
+			}
+		}
+
+		// Call the site change impact analysis endpoint
+		const analysis = await apiClient.statistics.calculateSiteChangeImpact({
+			entries,
+			treatments: allTreatments,
+			hoursBeforeChange: input?.hoursBeforeChange ?? 12,
+			hoursAfterChange: input?.hoursAfterChange ?? 24,
+			bucketSizeMinutes: input?.bucketSizeMinutes ?? 30,
+		});
+
+		return {
+			analysis,
+			dateRange: {
+				from: startDate.toISOString(),
+				to: endDate.toISOString(),
+			},
+		};
+	}
+);

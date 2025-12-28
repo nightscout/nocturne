@@ -2288,6 +2288,40 @@
         }
       }
     },
+    "/api/v1/Statistics/site-change-impact": {
+      "post": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Analyze glucose patterns around site changes to identify impact of site age on control",
+        "operationId": "Statistics_CalculateSiteChangeImpact",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Request containing entries, treatments, and analysis parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteChangeImpactRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "Site change impact analysis with averaged glucose patterns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteChangeImpactAnalysis"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Versions": {
       "get": {
         "tags": [
@@ -5325,6 +5359,52 @@
         }
       }
     },
+    "/api/v4/state-spans/temp-basals": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get temp basal state spans",
+        "operationId": "StateSpans_GetTempBasals",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/state-spans/{id}": {
       "get": {
         "tags": [
@@ -5748,7 +5828,7 @@
         "tags": [
           "V4 Trackers"
         ],
-        "summary": "Get all tracker definitions for the current user",
+        "summary": "Get all tracker definitions. Returns public trackers for unauthenticated users,\nor all visible trackers for authenticated users.",
         "operationId": "Trackers_GetDefinitions",
         "parameters": [
           {
@@ -15844,6 +15924,152 @@
           }
         }
       },
+      "SiteChangeImpactAnalysis": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "siteChangeCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dataPoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteChangeImpactDataPoint"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SiteChangeImpactSummary"
+          },
+          "hoursBeforeChange": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hoursAfterChange": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bucketSizeMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hasSufficientData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SiteChangeImpactDataPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "minutesFromChange": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averageGlucose": {
+            "type": "number",
+            "format": "double"
+          },
+          "medianGlucose": {
+            "type": "number",
+            "format": "double"
+          },
+          "stdDev": {
+            "type": "number",
+            "format": "double"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "percentile10": {
+            "type": "number",
+            "format": "double"
+          },
+          "percentile25": {
+            "type": "number",
+            "format": "double"
+          },
+          "percentile75": {
+            "type": "number",
+            "format": "double"
+          },
+          "percentile90": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "SiteChangeImpactSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "avgGlucoseBeforeChange": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgGlucoseAfterChange": {
+            "type": "number",
+            "format": "double"
+          },
+          "percentImprovement": {
+            "type": "number",
+            "format": "double"
+          },
+          "timeInRangeBeforeChange": {
+            "type": "number",
+            "format": "double"
+          },
+          "timeInRangeAfterChange": {
+            "type": "number",
+            "format": "double"
+          },
+          "cvBeforeChange": {
+            "type": "number",
+            "format": "double"
+          },
+          "cvAfterChange": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "SiteChangeImpactRequest": {
+        "type": "object",
+        "description": "Request model for site change impact analysis",
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "type": "array",
+            "description": "Collection of glucose entries",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            }
+          },
+          "treatments": {
+            "type": "array",
+            "description": "Collection of treatments (must include site changes)",
+            "items": {
+              "$ref": "#/components/schemas/Treatment"
+            }
+          },
+          "hoursBeforeChange": {
+            "type": "integer",
+            "description": "Hours before site change to analyze (default: 12)",
+            "format": "int32"
+          },
+          "hoursAfterChange": {
+            "type": "integer",
+            "description": "Hours after site change to analyze (default: 24)",
+            "format": "int32"
+          },
+          "bucketSizeMinutes": {
+            "type": "integer",
+            "description": "Time bucket size for averaging in minutes (default: 30)",
+            "format": "int32"
+          }
+        }
+      },
       "VersionsResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -16382,6 +16608,27 @@
             "type": "number",
             "description": "Maximum COB in the series (for Y-axis scaling)",
             "format": "double"
+          },
+          "pumpModeSpans": {
+            "type": "array",
+            "description": "Pump mode state spans for chart background coloring",
+            "items": {
+              "$ref": "#/components/schemas/StateSpan"
+            }
+          },
+          "tempBasalSpans": {
+            "type": "array",
+            "description": "Temp basal state spans with rate and duration metadata",
+            "items": {
+              "$ref": "#/components/schemas/StateSpan"
+            }
+          },
+          "profileSpans": {
+            "type": "array",
+            "description": "Profile state spans showing active profile changes",
+            "items": {
+              "$ref": "#/components/schemas/StateSpan"
+            }
           }
         }
       },
@@ -16427,6 +16674,73 @@
             "description": "Whether this is a temporary basal rate"
           }
         }
+      },
+      "StateSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "StateSpanCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "TempBasal"
+        ],
+        "enum": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "TempBasal"
+        ]
       },
       "ProxyConfigurationDto": {
         "type": "object",
@@ -18745,71 +19059,6 @@
           }
         }
       },
-      "StateSpan": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "nullable": true
-          },
-          "category": {
-            "$ref": "#/components/schemas/StateSpanCategory"
-          },
-          "state": {
-            "type": "string",
-            "nullable": true
-          },
-          "startMills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "endMills": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
-          },
-          "source": {
-            "type": "string",
-            "nullable": true
-          },
-          "metadata": {
-            "type": "object",
-            "nullable": true,
-            "additionalProperties": {}
-          },
-          "originalId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          }
-        }
-      },
-      "StateSpanCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile"
-        ],
-        "enum": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile"
-        ]
-      },
       "CreateStateSpanRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -19169,6 +19418,14 @@
               }
             ]
           },
+          "visibility": {
+            "description": "Visibility level for this tracker (Public, Private, RoleRestricted)",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerVisibility"
+              }
+            ]
+          },
           "startEventType": {
             "type": "string",
             "description": "Event type to create when tracker is started (for Nightscout compatibility)",
@@ -19278,6 +19535,20 @@
           "Urgent"
         ]
       },
+      "TrackerVisibility": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Public",
+          "Private",
+          "RoleRestricted"
+        ],
+        "enum": [
+          "Public",
+          "Private",
+          "RoleRestricted"
+        ]
+      },
       "CreateTrackerDefinitionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -19331,6 +19602,14 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/DashboardVisibility"
+              }
+            ]
+          },
+          "visibility": {
+            "description": "Visibility level for this tracker (Public, Private, RoleRestricted)",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerVisibility"
               }
             ]
           },
@@ -19448,6 +19727,15 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/DashboardVisibility"
+              }
+            ]
+          },
+          "visibility": {
+            "description": "Visibility level for this tracker (Public, Private, RoleRestricted)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerVisibility"
               }
             ]
           },

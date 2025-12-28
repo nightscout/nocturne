@@ -1,8 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models;
 
 /// <summary>
 /// Visibility level for tracker definitions
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TrackerVisibility
 {
     /// <summary>

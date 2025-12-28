@@ -2961,6 +2961,49 @@ export class StatisticsClient {
         }
         return Promise.resolve<MultiPeriodStatistics>(null as any);
     }
+
+    /**
+     * Analyze glucose patterns around site changes to identify impact of site age on control
+     * @param request Request containing entries, treatments, and analysis parameters
+     * @return Site change impact analysis with averaged glucose patterns
+     */
+    calculateSiteChangeImpact(request: SiteChangeImpactRequest, signal?: AbortSignal): Promise<SiteChangeImpactAnalysis> {
+        let url_ = this.baseUrl + "/api/v1/Statistics/site-change-impact";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCalculateSiteChangeImpact(_response);
+        });
+    }
+
+    protected processCalculateSiteChangeImpact(response: Response): Promise<SiteChangeImpactAnalysis> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SiteChangeImpactAnalysis;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SiteChangeImpactAnalysis>(null as any);
+    }
 }
 
 export class VersionsClient {
@@ -6552,6 +6595,49 @@ export class StateSpansClient {
     }
 
     /**
+     * Get temp basal state spans
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getTempBasals(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/temp-basals?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTempBasals(_response);
+        });
+    }
+
+    protected processGetTempBasals(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
      * Get a specific state span by ID
      */
     getStateSpan(id: string, signal?: AbortSignal): Promise<StateSpan> {
@@ -7189,7 +7275,8 @@ export class TrackersClient {
     }
 
     /**
-     * Get all tracker definitions for the current user
+     * Get all tracker definitions. Returns public trackers for unauthenticated users,
+    or all visible trackers for authenticated users.
      * @param category (optional) 
      */
     getDefinitions(category?: TrackerCategory | null | undefined, signal?: AbortSignal): Promise<TrackerDefinitionDto[]> {
@@ -15618,6 +15705,52 @@ export interface PeriodStatistics {
     treatmentCount?: number;
 }
 
+export interface SiteChangeImpactAnalysis {
+    siteChangeCount?: number;
+    dataPoints?: SiteChangeImpactDataPoint[];
+    summary?: SiteChangeImpactSummary;
+    hoursBeforeChange?: number;
+    hoursAfterChange?: number;
+    bucketSizeMinutes?: number;
+    hasSufficientData?: boolean;
+}
+
+export interface SiteChangeImpactDataPoint {
+    minutesFromChange?: number;
+    averageGlucose?: number;
+    medianGlucose?: number;
+    stdDev?: number;
+    count?: number;
+    percentile10?: number;
+    percentile25?: number;
+    percentile75?: number;
+    percentile90?: number;
+}
+
+export interface SiteChangeImpactSummary {
+    avgGlucoseBeforeChange?: number;
+    avgGlucoseAfterChange?: number;
+    percentImprovement?: number;
+    timeInRangeBeforeChange?: number;
+    timeInRangeAfterChange?: number;
+    cvBeforeChange?: number;
+    cvAfterChange?: number;
+}
+
+/** Request model for site change impact analysis */
+export interface SiteChangeImpactRequest {
+    /** Collection of glucose entries */
+    entries?: Entry[];
+    /** Collection of treatments (must include site changes) */
+    treatments?: Treatment[];
+    /** Hours before site change to analyze (default: 12) */
+    hoursBeforeChange?: number;
+    /** Hours after site change to analyze (default: 24) */
+    hoursAfterChange?: number;
+    /** Time bucket size for averaging in minutes (default: 30) */
+    bucketSizeMinutes?: number;
+}
+
 export interface VersionsResponse {
     versions?: string[];
 }
@@ -15764,6 +15897,12 @@ export interface DashboardChartData {
     maxIob?: number;
     /** Maximum COB in the series (for Y-axis scaling) */
     maxCob?: number;
+    /** Pump mode state spans for chart background coloring */
+    pumpModeSpans?: StateSpan[];
+    /** Temp basal state spans with rate and duration metadata */
+    tempBasalSpans?: StateSpan[];
+    /** Profile state spans showing active profile changes */
+    profileSpans?: StateSpan[];
 }
 
 /** Time series data point with timestamp and value */
@@ -15784,6 +15923,27 @@ export interface BasalPoint {
     scheduledRate?: number;
     /** Whether this is a temporary basal rate */
     isTemp?: boolean;
+}
+
+export interface StateSpan {
+    id?: string | undefined;
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    startMills?: number;
+    endMills?: number | undefined;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+}
+
+export enum StateSpanCategory {
+    PumpMode = "PumpMode",
+    PumpConnectivity = "PumpConnectivity",
+    Override = "Override",
+    Profile = "Profile",
+    TempBasal = "TempBasal",
 }
 
 /** Proxy configuration DTO */
@@ -16562,26 +16722,6 @@ export interface ConnectorSyncStatus {
     queriedAt?: Date;
 }
 
-export interface StateSpan {
-    id?: string | undefined;
-    category?: StateSpanCategory;
-    state?: string | undefined;
-    startMills?: number;
-    endMills?: number | undefined;
-    source?: string | undefined;
-    metadata?: { [key: string]: any; } | undefined;
-    originalId?: string | undefined;
-    createdAt?: Date | undefined;
-    updatedAt?: Date | undefined;
-}
-
-export enum StateSpanCategory {
-    PumpMode = "PumpMode",
-    PumpConnectivity = "PumpConnectivity",
-    Override = "Override",
-    Profile = "Profile",
-}
-
 export interface CreateStateSpanRequest {
     category?: StateSpanCategory;
     state?: string | undefined;
@@ -16688,6 +16828,8 @@ export interface TrackerDefinitionDto {
     isFavorite?: boolean;
     /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
     dashboardVisibility?: DashboardVisibility;
+    /** Visibility level for this tracker (Public, Private, RoleRestricted) */
+    visibility?: TrackerVisibility;
     /** Event type to create when tracker is started (for Nightscout compatibility) */
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
@@ -16728,6 +16870,12 @@ export enum DashboardVisibility {
     Urgent = "Urgent",
 }
 
+export enum TrackerVisibility {
+    Public = "Public",
+    Private = "Private",
+    RoleRestricted = "RoleRestricted",
+}
+
 export interface CreateTrackerDefinitionRequest {
     name: string;
     description?: string | undefined;
@@ -16740,6 +16888,8 @@ export interface CreateTrackerDefinitionRequest {
     isFavorite?: boolean;
     /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
     dashboardVisibility?: DashboardVisibility;
+    /** Visibility level for this tracker (Public, Private, RoleRestricted) */
+    visibility?: TrackerVisibility;
     /** Event type to create when tracker is started (for Nightscout compatibility) */
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
@@ -16772,6 +16922,8 @@ export interface UpdateTrackerDefinitionRequest {
     isFavorite?: boolean | undefined;
     /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
     dashboardVisibility?: DashboardVisibility | undefined;
+    /** Visibility level for this tracker (Public, Private, RoleRestricted) */
+    visibility?: TrackerVisibility | undefined;
     /** Event type to create when tracker is started (for Nightscout compatibility) */
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */

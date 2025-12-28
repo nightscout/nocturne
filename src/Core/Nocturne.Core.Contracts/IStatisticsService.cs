@@ -119,4 +119,23 @@ public interface IStatisticsService
         IEnumerable<Treatment> treatments,
         ExtendedAnalysisConfig? config = null
     );
+
+    // Site Change Analysis
+
+    /// <summary>
+    /// Analyze glucose patterns around site changes to identify impact of site age on control
+    /// </summary>
+    /// <param name="entries">Glucose entries</param>
+    /// <param name="treatments">Treatments including site changes</param>
+    /// <param name="hoursBeforeChange">Hours before site change to analyze (default: 12)</param>
+    /// <param name="hoursAfterChange">Hours after site change to analyze (default: 24)</param>
+    /// <param name="bucketSizeMinutes">Time bucket size for averaging (default: 30)</param>
+    /// <returns>Site change impact analysis with averaged glucose patterns</returns>
+    SiteChangeImpactAnalysis CalculateSiteChangeImpact(
+        IEnumerable<Entry> entries,
+        IEnumerable<Treatment> treatments,
+        int hoursBeforeChange = 12,
+        int hoursAfterChange = 24,
+        int bucketSizeMinutes = 30
+    );
 }

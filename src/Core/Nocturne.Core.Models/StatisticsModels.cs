@@ -1637,3 +1637,114 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
     /// <summary>Treatment summary if treatment data is available</summary>
     public TreatmentSummary? TreatmentSummary { get; set; }
 }
+
+/// <summary>
+/// Data point for site change impact analysis
+/// Represents averaged glucose at a specific time offset from site change
+/// </summary>
+public class SiteChangeImpactDataPoint
+{
+    /// <summary>Minutes from site change (negative = before, positive = after)</summary>
+    [JsonPropertyName("minutesFromChange")]
+    public int MinutesFromChange { get; set; }
+
+    /// <summary>Average glucose at this time offset (mg/dL)</summary>
+    [JsonPropertyName("averageGlucose")]
+    public double AverageGlucose { get; set; }
+
+    /// <summary>Median glucose at this time offset (mg/dL)</summary>
+    [JsonPropertyName("medianGlucose")]
+    public double MedianGlucose { get; set; }
+
+    /// <summary>Standard deviation of glucose values</summary>
+    [JsonPropertyName("stdDev")]
+    public double StdDev { get; set; }
+
+    /// <summary>Number of readings contributing to this data point</summary>
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    /// <summary>10th percentile glucose value (mg/dL)</summary>
+    [JsonPropertyName("percentile10")]
+    public double Percentile10 { get; set; }
+
+    /// <summary>25th percentile glucose value (mg/dL)</summary>
+    [JsonPropertyName("percentile25")]
+    public double Percentile25 { get; set; }
+
+    /// <summary>75th percentile glucose value (mg/dL)</summary>
+    [JsonPropertyName("percentile75")]
+    public double Percentile75 { get; set; }
+
+    /// <summary>90th percentile glucose value (mg/dL)</summary>
+    [JsonPropertyName("percentile90")]
+    public double Percentile90 { get; set; }
+}
+
+/// <summary>
+/// Summary statistics for site change impact
+/// </summary>
+public class SiteChangeImpactSummary
+{
+    /// <summary>Average glucose before site change (mg/dL)</summary>
+    [JsonPropertyName("avgGlucoseBeforeChange")]
+    public double AvgGlucoseBeforeChange { get; set; }
+
+    /// <summary>Average glucose after site change (mg/dL)</summary>
+    [JsonPropertyName("avgGlucoseAfterChange")]
+    public double AvgGlucoseAfterChange { get; set; }
+
+    /// <summary>Percent improvement in glucose after site change</summary>
+    [JsonPropertyName("percentImprovement")]
+    public double PercentImprovement { get; set; }
+
+    /// <summary>Time in range before site change (%)</summary>
+    [JsonPropertyName("timeInRangeBeforeChange")]
+    public double TimeInRangeBeforeChange { get; set; }
+
+    /// <summary>Time in range after site change (%)</summary>
+    [JsonPropertyName("timeInRangeAfterChange")]
+    public double TimeInRangeAfterChange { get; set; }
+
+    /// <summary>Coefficient of variation before site change (%)</summary>
+    [JsonPropertyName("cvBeforeChange")]
+    public double CvBeforeChange { get; set; }
+
+    /// <summary>Coefficient of variation after site change (%)</summary>
+    [JsonPropertyName("cvAfterChange")]
+    public double CvAfterChange { get; set; }
+}
+
+/// <summary>
+/// Complete site change impact analysis result
+/// </summary>
+public class SiteChangeImpactAnalysis
+{
+    /// <summary>Number of site changes analyzed</summary>
+    [JsonPropertyName("siteChangeCount")]
+    public int SiteChangeCount { get; set; }
+
+    /// <summary>Time points with averaged glucose data</summary>
+    [JsonPropertyName("dataPoints")]
+    public List<SiteChangeImpactDataPoint> DataPoints { get; set; } = new();
+
+    /// <summary>Summary statistics comparing before vs after</summary>
+    [JsonPropertyName("summary")]
+    public SiteChangeImpactSummary Summary { get; set; } = new();
+
+    /// <summary>Hours analyzed before site change</summary>
+    [JsonPropertyName("hoursBeforeChange")]
+    public int HoursBeforeChange { get; set; }
+
+    /// <summary>Hours analyzed after site change</summary>
+    [JsonPropertyName("hoursAfterChange")]
+    public int HoursAfterChange { get; set; }
+
+    /// <summary>Bucket size in minutes for averaging</summary>
+    [JsonPropertyName("bucketSizeMinutes")]
+    public int BucketSizeMinutes { get; set; }
+
+    /// <summary>Whether sufficient data exists for meaningful analysis</summary>
+    [JsonPropertyName("hasSufficientData")]
+    public bool HasSufficientData { get; set; }
+}

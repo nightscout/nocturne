@@ -110,6 +110,7 @@
     getUnitLabel,
   } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
+  import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
 
   // Build date range input from URL parameters
   const dateRangeInput = $derived(useDateRange());
@@ -378,6 +379,17 @@
           href: "/reports/corrections",
           icon: Target,
           status: "coming-soon",
+          forClinic: true,
+        },
+        {
+          title: "Site Change Impact",
+          userDescription:
+            "See how your glucose control changes before and after pump site changes.",
+          clinicalDescription:
+            "Analyzes glucose patterns around infusion site changes to identify absorption degradation.",
+          href: "/reports/site-change-impact",
+          icon: SiteChangeIcon,
+          status: "available",
           forClinic: true,
         },
       ],

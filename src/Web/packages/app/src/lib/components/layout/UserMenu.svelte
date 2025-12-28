@@ -103,16 +103,16 @@
       {/if}
 
       <DropdownMenu.Group>
-        <DropdownMenu.Item onSelect={() => goto("/profile")}>
+        <DropdownMenu.Item onSelect={() => goto("/account")}>
           <User class="mr-2 h-4 w-4" />
-          <span>Profile</span>
+          <span>Account</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => goto("/settings")}>
           <Settings class="mr-2 h-4 w-4" />
           <span>Settings</span>
         </DropdownMenu.Item>
         {#if user.roles.includes("admin")}
-          <DropdownMenu.Item onSelect={() => goto("/admin")}>
+          <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
             <Shield class="mr-2 h-4 w-4" />
             <span>Admin</span>
           </DropdownMenu.Item>

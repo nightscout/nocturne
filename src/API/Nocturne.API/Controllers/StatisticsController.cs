@@ -626,6 +626,34 @@ public class StatisticsController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Analyze glucose patterns around site changes to identify impact of site age on control
+    /// </summary>
+    /// <param name="request">Request containing entries, treatments, and analysis parameters</param>
+    /// <returns>Site change impact analysis with averaged glucose patterns</returns>
+    [HttpPost("site-change-impact")]
+    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
+    public ActionResult<SiteChangeImpactAnalysis> CalculateSiteChangeImpact(
+        [FromBody] SiteChangeImpactRequest request
+    )
+    {
+        try
+        {
+            var result = _statisticsService.CalculateSiteChangeImpact(
+                request.Entries,
+                request.Treatments,
+                request.HoursBeforeChange,
+                request.HoursAfterChange,
+                request.BucketSizeMinutes
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 }
 
 /// <summary>
@@ -758,4 +786,35 @@ public class DataSufficiencyRequest
     /// Expected readings per day based on sensor type (default: 288 for 5-minute intervals)
     /// </summary>
     public int ExpectedReadingsPerDay { get; set; } = 288;
+}
+
+/// <summary>
+/// Request model for site change impact analysis
+/// </summary>
+public class SiteChangeImpactRequest
+{
+    /// <summary>
+    /// Collection of glucose entries
+    /// </summary>
+    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+
+    /// <summary>
+    /// Collection of treatments (must include site changes)
+    /// </summary>
+    public IEnumerable<Treatment> Treatments { get; set; } = Enumerable.Empty<Treatment>();
+
+    /// <summary>
+    /// Hours before site change to analyze (default: 12)
+    /// </summary>
+    public int HoursBeforeChange { get; set; } = 12;
+
+    /// <summary>
+    /// Hours after site change to analyze (default: 24)
+    /// </summary>
+    public int HoursAfterChange { get; set; } = 24;
+
+    /// <summary>
+    /// Time bucket size for averaging in minutes (default: 30)
+    /// </summary>
+    public int BucketSizeMinutes { get; set; } = 30;
 }
