@@ -1,12 +1,8 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
   import { Pencil, Trash2, Plus } from "lucide-svelte";
   import {
-    TreatmentFoodInputMode,
     type TreatmentFood,
     type TreatmentFoodBreakdown,
     type TreatmentFoodRequest,
@@ -15,31 +11,26 @@
     addTreatmentFood,
     deleteTreatmentFood,
     getTreatmentFoodBreakdown,
-    updateTreatmentFood,
   } from "$lib/data/treatment-foods.remote";
   import TreatmentFoodSelectorDialog from "./TreatmentFoodSelectorDialog.svelte";
+  import TreatmentFoodEntryEditDialog from "./TreatmentFoodEntryEditDialog.svelte";
+  import { CarbBreakdownBar } from "./index";
 
   interface Props {
     treatmentId?: string;
+    /** Total carbs from the treatment - shown so user knows what they're working toward */
+    totalCarbs?: number;
   }
 
-  let { treatmentId }: Props = $props();
+  let { treatmentId, totalCarbs = 0 }: Props = $props();
 
   let breakdown = $state<TreatmentFoodBreakdown | null>(null);
   let isLoading = $state(false);
   let loadError = $state<string | null>(null);
   let showAddFood = $state(false);
-  let showAddOther = $state(false);
   let showEdit = $state(false);
 
   let editEntry = $state<TreatmentFood | null>(null);
-  let editInputMode = $state<TreatmentFoodInputMode>(
-    TreatmentFoodInputMode.Portions
-  );
-  let editPortions = $state(1);
-  let editCarbs = $state<number | undefined>(undefined);
-  let editOffset = $state<number | undefined>(0);
-  let editNote = $state("");
 
   $effect(() => {
     if (!treatmentId) {
@@ -47,14 +38,6 @@
       return;
     }
     void loadBreakdown(treatmentId);
-  });
-
-  $effect(() => {
-    if (showAddOther) {
-      editCarbs = undefined;
-      editOffset = 0;
-      editNote = "";
-    }
   });
 
   async function loadBreakdown(id: string) {
@@ -81,80 +64,9 @@
     }
   }
 
-  async function handleAddOther() {
-    if (!treatmentId) return;
-    const request: TreatmentFoodRequest = {
-      foodId: undefined,
-      carbs: editCarbs,
-      timeOffsetMinutes: editOffset,
-      note: editNote.trim() || undefined,
-      inputMode: TreatmentFoodInputMode.Carbs,
-    };
-    try {
-      const updated = await addTreatmentFood({ treatmentId, request });
-      breakdown = updated;
-      showAddOther = false;
-      resetEditor();
-    } catch (err) {
-      console.error("Failed to add other entry:", err);
-    }
-  }
-
   function openEdit(entry: TreatmentFood) {
     editEntry = entry;
-    editInputMode = entry.foodId
-      ? TreatmentFoodInputMode.Portions
-      : TreatmentFoodInputMode.Carbs;
-    editPortions = entry.portions ?? 1;
-    editCarbs = entry.carbs ?? undefined;
-    editOffset = entry.timeOffsetMinutes ?? 0;
-    editNote = entry.note ?? "";
     showEdit = true;
-  }
-
-  function resetEditor() {
-    editEntry = null;
-    editPortions = 1;
-    editCarbs = undefined;
-    editOffset = 0;
-    editNote = "";
-    editInputMode = TreatmentFoodInputMode.Portions;
-    showEdit = false;
-  }
-
-  async function handleUpdateEntry() {
-    if (!treatmentId || !editEntry?.id) return;
-
-    const request: TreatmentFoodRequest = {
-      foodId: editEntry.foodId ?? undefined,
-      timeOffsetMinutes: editOffset,
-      note: editNote.trim() || undefined,
-      inputMode: editInputMode,
-    };
-
-    if (editEntry.foodId) {
-      if (editInputMode === TreatmentFoodInputMode.Portions) {
-        request.portions = editPortions;
-      } else {
-        request.carbs = editCarbs;
-      }
-    } else {
-      request.carbs = editCarbs;
-      request.inputMode = TreatmentFoodInputMode.Carbs;
-    }
-
-    try {
-      const updated = await updateTreatmentFood({
-        treatmentId,
-        entryId: editEntry.id,
-        request,
-      });
-
-      breakdown = updated;
-      resetEditor();
-    } catch (err) {
-      console.error("Failed to update food entry:", err);
-    }
   }
 
   async function handleDelete(entry: TreatmentFood) {
@@ -170,7 +82,21 @@
     }
   }
 
-  const isOtherEdit = $derived(editEntry && !editEntry.foodId);
+  async function handleEditSaved() {
+    if (treatmentId) {
+      await loadBreakdown(treatmentId);
+    }
+  }
+
+  // Remaining carbs available (excluding current entry being edited)
+  const remainingCarbs = $derived.by(() => {
+    if (!breakdown) return totalCarbs;
+    const otherAttributedCarbs =
+      breakdown.foods
+        ?.filter((f) => f.id !== editEntry?.id)
+        .reduce((sum, f) => sum + (f.carbs ?? 0), 0) ?? 0;
+    return Math.round((totalCarbs - otherAttributedCarbs) * 10) / 10;
+  });
 </script>
 
 <div class="rounded-lg border p-4 space-y-4">
@@ -181,20 +107,10 @@
         Add foods to match carbs when it helps. Partial attribution is fine.
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onclick={() => (showAddOther = true)}
-      >
-        Add Other
-      </Button>
-      <Button type="button" size="sm" onclick={() => (showAddFood = true)}>
-        <Plus class="mr-1 h-4 w-4" />
-        Add Food
-      </Button>
-    </div>
+    <Button type="button" size="sm" onclick={() => (showAddFood = true)}>
+      <Plus class="mr-1 h-4 w-4" />
+      Add Food
+    </Button>
   </div>
 
   {#if isLoading}
@@ -203,6 +119,21 @@
     <div class="text-sm text-destructive">{loadError}</div>
   {:else if breakdown}
     <div class="space-y-3">
+      <!-- Total carbs indicator -->
+      {#if totalCarbs > 0}
+        <div
+          class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
+        >
+          <span class="text-sm font-medium">Treatment Total</span>
+          <span class="text-lg font-bold tabular-nums">{totalCarbs}g</span>
+        </div>
+      {/if}
+
+      <!-- Carb breakdown bar -->
+      {#if totalCarbs > 0}
+        <CarbBreakdownBar {totalCarbs} foods={breakdown.foods ?? []} />
+      {/if}
+
       <div class="flex flex-wrap gap-2 text-xs">
         <Badge variant="secondary">
           Attributed {breakdown.attributedCarbs}g
@@ -266,158 +197,19 @@
   bind:open={showAddFood}
   onOpenChange={(value) => (showAddFood = value)}
   onSubmit={handleAddFood}
+  {totalCarbs}
+  unspecifiedCarbs={breakdown?.unspecifiedCarbs ?? totalCarbs}
 />
 
-<Dialog.Root
-  bind:open={showAddOther}
-  onOpenChange={(value) => (showAddOther = value)}
->
-  <Dialog.Content class="max-w-md">
-    <Dialog.Header>
-      <Dialog.Title>Add Other</Dialog.Title>
-      <Dialog.Description>
-        Log carbs without a food entry. Notes are optional.
-      </Dialog.Description>
-    </Dialog.Header>
-
-    <div class="space-y-4">
-      <div class="space-y-2">
-        <Label for="other-carbs">Carbs (g)</Label>
-        <Input
-          id="other-carbs"
-          type="number"
-          step="0.1"
-          min="0"
-          bind:value={editCarbs}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="other-offset">Time offset (min)</Label>
-        <Input
-          id="other-offset"
-          type="number"
-          step="1"
-          bind:value={editOffset}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="other-note">Note</Label>
-        <Input id="other-note" bind:value={editNote} />
-      </div>
-    </div>
-
-    <Dialog.Footer class="gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        onclick={() => (showAddOther = false)}
-      >
-        Cancel
-      </Button>
-      <Button type="button" onclick={handleAddOther}>Add Other</Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root
+<TreatmentFoodEntryEditDialog
   bind:open={showEdit}
-  onOpenChange={(value) => !value && resetEditor()}
->
-  <Dialog.Content class="max-w-md">
-    <Dialog.Header>
-      <Dialog.Title>Edit Food Entry</Dialog.Title>
-      <Dialog.Description>
-        Update portions or carbs. Values sync after saving.
-      </Dialog.Description>
-    </Dialog.Header>
-
-    <div class="space-y-4">
-      {#if editEntry}
-        <div class="rounded-md border p-3 text-sm">
-          <div class="font-medium">{editEntry.foodName ?? "Other"}</div>
-          {#if editEntry.foodId}
-            <div class="text-xs text-muted-foreground">
-              {editEntry.carbsPerPortion ?? "-"}g per portion
-            </div>
-          {/if}
-        </div>
-
-        {#if !isOtherEdit}
-          <div class="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={editInputMode === TreatmentFoodInputMode.Portions
-                ? "default"
-                : "outline"}
-              onclick={() => (editInputMode = TreatmentFoodInputMode.Portions)}
-            >
-              Portions
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={editInputMode === TreatmentFoodInputMode.Carbs
-                ? "default"
-                : "outline"}
-              onclick={() => (editInputMode = TreatmentFoodInputMode.Carbs)}
-            >
-              Carbs
-            </Button>
-          </div>
-        {/if}
-
-        <div class="grid gap-4 md:grid-cols-2">
-          {#if !isOtherEdit}
-            <div class="space-y-2">
-              <Label for="edit-portions">Portions</Label>
-              <Input
-                id="edit-portions"
-                type="number"
-                step="0.1"
-                min="0"
-                bind:value={editPortions}
-                disabled={editInputMode !== TreatmentFoodInputMode.Portions}
-              />
-            </div>
-          {/if}
-          <div class="space-y-2">
-            <Label for="edit-carbs">Carbs (g)</Label>
-            <Input
-              id="edit-carbs"
-              type="number"
-              step="0.1"
-              min="0"
-              bind:value={editCarbs}
-              disabled={!isOtherEdit &&
-                editInputMode !== TreatmentFoodInputMode.Carbs}
-            />
-          </div>
-        </div>
-
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <Label for="edit-offset">Time offset (min)</Label>
-            <Input
-              id="edit-offset"
-              type="number"
-              step="1"
-              bind:value={editOffset}
-            />
-          </div>
-          <div class="space-y-2">
-            <Label for="edit-note">Note</Label>
-            <Input id="edit-note" bind:value={editNote} />
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <Dialog.Footer class="gap-2">
-      <Button type="button" variant="outline" onclick={resetEditor}>
-        Cancel
-      </Button>
-      <Button type="button" onclick={handleUpdateEntry}>Save</Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+  onOpenChange={(value) => {
+    showEdit = value;
+    if (!value) editEntry = null;
+  }}
+  entry={editEntry}
+  {treatmentId}
+  {totalCarbs}
+  {remainingCarbs}
+  onSave={handleEditSaved}
+/>

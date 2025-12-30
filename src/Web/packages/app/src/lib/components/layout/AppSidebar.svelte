@@ -232,16 +232,16 @@
     <Sidebar.Trigger />
   </Sidebar.Header>
 
+  <!-- Glucose Widget (fixed, not scrollable) -->
+  <Sidebar.Group>
+    <Sidebar.GroupContent>
+      <SidebarGlucoseWidget />
+    </Sidebar.GroupContent>
+  </Sidebar.Group>
+
+  <Sidebar.Separator />
+
   <Sidebar.Content>
-    <!-- Glucose Widget -->
-    <Sidebar.Group>
-      <Sidebar.GroupContent>
-        <SidebarGlucoseWidget />
-      </Sidebar.GroupContent>
-    </Sidebar.Group>
-
-    <Sidebar.Separator />
-
     <!-- Navigation -->
     <Sidebar.Group>
       <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>

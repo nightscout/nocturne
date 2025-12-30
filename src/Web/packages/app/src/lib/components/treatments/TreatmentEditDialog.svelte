@@ -236,7 +236,7 @@
             <Input
               id="insulin"
               type="number"
-              step="0.1"
+              step="0.05"
               min="0"
               bind:value={formState.insulin}
               placeholder="0.0"
@@ -302,7 +302,10 @@
         </div>
 
         {#if treatment?._id}
-          <TreatmentFoodBreakdown treatmentId={treatment._id} />
+          <TreatmentFoodBreakdown
+            treatmentId={treatment._id}
+            totalCarbs={formState.carbs ?? 0}
+          />
         {/if}
 
         <!-- Profile -->

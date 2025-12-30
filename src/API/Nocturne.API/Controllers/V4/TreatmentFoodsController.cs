@@ -197,9 +197,11 @@ public class TreatmentFoodsController : ControllerBase
         var fromMills = new DateTimeOffset(fromDate).ToUnixTimeMilliseconds();
         var toMills = new DateTimeOffset(toDate).ToUnixTimeMilliseconds();
 
-        var query = _context.Treatments.AsNoTracking().Where(
-            t => t.Mills >= fromMills && t.Mills <= toMills && t.Carbs.HasValue && t.Carbs > 0
-        );
+        var query = _context
+            .Treatments.AsNoTracking()
+            .Where(t =>
+                t.Mills >= fromMills && t.Mills <= toMills && t.Carbs.HasValue && t.Carbs > 0
+            );
 
         if (_demoModeService.IsEnabled)
         {
@@ -244,6 +246,7 @@ public class TreatmentFoodsController : ControllerBase
             var meal = new MealTreatment
             {
                 Treatment = TreatmentMapper.ToDomainModel(treatmentEntity),
+                Foods = entries,
                 IsAttributed = entries.Count > 0,
                 AttributedCarbs = attributedCarbs,
                 UnspecifiedCarbs = totalCarbs - attributedCarbs,
@@ -275,10 +278,9 @@ public class TreatmentFoodsController : ControllerBase
         }
 
         return Guid.TryParse(id, out var guid)
-            ? await _context.Treatments.AsNoTracking().FirstOrDefaultAsync(
-                t => t.Id == guid,
-                cancellationToken
-            )
+            ? await _context
+                .Treatments.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == guid, cancellationToken)
             : null;
     }
 
@@ -297,10 +299,9 @@ public class TreatmentFoodsController : ControllerBase
         }
 
         return Guid.TryParse(id, out var guid)
-            ? await _context.Foods.AsNoTracking().FirstOrDefaultAsync(
-                f => f.Id == guid,
-                cancellationToken
-            )
+            ? await _context
+                .Foods.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == guid, cancellationToken)
             : null;
     }
 
@@ -314,11 +315,13 @@ public class TreatmentFoodsController : ControllerBase
         var timeOffset = request.TimeOffsetMinutes ?? existing?.TimeOffsetMinutes ?? 0;
         var note = request.Note ?? existing?.Note;
 
-        if (existing != null
+        if (
+            existing != null
             && request.FoodId == null
             && !request.Carbs.HasValue
             && !request.Portions.HasValue
-            && !request.InputMode.HasValue)
+            && !request.InputMode.HasValue
+        )
         {
             return new TreatmentFood
             {
@@ -357,9 +360,10 @@ public class TreatmentFoodsController : ControllerBase
         var inputMode = request.InputMode;
         if (inputMode == null)
         {
-            inputMode = request.Carbs.HasValue && !request.Portions.HasValue
-                ? TreatmentFoodInputMode.Carbs
-                : TreatmentFoodInputMode.Portions;
+            inputMode =
+                request.Carbs.HasValue && !request.Portions.HasValue
+                    ? TreatmentFoodInputMode.Carbs
+                    : TreatmentFoodInputMode.Portions;
         }
 
         if (!foodId.HasValue)
@@ -394,11 +398,7 @@ public class TreatmentFoodsController : ControllerBase
                 return null;
             }
 
-            carbs = Math.Round(
-                carbsPerPortion * portions,
-                1,
-                MidpointRounding.AwayFromZero
-            );
+            carbs = Math.Round(carbsPerPortion * portions, 1, MidpointRounding.AwayFromZero);
         }
         else
         {
@@ -407,11 +407,7 @@ public class TreatmentFoodsController : ControllerBase
                 return null;
             }
 
-            portions = Math.Round(
-                carbs / carbsPerPortion,
-                2,
-                MidpointRounding.AwayFromZero
-            );
+            portions = Math.Round(carbs / carbsPerPortion, 2, MidpointRounding.AwayFromZero);
 
             if (portions <= 0m)
             {

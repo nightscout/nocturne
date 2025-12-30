@@ -31,7 +31,7 @@
     Rule,
     AnnotationPoint,
   } from "layerchart";
-  import { chartConfig } from "$lib/constants";
+  import { chartConfig, getMealNameForTime } from "$lib/constants";
   import { curveStepAfter, curveMonotoneX, bisector } from "d3";
   import { scaleTime, scaleLinear } from "d3-scale";
   import {
@@ -131,9 +131,12 @@
     // Track dependencies - re-run when these change
     const enabled = predictionEnabled.current;
     const entryCount = entries.length;
+    // Track the latest entry's timestamp to trigger refetch when new glucose arrives
+    // This is important because entries.length doesn't change when array is capped
+    const latestEntryMills = entries[0]?.mills ?? 0;
 
     // Only refetch if we have entries and predictions are enabled
-    if (showPredictions && enabled && entryCount > 0) {
+    if (showPredictions && enabled && entryCount > 0 && latestEntryMills > 0) {
       getPredictions({})
         .then((data) => {
           predictionData = data;
@@ -538,11 +541,20 @@
   );
 
   const carbMarkersForIob = $derived(
-    carbTreatments.map((t) => ({
-      time: new Date(getTreatmentTime(t)),
-      carbs: t.carbs ?? 0,
-      treatment: t,
-    }))
+    carbTreatments.map((t) => {
+      const time = new Date(getTreatmentTime(t));
+      // Priority: foodType > notes (first 20 chars) > meal name from time
+      const label =
+        t.foodType ??
+        (t.notes ? t.notes.slice(0, 20) : null) ??
+        getMealNameForTime(time);
+      return {
+        time,
+        carbs: t.carbs ?? 0,
+        treatment: t,
+        label,
+      };
+    })
   );
 
   // Treatment edit dialog state
@@ -1027,6 +1039,16 @@
                 onclick={() => handleMarkerClick(marker.treatment)}
                 class="cursor-pointer"
               >
+                <!-- Food/meal label above the marker -->
+                {#if marker.label}
+                  <Text
+                    y={-18}
+                    textAnchor="middle"
+                    class="text-[7px] fill-carbs font-medium opacity-80"
+                  >
+                    {marker.label}
+                  </Text>
+                {/if}
                 <Polygon
                   points={[
                     { x: 0, y: -10 },

@@ -8,6 +8,7 @@
   import { Trash2, MoveUp, ArrowRight } from "lucide-svelte";
   import type { QuickPickRecord, FoodRecord } from "./types";
   import { getFoodState } from "./food-context";
+  import { scaleMacro, formatMacro, getGiLabel } from "$lib/components/food";
 
   interface Props {
     quickPick: QuickPickRecord;
@@ -19,6 +20,22 @@
   const foodState = getFoodState();
 
   let isDragOver = $state(false);
+
+  /**
+   * Calculate scaled carbs for a food item.
+   * If food has 4 servings = 269g carbs, and user wants 1 serving,
+   * the scaled carbs = (269 / 4) * 1 = 67.25g
+   */
+  function getScaledCarbs(food: {
+    portion: number;
+    carbs: number;
+    portions: number;
+  }): number {
+    const basePortion = food.portion || 1;
+    const selectedPortions = food.portions || 1;
+    return scaleMacro(basePortion, selectedPortions, food.carbs);
+  }
+
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
@@ -121,8 +138,10 @@
         <Label for="hideafteruse-{index}">Hide after use</Label>
       </div>
       <Separator orientation="vertical" class="h-4" />
-      <span class="text-sm text-muted-foreground whitespace-nowrap">
-        Carbs: {quickPick.carbs.toFixed(0)} g
+      <span
+        class="text-sm font-medium bg-primary/10 text-primary px-2 py-1 rounded"
+      >
+        Total: {formatMacro(quickPick.carbs)}g carbs
       </span>
     </div>
   </CardHeader>
@@ -130,44 +149,50 @@
     {#if quickPick.foods.length > 0}
       <div class="space-y-2">
         <div
-          class="grid grid-cols-6 gap-2 text-sm font-medium text-muted-foreground border-b pb-1"
+          class="grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 text-sm font-medium text-muted-foreground border-b pb-1"
         >
-          <div>Actions</div>
-          <div>Name</div>
-          <div class="text-center">Portion</div>
-          <div class="text-center">Carbs</div>
-          <div class="text-center">Portions</div>
-          <div class="text-center">Total Carbs</div>
+          <div class="w-8"></div>
+          <div>Food</div>
+          <div class="text-center w-24">Servings</div>
+          <div class="text-center w-16">GI</div>
+          <div class="text-right w-24">Carbs</div>
         </div>
         {#each quickPick.foods as food, foodIndex}
+          {@const scaledCarbs = getScaledCarbs(food)}
           <div
-            class="grid grid-cols-6 gap-2 text-sm items-center py-1 hover:bg-muted/25 rounded"
+            class="grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 text-sm items-center py-1 hover:bg-muted/25 rounded"
           >
-            <div>
+            <div class="w-8">
               <Button
                 variant="ghost"
                 size="sm"
                 onclick={() => foodState.deleteQuickPickFood(index, foodIndex)}
-                title="Remove food from quick pick"
+                title="Remove food"
               >
                 <Trash2 class="h-3 w-3" />
               </Button>
             </div>
-            <div class="truncate" title={food.name}>{food.name}</div>
-            <div class="text-center">{food.portion} {food.unit}</div>
-            <div class="text-center">{food.carbs}g</div>
-            <div class="text-center">
+            <div class="truncate" title={food.name}>
+              <span class="font-medium">{food.name}</span>
+              <span class="text-muted-foreground text-xs ml-1">
+                ({food.portion} {food.unit} = {formatMacro(food.carbs)}g)
+              </span>
+            </div>
+            <div class="text-center w-24">
               <Input
                 type="number"
                 value={food.portions}
                 oninput={(e) => updatePortions(foodIndex, e)}
-                class="w-16 h-6 text-xs text-center"
+                class="w-20 h-7 text-xs text-center"
                 min="0"
-                step="0.1"
+                step="0.5"
               />
             </div>
-            <div class="text-center font-medium">
-              {(food.carbs * food.portions).toFixed(1)}g
+            <div class="text-center w-16 text-muted-foreground">
+              {getGiLabel(food.gi)}
+            </div>
+            <div class="text-right w-24 font-semibold text-primary">
+              {formatMacro(scaledCarbs)}g
             </div>
           </div>
         {/each}
@@ -179,7 +204,7 @@
         {#if isDragOver}
           <div class="text-primary font-medium">Drop food here!</div>
         {:else}
-          <div class="flex items-center gap-2">
+          <div class="flex items-center justify-center gap-2">
             <ArrowRight class="w-4 h-4" />
             Drag & drop food here
           </div>

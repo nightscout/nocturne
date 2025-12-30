@@ -15397,6 +15397,12 @@ export interface ConnectorStatusDto {
     state?: string;
     stateMessage?: string | undefined;
     isHealthy?: boolean;
+    /** Breakdown of total items processed by data type
+Keys are data type names (e.g., "Glucose", "Treatments", "Food") */
+    totalItemsBreakdown?: { [key: string]: number; } | undefined;
+    /** Breakdown of items processed in the last 24 hours by data type
+Keys are data type names (e.g., "Glucose", "Treatments", "Food") */
+    itemsLast24HoursBreakdown?: { [key: string]: number; } | undefined;
 }
 
 /** Local auth configuration response */
@@ -17855,6 +17861,7 @@ export enum TreatmentFoodInputMode {
 
 export interface MealTreatment {
     treatment?: Treatment;
+    foods?: TreatmentFood[];
     isAttributed?: boolean;
     attributedCarbs?: number;
     unspecifiedCarbs?: number;

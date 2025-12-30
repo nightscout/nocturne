@@ -162,7 +162,7 @@
         </Button>
       {/snippet}
     </Popover.Trigger>
-    <Popover.Content class="w-[var(--bits-popover-anchor-width)] p-0">
+    <Popover.Content class="w-(--bits-popover-anchor-width) p-0">
       <Command.Root shouldFilter={false}>
         <Command.Input
           placeholder="Search categories and subcategories..."

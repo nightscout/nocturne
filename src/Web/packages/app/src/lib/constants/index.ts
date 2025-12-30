@@ -19,6 +19,9 @@ export const EXTERNAL_URLS: ExternalUrls = {
   },
 };
 
+// Re-export meal time constants
+export * from './meal-times';
+
 import type { GlycemicThresholds } from "../api";
 
 export interface CompressionLowConfig {

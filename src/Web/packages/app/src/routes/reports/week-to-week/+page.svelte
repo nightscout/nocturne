@@ -1,13 +1,12 @@
 <script lang="ts">
   import {
-    Chart,
-    Axis,
-    Svg,
+    LineChart,
     Spline,
-    Rect,
-    Group,
+    Highlight,
+    Tooltip,
     Points,
-    Legend,
+    Group,
+    Rect,
   } from "layerchart";
   import { scaleTime, scaleLinear, scaleLog } from "d3-scale";
   import { goto } from "$app/navigation";
@@ -24,18 +23,11 @@
   } from "$lib/data/week-to-week.remote";
   import PointDetailDialog from "$lib/components/reports/PointDetailDialog.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import {
     glucoseUnits,
     timeFormat,
   } from "$lib/stores/appearance-store.svelte";
   import { convertToDisplayUnits, getUnitLabel } from "$lib/utils/formatting";
-
-  // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange());
-
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
 
   // Day of week colors - matches Nightscout
   const DAY_COLORS = [
@@ -97,6 +89,15 @@
 
     return { start: startOfWeek, end: endOfWeek };
   });
+
+  // Query for reports data - sync with week navigation
+  // We use currentWeekRange to drive the query, ensuring we have data for the viewed week
+  const dateRangeInput = $derived({
+    from: currentWeekRange.start.toISOString(),
+    to: currentWeekRange.end.toISOString(),
+  });
+
+  const reportsQuery = $derived(getReportsData(dateRangeInput));
 
   // Format week range for display
   const weekRangeDisplay = $derived.by(() => {
@@ -167,9 +168,10 @@
   type ChartPoint = { x: Date; y: number; originalTimestamp: number };
   const chartDataSeries = $derived.by(() => {
     const series: {
+      key: string;
+      label: string;
       dayOfWeek: number;
       color: string;
-      name: string;
       data: ChartPoint[];
     }[] = [];
 
@@ -182,9 +184,10 @@
       );
 
       series.push({
+        key: String(dayOfWeek),
         dayOfWeek,
         color: DAY_COLORS[dayOfWeek].color,
-        name: DAY_COLORS[dayOfWeek].name,
+        label: DAY_COLORS[dayOfWeek].name,
         data: sortedEntries.map((e) => ({
           x: e.normalized,
           y: convertToDisplayUnits(
@@ -364,24 +367,6 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Legend -->
-  <Card.Root>
-    <Card.Content class="p-4">
-      <div class="flex flex-wrap items-center gap-4">
-        {#each DAY_COLORS as day, index}
-          {@const hasData = chartDataSeries.some((s) => s.dayOfWeek === index)}
-          <div class="flex items-center gap-2" class:opacity-30={!hasData}>
-            <div
-              class="h-3 w-6 rounded"
-              style="background-color: {day.color}"
-            ></div>
-            <span class="text-sm">{day.name}</span>
-          </div>
-        {/each}
-      </div>
-    </Card.Content>
-  </Card.Root>
-
   <!-- Chart -->
   <Card.Root>
     <Card.Content class="p-4 flex justify-center">
@@ -390,10 +375,8 @@
         class="relative"
       >
         {#if chartDataSeries.length > 0}
-          <Chart
-            data={chartDataSeries[0]?.data ?? []}
-            x={(d) => d.x}
-            y={(d) => d.y}
+          <LineChart
+            series={chartDataSeries}
             xScale={scaleTime()}
             yScale={selectedScale === "Logarithmic"
               ? scaleLog()
@@ -401,22 +384,14 @@
             {xDomain}
             {yDomain}
             padding={{ top: 20, right: 30, bottom: 40, left: 50 }}
+            tooltip={{ mode: "quadtree" }}
+            legend
           >
-            <Svg>
-              <!-- Axes -->
-              <Axis placement="left" rule label={unitLabel} />
-              <Axis
-                placement="bottom"
-                rule
-                format={formatTime}
-                ticks={[0, 3, 6, 9, 12, 15, 18, 21].map(
-                  (h) => new Date(2000, 0, 1, h)
-                )}
-              />
-
-              <!-- Target range background -->
+            {#snippet marks({ visibleSeries, tooltip })}
               {@const targetTop = DEFAULT_THRESHOLDS.targetTop ?? 180}
               {@const targetBottom = DEFAULT_THRESHOLDS.targetBottom ?? 70}
+
+              <!-- Target range background -->
               <Group class="target-range">
                 <Rect
                   x={0}
@@ -427,16 +402,27 @@
                 />
               </Group>
 
-              <!-- Render each day's line -->
-              {#each chartDataSeries as series (series.dayOfWeek)}
+              {#each visibleSeries as series (series.key)}
+                {@const active =
+                  tooltip.data == null ||
+                  tooltip.data?.originalTimestamp === undefined ||
+                  series.data.some(
+                    (d) =>
+                      d.originalTimestamp === tooltip.data?.originalTimestamp
+                  )}
+
                 <Spline
                   data={series.data}
                   x={(d) => d.x}
                   y={(d) => d.y}
                   stroke={series.color}
                   stroke-width={2}
+                  class={!active
+                    ? "opacity-20 transition-opacity"
+                    : "transition-opacity"}
                 />
-                <!-- Clickable points for this day -->
+
+                <!-- Points overlay -->
                 <Points
                   data={series.data}
                   x={(d) => d.x}
@@ -445,7 +431,6 @@
                   fill={series.color}
                   class="cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
                   onclick={(event: MouseEvent) => {
-                    // Get data from event target's __data__ property (d3 pattern)
                     const target = event.target as SVGElement & {
                       __data__?: ChartPoint;
                     };
@@ -456,9 +441,36 @@
                   }}
                 />
               {/each}
-              <Legend title="Legend" placement="bottom" variant="swatches" />
-            </Svg>
-          </Chart>
+            {/snippet}
+
+            {#snippet highlight({ series, context, tooltip })}
+              <!-- Add highlight point -->
+              {@const activeSeries = series.find((s) =>
+                s.data.includes(tooltip.data)
+              )}
+              <Highlight points={{ fill: activeSeries?.color }} lines />
+            {/snippet}
+
+            {#snippet tooltip({ series, context, tooltip })}
+              <Tooltip.Root>
+                <Tooltip.Header>
+                  {formatTime(context.x(tooltip.data))}
+                </Tooltip.Header>
+                <Tooltip.List>
+                  {#each series as s}
+                    {@const point = tooltip.data}
+                    {#if s.data.includes(point)}
+                      <Tooltip.Item
+                        label={s.label}
+                        value={point.y}
+                        color={s.color}
+                      />
+                    {/if}
+                  {/each}
+                </Tooltip.List>
+              </Tooltip.Root>
+            {/snippet}
+          </LineChart>
         {:else}
           <div
             class="flex h-full items-center justify-center text-muted-foreground"

@@ -13449,6 +13449,24 @@
           },
           "isHealthy": {
             "type": "boolean"
+          },
+          "totalItemsBreakdown": {
+            "type": "object",
+            "description": "Breakdown of total items processed by data type\nKeys are data type names (e.g., \"Glucose\", \"Treatments\", \"Food\")",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "itemsLast24HoursBreakdown": {
+            "type": "object",
+            "description": "Breakdown of items processed in the last 24 hours by data type\nKeys are data type names (e.g., \"Glucose\", \"Treatments\", \"Food\")",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            }
           }
         }
       },
@@ -21069,6 +21087,12 @@
         "properties": {
           "treatment": {
             "$ref": "#/components/schemas/Treatment"
+          },
+          "foods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreatmentFood"
+            }
           },
           "isAttributed": {
             "type": "boolean"

@@ -15,8 +15,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Models;
-using Nocturne.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 
 #nullable enable
 
@@ -57,13 +57,14 @@ namespace Nocturne.Connectors.Glooko.Services
         public override string ServiceName => "Glooko";
         public override string ConnectorSource => DataSources.GlookoConnector;
 
-        public override List<SyncDataType> SupportedDataTypes => new()
-        {
-            SyncDataType.Glucose,
-            SyncDataType.Treatments,
-            SyncDataType.Food,
-            SyncDataType.Activity
-        };
+        public override List<SyncDataType> SupportedDataTypes =>
+            new()
+            {
+                SyncDataType.Glucose,
+                SyncDataType.Treatments,
+                SyncDataType.Food,
+                SyncDataType.Activity,
+            };
 
         public GlookoConnectorService(
             HttpClient httpClient,
@@ -86,7 +87,8 @@ namespace Nocturne.Connectors.Glooko.Services
                 rateLimitingStrategy
                 ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
             _fileService = fileService;
-            _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+            _tokenProvider =
+                tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         }
 
         public override async Task<bool> AuthenticateAsync()
@@ -112,7 +114,7 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 Success = true,
                 Message = "Sync completed successfully",
-                StartTime = DateTime.UtcNow
+                StartTime = DateTime.UtcNow,
             };
 
             _stateService?.SetState(ConnectorState.Syncing, "Starting Glooko batch sync...");
@@ -174,27 +176,45 @@ namespace Nocturne.Connectors.Glooko.Services
                     {
                         try
                         {
-                            _logger.LogInformation("[{ConnectorSource}] Fetching additional data from v3 API...", ConnectorSource);
+                            _logger.LogInformation(
+                                "[{ConnectorSource}] Fetching additional data from v3 API...",
+                                ConnectorSource
+                            );
                             var v3Data = await FetchV3GraphDataAsync(from);
                             if (v3Data != null)
                             {
                                 var v3Treatments = TransformV3ToTreatments(v3Data);
                                 // Add v3 treatments that don't already exist (based on Id)
                                 var existingIds = treatments.Select(t => t.Id).ToHashSet();
-                                var newV3Treatments = v3Treatments.Where(t => !existingIds.Contains(t.Id)).ToList();
+                                var newV3Treatments = v3Treatments
+                                    .Where(t => !existingIds.Contains(t.Id))
+                                    .ToList();
                                 treatments.AddRange(newV3Treatments);
-                                _logger.LogInformation("[{ConnectorSource}] Added {Count} unique treatments from v3 API",
-                                    ConnectorSource, newV3Treatments.Count);
+                                _logger.LogInformation(
+                                    "[{ConnectorSource}] Added {Count} unique treatments from v3 API",
+                                    ConnectorSource,
+                                    newV3Treatments.Count
+                                );
 
                                 // Optionally add CGM backfill entries
-                                if (_config.V3IncludeCgmBackfill && request.DataTypes.Contains(SyncDataType.Glucose))
+                                if (
+                                    _config.V3IncludeCgmBackfill
+                                    && request.DataTypes.Contains(SyncDataType.Glucose)
+                                )
                                 {
                                     var v3Entries = TransformV3ToEntries(v3Data).ToList();
                                     if (v3Entries.Any())
                                     {
-                                        await PublishGlucoseDataInBatchesAsync(v3Entries, config, cancellationToken);
-                                        _logger.LogInformation("[{ConnectorSource}] Published {Count} CGM backfill entries from v3",
-                                            ConnectorSource, v3Entries.Count);
+                                        await PublishGlucoseDataInBatchesAsync(
+                                            v3Entries,
+                                            config,
+                                            cancellationToken
+                                        );
+                                        _logger.LogInformation(
+                                            "[{ConnectorSource}] Published {Count} CGM backfill entries from v3",
+                                            ConnectorSource,
+                                            v3Entries.Count
+                                        );
                                     }
                                 }
 
@@ -202,11 +222,18 @@ namespace Nocturne.Connectors.Glooko.Services
                                 var stateSpans = TransformV3ToStateSpans(v3Data);
                                 if (stateSpans.Any())
                                 {
-                                    var stateSpanSuccess = await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
+                                    var stateSpanSuccess = await PublishStateSpanDataAsync(
+                                        stateSpans,
+                                        config,
+                                        cancellationToken
+                                    );
                                     if (stateSpanSuccess)
                                     {
-                                        _logger.LogInformation("[{ConnectorSource}] Published {Count} state spans from v3",
-                                            ConnectorSource, stateSpans.Count);
+                                        _logger.LogInformation(
+                                            "[{ConnectorSource}] Published {Count} state spans from v3",
+                                            ConnectorSource,
+                                            stateSpans.Count
+                                        );
                                     }
                                 }
 
@@ -214,18 +241,29 @@ namespace Nocturne.Connectors.Glooko.Services
                                 var systemEvents = TransformV3ToSystemEvents(v3Data);
                                 if (systemEvents.Any())
                                 {
-                                    var eventSuccess = await PublishSystemEventDataAsync(systemEvents, config, cancellationToken);
+                                    var eventSuccess = await PublishSystemEventDataAsync(
+                                        systemEvents,
+                                        config,
+                                        cancellationToken
+                                    );
                                     if (eventSuccess)
                                     {
-                                        _logger.LogInformation("[{ConnectorSource}] Published {Count} system events from v3",
-                                            ConnectorSource, systemEvents.Count);
+                                        _logger.LogInformation(
+                                            "[{ConnectorSource}] Published {Count} system events from v3",
+                                            ConnectorSource,
+                                            systemEvents.Count
+                                        );
                                     }
                                 }
                             }
                         }
                         catch (Exception v3Ex)
                         {
-                            _logger.LogWarning(v3Ex, "[{ConnectorSource}] V3 API fetch failed, continuing with v2 data only", ConnectorSource);
+                            _logger.LogWarning(
+                                v3Ex,
+                                "[{ConnectorSource}] V3 API fetch failed, continuing with v2 data only",
+                                ConnectorSource
+                            );
                         }
                     }
 
@@ -612,30 +650,35 @@ namespace Nocturne.Connectors.Glooko.Services
                         var matchingInsulin = FindMatchingInsulin(batchData.Insulins, foodDate);
 
                         if (matchingInsulin != null)
-                        if (matchingInsulin != null)
-                        {
-                            var insulinDate = GetRawGlookoDate(matchingInsulin.Timestamp, matchingInsulin.PumpTimestamp);
-                            treatment.EventType = "Meal Bolus";
-                            treatment.EventType = "Meal Bolus";
-                            treatment.CreatedAt = GetCorrectedGlookoTime(insulinDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                            treatment.Insulin = matchingInsulin.Value;
-                            treatment.PreBolus = (foodDate - insulinDate).TotalMinutes;
-                            treatment.Id = GenerateTreatmentId(
-                                "Meal Bolus",
-                                insulinDate,
-                                $"carbs:{food.Carbs}_insulin:{matchingInsulin.Value}"
-                            );
-                        }
-                        else
-                        {
-                            treatment.EventType = "Carb Correction";
-                            treatment.CreatedAt = GetCorrectedGlookoTime(foodDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                            treatment.Id = GenerateTreatmentId(
-                                "Carb Correction",
-                                foodDate,
-                                $"carbs:{food.Carbs}"
-                            );
-                        }
+                            if (matchingInsulin != null)
+                            {
+                                var insulinDate = GetRawGlookoDate(
+                                    matchingInsulin.Timestamp,
+                                    matchingInsulin.PumpTimestamp
+                                );
+                                treatment.EventType = "Meal Bolus";
+                                treatment.EventType = "Meal Bolus";
+                                treatment.CreatedAt = GetCorrectedGlookoTime(insulinDate)
+                                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                                treatment.Insulin = matchingInsulin.Value;
+                                treatment.PreBolus = (foodDate - insulinDate).TotalMinutes;
+                                treatment.Id = GenerateTreatmentId(
+                                    "Meal Bolus",
+                                    insulinDate,
+                                    $"carbs:{food.Carbs}_insulin:{matchingInsulin.Value}"
+                                );
+                            }
+                            else
+                            {
+                                treatment.EventType = "Carb Correction";
+                                treatment.CreatedAt = GetCorrectedGlookoTime(foodDate)
+                                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                                treatment.Id = GenerateTreatmentId(
+                                    "Carb Correction",
+                                    foodDate,
+                                    $"carbs:{food.Carbs}"
+                                );
+                            }
 
                         treatment.Carbs = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
                         treatment.AdditionalProperties = JsonSerializer.Deserialize<
@@ -650,7 +693,10 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     foreach (var insulin in batchData.Insulins)
                     {
-                        var insulinDate = GetRawGlookoDate(insulin.Timestamp, insulin.PumpTimestamp);
+                        var insulinDate = GetRawGlookoDate(
+                            insulin.Timestamp,
+                            insulin.PumpTimestamp
+                        );
 
                         // Only create correction bolus if no matching food
                         var matchingFood = FindMatchingFood(batchData.Foods, insulinDate);
@@ -664,7 +710,8 @@ namespace Nocturne.Connectors.Glooko.Services
                                     $"insulin:{insulin.Value}"
                                 ),
                                 EventType = "Correction Bolus",
-                                CreatedAt = GetCorrectedGlookoTime(insulinDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                                CreatedAt = GetCorrectedGlookoTime(insulinDate)
+                                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                                 Insulin = insulin.Value,
                                 DataSource = ConnectorSource,
                             };
@@ -687,7 +734,8 @@ namespace Nocturne.Connectors.Glooko.Services
                                 $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"
                             ),
                             EventType = "Meal Bolus",
-                            CreatedAt = GetCorrectedGlookoTime(bolusDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            CreatedAt = GetCorrectedGlookoTime(bolusDate)
+                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Insulin = bolus.InsulinDelivered,
                             Carbs = bolus.CarbsInput > 0 ? bolus.CarbsInput : null,
                             AdditionalProperties = JsonSerializer.Deserialize<
@@ -718,7 +766,8 @@ namespace Nocturne.Connectors.Glooko.Services
                                 $"rate:{basal.Rate}_duration:{basal.Duration}"
                             ),
                             EventType = "Temp Basal",
-                            CreatedAt = GetCorrectedGlookoTime(basalDate).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            CreatedAt = GetCorrectedGlookoTime(basalDate)
+                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                             Rate = basal.Rate,
                             Absolute = basal.Rate,
                             Duration = durationMinutes,
@@ -745,7 +794,6 @@ namespace Nocturne.Connectors.Glooko.Services
 
             return treatments;
         }
-
 
         private string ConstructGlookoUrl(string endpoint, DateTime startDate, DateTime endDate)
         {
@@ -869,6 +917,62 @@ namespace Nocturne.Connectors.Glooko.Services
             return Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
 
+        /// <summary>
+        /// Normalize alarm type strings to standard values
+        /// Handles various Glooko alarm type formats (different devices may use different naming)
+        /// </summary>
+        private string NormalizeAlarmType(string? alarmType)
+        {
+            if (string.IsNullOrWhiteSpace(alarmType))
+                return "Unknown";
+
+            // Normalize to lowercase and remove common prefixes/suffixes for comparison
+            var normalized = alarmType.Trim().ToLowerInvariant();
+
+            // Map various alarm types to standardized names
+            return normalized switch
+            {
+                // Occlusion-related alarms (various naming conventions from different pumps)
+                "occlusion" => "Occlusion",
+                "occluded" => "Occlusion",
+                "pump occlusion" => "Occlusion",
+                "infusion set occlusion" => "Occlusion",
+                "cartridge occlusion" => "Occlusion",
+                "blockage" => "Occlusion",
+
+                // Battery-related alarms
+                "low battery" => "Low Battery",
+                "battery low" => "Low Battery",
+                "battery" => "Low Battery",
+
+                // Reservoir-related alarms
+                "low reservoir" => "Low Reservoir",
+                "reservoir low" => "Low Reservoir",
+                "empty reservoir" => "Empty Reservoir",
+
+                // Infusion set alarms
+                "infusion set change" => "Infusion Set Change",
+                "set change" => "Infusion Set Change",
+
+                // Sensor/CGM alarms
+                "sensor" => "Sensor Error",
+                "sensor error" => "Sensor Error",
+                "cgm sensor" => "Sensor Error",
+
+                // Communication alarms
+                "no delivery" => "No Delivery",
+                "delivery error" => "Delivery Error",
+                "communication error" => "Communication Error",
+
+                // General alarms
+                "error" => "Device Error",
+                "alarm" => "Device Alarm",
+
+                // Return original (capitalized) if not in map
+                _ => char.ToUpper(normalized[0]) + normalized.Substring(1),
+            };
+        }
+
         private GlookoFood? FindMatchingFood(GlookoFood[]? foods, DateTime insulinDate)
         {
             if (foods == null)
@@ -974,7 +1078,6 @@ namespace Nocturne.Connectors.Glooko.Services
             throw new HttpRequestException($"All {maxRetries} attempts failed for {url}");
         }
 
-
         /// <summary>
         /// Parses a Glooko trend string to Direction enum
         /// </summary>
@@ -1009,8 +1112,12 @@ namespace Nocturne.Connectors.Glooko.Services
         {
             var offsetHours = _config.TimezoneOffset;
             var corrected = rawDate.AddHours(-offsetHours);
-            _logger.LogDebug("GetCorrectedGlookoTime: Raw={Raw}, ConfigOffset={ConfigOffset}, Result={Result}",
-                rawDate, _config.TimezoneOffset, corrected);
+            _logger.LogDebug(
+                "GetCorrectedGlookoTime: Raw={Raw}, ConfigOffset={ConfigOffset}, Result={Result}",
+                rawDate,
+                _config.TimezoneOffset,
+                corrected
+            );
             return corrected;
         }
 
@@ -1030,11 +1137,11 @@ namespace Nocturne.Connectors.Glooko.Services
 
         private DateTime GetRawGlookoDate(string timestamp, string? pumpTimestamp)
         {
-             return DateTime.Parse(
-                 !string.IsNullOrEmpty(pumpTimestamp) ? pumpTimestamp : timestamp,
-                 System.Globalization.CultureInfo.InvariantCulture,
-                 System.Globalization.DateTimeStyles.RoundtripKind
-             );
+            return DateTime.Parse(
+                !string.IsNullOrEmpty(pumpTimestamp) ? pumpTimestamp : timestamp,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind
+            );
         }
 
         #region V3 API Methods
@@ -1050,7 +1157,9 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 if (string.IsNullOrEmpty(_tokenProvider.SessionCookie))
                 {
-                    throw new InvalidOperationException("Not authenticated with Glooko. Call AuthenticateAsync first.");
+                    throw new InvalidOperationException(
+                        "Not authenticated with Glooko. Call AuthenticateAsync first."
+                    );
                 }
 
                 var url = "/api/v3/session/users";
@@ -1059,12 +1168,17 @@ namespace Nocturne.Connectors.Glooko.Services
                 var result = await FetchFromGlookoEndpoint(url);
                 if (result.HasValue)
                 {
-                    var profile = JsonSerializer.Deserialize<GlookoV3UsersResponse>(result.Value.GetRawText());
+                    var profile = JsonSerializer.Deserialize<GlookoV3UsersResponse>(
+                        result.Value.GetRawText()
+                    );
                     if (profile?.CurrentUser != null)
                     {
                         _meterUnits = profile.CurrentUser.MeterUnits;
-                        _logger.LogInformation("[{ConnectorSource}] User profile loaded. MeterUnits: {Units}",
-                            ConnectorSource, _meterUnits);
+                        _logger.LogInformation(
+                            "[{ConnectorSource}] User profile loaded. MeterUnits: {Units}",
+                            ConnectorSource,
+                            _meterUnits
+                        );
                     }
                     return profile;
                 }
@@ -1087,7 +1201,9 @@ namespace Nocturne.Connectors.Glooko.Services
             {
                 if (string.IsNullOrEmpty(_tokenProvider.SessionCookie))
                 {
-                    throw new InvalidOperationException("Not authenticated with Glooko. Call AuthenticateAsync first.");
+                    throw new InvalidOperationException(
+                        "Not authenticated with Glooko. Call AuthenticateAsync first."
+                    );
                 }
 
                 if (_tokenProvider.UserData?.UserLogin?.GlookoCode == null)
@@ -1106,30 +1222,37 @@ namespace Nocturne.Connectors.Glooko.Services
                 var toDate = DateTime.UtcNow;
 
                 var url = ConstructV3GraphUrl(fromDate, toDate);
-                _logger.LogInformation("[{ConnectorSource}] Fetching v3 graph data from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
-                    ConnectorSource, fromDate, toDate);
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Fetching v3 graph data from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
+                    ConnectorSource,
+                    fromDate,
+                    toDate
+                );
 
                 var result = await FetchFromGlookoEndpointWithRetry(url);
                 if (result.HasValue)
                 {
-                    var graphData = JsonSerializer.Deserialize<GlookoV3GraphResponse>(result.Value.GetRawText());
+                    var graphData = JsonSerializer.Deserialize<GlookoV3GraphResponse>(
+                        result.Value.GetRawText()
+                    );
 
                     if (graphData?.Series != null)
                     {
                         _logger.LogInformation(
-                            "[{ConnectorSource}] Fetched v3 graph data: " +
-                            "AutomaticBolus={AutoBolus}, DeliveredBolus={Bolus}, " +
-                            "PumpAlarm={Alarms}, ReservoirChange={Reservoir}, SetSiteChange={SetSite}, " +
-                            "CgmReadings={Cgm}",
+                            "[{ConnectorSource}] Fetched v3 graph data: "
+                                + "AutomaticBolus={AutoBolus}, DeliveredBolus={Bolus}, "
+                                + "PumpAlarm={Alarms}, ReservoirChange={Reservoir}, SetSiteChange={SetSite}, "
+                                + "CgmReadings={Cgm}",
                             ConnectorSource,
                             graphData.Series.AutomaticBolus?.Length ?? 0,
                             graphData.Series.DeliveredBolus?.Length ?? 0,
                             graphData.Series.PumpAlarm?.Length ?? 0,
                             graphData.Series.ReservoirChange?.Length ?? 0,
                             graphData.Series.SetSiteChange?.Length ?? 0,
-                            (graphData.Series.CgmHigh?.Length ?? 0) +
-                            (graphData.Series.CgmNormal?.Length ?? 0) +
-                            (graphData.Series.CgmLow?.Length ?? 0));
+                            (graphData.Series.CgmHigh?.Length ?? 0)
+                                + (graphData.Series.CgmNormal?.Length ?? 0)
+                                + (graphData.Series.CgmLow?.Length ?? 0)
+                        );
                     }
 
                     return graphData;
@@ -1164,7 +1287,7 @@ namespace Nocturne.Connectors.Glooko.Services
                 "scheduledBasal",
                 "temporaryBasal",
                 "suspendBasal",
-                "profileChange"
+                "profileChange",
             };
 
             // Add CGM series if backfill is enabled
@@ -1175,11 +1298,11 @@ namespace Nocturne.Connectors.Glooko.Services
 
             var seriesParams = string.Join("&", series.Select(s => $"series[]={s}"));
 
-            return $"/api/v3/graph/data?patient={patientCode}" +
-                   $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}" +
-                   $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}" +
-                   $"&{seriesParams}" +
-                   "&locale=en&insulinTooltips=false&filterBgReadings=false&splitByDay=false";
+            return $"/api/v3/graph/data?patient={patientCode}"
+                + $"&startDate={startDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+                + $"&endDate={endDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+                + $"&{seriesParams}"
+                + "&locale=en&insulinTooltips=false&filterBgReadings=false&splitByDay=false";
         }
 
         /// <summary>
@@ -1202,21 +1325,27 @@ namespace Nocturne.Connectors.Glooko.Services
                     // Use raw timestamp for ID (matching v2 behavior) but corrected time for CreatedAt
                     var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(bolus.X).UtcDateTime;
                     var correctedTimestamp = GetCorrectedGlookoTime(bolus.X);
-                    treatments.Add(new Treatment
-                    {
-                        Id = GenerateTreatmentId("Automatic Bolus", rawTimestamp, $"insulin:{bolus.Y}"),
-                        EventType = "Automatic Bolus",
-                        CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Insulin = bolus.Y,
-                        InsulinDelivered = bolus.Data?.DeliveredUnits ?? bolus.Y,
-                        InsulinProgrammed = bolus.Data?.ProgrammedUnits,
-                        InsulinRecommendationForCorrection = bolus.Data?.CorrectionUnits,
-                        InsulinRecommendationForCarbs = bolus.Data?.FoodUnits,
-                        BloodGlucoseInput = bolus.Data?.BgInput,
-                        CalculationType = CalculationType.Automatic,
-                        DataSource = ConnectorSource,
-                        Notes = "AID automatic bolus"
-                    });
+                    treatments.Add(
+                        new Treatment
+                        {
+                            Id = GenerateTreatmentId(
+                                "Automatic Bolus",
+                                rawTimestamp,
+                                $"insulin:{bolus.Y}"
+                            ),
+                            EventType = "Automatic Bolus",
+                            CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            Insulin = bolus.Y,
+                            InsulinDelivered = bolus.Data?.DeliveredUnits ?? bolus.Y,
+                            InsulinProgrammed = bolus.Data?.ProgrammedUnits,
+                            InsulinRecommendationForCorrection = bolus.Data?.CorrectionUnits,
+                            InsulinRecommendationForCarbs = bolus.Data?.FoodUnits,
+                            BloodGlucoseInput = bolus.Data?.BgInput,
+                            CalculationType = CalculationType.Automatic,
+                            DataSource = ConnectorSource,
+                            Notes = "AID automatic bolus",
+                        }
+                    );
                 }
             }
 
@@ -1231,14 +1360,40 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(alarm.X).UtcDateTime;
                     var correctedTimestamp = GetCorrectedGlookoTime(alarm.X);
-                    treatments.Add(new Treatment
-                    {
-                        Id = GenerateTreatmentId("Pump Alarm", rawTimestamp, $"type:{alarm.AlarmType}"),
-                        EventType = "Pump Alarm",
-                        CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Notes = alarm.Data?.AlarmDescription ?? alarm.Label ?? alarm.AlarmType ?? "Unknown alarm",
-                        DataSource = ConnectorSource
-                    });
+
+                    // Normalize alarm type (handle various cases and formats)
+                    var normalizedAlarmType = NormalizeAlarmType(alarm.AlarmType);
+
+                    // Build descriptive notes from available fields
+                    var alarmDescription =
+                        alarm.Data?.AlarmDescription
+                        ?? alarm.Label
+                        ?? alarm.AlarmType
+                        ?? "Unknown alarm";
+
+                    treatments.Add(
+                        new Treatment
+                        {
+                            Id = GenerateTreatmentId(
+                                "Pump Alarm",
+                                rawTimestamp,
+                                $"type:{normalizedAlarmType}"
+                            ),
+                            EventType = "Pump Alarm",
+                            CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            Notes = $"[{normalizedAlarmType}] {alarmDescription}",
+                            Reason = normalizedAlarmType, // Use standardized alarm type as reason for better filtering
+                            DataSource = ConnectorSource,
+                        }
+                    );
+
+                    _logger.LogInformation(
+                        "[{ConnectorSource}] Imported pump alarm: type={AlarmType}, description={Description}, timestamp={Timestamp}",
+                        ConnectorSource,
+                        normalizedAlarmType,
+                        alarmDescription,
+                        correctedTimestamp
+                    );
                 }
             }
 
@@ -1249,14 +1404,16 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
                     var correctedTimestamp = GetCorrectedGlookoTime(change.X);
-                    treatments.Add(new Treatment
-                    {
-                        Id = GenerateTreatmentId("Reservoir Change", rawTimestamp, null),
-                        EventType = "Reservoir Change",
-                        CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Notes = change.Label,
-                        DataSource = ConnectorSource
-                    });
+                    treatments.Add(
+                        new Treatment
+                        {
+                            Id = GenerateTreatmentId("Reservoir Change", rawTimestamp, null),
+                            EventType = "Reservoir Change",
+                            CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            Notes = change.Label,
+                            DataSource = ConnectorSource,
+                        }
+                    );
                 }
             }
 
@@ -1267,14 +1424,16 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(change.X).UtcDateTime;
                     var correctedTimestamp = GetCorrectedGlookoTime(change.X);
-                    treatments.Add(new Treatment
-                    {
-                        Id = GenerateTreatmentId("Site Change", rawTimestamp, null),
-                        EventType = "Site Change",
-                        CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Notes = change.Label,
-                        DataSource = ConnectorSource
-                    });
+                    treatments.Add(
+                        new Treatment
+                        {
+                            Id = GenerateTreatmentId("Site Change", rawTimestamp, null),
+                            EventType = "Site Change",
+                            CreatedAt = correctedTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                            Notes = change.Label,
+                            DataSource = ConnectorSource,
+                        }
+                    );
                 }
             }
 
@@ -1286,8 +1445,11 @@ namespace Nocturne.Connectors.Glooko.Services
             // They are handled as StateSpans in TransformV3ToStateSpans().
             // See implementation_plan.md for migration details.
 
-            _logger.LogInformation("[{ConnectorSource}] Transformed {Count} treatments from v3 data",
-                ConnectorSource, treatments.Count);
+            _logger.LogInformation(
+                "[{ConnectorSource}] Transformed {Count} treatments from v3 data",
+                ConnectorSource,
+                treatments.Count
+            );
 
             return treatments;
         }
@@ -1316,19 +1478,24 @@ namespace Nocturne.Connectors.Glooko.Services
                 var timestamp = GetCorrectedGlookoTime(reading.X);
                 var sgvMgdl = ConvertToMgdl(reading.Y);
 
-                entries.Add(new Entry
-                {
-                    Id = $"glooko_v3_{reading.X}",
-                    Date = timestamp,
-                    Sgv = (int)Math.Round(sgvMgdl),
-                    Type = "sgv",
-                    Device = ConnectorSource,
-                    Direction = Direction.Flat.ToString() // v3 doesn't provide trend
-                });
+                entries.Add(
+                    new Entry
+                    {
+                        Id = $"glooko_v3_{reading.X}",
+                        Date = timestamp,
+                        Sgv = (int)Math.Round(sgvMgdl),
+                        Type = "sgv",
+                        Device = ConnectorSource,
+                        Direction = Direction.Flat.ToString(), // v3 doesn't provide trend
+                    }
+                );
             }
 
-            _logger.LogInformation("[{ConnectorSource}] Transformed {Count} CGM entries from v3 data",
-                ConnectorSource, entries.Count);
+            _logger.LogInformation(
+                "[{ConnectorSource}] Transformed {Count} CGM entries from v3 data",
+                ConnectorSource,
+                entries.Count
+            );
 
             return entries;
         }
@@ -1364,24 +1531,30 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     var startTimestamp = GetCorrectedGlookoTime(suspend.X);
                     var durationSeconds = suspend.Duration ?? 0;
-                    var endMills = durationSeconds > 0
-                        ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds() + (durationSeconds * 1000)
-                        : (long?)null;
+                    var endMills =
+                        durationSeconds > 0
+                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
+                                + (durationSeconds * 1000)
+                            : (long?)null;
 
-                    stateSpans.Add(new StateSpan
-                    {
-                        OriginalId = $"glooko_suspend_{suspend.X}",
-                        Category = StateSpanCategory.PumpMode,
-                        State = PumpModeState.Suspended.ToString(),
-                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
-                        EndMills = endMills,
-                        Source = ConnectorSource,
-                        Metadata = new Dictionary<string, object>
+                    stateSpans.Add(
+                        new StateSpan
                         {
-                            { "label", suspend.Label ?? "Suspended" },
-                            { "durationSeconds", durationSeconds }
+                            OriginalId = $"glooko_suspend_{suspend.X}",
+                            Category = StateSpanCategory.PumpMode,
+                            State = PumpModeState.Suspended.ToString(),
+                            StartMills = new DateTimeOffset(
+                                startTimestamp
+                            ).ToUnixTimeMilliseconds(),
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "label", suspend.Label ?? "Suspended" },
+                                { "durationSeconds", durationSeconds },
+                            },
                         }
-                    });
+                    );
                 }
             }
 
@@ -1392,9 +1565,11 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     var startTimestamp = GetCorrectedGlookoTime(lgsEvent.X);
                     var durationSeconds = lgsEvent.Duration ?? 0;
-                    var endMills = durationSeconds > 0
-                        ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds() + (durationSeconds * 1000)
-                        : (long?)null;
+                    var endMills =
+                        durationSeconds > 0
+                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
+                                + (durationSeconds * 1000)
+                            : (long?)null;
 
                     // Map LGS/PLGS event types to pump mode states
                     var stateValue = lgsEvent.EventType?.ToUpperInvariant() switch
@@ -1402,24 +1577,28 @@ namespace Nocturne.Connectors.Glooko.Services
                         "LGS" => PumpModeState.Limited.ToString(),
                         "PLGS" => PumpModeState.Limited.ToString(),
                         "SUSPEND" => PumpModeState.Suspended.ToString(),
-                        _ => PumpModeState.Limited.ToString()
+                        _ => PumpModeState.Limited.ToString(),
                     };
 
-                    stateSpans.Add(new StateSpan
-                    {
-                        OriginalId = $"glooko_lgsplgs_{lgsEvent.X}",
-                        Category = StateSpanCategory.PumpMode,
-                        State = stateValue,
-                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
-                        EndMills = endMills,
-                        Source = ConnectorSource,
-                        Metadata = new Dictionary<string, object>
+                    stateSpans.Add(
+                        new StateSpan
                         {
-                            { "label", lgsEvent.Label ?? lgsEvent.EventType ?? "LGS/PLGS" },
-                            { "eventType", lgsEvent.EventType ?? "unknown" },
-                            { "durationSeconds", durationSeconds }
+                            OriginalId = $"glooko_lgsplgs_{lgsEvent.X}",
+                            Category = StateSpanCategory.PumpMode,
+                            State = stateValue,
+                            StartMills = new DateTimeOffset(
+                                startTimestamp
+                            ).ToUnixTimeMilliseconds(),
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "label", lgsEvent.Label ?? lgsEvent.EventType ?? "LGS/PLGS" },
+                                { "eventType", lgsEvent.EventType ?? "unknown" },
+                                { "durationSeconds", durationSeconds },
+                            },
                         }
-                    });
+                    );
                 }
             }
 
@@ -1436,22 +1615,28 @@ namespace Nocturne.Connectors.Glooko.Services
                     long? endMills = null;
                     if (i < profileChanges.Count - 1)
                     {
-                        endMills = new DateTimeOffset(GetCorrectedGlookoTime(profileChanges[i + 1].X)).ToUnixTimeMilliseconds();
+                        endMills = new DateTimeOffset(
+                            GetCorrectedGlookoTime(profileChanges[i + 1].X)
+                        ).ToUnixTimeMilliseconds();
                     }
 
-                    stateSpans.Add(new StateSpan
-                    {
-                        OriginalId = $"glooko_profile_{change.X}",
-                        Category = StateSpanCategory.Profile,
-                        State = ProfileState.Active.ToString(),
-                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
-                        EndMills = endMills,
-                        Source = ConnectorSource,
-                        Metadata = new Dictionary<string, object>
+                    stateSpans.Add(
+                        new StateSpan
                         {
-                            { "profileName", change.ProfileName ?? change.Label ?? "Unknown" }
+                            OriginalId = $"glooko_profile_{change.X}",
+                            Category = StateSpanCategory.Profile,
+                            State = ProfileState.Active.ToString(),
+                            StartMills = new DateTimeOffset(
+                                startTimestamp
+                            ).ToUnixTimeMilliseconds(),
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "profileName", change.ProfileName ?? change.Label ?? "Unknown" },
+                            },
                         }
-                    });
+                    );
                 }
             }
 
@@ -1462,9 +1647,11 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     var startTimestamp = GetCorrectedGlookoTime(tempBasal.X);
                     var durationSeconds = tempBasal.Duration ?? 0;
-                    var endMills = durationSeconds > 0
-                        ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds() + (durationSeconds * 1000)
-                        : (long?)null;
+                    var endMills =
+                        durationSeconds > 0
+                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
+                                + (durationSeconds * 1000)
+                            : (long?)null;
 
                     // Rate is stored in Y field (U/hr)
                     var rate = tempBasal.Y ?? 0;
@@ -1472,28 +1659,35 @@ namespace Nocturne.Connectors.Glooko.Services
                     // Calculate total insulin delivered: rate (U/hr) × duration (seconds) / 3600 (seconds/hr)
                     var calculatedInsulin = rate * durationSeconds / 3600.0;
 
-                    stateSpans.Add(new StateSpan
-                    {
-                        OriginalId = $"glooko_tempbasal_{tempBasal.X}",
-                        Category = StateSpanCategory.TempBasal,
-                        State = TempBasalState.Active.ToString(),
-                        StartMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds(),
-                        EndMills = endMills,
-                        Source = ConnectorSource,
-                        Metadata = new Dictionary<string, object>
+                    stateSpans.Add(
+                        new StateSpan
                         {
-                            { "rate", rate },
-                            { "durationSeconds", durationSeconds },
-                            { "durationMinutes", durationSeconds / 60.0 },
-                            { "calculatedInsulin", calculatedInsulin },
-                            { "label", tempBasal.Label ?? "Temp Basal" }
+                            OriginalId = $"glooko_tempbasal_{tempBasal.X}",
+                            Category = StateSpanCategory.TempBasal,
+                            State = TempBasalState.Active.ToString(),
+                            StartMills = new DateTimeOffset(
+                                startTimestamp
+                            ).ToUnixTimeMilliseconds(),
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "rate", rate },
+                                { "durationSeconds", durationSeconds },
+                                { "durationMinutes", durationSeconds / 60.0 },
+                                { "calculatedInsulin", calculatedInsulin },
+                                { "label", tempBasal.Label ?? "Temp Basal" },
+                            },
                         }
-                    });
+                    );
                 }
             }
 
-            _logger.LogInformation("[{ConnectorSource}] Transformed {Count} state spans from v3 data",
-                ConnectorSource, stateSpans.Count);
+            _logger.LogInformation(
+                "[{ConnectorSource}] Transformed {Count} state spans from v3 data",
+                ConnectorSource,
+                stateSpans.Count
+            );
 
             return stateSpans;
         }
@@ -1520,26 +1714,35 @@ namespace Nocturne.Connectors.Glooko.Services
                     // Determine event type based on alarm type/code
                     var eventType = DetermineAlarmEventType(alarm.AlarmType, alarm.Data?.AlarmCode);
 
-                    events.Add(new SystemEvent
-                    {
-                        OriginalId = $"glooko_alarm_{alarm.X}",
-                        EventType = eventType,
-                        Category = SystemEventCategory.Pump,
-                        Code = alarm.Data?.AlarmCode ?? alarm.AlarmType,
-                        Description = alarm.Data?.AlarmDescription ?? alarm.Label ?? alarm.AlarmType ?? "Unknown alarm",
-                        Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
-                        Source = ConnectorSource,
-                        Metadata = new Dictionary<string, object>
+                    events.Add(
+                        new SystemEvent
                         {
-                            { "alarmType", alarm.AlarmType ?? "unknown" },
-                            { "label", alarm.Label ?? "" }
+                            OriginalId = $"glooko_alarm_{alarm.X}",
+                            EventType = eventType,
+                            Category = SystemEventCategory.Pump,
+                            Code = alarm.Data?.AlarmCode ?? alarm.AlarmType,
+                            Description =
+                                alarm.Data?.AlarmDescription
+                                ?? alarm.Label
+                                ?? alarm.AlarmType
+                                ?? "Unknown alarm",
+                            Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(),
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "alarmType", alarm.AlarmType ?? "unknown" },
+                                { "label", alarm.Label ?? "" },
+                            },
                         }
-                    });
+                    );
                 }
             }
 
-            _logger.LogInformation("[{ConnectorSource}] Transformed {Count} system events from v3 data",
-                ConnectorSource, events.Count);
+            _logger.LogInformation(
+                "[{ConnectorSource}] Transformed {Count} system events from v3 data",
+                ConnectorSource,
+                events.Count
+            );
 
             return events;
         }
@@ -1553,15 +1756,23 @@ namespace Nocturne.Connectors.Glooko.Services
             var code = (alarmCode ?? "").ToUpperInvariant();
 
             // Critical/hazard keywords
-            if (type.Contains("OCCLUSION") || type.Contains("EMPTY") ||
-                code.Contains("OCCLUSION") || code.Contains("EMPTY"))
+            if (
+                type.Contains("OCCLUSION")
+                || type.Contains("EMPTY")
+                || code.Contains("OCCLUSION")
+                || code.Contains("EMPTY")
+            )
             {
                 return SystemEventType.Alarm;
             }
 
             // Warning keywords
-            if (type.Contains("LOW") || type.Contains("BATTERY") ||
-                code.Contains("LOW") || code.Contains("BATTERY"))
+            if (
+                type.Contains("LOW")
+                || type.Contains("BATTERY")
+                || code.Contains("LOW")
+                || code.Contains("BATTERY")
+            )
             {
                 return SystemEventType.Warning;
             }
@@ -1579,4 +1790,3 @@ namespace Nocturne.Connectors.Glooko.Services
         #endregion
     }
 }
-

@@ -7,7 +7,6 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import {
     BarChart3,
@@ -24,19 +23,11 @@
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { type Entry } from "$lib/api";
-  import { GlucoseChart } from "$lib/components/glucose-chart";
-  import * as Pagination from "$lib/components/ui/pagination/index.js";
-  import ChevronLeftIcon from "@lucide/svelte/icons/chevron-left";
-  import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
   import { MediaQuery } from "svelte/reactivity";
-  import CardFooter from "$lib/components/ui/card/card-footer.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
 
   const isDesktop = new MediaQuery("(min-width: 768px)");
-  const perPage = $derived(isDesktop.current ? 4 : 8);
-  const siblingCount = $derived(isDesktop.current ? 1 : 0);
 
   // Build date range input from URL parameters
   const dateRangeInput = $derived(useDateRange(14));
@@ -59,7 +50,6 @@
   // Derived values from data
   const entries = $derived(data.entries);
   const analysis = $derived(data.analysis);
-  const averagedStats = $derived(data.averagedStats);
   const dateRange = $derived(data.dateRange);
   const startDate = $derived(new Date(dateRange.from));
   const endDate = $derived(new Date(dateRange.to));
@@ -256,32 +246,14 @@
     <!-- Main AGP Chart -->
     <Card class="border-2">
       <CardHeader>
-        <div class="flex items-center justify-between">
-          <div>
-            <CardTitle class="flex items-center gap-2">
-              <BarChart3 class="w-5 h-5" />
-              Glucose Pattern (24-hour overlay)
-            </CardTitle>
-            <CardDescription>
-              Median glucose with percentile bands showing your typical daily
-              pattern
-            </CardDescription>
-          </div>
-          <div class="flex items-center gap-2 text-xs text-muted-foreground">
-            <div class="flex items-center gap-1">
-              <div class="w-3 h-3 bg-black rounded-full"></div>
-              <span>Median</span>
-            </div>
-            <div class="flex items-center gap-1">
-              <div class="w-3 h-3 bg-blue-400 rounded"></div>
-              <span>25-75%</span>
-            </div>
-            <div class="flex items-center gap-1">
-              <div class="w-3 h-3 bg-blue-200 rounded"></div>
-              <span>10-90%</span>
-            </div>
-          </div>
-        </div>
+        <CardTitle class="flex items-center gap-2">
+          <BarChart3 class="w-5 h-5" />
+          Glucose Pattern (24-hour overlay)
+        </CardTitle>
+        <CardDescription>
+          Median glucose with percentile bands showing your typical daily
+          pattern
+        </CardDescription>
       </CardHeader>
       <CardContent class="h-80 md:h-96">
         <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />

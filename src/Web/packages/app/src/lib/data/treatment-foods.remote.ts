@@ -164,6 +164,21 @@ export const getAllFoods = query(async () => {
 });
 
 /**
+ * Get a single food by ID
+ */
+export const getFoodById = query(z.string(), async (foodId) => {
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
+
+  try {
+    return await apiClient.food.getFoodById(foodId);
+  } catch (err) {
+    console.error("Error loading food:", err);
+    throw error(500, "Failed to load food");
+  }
+});
+
+/**
  * Get recent foods for the current user
  */
 export const getRecentFoods = query(z.number().optional(), async (limit) => {

@@ -40,3 +40,4 @@ export { default as SystemEventIcon } from './SystemEventIcon.svelte';
 export { default as PumpModeIcon } from './PumpModeIcon.svelte';
 export { default as DeviceEventIcon } from './DeviceEventIcon.svelte';
 export { default as TrackerCategoryIcon } from './TrackerCategoryIcon.svelte';
+export { default as TreatmentTypeIcon } from './TreatmentTypeIcon.svelte';

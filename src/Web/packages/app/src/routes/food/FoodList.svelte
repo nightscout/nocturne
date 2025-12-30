@@ -18,6 +18,7 @@
   import { getFoodState } from "./food-context.js";
   import FoodFilters from "./FoodFilters.svelte";
   import type { FoodRecord } from "./types";
+  import { getGiLabel } from "$lib/components/food";
 
   interface Props {
     handleFoodDragStart: (event: DragEvent, food: FoodRecord) => void;
@@ -41,14 +42,12 @@
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Actions</TableHead>
+            <TableHead class="w-20">Actions</TableHead>
             <TableHead>Name</TableHead>
+            <TableHead class="text-center font-semibold">Carbs</TableHead>
+            <TableHead class="text-center font-semibold">GI</TableHead>
             <TableHead class="text-center">Portion</TableHead>
-            <TableHead class="text-center">Unit</TableHead>
-            <TableHead class="text-center">Carbs</TableHead>
-            <TableHead class="text-center">GI</TableHead>
             <TableHead>Category</TableHead>
-            <TableHead>Subcategory</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -67,6 +66,7 @@
                     variant="ghost"
                     size="sm"
                     onclick={() => foodStore.editFood(food)}
+                    title="Edit food"
                   >
                     <Edit class="h-3 w-3" />
                   </Button>
@@ -74,18 +74,29 @@
                     variant="ghost"
                     size="sm"
                     onclick={() => foodStore.deleteFood(food)}
+                    title="Delete food"
                   >
                     <Trash2 class="h-3 w-3" />
                   </Button>
                 </div>
               </TableCell>
-              <TableCell class="truncate">{food.name}</TableCell>
-              <TableCell class="text-center">{food.portion}</TableCell>
-              <TableCell class="text-center">{food.unit}</TableCell>
-              <TableCell class="text-center">{food.carbs}</TableCell>
-              <TableCell class="text-center">{food.gi}</TableCell>
-              <TableCell class="truncate">{food.category}</TableCell>
-              <TableCell class="truncate">{food.subcategory}</TableCell>
+              <TableCell class="truncate max-w-[200px]" title={food.name}
+                >{food.name}</TableCell
+              >
+              <TableCell class="text-center font-medium">{food.carbs}g</TableCell
+              >
+              <TableCell class="text-center">{getGiLabel(food.gi)}</TableCell>
+              <TableCell class="text-center text-muted-foreground">
+                {food.portion}
+                {food.unit}
+              </TableCell>
+              <TableCell class="truncate max-w-[150px] text-muted-foreground">
+                {#if food.category}
+                  {food.category}{#if food.subcategory} / {food.subcategory}{/if}
+                {:else}
+                  —
+                {/if}
+              </TableCell>
             </TableRow>
           {/each}
         </TableBody>

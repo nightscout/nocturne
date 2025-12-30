@@ -8,6 +8,7 @@ import {
 	createQuickPick as createQuickPickRemote,
 	saveQuickPicks as saveQuickPicksRemote,
 } from './data.remote';
+import { scaleMacro } from '$lib/components/food';
 
 const createEmptyFood = (): FoodRecord => ({
 	type: 'food',
@@ -88,11 +89,26 @@ export class FoodState {
 	}
 
 	// Private helper methods
+	/**
+	 * Calculate total carbs for a quick pick based on scaled portions.
+	 * 
+	 * Each food has:
+	 * - portion: the base serving size (e.g., 4 servings)
+	 * - carbs: total carbs for the base portion (e.g., 269g for 4 servings)
+	 * - portions: how many servings the user wants (e.g., 1)
+	 * 
+	 * The calculation: (carbs / portion) * portions
+	 * Example: (269 / 4) * 1 = 67.25g for 1 serving
+	 */
 	private calculateQuickPickCarbs(quickPick: QuickPickRecord) {
 		quickPick.carbs = 0;
 		if (quickPick.foods) {
 			quickPick.foods.forEach((food) => {
-				quickPick.carbs += food.carbs * (food.portions || 1);
+				const selectedPortions = food.portions || 1;
+				const basePortion = food.portion || 1;
+				// Calculate per-unit carbs and multiply by selected portions
+				const scaledCarbs = scaleMacro(basePortion, selectedPortions, food.carbs);
+				quickPick.carbs += scaledCarbs;
 			});
 		} else {
 			quickPick.foods = [];

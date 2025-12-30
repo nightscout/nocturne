@@ -29,54 +29,56 @@
 
   // Glucose distribution ranges (using CSS variables for theme support)
   const RANGES = [
-    { name: "Low", color: "var(--glucose-low)" },
-    { name: "In Range", color: "var(--glucose-in-range)" },
-    { name: "High", color: "var(--glucose-high)" },
+    { name: "Very Low", color: "#8b5cf6" }, // purple - <54 mg/dL
+    { name: "Low", color: "var(--glucose-low)" }, // red - 54-70 mg/dL
+    { name: "Tight Range", color: "#22c55e" }, // bright green - 70-140 mg/dL
+    { name: "In Range", color: "#16a34a" }, // darker green - 70-180 mg/dL
+    { name: "High", color: "var(--glucose-high)" }, // yellow - 180-250 mg/dL
+    { name: "Very High", color: "#ea580c" }, // dark orange - >250 mg/dL
   ] as const;
 
   const rangeStats = $derived.by(() => {
     const analysis = reportsQuery.current?.analysis;
-    const rangeStatsBE = analysis?.timeInRange?.rangeStats;
+    const tir = analysis?.timeInRange?.percentages;
 
-    if (!rangeStatsBE) {
+    if (!tir) {
       return RANGES.map((range) => ({
         name: range.name,
         color: range.color,
         percentage: 0,
-        count: 0,
-        average: 0,
-        median: 0,
-        stdDev: 0,
       }));
     }
 
     return [
       {
-        name: "Low",
+        name: "Very Low",
         color: RANGES[0].color,
-        percentage: rangeStatsBE.low?.timeInRange ?? 0,
-        count: rangeStatsBE.low?.readingCount ?? 0,
-        average: rangeStatsBE.low?.mean ?? 0,
-        median: rangeStatsBE.low?.median ?? 0,
-        stdDev: rangeStatsBE.low?.standardDeviation ?? 0,
+        percentage: tir.severeLow ?? 0,
+      },
+      {
+        name: "Low",
+        color: RANGES[1].color,
+        percentage: tir.low ?? 0,
+      },
+      {
+        name: "Tight Range",
+        color: RANGES[2].color,
+        percentage: tir.tightTarget ?? 0,
       },
       {
         name: "In Range",
-        color: RANGES[1].color,
-        percentage: rangeStatsBE.target?.timeInRange ?? 0,
-        count: rangeStatsBE.target?.readingCount ?? 0,
-        average: rangeStatsBE.target?.mean ?? 0,
-        median: rangeStatsBE.target?.median ?? 0,
-        stdDev: rangeStatsBE.target?.standardDeviation ?? 0,
+        color: RANGES[3].color,
+        percentage: tir.target ?? 0,
       },
       {
         name: "High",
-        color: RANGES[2].color,
-        percentage: rangeStatsBE.high?.timeInRange ?? 0,
-        count: rangeStatsBE.high?.readingCount ?? 0,
-        average: rangeStatsBE.high?.mean ?? 0,
-        median: rangeStatsBE.high?.median ?? 0,
-        stdDev: rangeStatsBE.high?.standardDeviation ?? 0,
+        color: RANGES[4].color,
+        percentage: tir.high ?? 0,
+      },
+      {
+        name: "Very High",
+        color: RANGES[5].color,
+        percentage: tir.severeHigh ?? 0,
       },
     ];
   });
@@ -261,11 +263,7 @@
             <Table.Header>
               <Table.Row>
                 <Table.Head>Range</Table.Head>
-                <Table.Head class="text-right">%</Table.Head>
-                <Table.Head class="text-right">Count</Table.Head>
-                <Table.Head class="text-right">Average</Table.Head>
-                <Table.Head class="text-right">Median</Table.Head>
-                <Table.Head class="text-right">Std Dev</Table.Head>
+                <Table.Head class="text-right">Time (%)</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -282,16 +280,6 @@
                   </Table.Cell>
                   <Table.Cell class="text-right font-medium">
                     {stat.percentage.toFixed(1)}%
-                  </Table.Cell>
-                  <Table.Cell class="text-right">{stat.count}</Table.Cell>
-                  <Table.Cell class="text-right">
-                    {stat.average > 0 ? stat.average.toFixed(0) : "—"}
-                  </Table.Cell>
-                  <Table.Cell class="text-right">
-                    {stat.median > 0 ? stat.median.toFixed(0) : "—"}
-                  </Table.Cell>
-                  <Table.Cell class="text-right">
-                    {stat.stdDev > 0 ? stat.stdDev.toFixed(1) : "—"}
                   </Table.Cell>
                 </Table.Row>
               {/each}

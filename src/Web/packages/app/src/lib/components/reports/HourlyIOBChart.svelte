@@ -44,16 +44,9 @@
     }
   }
 
-  // Load data when component mounts or when parameters change
+  // Load data when component mounts
   onMount(() => {
     loadIOBData();
-  });
-
-  // Reload when interval changes
-  $effect(() => {
-    if (intervalMinutes) {
-      loadIOBData();
-    }
   });
 </script>
 

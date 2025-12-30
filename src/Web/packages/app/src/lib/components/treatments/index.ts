@@ -2,3 +2,7 @@ export { default as TreatmentsDataTable } from "./TreatmentsDataTable.svelte";
 export { default as TreatmentCategoryTabs } from "./TreatmentCategoryTabs.svelte";
 export { default as TreatmentStatsCard } from "./TreatmentStatsCard.svelte";
 export { default as TreatmentEditDialog } from "./TreatmentEditDialog.svelte";
+export { default as TreatmentFoodBreakdown } from "./TreatmentFoodBreakdown.svelte";
+export { default as TreatmentFoodSelectorDialog } from "./TreatmentFoodSelectorDialog.svelte";
+export { default as TreatmentFoodEntryEditDialog } from "./TreatmentFoodEntryEditDialog.svelte";
+export { default as CarbBreakdownBar } from "./CarbBreakdownBar.svelte";

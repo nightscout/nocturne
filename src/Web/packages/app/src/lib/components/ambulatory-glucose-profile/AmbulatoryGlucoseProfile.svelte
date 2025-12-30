@@ -23,9 +23,21 @@
   const units = $derived(glucoseUnits.current);
   const isMMOL = $derived(units === "mmol");
 
-  // Convert data to display units
-  const data = $derived(
-    rawData.map((d) => ({
+  // Memoize data transformation to avoid recreating arrays on every render
+  // We use a stable key based on rawData length + first/last item + units
+  let cachedData: typeof rawData = [];
+  let cacheKey = "";
+
+  const data = $derived.by(() => {
+    // Create a simple cache key to detect meaningful changes
+    const newKey = `${rawData.length}-${rawData[0]?.hour ?? ""}-${rawData[rawData.length - 1]?.hour ?? ""}-${units}`;
+
+    if (newKey === cacheKey && cachedData.length > 0) {
+      return cachedData;
+    }
+
+    // Transform data with unit conversion
+    cachedData = rawData.map((d) => ({
       ...d,
       median: convertToDisplayUnits(d.median ?? 0, units),
       percentiles: d.percentiles
@@ -36,8 +48,10 @@
             p90: convertToDisplayUnits(d.percentiles.p90 ?? 0, units),
           }
         : undefined,
-    }))
-  );
+    }));
+    cacheKey = newKey;
+    return cachedData;
+  });
 
   // Dynamic Y-axis domain based on units
   const yDomain = $derived<[number, number]>(isMMOL ? [0, 22.2] : [0, 400]);
@@ -76,7 +90,7 @@
       {
         key: "p10",
         value: [(d) => d.percentiles?.p25, (d) => d.percentiles?.p10],
-        color: "var(--chart-1)",
+        color: "var(--chart-3)",
         label: "P10",
       },
       {
@@ -97,13 +111,13 @@
       {
         key: "percentiles.p75",
         value: [(d) => d.median, (d) => d.percentiles?.p75],
-        color: "var(--chart-3)",
+        color: "var(--chart-2)",
         label: "P75",
       },
       {
         key: "p90",
         value: [(d) => d.percentiles?.p75, (d) => d.percentiles?.p90],
-        color: "var(--chart-1)",
+        color: "var(--chart-3)",
         label: "P90",
       },
     ]}

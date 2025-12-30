@@ -82,6 +82,9 @@ public class MealTreatment
     [JsonPropertyName("treatment")]
     public Treatment Treatment { get; set; } = new();
 
+    [JsonPropertyName("foods")]
+    public List<TreatmentFood> Foods { get; set; } = [];
+
     [JsonPropertyName("isAttributed")]
     public bool IsAttributed { get; set; }
 

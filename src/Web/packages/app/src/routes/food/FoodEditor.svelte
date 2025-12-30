@@ -8,58 +8,14 @@
   } from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as Command from "$lib/components/ui/command";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Check, ChevronsUpDown } from "lucide-svelte";
-  import { tick } from "svelte";
-  import { cn } from "$lib/utils";
   import { getFoodState } from "./food-context";
-  import { CategorySubcategoryCombobox } from "$lib/components/food";
+  import {
+    CategorySubcategoryCombobox,
+    UnitCombobox,
+    GiCombobox,
+  } from "$lib/components/food";
 
   const foodStore = getFoodState();
-
-  // Combobox state for unit and GI
-  let unitOpen = $state(false);
-  let giOpen = $state(false);
-  let unitTriggerRef = $state<HTMLButtonElement>(null!);
-  let giTriggerRef = $state<HTMLButtonElement>(null!);
-
-  const foodUnits = ["g", "ml", "pcs", "oz"];
-  const giOptions = [
-    { value: 1, label: "Low" },
-    { value: 2, label: "Medium" },
-    { value: 3, label: "High" },
-  ];
-
-  // Selected labels for display
-  let selectedUnitLabel = $derived(
-    foodStore.currentFood.unit || "Select unit..."
-  );
-  let selectedGiLabel = $derived(
-    giOptions.find((opt) => opt.value === foodStore.currentFood.gi)?.label ||
-      "Select GI..."
-  );
-
-  // Helper functions for combobox
-  function closeUnitAndFocus() {
-    unitOpen = false;
-    tick().then(() => unitTriggerRef.focus());
-  }
-
-  function closeGiAndFocus() {
-    giOpen = false;
-    tick().then(() => giTriggerRef.focus());
-  }
-
-  function selectUnit(unit: string) {
-    foodStore.currentFood.unit = unit;
-    closeUnitAndFocus();
-  }
-
-  function selectGi(gi: number) {
-    foodStore.currentFood.gi = gi;
-    closeGiAndFocus();
-  }
 
   function handleCategoryChange(category: string) {
     foodStore.currentFood.category = category;
@@ -82,6 +38,14 @@
     foodStore.categories[category][subcategory] = true;
   }
 
+  function handleUnitChange(unit: string) {
+    foodStore.currentFood.unit = unit;
+  }
+
+  function handleGiChange(gi: number) {
+    foodStore.currentFood.gi = gi;
+  }
+
   function handleSaveFood() {
     foodStore.saveFood();
   }
@@ -92,126 +56,77 @@
 </script>
 
 <Card>
-  <CardHeader>
-    <CardTitle>
-      Record {#if foodStore.currentFood._id}(ID: {foodStore.currentFood
-          ._id}){/if}
+  <CardHeader class="pb-4">
+    <CardTitle class="flex items-center gap-2">
+      {foodStore.currentFood._id ? "Edit Food" : "New Food"}
+      {#if foodStore.currentFood._id}
+        <span class="text-sm font-normal text-muted-foreground">
+          ID: {foodStore.currentFood._id}
+        </span>
+      {/if}
     </CardTitle>
   </CardHeader>
-  <CardContent class="space-y-4">
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-      <div class="space-y-2">
-        <Label for="food-name">Name</Label>
-        <Input id="food-name" bind:value={foodStore.currentFood.name} />
-      </div>
-      <div class="space-y-2">
-        <Label for="food-portion">Portion</Label>
-        <Input
-          id="food-portion"
-          type="number"
-          bind:value={foodStore.currentFood.portion}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="food-unit">Unit</Label>
-        <Popover.Root bind:open={unitOpen}>
-          <Popover.Trigger bind:ref={unitTriggerRef}>
-            {#snippet child({ props })}
-              <Button
-                variant="outline"
-                class="w-full justify-between"
-                {...props}
-                role="combobox"
-                aria-expanded={unitOpen}
-              >
-                {selectedUnitLabel}
-                <ChevronsUpDown class="ml-2 size-4 shrink-0 opacity-50" />
-              </Button>
-            {/snippet}
-          </Popover.Trigger>
-          <Popover.Content class="w-[var(--bits-popover-anchor-width)] p-0">
-            <Command.Root>
-              <Command.Input placeholder="Search units..." />
-              <Command.List>
-                <Command.Empty>No unit found.</Command.Empty>
-                <Command.Group>
-                  {#each foodUnits as unit}
-                    <Command.Item
-                      value={unit}
-                      onSelect={() => selectUnit(unit)}
-                    >
-                      <Check
-                        class={cn(
-                          "mr-2 size-4",
-                          foodStore.currentFood.unit !== unit &&
-                            "text-transparent"
-                        )}
-                      />
-                      {unit}
-                    </Command.Item>
-                  {/each}
-                </Command.Group>
-              </Command.List>
-            </Command.Root>
-          </Popover.Content>
-        </Popover.Root>
-      </div>
-      <div class="space-y-2">
-        <Label for="food-carbs">Carbs (g)</Label>
-        <Input
-          id="food-carbs"
-          type="number"
-          bind:value={foodStore.currentFood.carbs}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="food-gi">GI</Label>
-        <Popover.Root bind:open={giOpen}>
-          <Popover.Trigger bind:ref={giTriggerRef}>
-            {#snippet child({ props })}
-              <Button
-                variant="outline"
-                class="w-full justify-between"
-                {...props}
-                role="combobox"
-                aria-expanded={giOpen}
-              >
-                {selectedGiLabel}
-                <ChevronsUpDown class="ml-2 size-4 shrink-0 opacity-50" />
-              </Button>
-            {/snippet}
-          </Popover.Trigger>
-          <Popover.Content class="w-[var(--bits-popover-anchor-width)] p-0">
-            <Command.Root>
-              <Command.Input placeholder="Search GI levels..." />
-              <Command.List>
-                <Command.Empty>No GI level found.</Command.Empty>
-                <Command.Group>
-                  {#each giOptions as option}
-                    <Command.Item
-                      value={option.label}
-                      onSelect={() => selectGi(option.value)}
-                    >
-                      <Check
-                        class={cn(
-                          "mr-2 size-4",
-                          foodStore.currentFood.gi !== option.value &&
-                            "text-transparent"
-                        )}
-                      />
-                      {option.label}
-                    </Command.Item>
-                  {/each}
-                </Command.Group>
-              </Command.List>
-            </Command.Root>
-          </Popover.Content>
-        </Popover.Root>
+  <CardContent class="space-y-6">
+    <!-- Primary info: Name -->
+    <div class="space-y-2">
+      <Label for="food-name">Name</Label>
+      <Input
+        id="food-name"
+        bind:value={foodStore.currentFood.name}
+        placeholder="Enter food name"
+        class="max-w-md"
+      />
+    </div>
+
+    <!-- Most important: Carbs, GI, Portion, Unit -->
+    <div class="rounded-lg border bg-muted/30 p-4 space-y-4">
+      <h3 class="text-sm font-medium text-muted-foreground">
+        Key Nutritional Info
+      </h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="space-y-2">
+          <Label for="food-carbs" class="text-base font-semibold"
+            >Carbs (g)</Label
+          >
+          <Input
+            id="food-carbs"
+            type="number"
+            bind:value={foodStore.currentFood.carbs}
+            class="text-lg font-medium"
+          />
+        </div>
+        <div class="space-y-2">
+          <Label for="food-gi" class="text-base font-semibold"
+            >Glycemic Index</Label
+          >
+          <GiCombobox
+            value={foodStore.currentFood.gi}
+            onValueChange={handleGiChange}
+          />
+        </div>
+        <div class="space-y-2">
+          <Label for="food-portion">Portion</Label>
+          <Input
+            id="food-portion"
+            type="number"
+            bind:value={foodStore.currentFood.portion}
+          />
+        </div>
+        <div class="space-y-2">
+          <Label for="food-unit">Unit</Label>
+          <UnitCombobox
+            value={foodStore.currentFood.unit}
+            onValueChange={handleUnitChange}
+          />
+        </div>
       </div>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="space-y-2 col-span-2">
-        <Label>Category & Subcategory</Label>
+
+    <!-- Secondary info: Category, Other Macros -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Category section -->
+      <div class="space-y-4">
+        <h3 class="text-sm font-medium text-muted-foreground">Category</h3>
         <CategorySubcategoryCombobox
           bind:category={foodStore.currentFood.category}
           bind:subcategory={foodStore.currentFood.subcategory}
@@ -222,34 +137,45 @@
           onSubcategoryCreate={handleSubcategoryCreate}
         />
       </div>
-      <div class="space-y-2">
-        <Label for="food-fat">Fat (g)</Label>
-        <Input
-          id="food-fat"
-          type="number"
-          bind:value={foodStore.currentFood.fat}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="food-protein">Protein (g)</Label>
-        <Input
-          id="food-protein"
-          type="number"
-          bind:value={foodStore.currentFood.protein}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="food-energy">Energy (kJ)</Label>
-        <Input
-          id="food-energy"
-          type="number"
-          bind:value={foodStore.currentFood.energy}
-        />
+
+      <!-- Other macros section -->
+      <div class="space-y-4">
+        <h3 class="text-sm font-medium text-muted-foreground">
+          Additional Macros
+        </h3>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="space-y-2">
+            <Label for="food-fat">Fat (g)</Label>
+            <Input
+              id="food-fat"
+              type="number"
+              bind:value={foodStore.currentFood.fat}
+            />
+          </div>
+          <div class="space-y-2">
+            <Label for="food-protein">Protein (g)</Label>
+            <Input
+              id="food-protein"
+              type="number"
+              bind:value={foodStore.currentFood.protein}
+            />
+          </div>
+          <div class="space-y-2">
+            <Label for="food-energy">Energy (kJ)</Label>
+            <Input
+              id="food-energy"
+              type="number"
+              bind:value={foodStore.currentFood.energy}
+            />
+          </div>
+        </div>
       </div>
     </div>
-    <div class="flex gap-2">
+
+    <!-- Actions -->
+    <div class="flex gap-2 pt-2">
       <Button onclick={handleSaveFood}>
-        {foodStore.currentFood._id ? "Save record" : "Create new record"}
+        {foodStore.currentFood._id ? "Save Changes" : "Create Food"}
       </Button>
       <Button variant="outline" onclick={handleClearForm}>Clear</Button>
     </div>
