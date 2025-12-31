@@ -22,9 +22,8 @@
   let isDragOver = $state(false);
 
   /**
-   * Calculate scaled carbs for a food item.
-   * If food has 4 servings = 269g carbs, and user wants 1 serving,
-   * the scaled carbs = (269 / 4) * 1 = 67.25g
+   * Calculate scaled carbs for a food item. If food has 4 servings = 269g
+   * carbs, and user wants 1 serving, the scaled carbs = (269 / 4) * 1 = 67.25g
    */
   function getScaledCarbs(food: {
     portion: number;
@@ -175,7 +174,8 @@
             <div class="truncate" title={food.name}>
               <span class="font-medium">{food.name}</span>
               <span class="text-muted-foreground text-xs ml-1">
-                ({food.portion} {food.unit} = {formatMacro(food.carbs)}g)
+                ({food.portion}
+                {food.unit} = {formatMacro(food.carbs)}g)
               </span>
             </div>
             <div class="text-center w-24">

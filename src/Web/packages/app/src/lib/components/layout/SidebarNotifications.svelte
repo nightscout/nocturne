@@ -113,6 +113,7 @@
       (d) => d.id === instance.definitionId
     );
     if (!def) return "Tracker active";
+    if (def.description) return def.description;
 
     // Find threshold hours for the level from notificationThresholds
     const threshold = def.notificationThresholds?.find(
@@ -162,6 +163,7 @@
 
   // Handlers
   async function handleSnooze(id: string, mins: number) {
+    isOpen = false;
     try {
       await trackersRemote.ackInstance({ id, request: { snoozeMins: mins } });
     } catch (err) {
@@ -170,6 +172,7 @@
   }
 
   async function handleComplete(id: string) {
+    isOpen = false;
     try {
       await trackersRemote.completeInstance({
         id,
@@ -181,6 +184,7 @@
   }
 
   async function handleGlobalAck(id: string) {
+    isOpen = false;
     try {
       await trackersRemote.ackInstance({
         id,
@@ -259,7 +263,7 @@
               <div
                 class="flex items-start gap-3 border-b p-3 last:border-b-0 text-red-500 bg-red-500/10 border-red-500/20"
               >
-                <div class="flex-shrink-0 mt-0.5">
+                <div class="shrink-0 mt-0.5">
                   <KeyRound class="h-4 w-4" />
                 </div>
                 <div class="flex-1 min-w-0">
@@ -316,7 +320,7 @@
                 getLevelClass(notification.level)
               )}
             >
-              <div class="flex-shrink-0 mt-0.5">
+              <div class="shrink-0 mt-0.5">
                 <LevelIcon class="h-4 w-4" />
               </div>
               <div class="flex-1 min-w-0">

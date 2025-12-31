@@ -424,6 +424,7 @@
 
   // Use server-side data for IOB and basal, with fallbacks
   const iobData = $derived(serverChartData?.iobSeries ?? []);
+  const cobData = $derived(serverChartData?.cobSeries ?? []);
   const basalData = $derived(serverChartData?.basalSeries ?? []);
   const maxIOB = $derived(serverChartData?.maxIob ?? 3);
   const maxBasalRate = $derived(
@@ -971,14 +972,28 @@
               tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
             />
 
-            <!-- IOB track label -->
+            <!-- IOB/COB track label -->
             <Text
               x={4}
               y={iobTrackTop + 12}
               class="text-[8px] fill-muted-foreground font-medium"
             >
-              IOB
+              IOB/COB
             </Text>
+
+            <!-- COB area (scaled by carb ratio to show on IOB-equivalent scale) -->
+            {#if cobData.length > 0 && cobData.some((d) => d.value > 0.01)}
+              <Area
+                data={cobData}
+                x={(d) => d.time}
+                y0={() => iobZero}
+                y1={(d) => iobScale(d.value / carbRatio)}
+                motion="spring"
+                curve={curveMonotoneX}
+                fill=""
+                class="fill-carbs/40"
+              />
+            {/if}
 
             <!-- IOB area (grows up from bottom of IOB track) -->
             {#if iobData.length > 0 && iobData.some((d) => d.value > 0.01)}
@@ -1122,6 +1137,17 @@
               points={{ class: "fill-insulin-basal" }}
             />
 
+            <!-- COB highlight with remapped scale (scaled by carb ratio) -->
+            <Highlight
+              x={(d) => d.time}
+              y={(d) => {
+                const cob = findSeriesValue(cobData, d.time);
+                if (!cob || cob.value <= 0) return null;
+                return iobScale(cob.value / carbRatio);
+              }}
+              points={{ class: "fill-carbs" }}
+            />
+
             <!-- IOB highlight with remapped scale -->
             <Highlight
               x={(d) => d.time}
@@ -1148,6 +1174,7 @@
             {#snippet children({ data })}
               {@const activeBasal = findBasalValue(basalData, data.time)}
               {@const activeIob = findSeriesValue(iobData, data.time)}
+              {@const activeCob = findSeriesValue(cobData, data.time)}
               {@const nearbyBolus = findNearbyBolus(data.time)}
               {@const nearbyCarbs = findNearbyCarbs(data.time)}
               {@const nearbyDeviceEvent = findNearbyDeviceEvent(data.time)}
@@ -1201,12 +1228,19 @@
                     color="var(--iob-basal)"
                   />
                 {/if}
+                {#if activeCob && activeCob.value > 0}
+                  <Tooltip.Item
+                    label="COB"
+                    value={`${activeCob.value.toFixed(0)}g`}
+                    color="var(--carbs)"
+                  />
+                {/if}
                 {#if activeBasal}
                   <Tooltip.Item
                     label={activeBasal.isTemp ? "Temp Basal" : "Basal"}
                     value={activeBasal.rate}
                     format={"decimal"}
-                    color="var(--insulin-basal)"
+                    color={activeBasal.isTemp ? "var(--insulin-temp-basal)" : "var(--insulin-basal)"}
                     class={cn(
                       staleBasalData && data.time >= staleBasalData.start
                         ? "text-yellow-500 font-bold"
@@ -1304,6 +1338,10 @@
       <div class="flex items-center gap-1">
         <div class="w-3 h-2 bg-iob-basal border border-insulin"></div>
         <span>IOB</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <div class="w-3 h-2 bg-carbs/40 border border-carbs"></div>
+        <span>COB</span>
       </div>
       <div class="flex items-center gap-1">
         <svg

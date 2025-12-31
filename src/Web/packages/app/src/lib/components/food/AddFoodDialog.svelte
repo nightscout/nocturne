@@ -8,11 +8,7 @@
   import { CategorySubcategoryCombobox } from "$lib/components/food";
   import UnitCombobox from "./UnitCombobox.svelte";
   import GiCombobox from "./GiCombobox.svelte";
-  import {
-    DEFAULT_PORTION,
-    DEFAULT_UNIT,
-    DEFAULT_GI,
-  } from "./food-constants";
+  import { DEFAULT_PORTION, DEFAULT_UNIT, DEFAULT_GI } from "./food-constants";
   import {
     createNewFood,
     updateExistingFood,
@@ -204,9 +200,9 @@
         </h3>
         <div class="grid gap-4 md:grid-cols-4">
           <div class="space-y-2">
-            <Label for="food-carbs" class="text-base font-semibold"
-              >Carbs (g)</Label
-            >
+            <Label for="food-carbs" class="text-base font-semibold">
+              Carbs (g)
+            </Label>
             <Input
               id="food-carbs"
               type="number"
@@ -215,13 +211,10 @@
             />
           </div>
           <div class="space-y-2">
-            <Label for="food-gi" class="text-base font-semibold"
-              >Glycemic Index</Label
-            >
-            <GiCombobox
-              value={foodGi}
-              onValueChange={(gi) => (foodGi = gi)}
-            />
+            <Label for="food-gi" class="text-base font-semibold">
+              Glycemic Index
+            </Label>
+            <GiCombobox value={foodGi} onValueChange={(gi) => (foodGi = gi)} />
           </div>
           <div class="space-y-2">
             <Label for="food-portion">Portion</Label>

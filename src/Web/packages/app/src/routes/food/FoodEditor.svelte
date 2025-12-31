@@ -85,9 +85,9 @@
       </h3>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="space-y-2">
-          <Label for="food-carbs" class="text-base font-semibold"
-            >Carbs (g)</Label
-          >
+          <Label for="food-carbs" class="text-base font-semibold">
+            Carbs (g)
+          </Label>
           <Input
             id="food-carbs"
             type="number"
@@ -96,9 +96,9 @@
           />
         </div>
         <div class="space-y-2">
-          <Label for="food-gi" class="text-base font-semibold"
-            >Glycemic Index</Label
-          >
+          <Label for="food-gi" class="text-base font-semibold">
+            Glycemic Index
+          </Label>
           <GiCombobox
             value={foodStore.currentFood.gi}
             onValueChange={handleGiChange}

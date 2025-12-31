@@ -53,6 +53,7 @@ public class RequestForwardingService : IRequestForwardingService
     /// <param name="responseCacheService">Service for caching responses</param>
     /// <param name="discrepancyPersistenceService">Service for persisting discrepancy analysis</param>
     /// <param name="httpContextAccessor">HTTP context accessor for auto-detecting Nocturne URL</param>
+    /// <param name="memoryCache">Memory cache for caching responses</param>
     public RequestForwardingService(
         IHttpClientFactory httpClientFactory,
         IOptions<CompatibilityProxyConfiguration> configuration,
@@ -579,17 +580,25 @@ public class RequestForwardingService : IRequestForwardingService
         return $"{scheme}://{host}";
     }
 
-    private async Task AddNightscoutAuthAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    private async Task AddNightscoutAuthAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken
+    )
     {
         var config = _configuration.Value;
 
         // 1. Try Subject Token (V3 JWT Auth)
         if (!string.IsNullOrEmpty(config.NightscoutSubjectToken))
         {
-            var token = await GetJwtTokenAsync(config.NightscoutSubjectToken, config.NightscoutUrl, cancellationToken);
+            var token = await GetJwtTokenAsync(
+                config.NightscoutSubjectToken,
+                config.NightscoutUrl,
+                cancellationToken
+            );
             if (!string.IsNullOrEmpty(token))
             {
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                request.Headers.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
                 _logger.LogDebug("Added JWT auth header to Nightscout request");
                 return;
             }
@@ -611,11 +620,18 @@ public class RequestForwardingService : IRequestForwardingService
         }
     }
 
-    private async Task<string?> GetJwtTokenAsync(string subjectToken, string nightscoutUrl, CancellationToken cancellationToken)
+    private async Task<string?> GetJwtTokenAsync(
+        string subjectToken,
+        string nightscoutUrl,
+        CancellationToken cancellationToken
+    )
     {
         var cacheKey = $"nightscout_jwt_{subjectToken.GetHashCode()}";
 
-        if (_memoryCache.TryGetValue(cacheKey, out string? cachedToken) && !string.IsNullOrEmpty(cachedToken))
+        if (
+            _memoryCache.TryGetValue(cacheKey, out string? cachedToken)
+            && !string.IsNullOrEmpty(cachedToken)
+        )
         {
             return cachedToken;
         }
@@ -650,7 +666,10 @@ public class RequestForwardingService : IRequestForwardingService
             }
             else
             {
-                _logger.LogWarning("Failed to obtain JWT from Nightscout: {StatusCode}", response.StatusCode);
+                _logger.LogWarning(
+                    "Failed to obtain JWT from Nightscout: {StatusCode}",
+                    response.StatusCode
+                );
             }
         }
         catch (Exception ex)

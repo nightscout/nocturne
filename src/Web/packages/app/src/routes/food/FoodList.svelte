@@ -80,11 +80,12 @@
                   </Button>
                 </div>
               </TableCell>
-              <TableCell class="truncate max-w-[200px]" title={food.name}
-                >{food.name}</TableCell
-              >
-              <TableCell class="text-center font-medium">{food.carbs}g</TableCell
-              >
+              <TableCell class="truncate max-w-[200px]" title={food.name}>
+                {food.name}
+              </TableCell>
+              <TableCell class="text-center font-medium">
+                {food.carbs}g
+              </TableCell>
               <TableCell class="text-center">{getGiLabel(food.gi)}</TableCell>
               <TableCell class="text-center text-muted-foreground">
                 {food.portion}
@@ -92,7 +93,8 @@
               </TableCell>
               <TableCell class="truncate max-w-[150px] text-muted-foreground">
                 {#if food.category}
-                  {food.category}{#if food.subcategory} / {food.subcategory}{/if}
+                  {food.category}{#if food.subcategory}
+                    / {food.subcategory}{/if}
                 {:else}
                   —
                 {/if}

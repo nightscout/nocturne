@@ -11,9 +11,9 @@
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);
   --insulin-bolus: rgba(30, 150, 252, 1.0);
-  --insulin-basal: rgba(30, 150, 252, 0.5);
-  --insulin-temp-basal: rgba(162, 214, 249, 0.5);
-  --insulin-manual-temp-basal: rgba(30, 150, 252, 1.0);
+  --insulin-basal: rgba(100, 180, 255, 0.3);
+  --insulin-temp-basal: rgba(140, 200, 255, 0.4);
+  --insulin-manual-temp-basal: rgba(30, 150, 252, 0.8);
 
   /* Carbohydrates */
   --carbs: oklch(0.769 0.188 70.08);
@@ -24,10 +24,10 @@
   --status-critical: oklch(0.577 0.245 27.325);
   --status-normal: oklch(0.6 0.118 184.704);
 
-  /* IOB (Insulin on Board) - for charts */
-  --iob-basal: oklch(0.646 0.222 41.116);
-  --iob-bolus: oklch(0.769 0.188 70.08);
-  --iob-temporary: oklch(0.6 0.118 184.704);
+  /* IOB (Insulin on Board) - for charts - should be more prominent than basal */
+  --iob-basal: rgba(30, 150, 252, 0.7);
+  --iob-bolus: rgba(30, 150, 252, 1.0);
+  --iob-temporary: rgba(80, 170, 255, 0.8);
 
   /* Pump Mode States */
   --pump-mode-automatic: oklch(0.6 0.118 184.704);     /* Green - full automation */
@@ -48,8 +48,15 @@
 }
 
 .dark {
-  /* Insulin Types - Dark Mode */
-  --insulin-temp-basal: rgba(30, 150, 252, 1.0);
+  /* Insulin Types - Dark Mode - need higher opacity for visibility */
+  --insulin-basal: rgba(100, 180, 255, 0.35);
+  --insulin-temp-basal: rgba(140, 200, 255, 0.5);
+  --insulin-manual-temp-basal: rgba(30, 150, 252, 0.9);
+
+  /* IOB - Dark Mode - more saturated for contrast */
+  --iob-basal: rgba(60, 160, 255, 0.8);
+  --iob-bolus: rgba(30, 150, 252, 1.0);
+  --iob-temporary: rgba(100, 180, 255, 0.85);
 }
 
 /* Tailwind theme integration */
@@ -81,11 +88,4 @@
   --color-iob-basal: var(--iob-basal);
   --color-iob-bolus: var(--iob-bolus);
   --color-iob-temporary: var(--iob-temporary);
-
-  /* Legacy compatibility - map to old variable names */
-  --color-glucose-very-low: var(--glucose-very-low);
-  --color-glucose-low: var(--glucose-low);
-  --color-glucose-in-range: var(--glucose-in-range);
-  --color-glucose-high: var(--glucose-high);
-  --color-glucose-very-high: var(--glucose-very-high);
 }

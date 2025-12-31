@@ -27,10 +27,10 @@ export const DEFAULT_GI: GiValue = 2;
 
 /**
  * Scale macronutrients based on portion ratio.
- * 
+ *
  * If a food is defined with 4 servings but the user wants 1 serving,
  * all macros should be divided by 4.
- * 
+ *
  * @param basePortion - The portion size defined in the food record
  * @param selectedPortion - The portion size the user wants
  * @param macroValue - The macro value at the base portion

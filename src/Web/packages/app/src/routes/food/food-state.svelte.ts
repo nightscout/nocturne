@@ -91,12 +91,12 @@ export class FoodState {
 	// Private helper methods
 	/**
 	 * Calculate total carbs for a quick pick based on scaled portions.
-	 * 
+	 *
 	 * Each food has:
 	 * - portion: the base serving size (e.g., 4 servings)
 	 * - carbs: total carbs for the base portion (e.g., 269g for 4 servings)
 	 * - portions: how many servings the user wants (e.g., 1)
-	 * 
+	 *
 	 * The calculation: (carbs / portion) * portions
 	 * Example: (269 / 4) * 1 = 67.25g for 1 serving
 	 */

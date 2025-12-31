@@ -152,28 +152,30 @@
 
   async function startInstanceHandler() {
     if (!startDefinitionId) return;
+    const defId = startDefinitionId;
+    const notes = startNotes;
+    const startedAt = startedAtString ? new Date(startedAtString) : undefined;
+    isStartDialogOpen = false;
     try {
-      const startedAt = startedAtString ? new Date(startedAtString) : undefined;
       await trackersRemote.startInstance({
-        definitionId: startDefinitionId,
-        startNotes: startNotes || undefined,
+        definitionId: defId,
+        startNotes: notes || undefined,
         startedAt: startedAt,
       });
 
       // Create treatment event if configured on the definition
-      const def = definitions.find((d) => d.id === startDefinitionId);
+      const def = definitions.find((d) => d.id === defId);
       if (def?.startEventType) {
         await treatmentsRemote.createTreatment({
           eventType: def.startEventType,
           created_at: (startedAt ?? new Date()).toISOString(),
-          notes: startNotes || undefined,
+          notes: notes || undefined,
           enteredBy: "Nocturne Tracker",
         });
       }
 
       await loadData();
       await tick();
-      isStartDialogOpen = false;
     } catch (err) {
       console.error("Failed to start instance:", err);
     }
@@ -467,20 +469,21 @@
 
   async function completeInstanceHandler() {
     if (!completingInstanceId) return;
+    const instanceId = completingInstanceId;
+    const reason = completionReason;
+    const notes = completionNotes;
+    // Find the instance to get the definition
+    const instance = activeInstances.find((i) => i.id === instanceId);
+    const def = instance
+      ? definitions.find((d) => d.id === instance.definitionId)
+      : null;
+    isCompleteDialogOpen = false;
     try {
-      // Find the instance to get the definition
-      const instance = activeInstances.find(
-        (i) => i.id === completingInstanceId
-      );
-      const def = instance
-        ? definitions.find((d) => d.id === instance.definitionId)
-        : null;
-
       await trackersRemote.completeInstance({
-        id: completingInstanceId,
+        id: instanceId,
         request: {
-          reason: completionReason,
-          completionNotes: completionNotes || undefined,
+          reason: reason,
+          completionNotes: notes || undefined,
         },
       });
 
@@ -489,14 +492,13 @@
         await treatmentsRemote.createTreatment({
           eventType: def.completionEventType,
           created_at: new Date().toISOString(),
-          notes: completionNotes || undefined,
+          notes: notes || undefined,
           enteredBy: "Nocturne Tracker",
         });
       }
 
       await loadData();
       await tick();
-      isCompleteDialogOpen = false;
     } catch (err) {
       console.error("Failed to complete instance:", err);
     }
