@@ -10,6 +10,10 @@ public class UserFoodFavoriteRepository
 {
     private readonly NocturneDbContext _context;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UserFoodFavoriteRepository"/> class.
+    /// </summary>
+    /// <param name="context">The database context.</param>
     public UserFoodFavoriteRepository(NocturneDbContext context)
     {
         _context = context;
@@ -63,11 +67,7 @@ public class UserFoodFavoriteRepository
             return null;
         }
 
-        var entity = new UserFoodFavoriteEntity
-        {
-            UserId = userId,
-            FoodId = foodId,
-        };
+        var entity = new UserFoodFavoriteEntity { UserId = userId, FoodId = foodId };
 
         _context.Set<UserFoodFavoriteEntity>().Add(entity);
         await _context.SaveChangesAsync(cancellationToken);

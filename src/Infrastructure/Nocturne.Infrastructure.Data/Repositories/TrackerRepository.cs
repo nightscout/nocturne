@@ -11,6 +11,10 @@ public class TrackerRepository
 {
     private readonly NocturneDbContext _context;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TrackerRepository"/> class.
+    /// </summary>
+    /// <param name="context">The database context.</param>
     public TrackerRepository(NocturneDbContext context)
     {
         _context = context;
@@ -27,8 +31,7 @@ public class TrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions
-            .Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.Include(d => d.NotificationThresholds)
             .Where(d => d.UserId == userId)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
@@ -42,8 +45,7 @@ public class TrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions
-            .Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.Include(d => d.NotificationThresholds)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
     }
@@ -58,8 +60,7 @@ public class TrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions
-            .Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.Include(d => d.NotificationThresholds)
             .Where(d => d.UserId == userId && d.Category == category)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
@@ -88,8 +89,7 @@ public class TrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions
-            .Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.Include(d => d.NotificationThresholds)
             .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
     }
 
@@ -172,8 +172,8 @@ public class TrackerRepository
     )
     {
         // Remove existing thresholds
-        var existing = await _context.TrackerNotificationThresholds
-            .Where(t => t.TrackerDefinitionId == definitionId)
+        var existing = await _context
+            .TrackerNotificationThresholds.Where(t => t.TrackerDefinitionId == definitionId)
             .ToListAsync(cancellationToken);
 
         _context.TrackerNotificationThresholds.RemoveRange(existing);
@@ -296,7 +296,6 @@ public class TrackerRepository
 
         return instance;
     }
-
 
     /// <summary>
     /// Complete a tracker instance with reason and notes

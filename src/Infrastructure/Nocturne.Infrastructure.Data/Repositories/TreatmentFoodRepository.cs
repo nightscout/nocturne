@@ -12,6 +12,10 @@ public class TreatmentFoodRepository
 {
     private readonly NocturneDbContext _context;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TreatmentFoodRepository"/> class.
+    /// </summary>
+    /// <param name="context">The database context.</param>
     public TreatmentFoodRepository(NocturneDbContext context)
     {
         _context = context;
@@ -33,7 +37,9 @@ public class TreatmentFoodRepository
             .OrderBy(tf => tf.SysCreatedAt)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(entity => TreatmentFoodMapper.ToDomainModel(entity, entity.Food)).ToList();
+        return entities
+            .Select(entity => TreatmentFoodMapper.ToDomainModel(entity, entity.Food))
+            .ToList();
     }
 
     /// <summary>
@@ -58,7 +64,9 @@ public class TreatmentFoodRepository
             .OrderBy(tf => tf.SysCreatedAt)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(entity => TreatmentFoodMapper.ToDomainModel(entity, entity.Food)).ToList();
+        return entities
+            .Select(entity => TreatmentFoodMapper.ToDomainModel(entity, entity.Food))
+            .ToList();
     }
 
     /// <summary>
@@ -74,10 +82,9 @@ public class TreatmentFoodRepository
         await _context.SaveChangesAsync(cancellationToken);
 
         var food = entity.FoodId.HasValue
-            ? await _context.Foods.AsNoTracking().FirstOrDefaultAsync(
-                f => f.Id == entity.FoodId.Value,
-                cancellationToken
-            )
+            ? await _context
+                .Foods.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == entity.FoodId.Value, cancellationToken)
             : null;
 
         return TreatmentFoodMapper.ToDomainModel(entity, food);
@@ -104,10 +111,9 @@ public class TreatmentFoodRepository
         await _context.SaveChangesAsync(cancellationToken);
 
         var food = entity.FoodId.HasValue
-            ? await _context.Foods.AsNoTracking().FirstOrDefaultAsync(
-                f => f.Id == entity.FoodId.Value,
-                cancellationToken
-            )
+            ? await _context
+                .Foods.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == entity.FoodId.Value, cancellationToken)
             : null;
 
         return TreatmentFoodMapper.ToDomainModel(entity, food);
@@ -151,11 +157,7 @@ public class TreatmentFoodRepository
                 (tf, f) => new { tf, f }
             )
             .GroupBy(x => x.f.Id)
-            .Select(g => new
-            {
-                Food = g.First().f,
-                LastUsed = g.Max(x => x.tf.SysCreatedAt),
-            })
+            .Select(g => new { Food = g.First().f, LastUsed = g.Max(x => x.tf.SysCreatedAt) })
             .OrderByDescending(x => x.LastUsed)
             .Take(limit)
             .Select(x => x.Food)

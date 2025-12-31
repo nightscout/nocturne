@@ -12,8 +12,8 @@ using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Nightscout.Services
 {
@@ -26,7 +26,6 @@ namespace Nocturne.Connectors.Nightscout.Services
         private readonly NightscoutConnectorConfiguration _config;
         private readonly IRetryDelayStrategy _retryDelayStrategy;
         private readonly IRateLimitingStrategy _rateLimitingStrategy;
-        private readonly IConnectorFileService<Entry[]>? _fileService = null; // Optional file service for data persistence
         private int _failedRequestCount = 0;
 
         /// <summary>
@@ -63,7 +62,7 @@ namespace Nocturne.Connectors.Nightscout.Services
                 SyncDataType.Profiles,
                 SyncDataType.DeviceStatus,
                 SyncDataType.Activity,
-                SyncDataType.Food
+                SyncDataType.Food,
             };
 
         public NightscoutConnectorService(
@@ -456,7 +455,6 @@ namespace Nocturne.Connectors.Nightscout.Services
             }
         }
 
-
         #endregion
 
         public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
@@ -513,10 +511,19 @@ namespace Nocturne.Connectors.Nightscout.Services
             DateTime? to
         )
         {
-            return await FetchCollectionV3Async<Activity>("activity", from, 1000, "created_at", true);
+            return await FetchCollectionV3Async<Activity>(
+                "activity",
+                from,
+                1000,
+                "created_at",
+                true
+            );
         }
 
-        protected override async Task<IEnumerable<Food>> FetchFoodsAsync(DateTime? from, DateTime? to)
+        protected override async Task<IEnumerable<Food>> FetchFoodsAsync(
+            DateTime? from,
+            DateTime? to
+        )
         {
             return await FetchCollectionV3Async<Food>("food", from, 1000, "created_at", true);
         }
@@ -533,6 +540,5 @@ namespace Nocturne.Connectors.Nightscout.Services
                 .OrderByDescending(entry => entry.Date)
                 .ToList();
         }
-
     }
 }

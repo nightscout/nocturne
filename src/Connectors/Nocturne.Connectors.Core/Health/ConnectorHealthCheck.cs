@@ -15,14 +15,22 @@ namespace Nocturne.Connectors.Core.Health
         private readonly IConnectorStateService _stateService;
         private readonly string _connectorSource;
 
-        public ConnectorHealthCheck(IConnectorMetricsTracker metricsTracker, IConnectorStateService stateService, string connectorSource)
+        public ConnectorHealthCheck(
+            IConnectorMetricsTracker metricsTracker,
+            IConnectorStateService stateService,
+            string connectorSource
+        )
         {
-            _metricsTracker = metricsTracker ?? throw new ArgumentNullException(nameof(metricsTracker));
+            _metricsTracker =
+                metricsTracker ?? throw new ArgumentNullException(nameof(metricsTracker));
             _stateService = stateService ?? throw new ArgumentNullException(nameof(stateService));
             _connectorSource = connectorSource ?? "unknown";
         }
 
-        public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+        public Task<HealthCheckResult> CheckHealthAsync(
+            HealthCheckContext context,
+            CancellationToken cancellationToken = default
+        )
         {
             var data = new Dictionary<string, object>
             {
@@ -30,7 +38,7 @@ namespace Nocturne.Connectors.Core.Health
                 { "TotalEntries", _metricsTracker.TotalEntries },
                 { "EntriesLast24Hours", _metricsTracker.EntriesLast24Hours },
                 { "State", _stateService.CurrentState.ToString() },
-                { "StateMessage", _stateService.StateMessage ?? string.Empty }
+                { "StateMessage", _stateService.StateMessage ?? string.Empty },
             };
 
             // Add per-type breakdowns
@@ -38,8 +46,14 @@ namespace Nocturne.Connectors.Core.Health
             var last24hBreakdown = _metricsTracker.GetItemsLast24HoursBreakdown();
 
             // Convert enum keys to strings for JSON serialization
-            data.Add("TotalItemsBreakdown", totalBreakdown.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value));
-            data.Add("ItemsLast24HoursBreakdown", last24hBreakdown.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value));
+            data.Add(
+                "TotalItemsBreakdown",
+                totalBreakdown.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value)
+            );
+            data.Add(
+                "ItemsLast24HoursBreakdown",
+                last24hBreakdown.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value)
+            );
 
             if (_metricsTracker.LastEntryTime.HasValue)
             {
@@ -51,7 +65,7 @@ namespace Nocturne.Connectors.Core.Health
             }
             else
             {
-                data.Add("LastEntryTime", null);
+                data.Add("LastEntryTime", "N/A");
             }
 
             // You might want to degrade health if no data received for a long time,
@@ -63,4 +77,3 @@ namespace Nocturne.Connectors.Core.Health
         }
     }
 }
-
