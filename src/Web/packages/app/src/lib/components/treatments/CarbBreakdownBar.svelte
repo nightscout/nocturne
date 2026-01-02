@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { TreatmentFood } from "$lib/api";
   import { cn } from "$lib/utils";
-  import { BarChart, Tooltip } from "layerchart";
+  import { BarChart } from "layerchart";
 
   interface Props {
     /** Total carbs in the treatment */
@@ -38,9 +38,7 @@
   );
 
   // Calculate unattributed carbs
-  const unattributedCarbs = $derived(
-    Math.max(0, totalCarbs - attributedCarbs)
-  );
+  const unattributedCarbs = $derived(Math.max(0, totalCarbs - attributedCarbs));
 
   // Generate a stable key for the chart based on food IDs to force re-render
   const chartKey = $derived(

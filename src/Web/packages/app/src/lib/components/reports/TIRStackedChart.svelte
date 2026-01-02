@@ -1,10 +1,5 @@
 <script lang="ts">
-  import {
-    DEFAULT_CONFIG,
-    type ExtendedAnalysisConfig,
-  } from "$lib/utils/glucose-analytics.ts";
   import { BarChart, Tooltip } from "layerchart";
-  import type { Entry } from "$lib/api";
 
   interface TimeInRangePercentages {
     severeLow?: number;
@@ -15,12 +10,8 @@
   }
 
   let {
-    entries,
-    config,
     percentages,
   }: {
-    entries: Entry[];
-    config?: ExtendedAnalysisConfig;
     /** Pre-computed percentages - required to avoid reactive API calls */
     percentages?: TimeInRangePercentages;
   } = $props();

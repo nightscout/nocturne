@@ -162,53 +162,45 @@
   }
 </script>
 
-<div class="rounded-lg border bg-card p-4 md:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-card-foreground mb-4">{title}</h2>
+<div class="flex flex-wrap items-center justify-between gap-4">
+  <!-- Date Range Calendar (left) -->
+  <Popover.Root bind:open>
+    <Popover.Trigger id="{id}-dates">
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="outline"
+          class="w-56 justify-between font-normal"
+        >
+          {value?.start && value?.end
+            ? `${value.start.toDate(getLocalTimeZone()).toLocaleDateString()} - ${value.end.toDate(getLocalTimeZone()).toLocaleDateString()}`
+            : "Select date"}
+          <ChevronDownIcon />
+        </Button>
+      {/snippet}
+    </Popover.Trigger>
+    <Popover.Content class="w-auto overflow-hidden p-0" align="start">
+      <RangeCalendar
+        bind:value
+        captionLayout="dropdown"
+        onValueChange={handleCalendarChange}
+      />
+    </Popover.Content>
+  </Popover.Root>
+
   {#if showDaysPresets}
-    <!-- Quick Day Selection -->
-    <div class="mb-4">
-      <Label class="text-sm font-medium text-foreground mb-2 block">
-        Quick Selection
-      </Label>
-      <div class="flex flex-wrap gap-2">
-        {#each [1, 3, 7, 14, 30, 90] as daysOption}
-          <Button
-            variant={selectedDays === daysOption ? "default" : "outline"}
-            size="sm"
-            onclick={() => setDayRange(daysOption)}
-            class="text-xs"
-          >
-            {daysOption === 1 ? "Today" : `${daysOption} days`}
-          </Button>
-        {/each}
-      </div>
+    <!-- Quick Day Selection (right) -->
+    <div class="flex flex-wrap gap-2">
+      {#each [1, 3, 7, 14, 30, 90] as daysOption}
+        <Button
+          variant={selectedDays === daysOption ? "default" : "outline"}
+          size="sm"
+          onclick={() => setDayRange(daysOption)}
+          class="text-xs"
+        >
+          {daysOption === 1 ? "Today" : `${daysOption} days`}
+        </Button>
+      {/each}
     </div>
   {/if}
-  <!-- Date Range Calendar -->
-  <div class="mb-4">
-    <Label for="{id}-dates" class="px-1">Select the dates to filter to.</Label>
-    <Popover.Root bind:open>
-      <Popover.Trigger id="{id}-dates">
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            variant="outline"
-            class="w-56 justify-between font-normal"
-          >
-            {value?.start && value?.end
-              ? `${value.start.toDate(getLocalTimeZone()).toLocaleDateString()} - ${value.end.toDate(getLocalTimeZone()).toLocaleDateString()}`
-              : "Select date"}
-            <ChevronDownIcon />
-          </Button>
-        {/snippet}
-      </Popover.Trigger>
-      <Popover.Content class="w-auto overflow-hidden p-0" align="start">
-        <RangeCalendar
-          bind:value
-          captionLayout="dropdown"
-          onValueChange={handleCalendarChange}
-        />
-      </Popover.Content>
-    </Popover.Root>
-  </div>
 </div>

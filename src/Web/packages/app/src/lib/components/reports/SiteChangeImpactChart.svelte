@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { AreaChart, Axis, Area, Tooltip, Rule } from "layerchart";
-  import { scaleLinear } from "d3-scale";
+  import { AreaChart, Rule } from "layerchart";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import { AlertCircle } from "lucide-svelte";
 
@@ -27,13 +26,13 @@
   }
 
   interface SiteChangeImpactAnalysis {
-    siteChangeCount: number;
+    siteChangeCount?: number;
     dataPoints: SiteChangeImpactDataPoint[];
-    summary: SiteChangeImpactSummary;
-    hoursBeforeChange: number;
-    hoursAfterChange: number;
-    bucketSizeMinutes: number;
-    hasSufficientData: boolean;
+    summary?: SiteChangeImpactSummary;
+    hoursBeforeChange?: number;
+    hoursAfterChange?: number;
+    bucketSizeMinutes?: number;
+    hasSufficientData?: boolean;
     warningMessage?: string;
   }
 

@@ -303,7 +303,7 @@
           <CardContent class="space-y-6">
             <!-- Stacked Bar Chart -->
             <div class="h-32 w-full overflow-hidden">
-              <TIRStackedChart {entries} percentages={tir} />
+              <TIRStackedChart percentages={tir} />
             </div>
 
             <!-- Duration Breakdown -->

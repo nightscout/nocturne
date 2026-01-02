@@ -203,24 +203,6 @@
     }
     return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
-
-  // Render context for custom bar colors
-  const renderContext = {
-    each: (
-      items: SpanBarData[],
-      rect: (
-        item: SpanBarData,
-        index: number,
-        items: SpanBarData[]
-      ) => Record<string, unknown>
-    ) => {
-      return items.map((item, index) => ({
-        ...rect(item, index, items),
-        fill: item.color,
-        class: "opacity-80 hover:opacity-100 transition-opacity",
-      }));
-    },
-  };
 </script>
 
 <div class="space-y-6 p-4">

@@ -4,7 +4,19 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
-  import { Calendar, ChevronDown, ChevronRight, Plus } from "lucide-svelte";
+  import {
+    Calendar,
+    ChevronDown,
+    ChevronRight,
+    ArrowUp,
+    ArrowDown,
+    ArrowUpDown,
+    Filter,
+    X,
+    Check,
+  } from "lucide-svelte";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as Command from "$lib/components/ui/command";
   import type {
     MealTreatment,
     Treatment,
@@ -23,6 +35,7 @@
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
     CarbBreakdownBar,
+    FoodEntryDetails,
   } from "$lib/components/treatments";
   import { addTreatmentFood } from "$lib/data/treatment-foods.remote";
   import { TreatmentTypeIcon } from "$lib/components/icons";
@@ -31,6 +44,18 @@
 
   let dateRange = $state<{ from?: string; to?: string }>({});
   let filterMode = $state<"all" | "unattributed">("all");
+
+  // Sorting state
+  type SortColumn = "time" | "meal" | "carbs" | "insulin";
+  type SortDirection = "asc" | "desc";
+  let sortColumn = $state<SortColumn>("time");
+  let sortDirection = $state<SortDirection>("desc");
+
+  // Search and filter state
+  let searchQuery = $state("");
+  let selectedFoods = $state<string[]>([]);
+  let foodFilterOpen = $state(false);
+  let foodFilterSearch = $state("");
 
   let showEditDialog = $state(false);
   let treatmentToEdit = $state<Treatment | null>(null);
@@ -60,6 +85,88 @@
   const mealsQuery = $derived(getMealTreatments(queryParams));
   const meals = $derived<MealTreatment[]>(mealsQuery.current ?? []);
 
+  // Get unique food names for filter dropdown
+  const uniqueFoods = $derived.by(() => {
+    const foods = new Set<string>();
+    for (const meal of meals) {
+      for (const food of meal.foods ?? []) {
+        if (food.foodName) foods.add(food.foodName);
+      }
+    }
+    return Array.from(foods).sort();
+  });
+
+  const filteredFoodsForDropdown = $derived.by(() => {
+    if (!foodFilterSearch.trim()) return uniqueFoods;
+    const search = foodFilterSearch.toLowerCase();
+    return uniqueFoods.filter((food) => food.toLowerCase().includes(search));
+  });
+
+  // Helper to get meal label for sorting
+  function getMealSortLabel(meal: MealTreatment): string {
+    const foods = meal.foods ?? [];
+    if (foods.length === 0) return meal.treatment?.eventType ?? "Meal";
+    if (foods.length === 1 && foods[0].foodName) return foods[0].foodName;
+    return getMealNameForTime(
+      new Date(meal.treatment?.created_at ?? new Date())
+    );
+  }
+
+  // Filter and sort meals
+  const filteredAndSortedMeals = $derived.by(() => {
+    let filtered = meals;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((meal) => {
+        const searchable = [
+          meal.treatment?.eventType,
+          meal.treatment?.notes,
+          ...(meal.foods?.map((f) => f.foodName ?? f.note) ?? []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return searchable.includes(query);
+      });
+    }
+
+    // Apply food name filter
+    if (selectedFoods.length > 0) {
+      filtered = filtered.filter((meal) =>
+        meal.foods?.some(
+          (f) => f.foodName && selectedFoods.includes(f.foodName)
+        )
+      );
+    }
+
+    // Sort meals
+    const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
+      switch (sortColumn) {
+        case "time":
+          comparison =
+            new Date(a.treatment?.created_at ?? 0).getTime() -
+            new Date(b.treatment?.created_at ?? 0).getTime();
+          break;
+        case "meal":
+          comparison = getMealSortLabel(a).localeCompare(getMealSortLabel(b));
+          break;
+        case "carbs":
+          comparison = (a.treatment?.carbs ?? 0) - (b.treatment?.carbs ?? 0);
+          break;
+        case "insulin":
+          comparison =
+            (a.treatment?.insulin ?? 0) - (b.treatment?.insulin ?? 0);
+          break;
+      }
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return sorted;
+  });
+
   // Group meals by date for day separators
   interface MealsByDay {
     date: string;
@@ -70,7 +177,7 @@
   const mealsByDay = $derived.by(() => {
     const grouped = new Map<string, MealTreatment[]>();
 
-    for (const meal of meals) {
+    for (const meal of filteredAndSortedMeals) {
       const dateStr = meal.treatment?.created_at;
       if (!dateStr) continue;
 
@@ -101,6 +208,37 @@
 
     return result;
   });
+
+  // Sorting and filtering helpers
+  function toggleSort(column: SortColumn) {
+    if (sortColumn === column) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      sortColumn = column;
+      sortDirection = column === "time" ? "desc" : "asc";
+    }
+  }
+
+  function toggleFoodFilter(food: string) {
+    if (selectedFoods.includes(food)) {
+      selectedFoods = selectedFoods.filter((f) => f !== food);
+    } else {
+      selectedFoods = [...selectedFoods, food];
+    }
+  }
+
+  function clearFoodFilter() {
+    selectedFoods = [];
+  }
+
+  function clearAllFilters() {
+    searchQuery = "";
+    selectedFoods = [];
+  }
+
+  const hasActiveFilters = $derived(
+    searchQuery.trim() !== "" || selectedFoods.length > 0
+  );
 
   function toggleRow(id: string) {
     const newSet = new Set(expandedRows);
@@ -260,44 +398,255 @@
     </p>
   </div>
 
-  <DateRangePicker
-    title="Meal range"
-    defaultDays={1}
-    onDateChange={handleDateChange}
-  />
+  <!-- Consolidated filters section -->
+  <Card.Root>
+    <Card.Content class="space-y-4 p-4">
+      <!-- Row 1: Date picker inline -->
+      <DateRangePicker
+        title="Meal range"
+        defaultDays={1}
+        onDateChange={handleDateChange}
+      />
 
-  <div class="flex items-center gap-2">
-    <Button
-      type="button"
-      variant={filterMode === "all" ? "default" : "outline"}
-      onclick={() => (filterMode = "all")}
-    >
-      All
-    </Button>
-    <Button
-      type="button"
-      variant={filterMode === "unattributed" ? "default" : "outline"}
-      onclick={() => (filterMode = "unattributed")}
-    >
-      Unattributed only
-    </Button>
-  </div>
+      <!-- Row 2: All filter controls -->
+      <div
+        class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+      >
+        <!-- Left side: All/Unattributed, Search, Food filter -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- All/Unattributed toggle -->
+          <div class="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={filterMode === "all" ? "default" : "outline"}
+              onclick={() => (filterMode = "all")}
+            >
+              All
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={filterMode === "unattributed" ? "default" : "outline"}
+              onclick={() => (filterMode = "unattributed")}
+            >
+              Unattributed only
+            </Button>
+          </div>
+
+          <!-- Separator -->
+          <div class="hidden md:block h-6 w-px bg-border"></div>
+
+          <!-- Search -->
+          <div class="flex-1 min-w-[200px] max-w-sm">
+            <input
+              type="text"
+              placeholder="Search meals..."
+              bind:value={searchQuery}
+              class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          <!-- Food Name Filter -->
+          <Popover.Root bind:open={foodFilterOpen}>
+            <Popover.Trigger>
+              {#snippet child({ props })}
+                <Button variant="outline" size="sm" class="gap-2" {...props}>
+                  <Filter class="h-4 w-4" />
+                  Foods
+                  {#if selectedFoods.length > 0}
+                    <Badge variant="secondary" class="ml-1">
+                      {selectedFoods.length}
+                    </Badge>
+                  {/if}
+                  <ChevronDown class="h-4 w-4" />
+                </Button>
+              {/snippet}
+            </Popover.Trigger>
+            <Popover.Content class="w-[280px] p-0" align="start">
+              <Command.Root shouldFilter={false}>
+                <Command.Input
+                  placeholder="Search foods..."
+                  bind:value={foodFilterSearch}
+                />
+                <Command.List class="max-h-[200px]">
+                  <Command.Empty>No foods found.</Command.Empty>
+                  <Command.Group>
+                    {#each filteredFoodsForDropdown as food}
+                      <Command.Item
+                        value={food}
+                        onSelect={() => toggleFoodFilter(food)}
+                        class="cursor-pointer"
+                      >
+                        <div
+                          class={cn(
+                            "mr-2 h-4 w-4 flex-shrink-0 border rounded flex items-center justify-center",
+                            selectedFoods.includes(food)
+                              ? "bg-primary border-primary"
+                              : "border-muted"
+                          )}
+                        >
+                          {#if selectedFoods.includes(food)}
+                            <Check class="h-3 w-3 text-primary-foreground" />
+                          {/if}
+                        </div>
+                        <span class="truncate">{food}</span>
+                      </Command.Item>
+                    {/each}
+                  </Command.Group>
+                </Command.List>
+                {#if selectedFoods.length > 0}
+                  <div class="border-t p-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="w-full"
+                      onclick={clearFoodFilter}
+                    >
+                      <X class="mr-2 h-3 w-3" />
+                      Clear filter
+                    </Button>
+                  </div>
+                {/if}
+              </Command.Root>
+            </Popover.Content>
+          </Popover.Root>
+        </div>
+
+        <!-- Right side: Clear all filters -->
+        {#if hasActiveFilters}
+          <Button variant="ghost" size="sm" onclick={clearAllFilters}>
+            <X class="mr-1 h-4 w-4" />
+            Clear filters
+          </Button>
+        {/if}
+      </div>
+
+      <!-- Active filters display -->
+      {#if hasActiveFilters}
+        <div class="flex flex-wrap items-center gap-2 pt-3 border-t text-sm">
+          <span class="text-muted-foreground">Showing:</span>
+          <span class="font-medium">
+            {filteredAndSortedMeals.length} of {meals.length}
+          </span>
+
+          {#each selectedFoods as food}
+            <Badge variant="outline" class="gap-1">
+              {food}
+              <button
+                onclick={() => toggleFoodFilter(food)}
+                class="ml-1 hover:text-foreground"
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </Badge>
+          {/each}
+
+          {#if searchQuery.trim()}
+            <Badge variant="outline" class="gap-1">
+              "{searchQuery}"
+              <button
+                onclick={() => (searchQuery = "")}
+                class="ml-1 hover:text-foreground"
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </Badge>
+          {/if}
+        </div>
+      {/if}
+    </Card.Content>
+  </Card.Root>
 
   <Card.Root>
     <Card.Content class="p-0">
-      {#if meals.length === 0}
+      {#if filteredAndSortedMeals.length === 0}
         <div class="p-6 text-center text-sm text-muted-foreground">
-          No meals found in this range.
+          {meals.length === 0
+            ? "No meals found in this range."
+            : "No meals match the current filters."}
         </div>
       {:else}
         <Table.Root>
           <Table.Header>
             <Table.Row>
               <Table.Head class="w-12"></Table.Head>
-              <Table.Head class="w-24">Time</Table.Head>
-              <Table.Head>Meal</Table.Head>
-              <Table.Head class="w-24 text-right">Carbs</Table.Head>
-              <Table.Head class="w-32 text-right">Insulin</Table.Head>
+              <Table.Head class="w-24">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="-ml-3 h-8"
+                  onclick={() => toggleSort("time")}
+                >
+                  Time
+                  {#if sortColumn === "time"}
+                    {#if sortDirection === "asc"}
+                      <ArrowUp class="ml-1 h-4 w-4" />
+                    {:else}
+                      <ArrowDown class="ml-1 h-4 w-4" />
+                    {/if}
+                  {:else}
+                    <ArrowUpDown class="ml-1 h-4 w-4 opacity-50" />
+                  {/if}
+                </Button>
+              </Table.Head>
+              <Table.Head>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="-ml-3 h-8"
+                  onclick={() => toggleSort("meal")}
+                >
+                  Meal
+                  {#if sortColumn === "meal"}
+                    {#if sortDirection === "asc"}
+                      <ArrowUp class="ml-1 h-4 w-4" />
+                    {:else}
+                      <ArrowDown class="ml-1 h-4 w-4" />
+                    {/if}
+                  {:else}
+                    <ArrowUpDown class="ml-1 h-4 w-4 opacity-50" />
+                  {/if}
+                </Button>
+              </Table.Head>
+              <Table.Head class="w-24 text-right">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="-mr-3 h-8"
+                  onclick={() => toggleSort("carbs")}
+                >
+                  Carbs
+                  {#if sortColumn === "carbs"}
+                    {#if sortDirection === "asc"}
+                      <ArrowUp class="ml-1 h-4 w-4" />
+                    {:else}
+                      <ArrowDown class="ml-1 h-4 w-4" />
+                    {/if}
+                  {:else}
+                    <ArrowUpDown class="ml-1 h-4 w-4 opacity-50" />
+                  {/if}
+                </Button>
+              </Table.Head>
+              <Table.Head class="w-32 text-right">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="-mr-3 h-8"
+                  onclick={() => toggleSort("insulin")}
+                >
+                  Insulin
+                  {#if sortColumn === "insulin"}
+                    {#if sortDirection === "asc"}
+                      <ArrowUp class="ml-1 h-4 w-4" />
+                    {:else}
+                      <ArrowDown class="ml-1 h-4 w-4" />
+                    {/if}
+                  {:else}
+                    <ArrowUpDown class="ml-1 h-4 w-4 opacity-50" />
+                  {/if}
+                </Button>
+              </Table.Head>
               <Table.Head class="w-32">Status</Table.Head>
               <Table.Head class="w-24"></Table.Head>
             </Table.Row>
@@ -485,15 +834,10 @@
                                   <div class="font-medium">
                                     {food.foodName ?? food.note ?? "Other"}
                                   </div>
-                                  <div class="text-muted-foreground">
-                                    {food.portions ?? 1} portion{(food.portions ??
-                                      1) !== 1
-                                      ? "s"
-                                      : ""} • {food.carbs}g carbs
-                                    {#if food.timeOffsetMinutes}
-                                      • +{food.timeOffsetMinutes} min
-                                    {/if}
-                                  </div>
+                                  <FoodEntryDetails
+                                    {food}
+                                    class="text-muted-foreground"
+                                  />
                                 </button>
                               {/each}
                             </div>

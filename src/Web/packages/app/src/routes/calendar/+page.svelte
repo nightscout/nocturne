@@ -71,7 +71,7 @@
   // Queries for trackers
   const trackersQuery = $derived(getActiveInstances());
   const historyQuery = $derived(getInstanceHistory(100));
-  const definitionsQuery = $derived(getDefinitions());
+  const definitionsQuery = $derived(getDefinitions({}));
 
   // Tracker event types for calendar display
   type TrackerEventType = "start" | "due" | "completed";
@@ -288,17 +288,6 @@
     const h = Math.floor(hours % 24);
     return h > 0 ? `${days}d ${h}h` : `${days}d`;
   }
-
-  function formatTimeRemaining(
-    instance: TrackerInstanceDto,
-    def: TrackerDefinitionDto | undefined
-  ): string {
-    if (!instance.ageHours || !def?.lifespanHours) return "No expiry";
-    const remaining = def.lifespanHours - instance.ageHours;
-    if (remaining <= 0) return "Overdue";
-    return `Due in ${formatTrackerAge(remaining)}`;
-  }
-
   type AlertLevel = "none" | "info" | "warn" | "hazard" | "urgent";
 
   function getTrackerLevel(
@@ -324,25 +313,10 @@
     return "none";
   }
 
-  function getTrackerClasses(level: AlertLevel): string {
-    const base = "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm";
-    const levelClasses: Record<AlertLevel, string> = {
-      none: "bg-secondary/50 border-border",
-      info: "bg-blue-100 border-blue-300 dark:bg-blue-900/30 dark:border-blue-700",
-      warn: "bg-yellow-100 border-yellow-300 dark:bg-yellow-900/30 dark:border-yellow-700",
-      hazard:
-        "bg-orange-100 border-orange-300 dark:bg-orange-900/30 dark:border-orange-700",
-      urgent:
-        "bg-red-100 border-red-300 dark:bg-red-900/30 dark:border-red-700",
-    };
-    return cn(base, levelClasses[level]);
-  }
-
   // Build tracker events from active and history instances
   function buildTrackerEvents(
     active: TrackerInstanceDto[],
-    history: TrackerInstanceDto[],
-    defs: TrackerDefinitionDto[]
+    history: TrackerInstanceDto[]
   ): Map<string, TrackerEvent[]> {
     const events = new Map<string, TrackerEvent[]>();
 

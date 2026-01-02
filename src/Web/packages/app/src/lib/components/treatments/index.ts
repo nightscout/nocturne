@@ -6,3 +6,4 @@ export { default as TreatmentFoodBreakdown } from "./TreatmentFoodBreakdown.svel
 export { default as TreatmentFoodSelectorDialog } from "./TreatmentFoodSelectorDialog.svelte";
 export { default as TreatmentFoodEntryEditDialog } from "./TreatmentFoodEntryEditDialog.svelte";
 export { default as CarbBreakdownBar } from "./CarbBreakdownBar.svelte";
+export { default as FoodEntryDetails } from "./FoodEntryDetails.svelte";

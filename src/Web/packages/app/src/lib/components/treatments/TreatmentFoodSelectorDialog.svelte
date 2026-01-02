@@ -739,10 +739,10 @@
                 {categories}
                 onCategoryChange={(cat) => (foodCategory = cat)}
                 onSubcategoryChange={(sub) => (foodSubcategory = sub)}
-                onCategoryCreate={(cat) => {
+                onCategoryCreate={(_cat) => {
                   // Category will be created when food is saved
                 }}
-                onSubcategoryCreate={(cat, sub) => {
+                onSubcategoryCreate={(_cat, _sub) => {
                   // Subcategory will be created when food is saved
                 }}
               />

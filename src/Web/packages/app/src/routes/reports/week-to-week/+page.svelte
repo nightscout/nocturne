@@ -2,7 +2,6 @@
   import { LineChart } from "layerchart";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import type { Entry } from "$lib/api";
   import * as Card from "$lib/components/ui/card";
   import Button from "$lib/components/ui/button/button.svelte";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";

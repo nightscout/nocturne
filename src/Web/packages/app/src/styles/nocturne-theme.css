@@ -17,7 +17,7 @@
 
   /* Carbohydrates */
   --carbs: oklch(0.769 0.188 70.08);
-  --carbs-on-board: oklch(0.769 0.188 70.08);
+  --carbs-on-board: oklch(62.447% 0.13042 69.605);
 
   /* Status Colors */
   --status-warning: oklch(0.646 0.222 41.116);

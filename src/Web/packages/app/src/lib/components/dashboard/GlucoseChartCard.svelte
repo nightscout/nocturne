@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { Entry, Treatment, DeviceStatus } from "$lib/api";
+  import type { Entry, Treatment, DeviceStatus, TreatmentFood } from "$lib/api";
+
+  // Extended Treatment type that may include foods (populated externally)
+  type TreatmentWithFoods = Treatment & { foods?: TreatmentFood[] };
   import { TreatmentEditDialog } from "$lib/components/treatments";
   import { updateTreatment } from "$lib/data/treatments.remote";
   import { toast } from "svelte-sonner";
@@ -66,11 +69,13 @@
     ReservoirIcon,
     SensorIcon,
     SiteChangeIcon,
+    BolusIcon,
+    CarbsIcon,
   } from "$lib/components/icons";
 
   interface ComponentProps {
     entries?: Entry[];
-    treatments?: Treatment[];
+    treatments?: TreatmentWithFoods[];
     deviceStatuses?: DeviceStatus[];
     demoMode?: boolean;
     dateRange?: {
@@ -93,17 +98,38 @@
     showPredictions?: boolean;
     /** Default focus hours for time range selector (from settings) */
     defaultFocusHours?: number;
+    /** Initial visibility for IOB area */
+    initialShowIob?: boolean;
+    /** Initial visibility for COB area */
+    initialShowCob?: boolean;
+    /** Initial visibility for Basal track */
+    initialShowBasal?: boolean;
+    /** Initial visibility for Bolus markers */
+    initialShowBolus?: boolean;
+    /** Initial visibility for Carb markers */
+    initialShowCarbs?: boolean;
+    /** Initial visibility for Device Event markers */
+    initialShowDeviceEvents?: boolean;
+    /** Initial visibility for Alarm/System Event markers */
+    initialShowAlarms?: boolean;
   }
 
   const realtimeStore = getRealtimeStore();
   let {
     entries = realtimeStore.entries,
-    treatments = realtimeStore.treatments,
+    treatments = realtimeStore.treatments as TreatmentWithFoods[],
     demoMode = realtimeStore.demoMode,
     dateRange,
     defaultBasalRate = 1.0,
     carbRatio = 15,
     showPredictions = true,
+    initialShowIob = true,
+    initialShowCob = true,
+    initialShowBasal = true,
+    initialShowBolus = true,
+    initialShowCarbs = true,
+    initialShowDeviceEvents = true,
+    initialShowAlarms = true,
   }: ComponentProps = $props();
 
   // Prediction data state
@@ -115,6 +141,15 @@
 
   // State span and system event data
   let stateData = $state<ChartStateData | null>(null);
+
+  // Legend toggle state for chart element visibility (initialized from props)
+  let showIob = $state(initialShowIob);
+  let showCob = $state(initialShowCob);
+  let showBasal = $state(initialShowBasal);
+  let showBolus = $state(initialShowBolus);
+  let showCarbs = $state(initialShowCarbs);
+  let showDeviceEvents = $state(initialShowDeviceEvents);
+  let showAlarms = $state(initialShowAlarms);
 
   // Track if initial data has loaded to prevent effect loops during hydration
   let hasMounted = $state(false);
@@ -492,12 +527,23 @@
   }
 
   // ===== COMPOUND CHART CONFIGURATION =====
-  // Track proportion ratios (configurable) - must sum to 1.0
-  const trackRatios = {
-    basal: 0.12, // 12% of chart height
-    glucose: 0.7, // 70% of chart height
-    iob: 0.18, // 18% of chart height
-  };
+  // Helper function to compute track ratios based on visibility
+  // Using a function instead of $derived to avoid reactivity loops
+  function getTrackRatios() {
+    const showBasalTrack = showBasal;
+    const showIobTrack = showIob || showCob;
+    const basalRatio = showBasalTrack ? 0.12 : 0;
+    const iobRatio = showIobTrack ? 0.18 : 0;
+    // Glucose gets the remaining space (base 0.7 + any hidden track space)
+    const glucoseRatio = 1 - basalRatio - iobRatio;
+    return {
+      basal: basalRatio,
+      glucose: glucoseRatio,
+      iob: iobRatio,
+      showBasalTrack,
+      showIobTrack,
+    };
+  }
 
   // Bisector for finding nearest data point
   const bisectDate = bisector((d: { time: Date }) => d.time).left;
@@ -541,22 +587,119 @@
     }))
   );
 
-  const carbMarkersForIob = $derived(
-    carbTreatments.map((t) => {
-      const time = new Date(getTreatmentTime(t));
-      // Priority: foodType > notes (first 20 chars) > meal name from time
-      const label =
-        t.foodType ??
-        (t.notes ? t.notes.slice(0, 20) : null) ??
-        getMealNameForTime(time);
-      return {
-        time,
-        carbs: t.carbs ?? 0,
-        treatment: t,
-        label,
-      };
-    })
-  );
+  // Build carb markers, accounting for foods with time offsets
+  // When a treatment has foods with offsets, create separate markers at each offset time
+  const carbMarkersForIob = $derived.by(() => {
+    const markers: Array<{
+      time: Date;
+      carbs: number;
+      treatment: Treatment;
+      label: string | null;
+      isOffset?: boolean;
+    }> = [];
+
+    for (const t of carbTreatments) {
+      const treatmentTime = getTreatmentTime(t);
+      const foods = t.foods ?? [];
+
+      // Check if we have foods with time offsets
+      const foodsWithOffsets = foods.filter(
+        (f) => f.timeOffsetMinutes != null && f.timeOffsetMinutes !== 0
+      );
+
+      if (foodsWithOffsets.length > 0) {
+        // Group foods by their offset time
+        const offsetGroups = new Map<
+          number,
+          { carbs: number; labels: string[] }
+        >();
+
+        // Also track foods without offsets (or 0 offset)
+        let baseCarbs = 0;
+        const baseLabels: string[] = [];
+
+        for (const food of foods) {
+          const offset = food.timeOffsetMinutes ?? 0;
+          const foodCarbs = food.carbs ?? 0;
+          const foodLabel = food.foodName ?? food.note;
+
+          if (offset === 0) {
+            baseCarbs += foodCarbs;
+            if (foodLabel) baseLabels.push(foodLabel);
+          } else {
+            const existing = offsetGroups.get(offset) ?? {
+              carbs: 0,
+              labels: [],
+            };
+            existing.carbs += foodCarbs;
+            if (foodLabel) existing.labels.push(foodLabel);
+            offsetGroups.set(offset, existing);
+          }
+        }
+
+        // Add any unattributed carbs (carbs not covered by foods) to base time
+        const totalFoodCarbs = foods.reduce(
+          (sum, f) => sum + (f.carbs ?? 0),
+          0
+        );
+        const treatmentCarbs = t.carbs ?? 0;
+        const unattributedCarbs = treatmentCarbs - totalFoodCarbs;
+        if (unattributedCarbs > 0) {
+          baseCarbs += unattributedCarbs;
+        }
+
+        // Create marker for base time (foods with no offset + unattributed)
+        if (baseCarbs > 0) {
+          const baseLabel =
+            baseLabels.length > 0
+              ? baseLabels.join(", ").slice(0, 20)
+              : (t.foodType ??
+                (t.notes ? t.notes.slice(0, 20) : null) ??
+                getMealNameForTime(new Date(treatmentTime)));
+
+          markers.push({
+            time: new Date(treatmentTime),
+            carbs: baseCarbs,
+            treatment: t,
+            label: baseLabel,
+          });
+        }
+
+        // Create markers for each offset group
+        for (const [offset, group] of offsetGroups) {
+          const offsetTime = treatmentTime + offset * 60 * 1000;
+          const offsetLabel =
+            group.labels.length > 0
+              ? group.labels.join(", ").slice(0, 20)
+              : null;
+
+          markers.push({
+            time: new Date(offsetTime),
+            carbs: group.carbs,
+            treatment: t,
+            label: offsetLabel,
+            isOffset: true,
+          });
+        }
+      } else {
+        // No offset foods - use original logic
+        const time = new Date(treatmentTime);
+        const label =
+          t.foodType ??
+          (t.notes ? t.notes.slice(0, 20) : null) ??
+          getMealNameForTime(time);
+
+        markers.push({
+          time,
+          carbs: t.carbs ?? 0,
+          treatment: t,
+          label,
+        });
+      }
+    }
+
+    return markers;
+  });
 
   // Treatment edit dialog state
   let selectedTreatment = $state<Treatment | null>(null);
@@ -735,11 +878,15 @@
       >
         {#snippet children({ context })}
           <Svg>
+            <!-- Get track configuration (ratios and visibility flags) -->
+            {@const trackConfig = getTrackRatios()}
+            {@const { showBasalTrack, showIobTrack } = trackConfig}
+
             <!-- Create remapped scales for basal, glucose, and IOB tracks -->
             <!-- Layout from top to bottom: BASAL | GLUCOSE | IOB -->
-            {@const basalTrackHeight = context.height * trackRatios.basal}
-            {@const glucoseTrackHeight = context.height * trackRatios.glucose}
-            {@const iobTrackHeight = context.height * trackRatios.iob}
+            {@const basalTrackHeight = context.height * trackConfig.basal}
+            {@const glucoseTrackHeight = context.height * trackConfig.glucose}
+            {@const iobTrackHeight = context.height * trackConfig.iob}
 
             <!-- Track positions (y coordinates in SVG where 0 = top) -->
             {@const basalTrackTop = 0}
@@ -856,7 +1003,7 @@
             {/if}
 
             <!-- Scheduled basal rate line -->
-            {#if scheduledBasalData.length > 0}
+            {#if scheduledBasalData.length > 0 && showBasal}
               <Spline
                 data={scheduledBasalData}
                 x={(d) => d.time}
@@ -868,27 +1015,33 @@
             {/if}
 
             <!-- Basal axis on right -->
-            <Axis
-              placement="right"
-              scale={basalAxisScale}
-              ticks={2}
-              tickLabelProps={{
-                class: "text-[9px] fill-muted-foreground",
-              }}
-            />
+            {#if showBasalTrack}
+              <Axis
+                placement="right"
+                scale={basalAxisScale}
+                ticks={2}
+                tickLabelProps={{
+                  class: "text-[9px] fill-muted-foreground",
+                }}
+              />
 
-            <!-- Basal track label -->
-            <Text
-              x={4}
-              y={basalTrackTop + 12}
-              class="text-[8px] fill-muted-foreground font-medium"
-            >
-              BASAL
-            </Text>
+              <!-- Basal track label -->
+              <Text
+                x={4}
+                y={basalTrackTop + 12}
+                class="text-[8px] fill-muted-foreground font-medium"
+              >
+                BASAL
+              </Text>
+            {/if}
 
             <!-- Effective basal area (drips down from top of basal track) -->
             <!-- y0 = baseline (0 rate at top), y1 = actual rate (grows down) -->
-            {#if basalData.length > 0}
+            {#if basalData.length > 0 && showBasal}
+              <!-- <LinearGradient
+                class="from-insulin-basal/95 to-insulin-basal/5"
+                vertical
+              > -->
               <Area
                 data={basalData}
                 x={(d) => d.time}
@@ -898,6 +1051,7 @@
                 fill="var(--insulin-basal)"
                 class="stroke-insulin stroke-1"
               />
+              <!-- </LinearGradient> -->
             {/if}
 
             <!-- ===== GLUCOSE TRACK (MIDDLE) ===== -->
@@ -964,25 +1118,27 @@
             />
 
             <!-- ===== IOB TRACK (BOTTOM) with Treatment Markers ===== -->
-            <!-- IOB axis on right -->
-            <Axis
-              placement="right"
-              scale={iobAxisScale}
-              ticks={2}
-              tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
-            />
+            {#if showIobTrack}
+              <!-- IOB axis on right -->
+              <Axis
+                placement="right"
+                scale={iobAxisScale}
+                ticks={2}
+                tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+              />
 
-            <!-- IOB/COB track label -->
-            <Text
-              x={4}
-              y={iobTrackTop + 12}
-              class="text-[8px] fill-muted-foreground font-medium"
-            >
-              IOB/COB
-            </Text>
+              <!-- IOB/COB track label -->
+              <Text
+                x={4}
+                y={iobTrackTop + 12}
+                class="text-[8px] fill-muted-foreground font-medium"
+              >
+                IOB/COB
+              </Text>
+            {/if}
 
             <!-- COB area (scaled by carb ratio to show on IOB-equivalent scale) -->
-            {#if cobData.length > 0 && cobData.some((d) => d.value > 0.01)}
+            {#if cobData.length > 0 && cobData.some((d) => d.value > 0.01) && showCob}
               <Area
                 data={cobData}
                 x={(d) => d.time}
@@ -996,7 +1152,7 @@
             {/if}
 
             <!-- IOB area (grows up from bottom of IOB track) -->
-            {#if iobData.length > 0 && iobData.some((d) => d.value > 0.01)}
+            {#if iobData.length > 0 && iobData.some((d) => d.value > 0.01) && showIob}
               <Area
                 data={iobData}
                 x={(d) => d.time}
@@ -1017,147 +1173,179 @@
             />
 
             <!-- Bolus markers (on top layer) - clickable to edit -->
-            {#each bolusMarkersForIob as marker}
-              {@const xPos = context.xScale(marker.time)}
-              {@const yPos = context.yScale(iobScale(marker.insulin))}
-              <Group
-                x={xPos}
-                y={yPos + 0}
-                onclick={() => handleMarkerClick(marker.treatment)}
-                class="cursor-pointer"
-              >
-                <Polygon
-                  points={[
-                    { x: 0, y: 10 },
-                    { x: -5, y: 0 },
-                    { x: 5, y: 0 },
-                  ]}
-                  class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
-                />
-                <Text
-                  y={-14}
-                  textAnchor="middle"
-                  class="text-[8px] fill-insulin-bolus font-medium"
+            <!-- Hemisphere (semicircle pointing down) normally, triangle if manual override -->
+            {#if showBolus}
+              {#each bolusMarkersForIob as marker}
+                {@const xPos = context.xScale(marker.time)}
+                {@const yPos = context.yScale(iobScale(marker.insulin))}
+                {@const t = marker.treatment}
+                {@const suggestedTotal =
+                  (t.insulinRecommendationForCarbs ?? 0) +
+                  (t.insulinRecommendationForCorrection ?? 0)}
+                {@const hasSuggestion = suggestedTotal > 0}
+                {@const isOverride =
+                  hasSuggestion &&
+                  Math.abs(suggestedTotal - marker.insulin) > 0.05}
+                <Group
+                  x={xPos}
+                  y={yPos + 0}
+                  onclick={() => handleMarkerClick(marker.treatment)}
+                  class="cursor-pointer"
                 >
-                  {marker.insulin.toFixed(1)}U
-                </Text>
-              </Group>
-            {/each}
+                  {#if isOverride}
+                    <!-- Triangle for manual override -->
+                    <Polygon
+                      points={[
+                        { x: 0, y: 12 },
+                        { x: -8, y: 0 },
+                        { x: 8, y: 0 },
+                      ]}
+                      class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
+                    />
+                  {:else}
+                    <!-- Hemisphere (dome shape - curves above baseline) -->
+                    <path
+                      d="M -8,0 A 8,8 0 0,0 8,0 Z"
+                      class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
+                    />
+                  {/if}
+                  <Text
+                    y={-14}
+                    textAnchor="middle"
+                    class="text-[8px] fill-insulin-bolus font-medium"
+                  >
+                    {marker.insulin.toFixed(1)}U
+                  </Text>
+                </Group>
+              {/each}
+            {/if}
 
             <!-- Carb markers (on top layer) - clickable to edit -->
-            {#each carbMarkersForIob as marker}
-              {@const xPos = context.xScale(marker.time)}
-              {@const yPos = context.yScale(iobScale(marker.carbs / carbRatio))}
-              <Group
-                x={xPos}
-                y={yPos}
-                onclick={() => handleMarkerClick(marker.treatment)}
-                class="cursor-pointer"
-              >
-                <!-- Food/meal label above the marker -->
-                {#if marker.label}
-                  <Text
-                    y={-18}
-                    textAnchor="middle"
-                    class="text-[7px] fill-carbs font-medium opacity-80"
-                  >
-                    {marker.label}
-                  </Text>
-                {/if}
-                <Polygon
-                  points={[
-                    { x: 0, y: -10 },
-                    { x: -5, y: 0 },
-                    { x: 5, y: 0 },
-                  ]}
-                  fill="var(--carbs)"
-                  class="opacity-90 hover:opacity-100 transition-opacity"
-                />
-                <Text
-                  y={18}
-                  textAnchor="middle"
-                  class="text-[8px] fill-carbs font-medium"
+            <!-- Hemisphere (semicircle pointing up) to complement bolus hemispheres -->
+            {#if showCarbs}
+              {#each carbMarkersForIob as marker}
+                {@const xPos = context.xScale(marker.time)}
+                {@const yPos = context.yScale(
+                  iobScale(marker.carbs / carbRatio)
+                )}
+                <Group
+                  x={xPos}
+                  y={yPos}
+                  onclick={() => handleMarkerClick(marker.treatment)}
+                  class="cursor-pointer"
                 >
-                  {marker.carbs}g
-                </Text>
-              </Group>
-            {/each}
+                  <!-- Food/meal label above the marker -->
+                  {#if marker.label}
+                    <Text
+                      y={-18}
+                      textAnchor="middle"
+                      class="text-[7px] fill-carbs font-medium opacity-80"
+                    >
+                      {marker.label}
+                    </Text>
+                  {/if}
+                  <!-- Hemisphere (bowl shape - curves below baseline) -->
+                  <path
+                    d="M -8,0 A 8,8 0 0,1 8,0 Z"
+                    fill="var(--carbs)"
+                    class="opacity-90 hover:opacity-100 transition-opacity"
+                  />
+                  <Text
+                    y={18}
+                    textAnchor="middle"
+                    class="text-[8px] fill-carbs font-medium"
+                  >
+                    {marker.carbs}g
+                  </Text>
+                </Group>
+              {/each}
+            {/if}
 
             <!-- Device event markers (positioned at median glucose in glucose track) -->
-            {#each deviceEventMarkers as marker}
-              {@const xPos = context.xScale(marker.time)}
-              {@const yPos = context.yScale(glucoseScale(medianGlucose))}
-              <Group x={xPos} y={yPos}>
-                <!-- Background circle -->
-                <circle
-                  r="12"
-                  fill="var(--background)"
-                  stroke={marker.config.color}
-                  stroke-width="2"
-                  class="opacity-95"
-                />
-                <!-- Icon using foreignObject to embed Lucide component -->
-                <foreignObject x="-10" y="-10" width="20" height="20">
-                  <div class="flex items-center justify-center w-full h-full">
-                    <DeviceEventIcon
-                      eventType={marker.eventType}
-                      size={16}
-                      color={marker.config.color}
-                    />
-                  </div>
-                </foreignObject>
-              </Group>
-            {/each}
+            {#if showDeviceEvents}
+              {#each deviceEventMarkers as marker}
+                {@const xPos = context.xScale(marker.time)}
+                {@const yPos = context.yScale(glucoseScale(medianGlucose))}
+                <Group x={xPos} y={yPos}>
+                  <!-- Background circle -->
+                  <circle
+                    r="12"
+                    fill="var(--background)"
+                    stroke={marker.config.color}
+                    stroke-width="2"
+                    class="opacity-95"
+                  />
+                  <!-- Icon using foreignObject to embed Lucide component -->
+                  <foreignObject x="-10" y="-10" width="20" height="20">
+                    <div class="flex items-center justify-center w-full h-full">
+                      <DeviceEventIcon
+                        eventType={marker.eventType}
+                        size={16}
+                        color={marker.config.color}
+                      />
+                    </div>
+                  </foreignObject>
+                </Group>
+              {/each}
+            {/if}
 
             <!-- System event markers (alarms, warnings) positioned at glucose track bottom -->
-            {#each systemEvents as event (event.id)}
-              {@const xPos = context.xScale(event.time)}
-              {@const yPos = context.yScale(glucoseScale(lowThreshold * 0.8))}
-              <Group x={xPos} y={yPos}>
-                <!-- Icon using foreignObject to embed Lucide component -->
-                <foreignObject x="-8" y="-8" width="16" height="16">
-                  <div class="flex items-center justify-center w-full h-full">
-                    <SystemEventIcon
-                      eventType={event.eventType}
-                      size={16}
-                      color={event.color}
-                    />
-                  </div>
-                </foreignObject>
-              </Group>
-            {/each}
+            {#if showAlarms}
+              {#each systemEvents as event (event.id)}
+                {@const xPos = context.xScale(event.time)}
+                {@const yPos = context.yScale(glucoseScale(lowThreshold * 0.8))}
+                <Group x={xPos} y={yPos}>
+                  <!-- Icon using foreignObject to embed Lucide component -->
+                  <foreignObject x="-8" y="-8" width="16" height="16">
+                    <div class="flex items-center justify-center w-full h-full">
+                      <SystemEventIcon
+                        eventType={event.eventType}
+                        size={16}
+                        color={event.color}
+                      />
+                    </div>
+                  </foreignObject>
+                </Group>
+              {/each}
+            {/if}
 
             <!-- Basal highlight with remapped scale -->
-            <Highlight
-              x={(d) => d.time}
-              y={(d) => {
-                const basal = findBasalValue(basalData, d.time);
-                return basalScale(basal?.rate ?? 0);
-              }}
-              points={{ class: "fill-insulin-basal" }}
-            />
+            {#if showBasal}
+              <Highlight
+                x={(d) => d.time}
+                y={(d) => {
+                  const basal = findBasalValue(basalData, d.time);
+                  return basalScale(basal?.rate ?? 0);
+                }}
+                points={{ class: "fill-insulin-basal" }}
+              />
+            {/if}
 
             <!-- COB highlight with remapped scale (scaled by carb ratio) -->
-            <Highlight
-              x={(d) => d.time}
-              y={(d) => {
-                const cob = findSeriesValue(cobData, d.time);
-                if (!cob || cob.value <= 0) return null;
-                return iobScale(cob.value / carbRatio);
-              }}
-              points={{ class: "fill-carbs" }}
-            />
+            {#if showCob}
+              <Highlight
+                x={(d) => d.time}
+                y={(d) => {
+                  const cob = findSeriesValue(cobData, d.time);
+                  if (!cob || cob.value <= 0) return null;
+                  return iobScale(cob.value / carbRatio);
+                }}
+                points={{ class: "fill-carbs" }}
+              />
+            {/if}
 
             <!-- IOB highlight with remapped scale -->
-            <Highlight
-              x={(d) => d.time}
-              y={(d) => {
-                const iob = findSeriesValue(iobData, d.time);
-                if (!iob || iob.value <= 0) return null;
-                return iobScale(iob.value);
-              }}
-              points={{ class: "fill-iob-basal" }}
-            />
+            {#if showIob}
+              <Highlight
+                x={(d) => d.time}
+                y={(d) => {
+                  const iob = findSeriesValue(iobData, d.time);
+                  if (!iob || iob.value <= 0) return null;
+                  return iobScale(iob.value);
+                }}
+                points={{ class: "fill-iob-basal" }}
+              />
+            {/if}
             <!-- Glucose highlight (main) -->
             <Highlight
               x={(d) => d.time}
@@ -1333,40 +1521,61 @@
           <span>Very Low</span>
         </div>
       {/if}
-      <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class={cn(
+          "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+          !showBasal && "opacity-50"
+        )}
+        onclick={() => (showBasal = !showBasal)}
+      >
         <div class="w-3 h-2 bg-insulin-basal border border-insulin"></div>
-        <span>Basal</span>
-      </div>
-      <div class="flex items-center gap-1">
+        <span class={cn(!showBasal && "line-through")}>Basal</span>
+      </button>
+      <button
+        type="button"
+        class={cn(
+          "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+          !showIob && "opacity-50"
+        )}
+        onclick={() => (showIob = !showIob)}
+      >
         <div class="w-3 h-2 bg-iob-basal border border-insulin"></div>
-        <span>IOB</span>
-      </div>
-      <div class="flex items-center gap-1">
+        <span class={cn(!showIob && "line-through")}>IOB</span>
+      </button>
+      <button
+        type="button"
+        class={cn(
+          "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+          !showCob && "opacity-50"
+        )}
+        onclick={() => (showCob = !showCob)}
+      >
         <div class="w-3 h-2 bg-carbs/40 border border-carbs"></div>
-        <span>COB</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <svg
-          width="20"
-          height="10"
-          viewBox="0 0 10 10"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <polygon points="0,10  -5,0  5,0" class="fill-insulin-bolus" />
-        </svg>
-        <span>Bolus</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <svg
-          width="20"
-          height="10"
-          viewBox="0 0 10 10"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <polygon points="0,0  -5,10  5,10" class="fill-carbs" />
-        </svg>
-        <span>Carbs</span>
-      </div>
+        <span class={cn(!showCob && "line-through")}>COB</span>
+      </button>
+      <button
+        type="button"
+        class={cn(
+          "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+          !showBolus && "opacity-50"
+        )}
+        onclick={() => (showBolus = !showBolus)}
+      >
+        <BolusIcon size={16} />
+        <span class={cn(!showBolus && "line-through")}>Bolus</span>
+      </button>
+      <button
+        type="button"
+        class={cn(
+          "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+          !showCarbs && "opacity-50"
+        )}
+        onclick={() => (showCarbs = !showCarbs)}
+      >
+        <CarbsIcon size={16} />
+        <span class={cn(!showCarbs && "line-through")}>Carbs</span>
+      </button>
       <!-- Device event legend items (only show if present in current view) -->
       {#if deviceEventMarkers.some((m) => m.eventType === "Sensor Start" || m.eventType === "Sensor Change")}
         <div class="flex items-center gap-1">
@@ -1407,16 +1616,34 @@
           </div>
         {/if}
       {/each}
-      <!-- System event legend items (only show if present in current view) -->
-      {#each [...new Set(systemEvents.map((e) => e.eventType))] as eventType}
-        {@const event = systemEvents.find((e) => e.eventType === eventType)}
-        {#if event}
-          <div class="flex items-center gap-1">
-            <SystemEventIcon {eventType} size={14} color={event.color} />
-            <span>{eventType}</span>
-          </div>
-        {/if}
-      {/each}
+      <!-- System event legend items (only show if present in current view) - clickable to toggle -->
+      {#if systemEvents.length > 0}
+        {@const uniqueEventTypes = [
+          ...new Set(systemEvents.map((e) => e.eventType)),
+        ]}
+        <button
+          type="button"
+          class={cn(
+            "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+            !showAlarms && "opacity-50"
+          )}
+          onclick={() => (showAlarms = !showAlarms)}
+        >
+          {#each uniqueEventTypes.slice(0, 1) as eventType}
+            {@const event = systemEvents.find((e) => e.eventType === eventType)}
+            {#if event}
+              <SystemEventIcon
+                {eventType}
+                size={14}
+                color={showAlarms ? event.color : "var(--muted-foreground)"}
+              />
+            {/if}
+          {/each}
+          <span class={cn(!showAlarms && "line-through")}>
+            Alarms ({systemEvents.length})
+          </span>
+        </button>
+      {/if}
     </div>
   </CardContent>
 </Card>

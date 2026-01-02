@@ -173,22 +173,7 @@
   }
 
   // Report navigation categories with user-friendly descriptions
-  const reportCategories: Array<{
-    id: NonNullable<CategoryType>;
-    title: string;
-    subtitle: string;
-    description: string;
-    icon: typeof Gauge;
-    reports: Array<{
-      title: string;
-      userDescription: string;
-      clinicalDescription: string;
-      href: string;
-      icon: typeof Gauge;
-      status: "available" | "coming-soon";
-      forClinic: boolean;
-    }>;
-  }> = [
+  const reportCategories = [
     {
       id: "overview",
       title: "The Big Picture",
@@ -563,7 +548,7 @@
             <CardDescription>Where you spend your time</CardDescription>
           </CardHeader>
           <CardContent class="flex justify-center">
-            <TIRStackedChart entries={data.entries} percentages={tir} />
+            <TIRStackedChart percentages={tir} />
           </CardContent>
         </Card>
 
@@ -592,10 +577,7 @@
             </div>
           </CardHeader>
           <CardContent class="h-64">
-            <AmbulatoryGlucoseProfile
-              entries={data.entries}
-              averagedStats={data.averagedStats}
-            />
+            <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
           </CardContent>
         </Card>
       </div>

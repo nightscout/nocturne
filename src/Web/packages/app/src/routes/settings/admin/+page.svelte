@@ -154,10 +154,18 @@
     });
   }
 
+  // Helper to check if subject is a system subject (property may not exist in API)
+  function isSystemSubjectCheck(subject: Subject): boolean {
+    return (
+      "isSystemSubject" in subject &&
+      (subject as { isSystemSubject?: boolean }).isSystemSubject === true
+    );
+  }
+
   // Get subject type icon
   function getSubjectIcon(subject: Subject) {
     // Public system subject gets a globe icon
-    if (subject.isSystemSubject && subject.name === "Public") {
+    if (isSystemSubjectCheck(subject) && subject.name === "Public") {
       return Globe;
     }
     // Infer type from access token presence
@@ -375,7 +383,7 @@
   }
 
   async function handleSetPassword() {
-    if (!selectedResetRequest) return;
+    if (!selectedResetRequest?.email) return;
     setPasswordSaving = true;
     try {
       await adminRemote.setTemporaryPassword({
@@ -568,7 +576,7 @@
                 {#each subjects as subject}
                   {@const Icon = getSubjectIcon(subject)}
                   {@const isPublicSubject =
-                    subject.isSystemSubject && subject.name === "Public"}
+                    isSystemSubjectCheck(subject) && subject.name === "Public"}
                   <div
                     class="flex items-center justify-between p-4 rounded-lg border {isPublicSubject
                       ? 'bg-primary/5 border-primary/20'
@@ -635,7 +643,7 @@
                       >
                         <Pencil class="h-4 w-4" />
                       </Button>
-                      {#if !subject.isSystemSubject}
+                      {#if !isSystemSubjectCheck(subject)}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1232,7 +1240,11 @@
       <div class="p-4 rounded-lg bg-muted font-mono text-sm break-all">
         {generatedResetLink}
       </div>
-      <Button class="w-full" onclick={copyResetLink} disabled={!generatedResetLink}>
+      <Button
+        class="w-full"
+        onclick={copyResetLink}
+        disabled={!generatedResetLink}
+      >
         {#if resetLinkCopied}
           <Check class="h-4 w-4 mr-2" />
           Copied!
@@ -1250,5 +1262,3 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
-
-

@@ -14,11 +14,14 @@
   } from "$lib/data/treatment-foods.remote";
   import TreatmentFoodSelectorDialog from "./TreatmentFoodSelectorDialog.svelte";
   import TreatmentFoodEntryEditDialog from "./TreatmentFoodEntryEditDialog.svelte";
-  import { CarbBreakdownBar } from "./index";
+  import { CarbBreakdownBar, FoodEntryDetails } from "./index";
 
   interface Props {
     treatmentId?: string;
-    /** Total carbs from the treatment - shown so user knows what they're working toward */
+    /**
+     * Total carbs from the treatment - shown so user knows what they're working
+     * toward
+     */
     totalCarbs?: number;
   }
 
@@ -118,6 +121,8 @@
   {:else if loadError}
     <div class="text-sm text-destructive">{loadError}</div>
   {:else if breakdown}
+    {@const foodCount = breakdown.foods?.length ?? 0}
+    {@const hasUnattributed = (breakdown.unspecifiedCarbs ?? 0) > 0}
     <div class="space-y-3">
       <!-- Total carbs indicator -->
       {#if totalCarbs > 0}
@@ -129,8 +134,8 @@
         </div>
       {/if}
 
-      <!-- Carb breakdown bar -->
-      {#if totalCarbs > 0}
+      <!-- Carb breakdown bar: show only if multiple foods OR unattributed carbs with at least one food -->
+      {#if totalCarbs > 0 && (foodCount > 1 || (foodCount >= 1 && hasUnattributed))}
         <CarbBreakdownBar {totalCarbs} foods={breakdown.foods ?? []} />
       {/if}
 
@@ -157,14 +162,10 @@
                 <div class="font-medium">
                   {entry.foodName ?? "Other"}
                 </div>
-                <div class="text-xs text-muted-foreground">
-                  {entry.foodId ? `${entry.portions} portions` : "Other"} - {entry.carbs}g
-                  carbs
-                  {entry.timeOffsetMinutes
-                    ? ` - ${entry.timeOffsetMinutes} min`
-                    : ""}
-                  {entry.note ? ` - ${entry.note}` : ""}
-                </div>
+                <FoodEntryDetails
+                  food={entry}
+                  class="text-xs text-muted-foreground"
+                />
               </div>
               <div class="flex items-center gap-1">
                 <Button

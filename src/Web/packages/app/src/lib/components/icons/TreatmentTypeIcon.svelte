@@ -4,11 +4,7 @@
   import Utensils from "lucide-svelte/icons/utensils";
   import Activity from "lucide-svelte/icons/activity";
   import Smartphone from "lucide-svelte/icons/smartphone";
-  import FileText from "lucide-svelte/icons/file-text";
-  import Apple from "lucide-svelte/icons/apple";
-  import Pill from "lucide-svelte/icons/pill";
   import HeartPulse from "lucide-svelte/icons/heart-pulse";
-  import Clock from "lucide-svelte/icons/clock";
   import Bell from "lucide-svelte/icons/bell";
   import MessageSquare from "lucide-svelte/icons/message-square";
   import HelpCircle from "lucide-svelte/icons/help-circle";
@@ -72,7 +68,7 @@
     if (!type) return "text-muted-foreground";
 
     for (const category of Object.values(TREATMENT_CATEGORIES)) {
-      if (category.eventTypes.includes(type)) {
+      if (category.eventTypes.some((et) => et === type)) {
         return category.colorClass;
       }
     }

@@ -31,7 +31,7 @@
   const { data, children } = $props<{ data: LayoutData; children: any }>();
 
   const realtimeStore = createRealtimeStore(config);
-  const authStore = createAuthStore();
+  createAuthStore(); // Initialize auth store in context
 
   // Create settings store in context for the entire app
   // This makes feature settings available on all pages including the main dashboard

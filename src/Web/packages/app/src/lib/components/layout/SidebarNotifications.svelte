@@ -59,7 +59,7 @@
   // Reload when password reset request counter changes (via SignalR)
   $effect(() => {
     // Track the counter to trigger reload
-    const _count = realtimeStore.passwordResetRequestCount;
+    void realtimeStore.passwordResetRequestCount;
     if (isAdmin) {
       loadPendingResets();
     }

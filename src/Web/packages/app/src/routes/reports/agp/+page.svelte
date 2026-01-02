@@ -23,11 +23,8 @@
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { type Entry } from "$lib/api";
-  import { MediaQuery } from "svelte/reactivity";
   import { getReportsData } from "$lib/data/reports.remote";
   import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
-
-  const isDesktop = new MediaQuery("(min-width: 768px)");
 
   // Build date range input from URL parameters
   const dateRangeInput = $derived(useDateRange(14));
@@ -61,36 +58,6 @@
       )
     )
   );
-  const entriesByDay = $derived(computeEntriesByDay(entries));
-
-  let dayByDayPage = $state(1);
-
-  // Helper function to compute entries by day
-  function computeEntriesByDay(entries: Entry[]) {
-    return Object.entries(
-      entries.reduce(
-        (acc, entry) => {
-          const date = new Date(entry.mills ?? 0).toLocaleDateString();
-          if (!date) {
-            return acc;
-          }
-          if (!acc[date]) {
-            acc[date] = [];
-          }
-          acc[date].push(entry);
-          return acc;
-        },
-        {} as Record<string, Entry[]>
-      )
-    ).sort((a, b) => {
-      const timeA = Date.parse(a[0]);
-      const timeB = Date.parse(b[0]);
-      if (isNaN(timeA) || isNaN(timeB)) {
-        return a[0].localeCompare(b[0]);
-      }
-      return timeA - timeB;
-    });
-  }
 </script>
 
 <svelte:head>
@@ -273,7 +240,7 @@
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4 py-4 h-48">
-          <TIRStackedChart {entries} percentages={tir} />
+          <TIRStackedChart percentages={tir} />
         </CardContent>
       </Card>
 

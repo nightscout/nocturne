@@ -2,7 +2,6 @@
   import type { AveragedStats } from "$lib/api";
   import { DEFAULT_THRESHOLDS } from "$lib/constants";
   import { AreaChart } from "layerchart";
-  import { Skeleton } from "$lib/components/ui/skeleton";
   import { BarChart3 } from "lucide-svelte";
   import {
     glucoseUnits,
