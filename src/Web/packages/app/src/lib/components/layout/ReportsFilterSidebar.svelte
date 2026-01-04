@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import * as Sheet from "$lib/components/ui/sheet";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
@@ -7,7 +8,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
-  import { queryParam } from "sveltekit-search-params";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
   import RangeCalendar from "$lib/components/ui/range-calendar/range-calendar.svelte";
   import { Calendar, Filter, RotateCcw } from "lucide-svelte";
 
@@ -18,31 +19,10 @@
 
   let { open = $bindable(false), onOpenChange }: Props = $props();
 
-  // URL search params
-  const days = queryParam("days", {
-    encode: (value: number | undefined) => value?.toString() ?? "",
-    decode: (value: string | null) => {
-      if (!value) return undefined;
-      const parsed = parseInt(value);
-      return isNaN(parsed) ? undefined : parsed;
-    },
-    defaultValue: undefined,
-  });
-
-  const fromDate = queryParam("from", {
-    encode: (value: string | undefined) => value ?? "",
-    decode: (value: string | null) => value || undefined,
-    defaultValue: undefined,
-  });
-
-  const toDate = queryParam("to", {
-    encode: (value: string | undefined) => value ?? "",
-    decode: (value: string | null) => value || undefined,
-    defaultValue: undefined,
-  });
+  // Use centralized reports params hook
+  const params = useDateParams();
 
   let value = $state<DateRange | undefined>();
-  let initialized = $state(false);
 
   // Quick day presets
   const dayPresets = [
@@ -55,56 +35,50 @@
   ];
 
   // Derived state for selected days (for UI highlighting)
-  const selectedDays = $derived($days);
+  const selectedDays = $derived(params.days);
 
-  // Initialize state from URL
-  $effect(() => {
-    if (!initialized) {
-      initializeFromURL();
-      initialized = true;
-    }
+  // Initialize state from URL on mount (not in $effect to avoid read/write cycle)
+  onMount(() => {
+    initializeFromURL();
   });
 
   function initializeFromURL() {
-    if ($days) {
+    if (params.days) {
       const endDate = today(getLocalTimeZone());
-      const startDate = endDate.subtract({ days: $days - 1 });
+      const startDate = endDate.subtract({ days: params.days - 1 });
       value = { start: startDate, end: endDate };
-    } else if ($fromDate && $toDate) {
+    } else if (params.from && params.to) {
       try {
-        const startDate = parseDate($fromDate);
-        const endDate = parseDate($toDate);
+        const startDate = parseDate(params.from);
+        const endDate = parseDate(params.to);
         value = { start: startDate, end: endDate };
       } catch (error) {
         console.warn("Failed to parse date range from URL:", error);
-        setDayRange(7);
+        params.setDayRange(7);
       }
     } else {
-      setDayRange(7);
+      params.setDayRange(7);
     }
   }
 
   function setDayRange(daysCount: number) {
     const endDate = today(getLocalTimeZone());
     const startDate = endDate.subtract({ days: daysCount - 1 });
-
     value = { start: startDate, end: endDate };
-
-    days.set(daysCount);
-    fromDate.set(startDate.toString());
-    toDate.set(endDate.toString());
+    params.setDayRange(daysCount);
   }
 
   function handleCalendarChange(newValue: DateRange | undefined) {
     if (newValue?.start && newValue?.end) {
-      days.set(undefined);
-      fromDate.set(newValue.start.toString());
-      toDate.set(newValue.end.toString());
+      params.setCustomRange(newValue.start.toString(), newValue.end.toString());
     }
   }
 
   function resetFilters() {
-    setDayRange(7);
+    params.reset();
+    const endDate = today(getLocalTimeZone());
+    const startDate = endDate.subtract({ days: 7 - 1 });
+    value = { start: startDate, end: endDate };
   }
 
   function closeSheet() {

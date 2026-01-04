@@ -2,8 +2,10 @@
   import { AreaChart, Rule } from "layerchart";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import { AlertCircle } from "lucide-svelte";
+  import type { SiteChangeImpactAnalysis } from "$lib/api";
 
-  interface SiteChangeImpactDataPoint {
+  // Local interface with required fields for chart rendering
+  interface SiteChangeImpactDataPointValid {
     minutesFromChange: number;
     averageGlucose: number;
     medianGlucose: number;
@@ -13,27 +15,6 @@
     percentile25: number;
     percentile75: number;
     percentile90: number;
-  }
-
-  interface SiteChangeImpactSummary {
-    avgGlucoseBeforeChange: number;
-    avgGlucoseAfterChange: number;
-    percentImprovement: number;
-    timeInRangeBeforeChange: number;
-    timeInRangeAfterChange: number;
-    cvBeforeChange: number;
-    cvAfterChange: number;
-  }
-
-  interface SiteChangeImpactAnalysis {
-    siteChangeCount?: number;
-    dataPoints: SiteChangeImpactDataPoint[];
-    summary?: SiteChangeImpactSummary;
-    hoursBeforeChange?: number;
-    hoursAfterChange?: number;
-    bucketSizeMinutes?: number;
-    hasSufficientData?: boolean;
-    warningMessage?: string;
   }
 
   interface Props {
@@ -50,8 +31,41 @@
     return `${hours}h`;
   }
 
-  // Derived values for chart
-  const chartData = $derived(analysis?.dataPoints ?? []);
+  // Filter and validate data points to ensure all required fields are present
+  const chartData = $derived.by((): SiteChangeImpactDataPointValid[] => {
+    if (!analysis?.dataPoints) return [];
+
+    return analysis.dataPoints
+      .filter(
+        (
+          d
+        ): d is typeof d & {
+          minutesFromChange: number;
+          medianGlucose: number;
+          percentile10: number;
+          percentile25: number;
+          percentile75: number;
+          percentile90: number;
+        } =>
+          d.minutesFromChange !== undefined &&
+          d.medianGlucose !== undefined &&
+          d.percentile10 !== undefined &&
+          d.percentile25 !== undefined &&
+          d.percentile75 !== undefined &&
+          d.percentile90 !== undefined
+      )
+      .map((d) => ({
+        minutesFromChange: d.minutesFromChange,
+        averageGlucose: d.averageGlucose ?? d.medianGlucose,
+        medianGlucose: d.medianGlucose,
+        stdDev: d.stdDev ?? 0,
+        count: d.count ?? 0,
+        percentile10: d.percentile10,
+        percentile25: d.percentile25,
+        percentile75: d.percentile75,
+        percentile90: d.percentile90,
+      }));
+  });
 
   const yDomain = $derived.by(() => {
     if (chartData.length === 0) return [40, 300];
@@ -65,7 +79,8 @@
   });
 
   const xDomain = $derived.by(() => {
-    if (!analysis) return [-720, 1440];
+    if (!analysis?.hoursBeforeChange || !analysis?.hoursAfterChange)
+      return [-720, 1440];
     return [-analysis.hoursBeforeChange * 60, analysis.hoursAfterChange * 60];
   });
 </script>
@@ -84,8 +99,8 @@
           {
             key: "p10_p25",
             value: [
-              (d: SiteChangeImpactDataPoint) => d.percentile25,
-              (d: SiteChangeImpactDataPoint) => d.percentile10,
+              (d: SiteChangeImpactDataPointValid) => d.percentile25,
+              (d: SiteChangeImpactDataPointValid) => d.percentile10,
             ],
             color: "hsl(var(--chart-1) / 0.3)",
             label: "10th-25th",
@@ -93,8 +108,8 @@
           {
             key: "p25_median",
             value: [
-              (d: SiteChangeImpactDataPoint) => d.medianGlucose,
-              (d: SiteChangeImpactDataPoint) => d.percentile25,
+              (d: SiteChangeImpactDataPointValid) => d.medianGlucose,
+              (d: SiteChangeImpactDataPointValid) => d.percentile25,
             ],
             color: "hsl(var(--chart-2) / 0.5)",
             label: "25th-Median",
@@ -102,8 +117,8 @@
           {
             key: "median",
             value: [
-              (d: SiteChangeImpactDataPoint) => d.medianGlucose,
-              (d: SiteChangeImpactDataPoint) => d.medianGlucose,
+              (d: SiteChangeImpactDataPointValid) => d.medianGlucose,
+              (d: SiteChangeImpactDataPointValid) => d.medianGlucose,
             ],
             color: "hsl(var(--primary))",
             props: {
@@ -114,8 +129,8 @@
           {
             key: "median_p75",
             value: [
-              (d: SiteChangeImpactDataPoint) => d.medianGlucose,
-              (d: SiteChangeImpactDataPoint) => d.percentile75,
+              (d: SiteChangeImpactDataPointValid) => d.medianGlucose,
+              (d: SiteChangeImpactDataPointValid) => d.percentile75,
             ],
             color: "hsl(var(--chart-3) / 0.5)",
             label: "Median-75th",
@@ -123,8 +138,8 @@
           {
             key: "p75_p90",
             value: [
-              (d: SiteChangeImpactDataPoint) => d.percentile75,
-              (d: SiteChangeImpactDataPoint) => d.percentile90,
+              (d: SiteChangeImpactDataPointValid) => d.percentile75,
+              (d: SiteChangeImpactDataPointValid) => d.percentile90,
             ],
             color: "hsl(var(--chart-4) / 0.3)",
             label: "75th-90th",
@@ -190,49 +205,52 @@
     </div>
 
     <!-- Summary Statistics -->
-    <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-      <div class="rounded-lg bg-muted/50 p-3 text-center">
-        <div class="text-sm text-muted-foreground">Avg Before</div>
-        <div class="text-xl font-semibold">
-          {analysis.summary.avgGlucoseBeforeChange.toFixed(0)}
-          <span class="text-xs text-muted-foreground">mg/dL</span>
+    {#if analysis.summary}
+      <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div class="rounded-lg bg-muted/50 p-3 text-center">
+          <div class="text-sm text-muted-foreground">Avg Before</div>
+          <div class="text-xl font-semibold">
+            {analysis.summary.avgGlucoseBeforeChange?.toFixed(0)}
+            <span class="text-xs text-muted-foreground">mg/dL</span>
+          </div>
+        </div>
+        <div class="rounded-lg bg-muted/50 p-3 text-center">
+          <div class="text-sm text-muted-foreground">Avg After</div>
+          <div class="text-xl font-semibold">
+            {analysis.summary.avgGlucoseAfterChange?.toFixed(0)}
+            <span class="text-xs text-muted-foreground">mg/dL</span>
+          </div>
+        </div>
+        <div class="rounded-lg bg-muted/50 p-3 text-center">
+          <div class="text-sm text-muted-foreground">TIR Before</div>
+          <div class="text-xl font-semibold">
+            {analysis.summary.timeInRangeBeforeChange?.toFixed(0)}%
+          </div>
+        </div>
+        <div class="rounded-lg bg-muted/50 p-3 text-center">
+          <div class="text-sm text-muted-foreground">TIR After</div>
+          <div class="text-xl font-semibold">
+            {analysis.summary.timeInRangeAfterChange?.toFixed(0)}%
+          </div>
         </div>
       </div>
-      <div class="rounded-lg bg-muted/50 p-3 text-center">
-        <div class="text-sm text-muted-foreground">Avg After</div>
-        <div class="text-xl font-semibold">
-          {analysis.summary.avgGlucoseAfterChange.toFixed(0)}
-          <span class="text-xs text-muted-foreground">mg/dL</span>
-        </div>
-      </div>
-      <div class="rounded-lg bg-muted/50 p-3 text-center">
-        <div class="text-sm text-muted-foreground">TIR Before</div>
-        <div class="text-xl font-semibold">
-          {analysis.summary.timeInRangeBeforeChange.toFixed(0)}%
-        </div>
-      </div>
-      <div class="rounded-lg bg-muted/50 p-3 text-center">
-        <div class="text-sm text-muted-foreground">TIR After</div>
-        <div class="text-xl font-semibold">
-          {analysis.summary.timeInRangeAfterChange.toFixed(0)}%
-        </div>
-      </div>
-    </div>
 
-    {#if analysis.summary.percentImprovement > 0}
-      <div class="mt-4 rounded-lg bg-success/10 p-3 text-center text-success">
-        <span class="font-medium">
-          ↓ {analysis.summary.percentImprovement.toFixed(1)}% improvement
-        </span>
-        <span class="text-sm opacity-80">after site change</span>
-      </div>
-    {:else if analysis.summary.percentImprovement < 0}
-      <div class="mt-4 rounded-lg bg-warning/10 p-3 text-center text-warning">
-        <span class="font-medium">
-          ↑ {Math.abs(analysis.summary.percentImprovement).toFixed(1)}% higher
-        </span>
-        <span class="text-sm opacity-80">after site change</span>
-      </div>
+      {#if analysis.summary?.percentImprovement !== undefined && analysis.summary?.percentImprovement > 0}
+        <div class="mt-4 rounded-lg bg-success/10 p-3 text-center text-success">
+          <span class="font-medium">
+            ↓ {analysis.summary?.percentImprovement.toFixed(1)}% improvement
+          </span>
+          <span class="text-sm opacity-80">after site change</span>
+        </div>
+      {:else if analysis.summary?.percentImprovement !== undefined && analysis.summary?.percentImprovement < 0}
+        <div class="mt-4 rounded-lg bg-warning/10 p-3 text-center text-warning">
+          <span class="font-medium">
+            ↑ {Math.abs(analysis.summary?.percentImprovement).toFixed(1)}%
+            higher
+          </span>
+          <span class="text-sm opacity-80">after site change</span>
+        </div>
+      {/if}
     {/if}
   {:else if analysis && !analysis.hasSufficientData}
     <div

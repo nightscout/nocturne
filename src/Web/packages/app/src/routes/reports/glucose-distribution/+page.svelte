@@ -3,13 +3,14 @@
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
   import { AlertTriangle } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange());
+  const reportsParams = useDateParams();
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

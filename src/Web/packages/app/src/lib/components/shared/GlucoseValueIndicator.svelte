@@ -14,10 +14,14 @@
     isStale?: boolean;
     /** Whether the connection is disconnected */
     isDisconnected?: boolean;
+    /** Whether a sync is in progress */
+    isSyncing?: boolean;
     /** Status text to show (e.g., "1 min ago" or "Connection Error") */
     statusText?: string;
     /** Tooltip text for status (e.g., "Last reading: 5 min ago") */
     statusTooltip?: string;
+    /** Callback when sync button is clicked (makes status text clickable) */
+    onSyncClick?: () => void;
     /** Size variant - 'sm' for sidebar, 'lg' for dashboard */
     size?: "sm" | "lg";
     /** Additional CSS classes for the container */
@@ -30,8 +34,10 @@
     isLoading = false,
     isStale = false,
     isDisconnected = false,
+    isSyncing = false,
     statusText,
     statusTooltip,
+    onSyncClick,
     size = "lg",
     class: className = "",
   }: Props = $props();
@@ -90,6 +96,7 @@
   );
 </script>
 
+<!-- Horizontal layout with grid overlay on status text to prevent layout shift when syncing -->
 <div class="glucose-value-indicator inline-flex items-center gap-2 {className}">
   {#if isLoading}
     <!-- Loading skeleton -->
@@ -115,18 +122,50 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <span
-              {...props}
-              class="text-xs cursor-help {isDisconnected
-                ? 'text-destructive font-medium'
-                : 'text-muted-foreground'}"
-            >
-              {statusText}
-            </span>
+            {#if onSyncClick}
+              <!-- Grid overlay approach: both states occupy same cell, only one visible -->
+              <button
+                {...props}
+                type="button"
+                onclick={onSyncClick}
+                disabled={isSyncing}
+                class="text-xs transition-colors grid"
+              >
+                <!-- Normal state text (invisible when syncing) -->
+                <span
+                  class="col-start-1 row-start-1 {isSyncing
+                    ? 'invisible'
+                    : isDisconnected
+                      ? 'text-destructive font-medium hover:text-destructive/80 hover:underline'
+                      : 'text-muted-foreground hover:text-foreground hover:underline'}"
+                >
+                  {statusText}
+                </span>
+                <!-- Syncing state text (invisible when not syncing) -->
+                <span
+                  class="col-start-1 row-start-1 animate-pulse text-primary font-medium {isSyncing
+                    ? ''
+                    : 'invisible'}"
+                >
+                  Syncing...
+                </span>
+              </button>
+            {:else}
+              <span
+                {...props}
+                class="text-xs cursor-help {isDisconnected
+                  ? 'text-destructive font-medium'
+                  : 'text-muted-foreground'}"
+              >
+                {statusText}
+              </span>
+            {/if}
           {/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content side="bottom">
-          <p>{statusTooltip || statusText}</p>
+          <p>
+            {onSyncClick ? "Click to sync data" : statusTooltip || statusText}
+          </p>
         </Tooltip.Content>
       </Tooltip.Root>
     {/if}

@@ -494,8 +494,7 @@
     {:then [activeTrackers, historyTrackers, definitions]}
       {@const trackerEvents = buildTrackerEvents(
         activeTrackers ?? [],
-        historyTrackers ?? [],
-        definitions ?? []
+        historyTrackers ?? []
       )}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">

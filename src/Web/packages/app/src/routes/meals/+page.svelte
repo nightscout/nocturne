@@ -402,11 +402,7 @@
   <Card.Root>
     <Card.Content class="space-y-4 p-4">
       <!-- Row 1: Date picker inline -->
-      <DateRangePicker
-        title="Meal range"
-        defaultDays={1}
-        onDateChange={handleDateChange}
-      />
+      <DateRangePicker defaultDays={1} onDateChange={handleDateChange} />
 
       <!-- Row 2: All filter controls -->
       <div

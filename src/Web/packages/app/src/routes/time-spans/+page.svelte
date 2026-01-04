@@ -237,11 +237,7 @@
   </Card.Root>
 
   <!-- Date Range Picker -->
-  <DateRangePicker
-    title="Select Date Range"
-    showDaysPresets={true}
-    defaultDays={7}
-  />
+  <DateRangePicker showDaysPresets={true} defaultDays={7} />
 
   <!-- Time Spans Chart -->
   <Card.Root>

@@ -22,10 +22,11 @@
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
   import { getSiteChangeImpact } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
 
   // Build date range input from URL parameters - default to 90 days for site change analysis
-  const dateRangeInput = $derived(useDateRange(90));
+  const reportsParams = useDateParams(90);
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for site change impact data
   const siteChangeQuery = $derived(getSiteChangeImpact(dateRangeInput));
@@ -141,7 +142,7 @@
             <p class="mt-2">Loading site change data...</p>
           </div>
         </div>
-      {:else}
+      {:else if analysis !== null && analysis !== undefined}
         <SiteChangeImpactChart {analysis} />
       {/if}
     </CardContent>

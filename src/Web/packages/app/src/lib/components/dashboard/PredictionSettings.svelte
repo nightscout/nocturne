@@ -19,14 +19,24 @@
   interface Props {
     /** Whether to show prediction controls (from parent) */
     showPredictions?: boolean;
-    /** Current prediction display mode (bindable) */
+    /** Current prediction display mode */
     predictionMode?: PredictionDisplayMode;
+    /** Callback when prediction mode changes */
+    onPredictionModeChange?: (mode: PredictionDisplayMode) => void;
   }
 
   let {
     showPredictions = true,
-    predictionMode = $bindable("cone"),
+    predictionMode = "cone",
+    onPredictionModeChange,
   }: Props = $props();
+
+  // Handle mode changes via callback
+  function handleModeChange(value: string | undefined) {
+    if (value && onPredictionModeChange) {
+      onPredictionModeChange(value as PredictionDisplayMode);
+    }
+  }
 
   // Sync prediction mode with algorithm settings model on mount
 </script>
@@ -72,7 +82,8 @@
     {#if showPredictions && predictionEnabled.current}
       <ToggleGroup.Root
         type="single"
-        bind:value={predictionMode}
+        value={predictionMode}
+        onValueChange={handleModeChange}
         class="bg-muted rounded-lg p-0.5"
       >
         <ToggleGroup.Item

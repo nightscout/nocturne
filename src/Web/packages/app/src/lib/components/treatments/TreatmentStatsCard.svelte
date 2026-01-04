@@ -3,7 +3,8 @@
   import { Badge } from "$lib/components/ui/badge";
   import type { TreatmentSummary } from "$lib/api";
   import type { TreatmentCounts } from "$lib/constants/treatment-categories";
-  import { Syringe, Apple, Activity, TrendingUp, Clock } from "lucide-svelte";
+  import { Activity } from "lucide-svelte";
+  import { BolusIcon, CarbsIcon } from "$lib/components/icons";
 
   interface Props {
     /** Backend-calculated treatment summary with accurate insulin/carb totals */
@@ -56,13 +57,15 @@
   );
 </script>
 
-<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
   <!-- Total Treatments -->
   <Card.Root class="bg-card">
     <Card.Content class="p-4">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm font-medium text-muted-foreground">Total</p>
+          <p class="text-sm font-medium text-muted-foreground">
+            Total Treatments
+          </p>
           <p class="text-2xl font-bold tabular-nums">{counts.total}</p>
         </div>
         <div
@@ -82,91 +85,61 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Total Insulin -->
+  <!-- Insulin (merged with Boluses) -->
   <Card.Root class="bg-card">
     <Card.Content class="p-4">
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm font-medium text-muted-foreground">Insulin</p>
           <p
-            class="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400"
+            class="text-2xl font-bold tabular-nums text-[color:var(--insulin-bolus)]"
           >
             {totalInsulin.toFixed(1)}U
           </p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-[color:var(--insulin-bolus)]/10 flex items-center justify-center"
         >
-          <Syringe class="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <BolusIcon size={20} />
         </div>
       </div>
-      <p class="text-xs text-muted-foreground mt-2">
-        {dailyAvgInsulin.toFixed(1)}U/day avg
-      </p>
+      <div
+        class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"
+      >
+        <span>{bolusCount} boluses</span>
+        <span>•</span>
+        <span>{dailyAvgBoluses.toFixed(1)}/day</span>
+        <span>•</span>
+        <span>{avgInsulinPerBolus.toFixed(1)}U avg</span>
+      </div>
     </Card.Content>
   </Card.Root>
 
-  <!-- Bolus Count -->
-  <Card.Root class="bg-card">
-    <Card.Content class="p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-muted-foreground">Boluses</p>
-          <p class="text-2xl font-bold tabular-nums">{bolusCount}</p>
-        </div>
-        <div
-          class="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center"
-        >
-          <TrendingUp class="h-5 w-5 text-purple-600 dark:text-purple-400" />
-        </div>
-      </div>
-      <p class="text-xs text-muted-foreground mt-2">
-        {dailyAvgBoluses.toFixed(1)}/day • {avgInsulinPerBolus.toFixed(1)}U avg
-      </p>
-    </Card.Content>
-  </Card.Root>
-
-  <!-- Total Carbs -->
+  <!-- Carbs (merged with Meals) -->
   <Card.Root class="bg-card">
     <Card.Content class="p-4">
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm font-medium text-muted-foreground">Carbs</p>
-          <p
-            class="text-2xl font-bold tabular-nums text-green-600 dark:text-green-400"
-          >
+          <p class="text-2xl font-bold tabular-nums text-[color:var(--carbs)]">
             {totalCarbs.toFixed(0)}g
           </p>
         </div>
         <div
-          class="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center"
+          class="h-10 w-10 rounded-lg bg-[color:var(--carbs)]/10 flex items-center justify-center"
         >
-          <Apple class="h-5 w-5 text-green-600 dark:text-green-400" />
+          <CarbsIcon size={20} />
         </div>
       </div>
-      <p class="text-xs text-muted-foreground mt-2">
-        {dailyAvgCarbs.toFixed(0)}g/day avg
-      </p>
-    </Card.Content>
-  </Card.Root>
-
-  <!-- Carb Entries -->
-  <Card.Root class="bg-card">
-    <Card.Content class="p-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-muted-foreground">Meals</p>
-          <p class="text-2xl font-bold tabular-nums">{carbEntriesCount}</p>
-        </div>
-        <div
-          class="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"
-        >
-          <Clock class="h-5 w-5 text-amber-600 dark:text-amber-400" />
-        </div>
+      <div
+        class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"
+      >
+        <span>{carbEntriesCount} meals</span>
+        <span>•</span>
+        <span>{dailyAvgCarbs.toFixed(0)}g/day</span>
+        <span>•</span>
+        <span>{avgCarbsPerEntry.toFixed(0)}g avg/meal</span>
       </div>
-      <p class="text-xs text-muted-foreground mt-2">
-        {avgCarbsPerEntry.toFixed(0)}g avg/meal
-      </p>
     </Card.Content>
   </Card.Root>
 </div>

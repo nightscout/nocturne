@@ -1,5 +1,13 @@
 <script lang="ts">
-  import type { Entry, Treatment, DeviceStatus, TreatmentFood } from "$lib/api";
+  import type {
+    Entry,
+    Treatment,
+    DeviceStatus,
+    TreatmentFood,
+    TrackerInstanceDto,
+    TrackerDefinitionDto,
+    TrackerCategory,
+  } from "$lib/api";
 
   // Extended Treatment type that may include foods (populated externally)
   type TreatmentWithFoods = Treatment & { foods?: TreatmentFood[] };
@@ -72,6 +80,8 @@
     BolusIcon,
     CarbsIcon,
   } from "$lib/components/icons";
+  import { TrackerCategoryIcon } from "$lib/components/icons";
+  import Clock from "lucide-svelte/icons/clock";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -112,6 +122,12 @@
     initialShowDeviceEvents?: boolean;
     /** Initial visibility for Alarm/System Event markers */
     initialShowAlarms?: boolean;
+    /** Initial visibility for scheduled tracker markers */
+    initialShowScheduledTrackers?: boolean;
+    /** Optional tracker instances (defaults to realtime store) */
+    trackerInstances?: TrackerInstanceDto[];
+    /** Optional tracker definitions (defaults to realtime store) */
+    trackerDefinitions?: TrackerDefinitionDto[];
   }
 
   const realtimeStore = getRealtimeStore();
@@ -130,6 +146,9 @@
     initialShowCarbs = true,
     initialShowDeviceEvents = true,
     initialShowAlarms = true,
+    initialShowScheduledTrackers = true,
+    trackerInstances = realtimeStore.trackerInstances,
+    trackerDefinitions = realtimeStore.trackerDefinitions,
   }: ComponentProps = $props();
 
   // Prediction data state
@@ -150,39 +169,52 @@
   let showCarbs = $state(initialShowCarbs);
   let showDeviceEvents = $state(initialShowDeviceEvents);
   let showAlarms = $state(initialShowAlarms);
+  let showScheduledTrackers = $state(initialShowScheduledTrackers);
 
-  // Track if initial data has loaded to prevent effect loops during hydration
-  let hasMounted = $state(false);
-  $effect(() => {
-    // Set mounted flag after first tick
-    hasMounted = true;
+  // Browser check for SSR safety (replaces hasMounted pattern)
+  const isBrowser = typeof window !== "undefined";
+
+  // Derive prediction fetch trigger - returns null if should not fetch
+  const predictionFetchTrigger = $derived.by(() => {
+    if (!isBrowser) return null;
+    const enabled = predictionEnabled.current;
+    const latestEntryMills = entries[0]?.mills ?? 0;
+    if (
+      !showPredictions ||
+      !enabled ||
+      entries.length === 0 ||
+      latestEntryMills === 0
+    ) {
+      return null;
+    }
+    // Return a stable trigger value
+    return { enabled, latestEntryMills };
   });
 
-  // Fetch predictions when enabled (debounced by mounted state)
+  // Fetch predictions when trigger changes - with proper cancellation
   $effect(() => {
-    // Don't run until after initial mount to prevent loops during hydration
-    if (!hasMounted) return;
+    const trigger = predictionFetchTrigger;
+    if (!trigger) return;
 
-    // Track dependencies - re-run when these change
-    const enabled = predictionEnabled.current;
-    const entryCount = entries.length;
-    // Track the latest entry's timestamp to trigger refetch when new glucose arrives
-    // This is important because entries.length doesn't change when array is capped
-    const latestEntryMills = entries[0]?.mills ?? 0;
-
-    // Only refetch if we have entries and predictions are enabled
-    if (showPredictions && enabled && entryCount > 0 && latestEntryMills > 0) {
-      getPredictions({})
-        .then((data) => {
+    let cancelled = false;
+    getPredictions({})
+      .then((data) => {
+        if (!cancelled) {
           predictionData = data;
           predictionError = null;
-        })
-        .catch((err) => {
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
           console.error("Failed to fetch predictions:", err);
           predictionError = err.message;
           predictionData = null;
-        });
-    }
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   });
 
   // Round to minute boundaries to avoid triggering effects every second
@@ -242,45 +274,105 @@
 
   const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
 
+  // Local reactive copy of lookback for UI display (synced from PersistedState)
+  // Declared before displayDateRange because it's used in the calculation
+  let lookbackValue = $state(glucoseChartLookback.current);
+
+  // Sync lookback changes TO the chart (when user changes via toggle)
+  function handleLookbackChange(value: string | undefined) {
+    const newValue = value as TimeRangeOption | undefined;
+    if (newValue && newValue !== lookbackValue) {
+      lookbackValue = newValue;
+      glucoseChartLookback.current = newValue;
+    }
+  }
+
+  // Display date range - uses local lookbackValue for immediate reactivity
   const displayDateRange = $derived({
     from: dateRange
       ? normalizeDate(dateRange.from, new Date())
-      : new Date(
-          nowMinute - parseInt(glucoseChartLookback.current) * 60 * 60 * 1000
-        ),
+      : new Date(nowMinute - parseInt(lookbackValue) * 60 * 60 * 1000),
     to: dateRange
       ? normalizeDate(dateRange.to, new Date())
       : new Date(nowMinute),
   });
 
-  // Fetch server-side chart data when date range changes (guarded by hasMounted)
+  // Track when PersistedState changes (for cross-tab sync) to update local value
   $effect(() => {
-    // Don't run until after initial mount to prevent loops during hydration
-    if (!hasMounted) return;
+    const persistedValue = glucoseChartLookback.current;
+    if (persistedValue !== lookbackValue) {
+      lookbackValue = persistedValue;
+    }
+  });
 
-    const startTime = displayDateRange.from.getTime();
-    const endTime = displayDateRange.to.getTime();
+  // Local reactive copy of prediction mode for UI display
+  let predictionModeValue = $state(predictionDisplayMode.current);
 
-    if (isNaN(startTime) || isNaN(endTime)) return;
+  // Sync prediction mode changes
+  function handlePredictionModeChange(
+    value: typeof predictionDisplayMode.current
+  ) {
+    if (value && value !== predictionModeValue) {
+      predictionModeValue = value;
+      predictionDisplayMode.current = value;
+    }
+  }
 
-    getChartData({ startTime, endTime, intervalMinutes: 5 })
+  // Stable date range for fetching - rounds to 5-minute boundaries to prevent
+  // rapid re-fetches as nowMinute updates every minute
+  const stableFetchRange = $derived.by(() => {
+    if (!isBrowser) return null;
+    const fromTime = displayDateRange.from.getTime();
+    const toTime = displayDateRange.to.getTime();
+    if (isNaN(fromTime) || isNaN(toTime)) return null;
+    // Round to 5-minute boundaries for fetch stability
+    const intervalMs = 5 * 60 * 1000;
+    const startRounded = Math.floor(fromTime / intervalMs) * intervalMs;
+    const endRounded = Math.ceil(toTime / intervalMs) * intervalMs;
+    return { startTime: startRounded, endTime: endRounded };
+  });
+
+  // Fetch server-side chart data when stable range changes - with proper cancellation
+  $effect(() => {
+    const range = stableFetchRange;
+    if (!range) return;
+
+    let cancelled = false;
+
+    getChartData({
+      startTime: range.startTime,
+      endTime: range.endTime,
+      intervalMinutes: 5,
+    })
       .then((data) => {
-        serverChartData = data;
+        if (!cancelled) {
+          serverChartData = data;
+        }
       })
       .catch((err) => {
-        console.error("Failed to fetch chart data:", err);
-        serverChartData = null;
+        if (!cancelled) {
+          console.error("Failed to fetch chart data:", err);
+          serverChartData = null;
+        }
       });
 
     // Also fetch state span data
-    getChartStateData({ startTime, endTime })
+    getChartStateData({ startTime: range.startTime, endTime: range.endTime })
       .then((data) => {
-        stateData = data;
+        if (!cancelled) {
+          stateData = data;
+        }
       })
       .catch((err) => {
-        console.error("Failed to fetch state data:", err);
-        stateData = null;
+        if (!cancelled) {
+          console.error("Failed to fetch state data:", err);
+          stateData = null;
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   });
 
   // Prediction buffer
@@ -507,6 +599,70 @@
       const eventTime = event.time.getTime();
       return eventTime >= rangeStart && eventTime <= rangeEnd;
     });
+  });
+
+  // Scheduled tracker expiration markers
+  // These show when active trackers (site change, sensor, etc.) are due to expire
+  interface ScheduledTrackerMarker {
+    id: string;
+    definitionId: string;
+    name: string;
+    category: TrackerCategory;
+    time: Date;
+    icon?: string;
+    color: string;
+  }
+
+  // Map tracker category to color
+  function getTrackerColor(category: TrackerCategory): string {
+    const colorMap: Record<TrackerCategory, string> = {
+      Sensor: "var(--glucose-in-range)",
+      Cannula: "var(--insulin-bolus)",
+      Reservoir: "var(--insulin-basal)",
+      Battery: "var(--carbs)",
+      Consumable: "var(--muted-foreground)",
+      Appointment: "var(--primary)",
+      Reminder: "var(--primary)",
+      Custom: "var(--muted-foreground)",
+    };
+    return colorMap[category] ?? "var(--muted-foreground)";
+  }
+
+  // Filter scheduled tracker expirations to visible range (including prediction window)
+  const scheduledTrackerMarkers = $derived.by((): ScheduledTrackerMarker[] => {
+    if (!trackerInstances || trackerInstances.length === 0) return [];
+
+    const rangeStart = displayDateRange.from.getTime();
+    // Include prediction window to show upcoming expirations
+    const rangeEnd = chartXDomain.to.getTime();
+
+    return trackerInstances
+      .filter((instance) => {
+        // Only include if the tracker has an expected end time
+        if (!instance.expectedEndAt) return false;
+        const expectedTime = new Date(instance.expectedEndAt).getTime();
+        return expectedTime >= rangeStart && expectedTime <= rangeEnd;
+      })
+      .map((instance) => {
+        const definition = trackerDefinitions?.find(
+          (d) => d.id === instance.definitionId
+        );
+        const category =
+          instance.category ??
+          definition?.category ??
+          ("Custom" as TrackerCategory);
+
+        return {
+          id: instance.id ?? "",
+          definitionId: instance.definitionId ?? "",
+          name: instance.definitionName ?? definition?.name ?? "Tracker",
+          category,
+          time: new Date(instance.expectedEndAt!),
+          icon: definition?.icon,
+          color: getTrackerColor(category),
+        };
+      })
+      .sort((a, b) => a.time.getTime() - b.time.getTime());
   });
 
   function getGlucoseColor(sgv: number): string {
@@ -841,12 +997,14 @@
         <!-- Prediction settings component with its own boundary -->
         <PredictionSettings
           {showPredictions}
-          bind:predictionMode={predictionDisplayMode.current}
+          predictionMode={predictionModeValue}
+          onPredictionModeChange={handlePredictionModeChange}
         />
         <!-- Time range selector -->
         <ToggleGroup.Root
           type="single"
-          bind:value={glucoseChartLookback.current}
+          value={lookbackValue}
+          onValueChange={handleLookbackChange}
           class="bg-muted rounded-lg p-0.5"
         >
           {#each timeRangeOptions as option}
@@ -1309,6 +1467,64 @@
               {/each}
             {/if}
 
+            <!-- Scheduled tracker expiration markers (dashed vertical lines) -->
+            {#if showScheduledTrackers}
+              {#each scheduledTrackerMarkers as marker (marker.id)}
+                {@const xPos = context.xScale(marker.time)}
+                {@const lineTop = basalTrackTop + 20}
+                {@const lineBottom = context.height}
+                <!-- Dashed vertical line spanning the chart height -->
+                <line
+                  x1={xPos}
+                  y1={lineTop}
+                  x2={xPos}
+                  y2={lineBottom}
+                  stroke={marker.color}
+                  stroke-width="1.5"
+                  stroke-dasharray="4,4"
+                  class="opacity-60"
+                />
+                <!-- Icon and label at the top of the basal track -->
+                <Group x={xPos} y={basalTrackTop + 10}>
+                  <!-- Background pill -->
+                  <rect
+                    x="-24"
+                    y="-8"
+                    width="48"
+                    height="16"
+                    rx="8"
+                    fill="var(--background)"
+                    stroke={marker.color}
+                    stroke-width="1"
+                    class="opacity-90"
+                  />
+                  <!-- Icon using foreignObject -->
+                  <foreignObject x="-22" y="-6" width="12" height="12">
+                    <div class="flex items-center justify-center w-full h-full">
+                      <TrackerCategoryIcon
+                        category={marker.category}
+                        size={10}
+                        color={marker.color}
+                      />
+                    </div>
+                  </foreignObject>
+                  <!-- Time label -->
+                  <Text
+                    x={3}
+                    y={0}
+                    textAnchor="start"
+                    class="text-[7px] fill-muted-foreground font-medium"
+                    dy="0.35em"
+                  >
+                    {marker.time.toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </Group>
+              {/each}
+            {/if}
+
             <!-- Basal highlight with remapped scale -->
             {#if showBasal}
               <Highlight
@@ -1641,6 +1857,27 @@
           {/each}
           <span class={cn(!showAlarms && "line-through")}>
             Alarms ({systemEvents.length})
+          </span>
+        </button>
+      {/if}
+      <!-- Scheduled tracker legend items (only show if present in current view) - clickable to toggle -->
+      {#if scheduledTrackerMarkers.length > 0}
+        <button
+          type="button"
+          class={cn(
+            "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+            !showScheduledTrackers && "opacity-50"
+          )}
+          onclick={() => (showScheduledTrackers = !showScheduledTrackers)}
+        >
+          <Clock
+            size={14}
+            class={showScheduledTrackers
+              ? "text-primary"
+              : "text-muted-foreground"}
+          />
+          <span class={cn(!showScheduledTrackers && "line-through")}>
+            Scheduled ({scheduledTrackerMarkers.length})
           </span>
         </button>
       {/if}

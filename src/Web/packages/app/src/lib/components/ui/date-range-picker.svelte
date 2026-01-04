@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
   import { queryParam } from "sveltekit-search-params";
@@ -10,7 +9,6 @@
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
-    title?: string;
     showDaysPresets?: boolean;
     defaultDays?: number;
     onDateChange?: (params: {
@@ -21,7 +19,6 @@
   }
 
   let {
-    title = "Select Date Range",
     showDaysPresets = true,
     defaultDays = 7,
     onDateChange,

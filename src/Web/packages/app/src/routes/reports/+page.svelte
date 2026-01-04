@@ -102,7 +102,7 @@
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     formatGlucoseValue,
@@ -113,7 +113,8 @@
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange());
+  const reportsParams = useDateParams();
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for reports data - automatically re-fetches when dateRangeInput changes
   const reportsQuery = $derived(getReportsData(dateRangeInput));
@@ -724,7 +725,9 @@
 
         {#each reportCategories as category}
           {@const CategoryIcon = category.icon}
-          {@const styles = categoryVariants({ category: category.id })}
+          {@const styles = categoryVariants({
+            category: category.id as CategoryType,
+          })}
           <TabsContent value={category.id} class="mt-6">
             <Card class={styles.card()}>
               <CardHeader class={styles.header()}>

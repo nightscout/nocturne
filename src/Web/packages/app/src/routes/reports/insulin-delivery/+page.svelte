@@ -25,11 +25,12 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import type { Treatment, TreatmentSummary } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
   import { countTreatmentsByCategory } from "$lib/constants/treatment-categories";
 
-  // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange(30));
+  // Build date range input from URL parameters - default to 30 days
+  const reportsParams = useDateParams(30);
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

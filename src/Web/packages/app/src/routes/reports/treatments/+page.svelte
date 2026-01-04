@@ -35,7 +35,7 @@
   import { formatDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
 
   // Import remote function forms and commands
   import {
@@ -46,7 +46,8 @@
   import { invalidateAll } from "$app/navigation";
 
   // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange());
+  const reportsParams = useDateParams();
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

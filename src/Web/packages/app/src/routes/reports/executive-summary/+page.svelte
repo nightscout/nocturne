@@ -26,10 +26,11 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
 
-  // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange(14));
+  // Build date range input from URL parameters - default to 14 days for executive summary
+  const reportsParams = useDateParams(14);
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

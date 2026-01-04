@@ -22,12 +22,12 @@
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import { type Entry } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { useDateRange } from "$lib/hooks/use-date-range.svelte.js";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
 
-  // Build date range input from URL parameters
-  const dateRangeInput = $derived(useDateRange(14));
+  // Build date range input from URL parameters - default to 14 days for AGP
+  const reportsParams = useDateParams(14);
+  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
   // Query for reports data
   const reportsQuery = $derived(getReportsData(dateRangeInput));

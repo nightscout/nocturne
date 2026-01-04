@@ -150,7 +150,11 @@
   // Calculate time since last reading for display
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
-  // Status text - show "Connection Error" when disconnected
+  // Syncing state
+  const isSyncing = $derived(realtimeStore.isSyncing);
+
+  // Status text - show connection error or time since reading
+  // Note: "Syncing..." state is handled in the GlucoseValueIndicator component
   const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);
 </script>
 
@@ -164,8 +168,10 @@
         {isLoading}
         {isStale}
         {isDisconnected}
+        {isSyncing}
         {statusText}
-        statusTooltip="Last reading: {timeSince}"
+        statusTooltip="Click to sync data"
+        onSyncClick={() => realtimeStore.syncData()}
         size="sm"
       />
       <div class="flex flex-col items-start">

@@ -36,6 +36,7 @@
   } from "$api";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { goto } from "$app/navigation";
+  import { onMount, untrack } from "svelte";
 
   // Get the realtime store for reactive tracker data
   const realtimeStore = getRealtimeStore();
@@ -101,26 +102,33 @@
     }
   }
 
-  // Initial load
-  $effect(() => {
+  // Initial load on mount (not in $effect to avoid unnecessary re-runs)
+  onMount(() => {
     loadData();
   });
 
   // Reload when password reset request counter changes (via SignalR)
-  // We use a separate variable to track the counter so we don't create circular dependencies
+  // Use untrack to avoid creating a dependency cycle with lastResetCount
   let lastResetCount = $state<number | undefined>(undefined);
 
   $effect(() => {
     const currentCount = realtimeStore.passwordResetRequestCount;
+    // Read previous count without creating a subscription
+    const previousCount = untrack(() => lastResetCount);
+
     // Only reload if the count actually changed (not on initial mount)
-    if (lastResetCount !== undefined && currentCount !== lastResetCount) {
+    if (previousCount !== undefined && currentCount !== previousCount) {
       // Capture isAdmin value here to avoid reactive re-runs
       const shouldReload = authStore.hasRole("admin");
       if (shouldReload) {
         loadData();
       }
     }
-    lastResetCount = currentCount;
+
+    // Write without creating a subscription
+    untrack(() => {
+      lastResetCount = currentCount;
+    });
   });
 
   // Format age
@@ -226,13 +234,25 @@
   let expandedGroups = $state<Record<string, boolean>>({});
 
   // Initialize all groups - first one expanded, rest collapsed
-  $effect(() => {
+  // Use $effect.pre with untrack to avoid read/write cycle
+  $effect.pre(() => {
     const keys = Object.keys(groupedHistory);
-    for (let i = 0; i < keys.length; i++) {
-      if (expandedGroups[keys[i]] === undefined) {
-        expandedGroups[keys[i]] = i === 0; // First group expanded
+    if (keys.length === 0) return;
+
+    // Check if we've already initialized any groups from this set
+    const hasAnyExpanded = untrack(() =>
+      Object.keys(expandedGroups).some((k) => keys.includes(k))
+    );
+    if (hasAnyExpanded) return;
+
+    // Initialize without creating reactive dependencies on expandedGroups
+    untrack(() => {
+      for (let i = 0; i < keys.length; i++) {
+        if (expandedGroups[keys[i]] === undefined) {
+          expandedGroups[keys[i]] = i === 0; // First group expanded
+        }
       }
-    }
+    });
   });
 
   // Helper to toggle group

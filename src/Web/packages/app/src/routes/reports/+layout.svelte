@@ -4,35 +4,15 @@
   import { ReportsFilterSidebar } from "$lib/components/layout";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { ArrowLeftIcon, Filter, Calendar } from "lucide-svelte";
-  import { queryParam } from "sveltekit-search-params";
+  import { useDateParams } from "$lib/hooks/date-params.svelte";
 
   let { children } = $props();
 
   // Filter sidebar state
   let filterSidebarOpen = $state(false);
 
-  // URL search params for display
-  const days = queryParam("days", {
-    encode: (value: number | undefined) => value?.toString() ?? "",
-    decode: (value: string | null) => {
-      if (!value) return undefined;
-      const parsed = parseInt(value);
-      return isNaN(parsed) ? undefined : parsed;
-    },
-    defaultValue: undefined,
-  });
-
-  const fromDate = queryParam("from", {
-    encode: (value: string | undefined) => value ?? "",
-    decode: (value: string | null) => value || undefined,
-    defaultValue: undefined,
-  });
-
-  const toDate = queryParam("to", {
-    encode: (value: string | undefined) => value ?? "",
-    decode: (value: string | null) => value || undefined,
-    defaultValue: undefined,
-  });
+  // Use centralized reports params hook
+  const params = useDateParams();
 
   // Extract report name from the URL
   const reportName = $derived.by(() => {
@@ -57,12 +37,12 @@
 
   // Format date range for display
   const dateRangeDisplay = $derived(() => {
-    if ($days) {
-      if ($days === 1) return "Today";
-      return `Last ${$days} days`;
+    if (params.days) {
+      if (params.days === 1) return "Today";
+      return `Last ${params.days} days`;
     }
-    if ($fromDate && $toDate) {
-      return `${$fromDate} to ${$toDate}`;
+    if (params.from && params.to) {
+      return `${params.from} to ${params.to}`;
     }
     return "Last 7 days";
   });
