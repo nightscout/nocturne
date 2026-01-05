@@ -1,3 +1,5 @@
+using System.IO;
+using System.Linq;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -176,6 +178,7 @@ public class StatusServiceTests
     public async Task GetSystemStatusAsync_WithEnvironmentVariables_ShouldIncludeGitCommit()
     {
         // Arrange
+        var previousGitCommit = Environment.GetEnvironmentVariable("GIT_COMMIT");
         Environment.SetEnvironmentVariable("GIT_COMMIT", "abc123def456");
 
         _mockCacheService
@@ -193,26 +196,34 @@ public class StatusServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("GIT_COMMIT", null);
+            Environment.SetEnvironmentVariable("GIT_COMMIT", previousGitCommit);
         }
     }
 
     [Fact]
-    public async Task GetSystemStatusAsync_WithoutGitCommit_ShouldUseDefaultHead()
+    public async Task GetSystemStatusAsync_WithoutGitCommit_ShouldUseRepositoryHeadOrDefault()
     {
         // Arrange
+        var previousGitCommit = Environment.GetEnvironmentVariable("GIT_COMMIT");
         Environment.SetEnvironmentVariable("GIT_COMMIT", null);
 
         _mockCacheService
             .Setup(x => x.GetAsync<StatusResponse>("status:system", default))
             .ReturnsAsync((StatusResponse?)null);
 
-        // Act
-        var result = await _statusService.GetSystemStatusAsync();
+        try
+        {
+            // Act
+            var result = await _statusService.GetSystemStatusAsync();
 
-        // Assert
-        result.Should().NotBeNull();
-        result.Head.Should().Be("nocturne-dev");
+            // Assert
+            result.Should().NotBeNull();
+            result.Head.Should().Be(ResolveExpectedHead());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GIT_COMMIT", previousGitCommit);
+        }
     }
 
     #endregion
@@ -718,5 +729,123 @@ public class StatusServiceTests
     }
 
     #endregion
-}
 
+    #region Helper Methods
+
+    private static string ResolveExpectedHead()
+    {
+        var envCommit = Environment.GetEnvironmentVariable("GIT_COMMIT");
+        if (!string.IsNullOrWhiteSpace(envCommit))
+        {
+            return envCommit;
+        }
+
+        var gitDirectory = FindGitDirectory(AppContext.BaseDirectory);
+        var repositoryCommit = gitDirectory != null ? ReadCommitFromGitDirectory(gitDirectory) : null;
+
+        return string.IsNullOrWhiteSpace(repositoryCommit) ? "nocturne-dev" : repositoryCommit;
+    }
+
+    private static string? FindGitDirectory(string? startDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(startDirectory))
+        {
+            return null;
+        }
+
+        var directoryInfo = new DirectoryInfo(startDirectory);
+
+        while (directoryInfo != null)
+        {
+            var gitPath = Path.Combine(directoryInfo.FullName, ".git");
+
+            if (Directory.Exists(gitPath))
+            {
+                return gitPath;
+            }
+
+            if (File.Exists(gitPath))
+            {
+                var pointerLine = File.ReadLines(gitPath).FirstOrDefault()?.Trim();
+                const string gitDirPrefix = "gitdir:";
+
+                if (
+                    !string.IsNullOrWhiteSpace(pointerLine)
+                    && pointerLine.StartsWith(gitDirPrefix, StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    var gitDir = pointerLine.Substring(gitDirPrefix.Length).Trim();
+                    var resolvedPath = Path.IsPathRooted(gitDir)
+                        ? gitDir
+                        : Path.GetFullPath(Path.Combine(directoryInfo.FullName, gitDir));
+
+                    if (Directory.Exists(resolvedPath))
+                    {
+                        return resolvedPath;
+                    }
+                }
+            }
+
+            directoryInfo = directoryInfo.Parent;
+        }
+
+        return null;
+    }
+
+    private static string? ReadCommitFromGitDirectory(string gitDirectory)
+    {
+        var headPath = Path.Combine(gitDirectory, "HEAD");
+        if (!File.Exists(headPath))
+        {
+            return null;
+        }
+
+        var headContent = File.ReadAllText(headPath).Trim();
+        if (string.IsNullOrWhiteSpace(headContent))
+        {
+            return null;
+        }
+
+        if (headContent.StartsWith("ref:", StringComparison.OrdinalIgnoreCase))
+        {
+            var reference = headContent["ref:".Length..].Trim();
+            var refPath = Path.Combine(
+                gitDirectory,
+                reference.Replace('/', Path.DirectorySeparatorChar)
+            );
+
+            if (File.Exists(refPath))
+            {
+                var commitFromRef = File.ReadAllText(refPath).Trim();
+                return string.IsNullOrWhiteSpace(commitFromRef) ? null : commitFromRef;
+            }
+
+            var packedRefsPath = Path.Combine(gitDirectory, "packed-refs");
+            if (File.Exists(packedRefsPath))
+            {
+                foreach (var line in File.ReadLines(packedRefsPath))
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    {
+                        continue;
+                    }
+
+                    var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (
+                        parts.Length == 2
+                        && string.Equals(parts[1].Trim(), reference, StringComparison.Ordinal)
+                    )
+                    {
+                        return parts[0].Trim();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return headContent;
+    }
+
+    #endregion
+}

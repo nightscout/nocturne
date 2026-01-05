@@ -1,3 +1,5 @@
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
@@ -133,9 +135,134 @@ public class StatusService : IStatusService
     /// </summary>
     private static string GetGitCommitHash()
     {
-        // This would typically come from build-time injection or git metadata
-        // For now, return a placeholder that matches Nightscout's pattern
-        return Environment.GetEnvironmentVariable("GIT_COMMIT") ?? "nocturne-dev";
+        var envCommit = Environment.GetEnvironmentVariable("GIT_COMMIT");
+        if (!string.IsNullOrWhiteSpace(envCommit))
+        {
+            return envCommit;
+        }
+
+        try
+        {
+            var gitDirectory = FindGitDirectory(AppContext.BaseDirectory);
+            if (gitDirectory == null)
+            {
+                return "nocturne-dev";
+            }
+
+            var commitHash = ReadCommitFromGitDirectory(gitDirectory);
+            return string.IsNullOrWhiteSpace(commitHash) ? "nocturne-dev" : commitHash;
+        }
+        catch (Exception)
+        {
+            return "nocturne-dev";
+        }
+    }
+
+    /// <summary>
+    /// Locate the nearest .git directory starting from a base path.
+    /// </summary>
+    private static string? FindGitDirectory(string? startDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(startDirectory))
+        {
+            return null;
+        }
+
+        var directoryInfo = new DirectoryInfo(startDirectory);
+
+        while (directoryInfo != null)
+        {
+            var gitPath = Path.Combine(directoryInfo.FullName, ".git");
+
+            if (Directory.Exists(gitPath))
+            {
+                return gitPath;
+            }
+
+            if (File.Exists(gitPath))
+            {
+                var pointerLine = File.ReadLines(gitPath).FirstOrDefault()?.Trim();
+                const string gitDirPrefix = "gitdir:";
+
+                if (
+                    !string.IsNullOrWhiteSpace(pointerLine)
+                    && pointerLine.StartsWith(gitDirPrefix, StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    var gitDir = pointerLine.Substring(gitDirPrefix.Length).Trim();
+                    var resolvedPath = Path.IsPathRooted(gitDir)
+                        ? gitDir
+                        : Path.GetFullPath(Path.Combine(directoryInfo.FullName, gitDir));
+
+                    if (Directory.Exists(resolvedPath))
+                    {
+                        return resolvedPath;
+                    }
+                }
+            }
+
+            directoryInfo = directoryInfo.Parent;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Read the commit hash referenced by the HEAD file.
+    /// </summary>
+    private static string? ReadCommitFromGitDirectory(string gitDirectory)
+    {
+        var headPath = Path.Combine(gitDirectory, "HEAD");
+        if (!File.Exists(headPath))
+        {
+            return null;
+        }
+
+        var headContent = File.ReadAllText(headPath).Trim();
+        if (string.IsNullOrWhiteSpace(headContent))
+        {
+            return null;
+        }
+
+        if (headContent.StartsWith("ref:", StringComparison.OrdinalIgnoreCase))
+        {
+            var reference = headContent["ref:".Length..].Trim();
+            var refPath = Path.Combine(
+                gitDirectory,
+                reference.Replace('/', Path.DirectorySeparatorChar)
+            );
+
+            if (File.Exists(refPath))
+            {
+                var commitFromRef = File.ReadAllText(refPath).Trim();
+                return string.IsNullOrWhiteSpace(commitFromRef) ? null : commitFromRef;
+            }
+
+            var packedRefsPath = Path.Combine(gitDirectory, "packed-refs");
+            if (File.Exists(packedRefsPath))
+            {
+                foreach (var line in File.ReadLines(packedRefsPath))
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    {
+                        continue;
+                    }
+
+                    var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (
+                        parts.Length == 2
+                        && string.Equals(parts[1].Trim(), reference, StringComparison.Ordinal)
+                    )
+                    {
+                        return parts[0].Trim();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return headContent;
     }
 
     /// <summary>
