@@ -902,6 +902,8 @@ public class OpenApsService : IOpenApsService
 
     /// <summary>
     /// Process MM tune data
+    /// Legacy: if (status.mmtune and status.mmtune.timestamp)
+    /// MM tune data is stored directly on the device status, not inside openaps
     /// </summary>
     private static void ProcessMmTuneData(
         DeviceStatus status,
@@ -909,10 +911,26 @@ public class OpenApsService : IOpenApsService
         OpenApsDevice device
     )
     {
-        // Legacy: if (status.mmtune && status.mmtune.timestamp)        // Note: MM tune data is stored directly on the device status, not inside openaps
-        // This would be accessed as status.MmTune in the C# model
-        // CHECKME: MM tune processing not implemented as MmTune model not yet available
-        // For now, this is a placeholder that maintains compatibility
+        // Legacy JS: if (status.mmtune && status.mmtune.timestamp) {
+        //   status.mmtune.moment = moment(status.mmtune.timestamp);
+        //   if (!device.mmtune || moments.when.isAfter(device.mmtune.moment)) {
+        //     device.mmtune = status.mmtune;
+        //   }
+        // }
+        if (status.MmTune == null || string.IsNullOrEmpty(status.MmTune.Timestamp))
+            return;
+
+        // Parse the timestamp to create the moment
+        if (DateTime.TryParse(status.MmTune.Timestamp, out var mmTuneMoment))
+        {
+            status.MmTune.Moment = mmTuneMoment;
+
+            // Update device mmtune if this is more recent
+            if (device.MmTune == null || moments.When > device.MmTune.Moment)
+            {
+                device.MmTune = status.MmTune;
+            }
+        }
     }
 
     /// <summary>

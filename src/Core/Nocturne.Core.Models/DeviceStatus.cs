@@ -110,6 +110,13 @@ public class DeviceStatus : ProcessableDocumentBase
     /// </summary>
     [JsonPropertyName("insulinPen")]
     public InsulinPenStatus? InsulinPen { get; set; }
+
+    /// <summary>
+    /// Gets or sets the MM tune (radio frequency tuning) information
+    /// Used by OpenAPS to track pump radio communication signal strength
+    /// </summary>
+    [JsonPropertyName("mmtune")]
+    public OpenApsMmTune? MmTune { get; set; }
 }
 
 /// <summary>
