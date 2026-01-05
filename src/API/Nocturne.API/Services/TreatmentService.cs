@@ -50,9 +50,10 @@ public class TreatmentService : ITreatmentService
     private string BuildDemoModeFilterQuery(string? existingQuery = null)
     {
         // Check if existing query is JSON
-        bool isJson = !string.IsNullOrWhiteSpace(existingQuery) &&
-                      existingQuery.Trim().StartsWith("{") &&
-                      existingQuery.Trim().EndsWith("}");
+        bool isJson =
+            !string.IsNullOrWhiteSpace(existingQuery)
+            && existingQuery.Trim().StartsWith("{")
+            && existingQuery.Trim().EndsWith("}");
 
         if (isJson)
         {
@@ -64,7 +65,8 @@ public class TreatmentService : ITreatmentService
             }
             else
             {
-                demoFilter = $"\"data_source\":{{\"$ne\":\"{Core.Constants.DataSources.DemoService}\"}}";
+                demoFilter =
+                    $"\"data_source\":{{\"$ne\":\"{Core.Constants.DataSources.DemoService}\"}}";
             }
 
             if (string.IsNullOrWhiteSpace(existingQuery) || existingQuery == "{}")
@@ -74,7 +76,9 @@ public class TreatmentService : ITreatmentService
 
             var trimmed = existingQuery!.Trim();
             var inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
-            return string.IsNullOrEmpty(inner) ? "{" + demoFilter + "}" : "{" + demoFilter + "," + inner + "}";
+            return string.IsNullOrEmpty(inner)
+                ? "{" + demoFilter + "}"
+                : "{" + demoFilter + "," + inner + "}";
         }
         else
         {
@@ -88,78 +92,23 @@ public class TreatmentService : ITreatmentService
             else
             {
                 // find[data_source][$ne]=demo-service
-                demoParamResponse = $"find[data_source][$ne]={Core.Constants.DataSources.DemoService}";
+                demoParamResponse =
+                    $"find[data_source][$ne]={Core.Constants.DataSources.DemoService}";
             }
 
             if (string.IsNullOrWhiteSpace(existingQuery))
             {
-                // If query was empty, return standard JSON filter to be safe/consistent if repo expects json default?
-                // Actually repo handles URL string.
-                // But wait, if I return URL string, QueryParser must handle it.
-                // Using URL params is fine.
-                // BUT if existingQuery was empty/null, better to use JSON format as default?
-                // The previous code returned JSON. Let's stick to JSON for empty case.
-                return "{" + (_demoModeService.IsEnabled
-                    ? $"\"data_source\":\"{Core.Constants.DataSources.DemoService}\""
-                    : $"\"data_source\":{{\"$ne\":\"{Core.Constants.DataSources.DemoService}\"}}") + "}";
+                return "{"
+                    + (
+                        _demoModeService.IsEnabled
+                            ? $"\"data_source\":\"{Core.Constants.DataSources.DemoService}\""
+                            : $"\"data_source\":{{\"$ne\":\"{Core.Constants.DataSources.DemoService}\"}}"
+                    )
+                    + "}";
             }
 
             // Append to existing URL params
             return $"{existingQuery}&{demoParamResponse}";
-        }
-    }
-
-    /// <summary>
-    /// Filters treatments based on demo mode status (legacy client-side filtering).
-    /// This is kept for backward compatibility but database-level filtering is preferred.
-    /// </summary>
-    private IEnumerable<Treatment> FilterTreatmentsByDemoMode(IEnumerable<Treatment> treatments)
-    {
-        var treatmentsList = treatments.ToList();
-        var demoTreatments = treatmentsList
-            .Where(t => t.DataSource == Core.Constants.DataSources.DemoService)
-            .ToList();
-        var nonDemoTreatments = treatmentsList
-            .Where(t => t.DataSource != Core.Constants.DataSources.DemoService)
-            .ToList();
-
-        _logger.LogDebug(
-            "FilterTreatmentsByDemoMode: DemoModeEnabled={DemoMode}, TotalTreatments={Total}, DemoTreatments={Demo}, NonDemoTreatments={NonDemo}",
-            _demoModeService.IsEnabled,
-            treatmentsList.Count,
-            demoTreatments.Count,
-            nonDemoTreatments.Count
-        );
-
-        if (_demoModeService.IsEnabled)
-        {
-            // In demo mode, ONLY return demo treatments - never fall back to real data
-            if (demoTreatments.Count > 0)
-            {
-                _logger.LogDebug(
-                    "Demo mode ON: Returning {Count} demo treatments",
-                    demoTreatments.Count
-                );
-                return demoTreatments;
-            }
-            else
-            {
-                // No demo treatments available - return empty to avoid exposing real data
-                _logger.LogWarning(
-                    "Demo mode is enabled but no demo treatments found. Returning empty results. "
-                        + "Ensure the Demo Service is running and generating data."
-                );
-                return Enumerable.Empty<Treatment>();
-            }
-        }
-        else
-        {
-            // Not in demo mode, only show non-demo treatments
-            _logger.LogDebug(
-                "Demo mode OFF: Returning {Count} non-demo treatments",
-                nonDemoTreatments.Count
-            );
-            return nonDemoTreatments;
         }
     }
 
