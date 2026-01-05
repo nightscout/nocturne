@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.ServiceDiscovery;
@@ -91,6 +92,7 @@ builder.Services.AddPostgreSqlInfrastructure(
 builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
 builder.Services.AddScoped<ICompatibilityReportService, CompatibilityReportService>();
+builder.Services.AddDataProtection();
 
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);

@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models.Authorization;
@@ -15,6 +17,7 @@ public class OidcProviderService : IOidcProviderService
     private readonly NocturneDbContext _dbContext;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OidcProviderService> _logger;
+    private readonly IDataProtector _clientSecretProtector;
 
     /// <summary>
     /// Creates a new instance of OidcProviderService
@@ -22,12 +25,16 @@ public class OidcProviderService : IOidcProviderService
     public OidcProviderService(
         NocturneDbContext dbContext,
         IHttpClientFactory httpClientFactory,
-        ILogger<OidcProviderService> logger
+        ILogger<OidcProviderService> logger,
+        IDataProtectionProvider dataProtectionProvider
     )
     {
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _clientSecretProtector = dataProtectionProvider.CreateProtector(
+            "Nocturne.API.Services.Auth.OidcProviderService.ClientSecret.v1"
+        );
     }
 
     /// <inheritdoc />
@@ -370,23 +377,32 @@ public class OidcProviderService : IOidcProviderService
     }
 
     /// <summary>
-    /// Encrypt a secret for storage
-    /// Note: In production, use proper encryption (e.g., Azure Key Vault, AWS KMS)
-    /// This is a placeholder implementation using base64 encoding
+    /// Encrypt a secret for storage using ASP.NET Core Data Protection
     /// </summary>
-    private static byte[] EncryptSecret(string secret)
+    private byte[] EncryptSecret(string secret)
     {
-        // TODO: Replace with proper encryption using Data Protection API or external KMS
-        return System.Text.Encoding.UTF8.GetBytes(secret);
+        var plaintext = Encoding.UTF8.GetBytes(secret);
+        return _clientSecretProtector.Protect(plaintext);
     }
 
     /// <summary>
     /// Decrypt a stored secret
     /// </summary>
-    private static string DecryptSecret(byte[] encrypted)
+    private string DecryptSecret(byte[] encrypted)
     {
-        // TODO: Replace with proper decryption
-        return System.Text.Encoding.UTF8.GetString(encrypted);
+        try
+        {
+            var decryptedBytes = _clientSecretProtector.Unprotect(encrypted);
+            return Encoding.UTF8.GetString(decryptedBytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to decrypt OIDC provider client secret; falling back to plaintext."
+            );
+            return Encoding.UTF8.GetString(encrypted);
+        }
     }
 
     private static string GetStringOrDefault(JsonElement element, string propertyName)
