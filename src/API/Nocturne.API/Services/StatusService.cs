@@ -1,10 +1,14 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services;
 
@@ -16,18 +20,24 @@ public class StatusService : IStatusService
     private readonly IConfiguration _configuration;
     private readonly ICacheService _cacheService;
     private readonly IDemoModeService _demoModeService;
+    private readonly NocturneDbContext _dbContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<StatusService> _logger;
 
     public StatusService(
         IConfiguration configuration,
         ICacheService cacheService,
         IDemoModeService demoModeService,
+        NocturneDbContext dbContext,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<StatusService> logger
     )
     {
         _configuration = configuration;
         _cacheService = cacheService;
         _demoModeService = demoModeService;
+        _dbContext = dbContext;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -391,28 +401,140 @@ public class StatusService : IStatusService
 
         var serverTime = DateTime.UtcNow;
 
+        var entriesTask = _dbContext
+            .Entries.AsNoTracking()
+            .OrderByDescending(e => e.SysUpdatedAt)
+            .Select(e => (DateTime?)e.SysUpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var treatmentsTask = _dbContext
+            .Treatments.AsNoTracking()
+            .OrderByDescending(t => t.SysUpdatedAt)
+            .Select(t => (DateTime?)t.SysUpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var profileTask = _dbContext
+            .Profiles.AsNoTracking()
+            .OrderByDescending(p => p.UpdatedAtPg)
+            .Select(p => (DateTime?)p.UpdatedAtPg)
+            .FirstOrDefaultAsync();
+
+        var deviceStatusTask = _dbContext
+            .DeviceStatuses.AsNoTracking()
+            .OrderByDescending(d => d.SysUpdatedAt)
+            .Select(d => (DateTime?)d.SysUpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var foodTask = _dbContext
+            .Foods.AsNoTracking()
+            .OrderByDescending(f => f.SysUpdatedAt)
+            .Select(f => (DateTime?)f.SysUpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var settingsTask = _dbContext
+            .Settings.AsNoTracking()
+            .OrderByDescending(s => s.SrvModified ?? s.SysUpdatedAt)
+            .Select(s =>
+                (DateTime?)(
+                    s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt
+                )
+            )
+            .FirstOrDefaultAsync();
+
+        var activityTask = _dbContext
+            .Activities.AsNoTracking()
+            .OrderByDescending(a => a.SysUpdatedAt)
+            .Select(a => (DateTime?)a.SysUpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var authSubjectsTask = _dbContext
+            .Subjects.AsNoTracking()
+            .OrderByDescending(s => s.UpdatedAt)
+            .Select(s => (DateTime?)s.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var roleTask = _dbContext
+            .Roles.AsNoTracking()
+            .OrderByDescending(r => r.UpdatedAt)
+            .Select(r => (DateTime?)r.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var oidcProviderTask = _dbContext
+            .OidcProviders.AsNoTracking()
+            .OrderByDescending(p => p.UpdatedAt)
+            .Select(p => (DateTime?)p.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var notificationPreferencesTask = _dbContext
+            .NotificationPreferences.AsNoTracking()
+            .OrderByDescending(p => p.UpdatedAt)
+            .Select(p => (DateTime?)p.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var alertRulesTask = _dbContext
+            .AlertRules.AsNoTracking()
+            .OrderByDescending(a => a.UpdatedAt)
+            .Select(a => (DateTime?)a.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        var alertHistoryTask = _dbContext
+            .AlertHistory.AsNoTracking()
+            .OrderByDescending(h => h.UpdatedAt)
+            .Select(h => (DateTime?)h.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        await Task.WhenAll(
+            entriesTask,
+            treatmentsTask,
+            profileTask,
+            deviceStatusTask,
+            foodTask,
+            settingsTask,
+            activityTask,
+            authSubjectsTask,
+            roleTask,
+            oidcProviderTask,
+            notificationPreferencesTask,
+            alertRulesTask,
+            alertHistoryTask
+        );
+
+        var additional = new Dictionary<string, DateTime>();
+
+        var authLastModified = GetMostRecentTimestamp(
+            authSubjectsTask.Result,
+            roleTask.Result,
+            oidcProviderTask.Result
+        );
+        if (authLastModified.HasValue)
+        {
+            additional["auth"] = authLastModified.Value;
+        }
+
+        var notificationsLastModified = GetMostRecentTimestamp(
+            notificationPreferencesTask.Result,
+            alertRulesTask.Result,
+            alertHistoryTask.Result
+        );
+        if (notificationsLastModified.HasValue)
+        {
+            additional["notifications"] = notificationsLastModified.Value;
+        }
+
         var response = new LastModifiedResponse
         {
             ServerTime = serverTime,
-            // For now, return current time as placeholder
-            // In a real implementation, these would come from database queries
-            Entries = serverTime.AddMinutes(-5),
-            Treatments = serverTime.AddMinutes(-10),
-            Profile = serverTime.AddHours(-1),
-            DeviceStatus = serverTime.AddMinutes(-2),
-            Food = serverTime.AddDays(-1),
-            Settings = serverTime.AddHours(-6),
-            Activity = serverTime.AddMinutes(-30),
-            Additional = new Dictionary<string, DateTime>
-            {
-                ["auth"] = serverTime.AddDays(-7),
-                ["notifications"] = serverTime.AddMinutes(-15),
-            },
+            Entries = entriesTask.Result,
+            Treatments = treatmentsTask.Result,
+            Profile = profileTask.Result,
+            DeviceStatus = deviceStatusTask.Result,
+            Food = foodTask.Result,
+            Settings = settingsTask.Result,
+            Activity = activityTask.Result,
+            Additional = additional,
         };
 
         _logger.LogDebug("Last modified response generated");
-
-        await Task.CompletedTask; // For future async database operations
 
         return response;
     }
@@ -420,16 +542,40 @@ public class StatusService : IStatusService
     /// <summary>
     /// Get authorization information for the current request
     /// </summary>
-    private static AuthorizationInfo GetAuthorizationInfo()
+    private AuthorizationInfo GetAuthorizationInfo()
     {
-        // For now, return basic authorization info
-        // In a real implementation, this would check the current request context
+        var httpContext = _httpContextAccessor.HttpContext;
+        var authContext = httpContext?.GetAuthContext();
+
+        if (authContext == null || !authContext.IsAuthenticated)
+        {
+            return new AuthorizationInfo
+            {
+                IsAuthorized = false,
+                Scope = new List<string>(),
+                Roles = new List<string>(),
+            };
+        }
+
+        var scope = new List<string>();
+        if (authContext.Scopes?.Count > 0)
+        {
+            scope.AddRange(authContext.Scopes);
+        }
+        if (authContext.Permissions?.Count > 0)
+        {
+            scope.AddRange(authContext.Permissions);
+        }
+
         return new AuthorizationInfo
         {
-            IsAuthorized = true, // Default to authorized for now
-            Scope = new List<string> { "api:*:read", "api:entries:read", "api:treatments:read" },
-            Subject = null, // No authenticated subject for now
-            Roles = new List<string> { "readable" },
+            IsAuthorized = true,
+            Scope = scope.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            Subject =
+                authContext.SubjectId?.ToString() ?? authContext.SubjectName ?? authContext.Email,
+            Roles =
+                authContext.Roles?.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                ?? new List<string>(),
         };
     }
 
@@ -484,5 +630,11 @@ public class StatusService : IStatusService
             ["v2"] = false, // Not implemented yet
             ["v3"] = true, // Partially implemented
         };
+    }
+
+    private static DateTime? GetMostRecentTimestamp(params DateTime?[] timestamps)
+    {
+        var filtered = timestamps.Where(t => t.HasValue).Select(t => t!.Value).ToList();
+        return filtered.Count == 0 ? null : filtered.Max();
     }
 }
