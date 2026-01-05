@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services;
 
@@ -13,6 +14,8 @@ namespace Nocturne.API.Services;
 public class DeviceAlertEngine : IDeviceAlertEngine
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly NotificationPreferencesRepository _notificationPreferencesRepository;
+    private readonly ISignalRBroadcastService _signalRBroadcastService;
     private readonly ILogger<DeviceAlertEngine> _logger;
     private readonly DeviceHealthOptions _options;
     private readonly IDeviceHealthAnalysisService _healthAnalysisService;
@@ -21,17 +24,23 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     /// Initializes a new instance of the DeviceAlertEngine
     /// </summary>
     /// <param name="dbContext">Database context</param>
+    /// <param name="notificationPreferencesRepository">Notification preferences repository</param>
+    /// <param name="signalRBroadcastService">SignalR broadcast service</param>
     /// <param name="logger">Logger</param>
     /// <param name="options">Device health options</param>
     /// <param name="healthAnalysisService">Device health analysis service</param>
     public DeviceAlertEngine(
         NocturneDbContext dbContext,
+        NotificationPreferencesRepository notificationPreferencesRepository,
+        ISignalRBroadcastService signalRBroadcastService,
         ILogger<DeviceAlertEngine> logger,
         IOptions<DeviceHealthOptions> options,
         IDeviceHealthAnalysisService healthAnalysisService
     )
     {
         _dbContext = dbContext;
+        _notificationPreferencesRepository = notificationPreferencesRepository;
+        _signalRBroadcastService = signalRBroadcastService;
         _logger = logger;
         _options = options.Value;
         _healthAnalysisService = healthAnalysisService;
@@ -163,7 +172,12 @@ public class DeviceAlertEngine : IDeviceAlertEngine
         }
 
         // Check quiet hours (only for non-critical alerts)
-        if (IsInQuietHours())
+        var inQuietHours = await _notificationPreferencesRepository.IsUserInQuietHoursAsync(
+            deviceEntity.UserId,
+            DateTime.UtcNow,
+            cancellationToken
+        );
+        if (inQuietHours && !IsCriticalAlert(alertType))
         {
             _logger.LogDebug(
                 "Alert {AlertType} for device {DeviceId} suppressed due to quiet hours",
@@ -198,38 +212,9 @@ public class DeviceAlertEngine : IDeviceAlertEngine
 
         try
         {
-            // Get user notification preferences
-            var preferences = await _dbContext.NotificationPreferences.FirstOrDefaultAsync(
-                p => p.UserId == deviceAlert.UserId,
-                cancellationToken
-            );
-
             // Create alert rule event
-            var alertEvent = new AlertEvent
-            {
-                Id = deviceAlert.Id,
-                UserId = deviceAlert.UserId,
-                AlertType = AlertType.DeviceWarning,
-                GlucoseValue = 0, // Not applicable for device alerts
-                Threshold = 0, // Not applicable for device alerts
-                TriggerTime = deviceAlert.TriggerTime,
-                Context = new Dictionary<string, object>
-                {
-                    ["deviceId"] = deviceAlert.DeviceId,
-                    ["deviceAlertType"] = deviceAlert.AlertType.ToString(),
-                    ["severity"] = deviceAlert.Severity.ToString(),
-                    ["message"] = deviceAlert.Message,
-                },
-            };
-
-            // Send through existing notification channels
-            // This would integrate with the existing INotificationV2Service or IAlertProcessingService
-            // For now, we'll just log the alert
-            _logger.LogInformation(
-                "Device alert sent: {Title} - {Message}",
-                deviceAlert.Title,
-                deviceAlert.Message
-            );
+            var notification = CreateNotificationFromDeviceAlert(deviceAlert);
+            await DispatchNotificationAsync(notification, deviceAlert.Severity);
 
             // Update the device's last maintenance alert time
             var deviceEntity = await _dbContext.DeviceHealth.FirstOrDefaultAsync(
@@ -272,11 +257,19 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     {
         _logger.LogInformation("Acknowledging device alert {AlertId}", alertId);
 
-        // This would integrate with the existing alert system to acknowledge the alert
-        // For now, we'll just log the acknowledgment
-        _logger.LogInformation("Device alert {AlertId} acknowledged", alertId);
+        var clearNotification = new NotificationBase
+        {
+            Level = 0,
+            Title = "Device alert cleared",
+            Message = $"Device alert {alertId} acknowledged",
+            Group = "device-alerts",
+            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Clear = true,
+        };
 
-        await Task.CompletedTask;
+        await _signalRBroadcastService.BroadcastClearAlarmAsync(clearNotification);
+
+        _logger.LogInformation("Device alert {AlertId} acknowledged", alertId);
     }
 
     #region Private Helper Methods
@@ -614,14 +607,58 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     }
 
     /// <summary>
-    /// Check if current time is in quiet hours
+    /// Map device alert to NotificationBase for broadcast
     /// </summary>
-    private static bool IsInQuietHours()
+    private NotificationBase CreateNotificationFromDeviceAlert(DeviceAlert deviceAlert)
     {
-        // This would check user notification preferences for quiet hours
-        // For now, assume quiet hours are 10 PM to 6 AM
-        var currentHour = DateTime.Now.Hour;
-        return currentHour >= 22 || currentHour < 6;
+        var level = deviceAlert.Severity switch
+        {
+            DeviceIssueSeverity.Critical => 2,
+            DeviceIssueSeverity.High => 1,
+            DeviceIssueSeverity.Medium => 1,
+            _ => 0,
+        };
+
+        return new NotificationBase
+        {
+            Level = level,
+            Title = deviceAlert.Title,
+            Message = deviceAlert.Message,
+            Group = "device-alerts",
+            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Plugin = "device-health",
+            IsAnnouncement = false,
+            Debug = new
+            {
+                deviceAlert.Id,
+                deviceAlert.DeviceId,
+                AlertType = deviceAlert.AlertType.ToString(),
+                Severity = deviceAlert.Severity.ToString(),
+            },
+        };
+    }
+
+    /// <summary>
+    /// Dispatch notification through SignalR using severity mapping
+    /// </summary>
+    private async Task DispatchNotificationAsync(
+        NotificationBase notification,
+        DeviceIssueSeverity severity
+    )
+    {
+        switch (severity)
+        {
+            case DeviceIssueSeverity.Critical:
+                await _signalRBroadcastService.BroadcastUrgentAlarmAsync(notification);
+                break;
+            case DeviceIssueSeverity.High:
+            case DeviceIssueSeverity.Medium:
+                await _signalRBroadcastService.BroadcastAlarmAsync(notification);
+                break;
+            default:
+                await _signalRBroadcastService.BroadcastNotificationAsync(notification);
+                break;
+        }
     }
 
     #endregion

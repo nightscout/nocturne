@@ -129,7 +129,7 @@ public class AlertRulesEngine : IAlertRulesEngine
 
                     // Check alert conditions
                     if (
-                        await IsAlertConditionMet(
+                        await IsAlertConditionMetInternal(
                             glucoseReading,
                             rule,
                             cancellationToken,
@@ -183,19 +183,17 @@ public class AlertRulesEngine : IAlertRulesEngine
         return await _alertRuleRepository.GetActiveRulesForUserAsync(userId, cancellationToken);
     }
 
-    // Overload for interface compatibility if strictly required, otherwise this replaces the implementation
-    // Ideally we update the interface too. Assuming IAlertRulesEngine is in same assembly or I can update it.
-    // For now, I'll update the logic here.
+    /// <inheritdoc />
     public async Task<bool> IsAlertConditionMet(
         Entry glucoseReading,
         AlertRuleEntity rule,
         CancellationToken cancellationToken
     )
     {
-        return await IsAlertConditionMet(glucoseReading, rule, cancellationToken, null);
+        return await IsAlertConditionMetInternal(glucoseReading, rule, cancellationToken, null);
     }
 
-    public async Task<bool> IsAlertConditionMet(
+    private async Task<bool> IsAlertConditionMetInternal(
         Entry glucoseReading,
         AlertRuleEntity rule,
         CancellationToken cancellationToken,
