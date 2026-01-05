@@ -202,6 +202,10 @@ pub struct Profile {
     #[cfg_attr(feature = "serde", serde(default))]
     pub isf_profile: ISFProfile,
 
+    /// Carb ratio schedule
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub carb_ratio_profile: Vec<CarbRatioScheduleEntry>,
+
     // ============ Pump Model ============
     /// Pump model for rounding rules
     #[cfg_attr(feature = "serde", serde(default))]
@@ -281,6 +285,7 @@ impl Default for Profile {
             suspend_zeros_iob: true,
             basal_profile: vec![],
             isf_profile: ISFProfile::default(),
+            carb_ratio_profile: vec![],
             model: None,
             out_units: None,
         }
@@ -419,6 +424,47 @@ impl BasalScheduleEntry {
             i,
             start: Some(start.format("%H:%M:%S").to_string()),
             rate,
+            minutes,
+        }
+    }
+}
+
+/// Entry in a carb ratio schedule
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct CarbRatioScheduleEntry {
+    /// Index in schedule
+    pub i: u32,
+
+    /// Start time as HH:MM:SS string
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub start: Option<String>,
+
+    /// Carb ratio (grams per unit)
+    pub ratio: f64,
+
+    /// Minutes from midnight
+    pub minutes: u32,
+}
+
+impl CarbRatioScheduleEntry {
+    /// Create a new carb ratio schedule entry
+    pub fn new(i: u32, ratio: f64, minutes: u32) -> Self {
+        Self {
+            i,
+            start: None,
+            ratio,
+            minutes,
+        }
+    }
+
+    /// Create with a specific start time
+    pub fn with_start(i: u32, ratio: f64, start: NaiveTime) -> Self {
+        let minutes = start.hour() * 60 + start.minute();
+        Self {
+            i,
+            start: Some(start.format("%H:%M:%S").to_string()),
+            ratio,
             minutes,
         }
     }

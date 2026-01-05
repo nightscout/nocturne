@@ -51,6 +51,7 @@ pub fn max_daily_basal(profile: &Profile) -> f64 {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use crate::types::BasalScheduleEntry;
 
     fn make_profile_with_schedule() -> Profile {
         Profile {

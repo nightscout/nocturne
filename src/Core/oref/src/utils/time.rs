@@ -39,6 +39,7 @@ pub fn format_timestamp(dt: DateTime<Utc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Datelike, Timelike};
 
     #[test]
     fn test_parse_rfc3339() {

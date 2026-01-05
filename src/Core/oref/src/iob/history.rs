@@ -169,9 +169,81 @@ pub fn split_temp_basal_at_schedule_changes(
     treatment: &Treatment,
     profile: &Profile,
 ) -> Vec<Treatment> {
-    // For now, return the treatment as-is
-    // Full implementation would split at schedule boundaries
-    vec![treatment.clone()]
+    // If not a temp basal or no schedule, return as-is
+    let (rate, duration) = match (treatment.rate, treatment.duration) {
+        (Some(r), Some(d)) if d > 0.0 => (r, d),
+        _ => return vec![treatment.clone()],
+    };
+
+    if profile.basal_profile.is_empty() {
+        return vec![treatment.clone()];
+    }
+
+    // Sort schedule by minutes
+    let mut schedule: Vec<_> = profile.basal_profile.iter().collect();
+    schedule.sort_by_key(|e| e.minutes);
+
+    // Get schedule change points (minutes from midnight)
+    let change_points: Vec<u32> = schedule.iter().map(|e| e.minutes).collect();
+
+    let start_millis = treatment.date;
+    let start_dt = DateTime::from_timestamp_millis(start_millis)
+        .unwrap_or_else(Utc::now);
+    let start_minutes = start_dt.hour() * 60 + start_dt.minute();
+
+    let end_minutes_from_start = duration as u32;
+    let mut results = Vec::new();
+    let mut current_offset: u32 = 0;
+
+    while current_offset < end_minutes_from_start {
+        let current_time_minutes = (start_minutes + current_offset) % (24 * 60);
+
+        // Find next schedule change point
+        let next_change = change_points
+            .iter()
+            .filter(|&&cp| cp > current_time_minutes)
+            .min()
+            .copied()
+            .unwrap_or(24 * 60); // Wrap to midnight
+
+        // Calculate minutes until next change
+        let minutes_until_change = if next_change > current_time_minutes {
+            next_change - current_time_minutes
+        } else {
+            // Wrapped past midnight
+            (24 * 60 - current_time_minutes) + next_change
+        };
+
+        // Calculate duration for this segment
+        let remaining = end_minutes_from_start - current_offset;
+        let segment_duration = remaining.min(minutes_until_change);
+
+        if segment_duration > 0 {
+            let segment_start = start_millis + (current_offset as i64 * 60 * 1000);
+
+            results.push(Treatment {
+                rate: Some(rate),
+                duration: Some(segment_duration as f64),
+                date: segment_start,
+                timestamp: treatment.timestamp.clone(),
+                started_at: treatment.started_at.clone(),
+                ..Default::default()
+            });
+        }
+
+        current_offset += segment_duration;
+
+        // Safety: avoid infinite loop if segment_duration is 0
+        if segment_duration == 0 {
+            break;
+        }
+    }
+
+    if results.is_empty() {
+        vec![treatment.clone()]
+    } else {
+        results
+    }
 }
 
 use chrono::Timelike;
@@ -179,6 +251,7 @@ use chrono::Timelike;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
 
     fn make_profile() -> Profile {
         Profile {
@@ -253,5 +326,87 @@ mod tests {
         for t in &treatments {
             assert!(t.insulin.unwrap_or(0.0) < 0.0);
         }
+    }
+
+    #[test]
+    fn test_split_temp_basal_no_schedule() {
+        let now = Utc::now();
+        let profile = make_profile(); // Empty basal_profile
+
+        let treatment = Treatment::temp_basal(2.0, 60.0, now);
+        let result = split_temp_basal_at_schedule_changes(&treatment, &profile);
+
+        // With no schedule, should return the original treatment
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].duration, Some(60.0));
+    }
+
+    #[test]
+    fn test_split_temp_basal_with_schedule() {
+        use chrono::TimeZone;
+        use crate::types::BasalScheduleEntry;
+
+        // Create a time at 05:30 (330 minutes from midnight)
+        let start_time = Utc.with_ymd_and_hms(2024, 1, 1, 5, 30, 0).unwrap();
+
+        let profile = Profile {
+            current_basal: 1.0,
+            basal_profile: vec![
+                BasalScheduleEntry::new(0, 0.8, 0),     // 00:00
+                BasalScheduleEntry::new(1, 1.0, 360),   // 06:00 - 30 min after start
+                BasalScheduleEntry::new(2, 1.2, 720),   // 12:00
+            ],
+            ..Default::default()
+        };
+
+        // 60-minute temp basal starting at 05:30 should split at 06:00
+        let treatment = Treatment::temp_basal(2.0, 60.0, start_time);
+        let result = split_temp_basal_at_schedule_changes(&treatment, &profile);
+
+        // Should be split into 2 segments: 30 min (05:30-06:00) and 30 min (06:00-06:30)
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].duration, Some(30.0));
+        assert_eq!(result[1].duration, Some(30.0));
+    }
+
+    #[test]
+    fn test_split_temp_basal_no_boundary_crossed() {
+        use chrono::TimeZone;
+        use crate::types::BasalScheduleEntry;
+
+        // Create a time at 07:00 (420 minutes from midnight)
+        let start_time = Utc.with_ymd_and_hms(2024, 1, 1, 7, 0, 0).unwrap();
+
+        let profile = Profile {
+            current_basal: 1.0,
+            basal_profile: vec![
+                BasalScheduleEntry::new(0, 0.8, 0),     // 00:00
+                BasalScheduleEntry::new(1, 1.0, 360),   // 06:00
+                BasalScheduleEntry::new(2, 1.2, 720),   // 12:00
+            ],
+            ..Default::default()
+        };
+
+        // 30-minute temp basal from 07:00-07:30, doesn't cross any boundary
+        let treatment = Treatment::temp_basal(2.0, 30.0, start_time);
+        let result = split_temp_basal_at_schedule_changes(&treatment, &profile);
+
+        // Should remain as single segment
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].duration, Some(30.0));
+    }
+
+    #[test]
+    fn test_split_temp_basal_not_temp_basal() {
+        let now = Utc::now();
+        let profile = make_profile();
+
+        // A bolus treatment (not temp basal)
+        let treatment = Treatment::bolus(2.0, now);
+        let result = split_temp_basal_at_schedule_changes(&treatment, &profile);
+
+        // Should return original
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].insulin, Some(2.0));
     }
 }
