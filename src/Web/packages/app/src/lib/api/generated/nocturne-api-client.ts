@@ -17897,6 +17897,8 @@ export interface CompleteTrackerInstanceRequest {
     reason: CompletionReason;
     completionNotes?: string | undefined;
     completeTreatmentId?: string | undefined;
+    /** Optional custom completion time for backdating. Defaults to now if not provided. */
+    completedAt?: Date | undefined;
 }
 
 export interface AckTrackerRequest {
@@ -18348,7 +18350,7 @@ export interface PumpStatus {
     status?: PumpStatusDetails | undefined;
     iob?: PumpIob | undefined;
     reservoir_display_override?: string | undefined;
-    reservoir_level_override?: number | undefined;
+    reservoir_level_override?: PumpAlertLevel | undefined;
     manufacturer?: string | undefined;
     model?: string | undefined;
     extended?: { [key: string]: any; } | undefined;
@@ -18370,6 +18372,13 @@ export interface PumpIob {
     bolusiob?: number | undefined;
     basaliob?: number | undefined;
     iob?: number | undefined;
+}
+
+export enum PumpAlertLevel {
+    None = 0,
+    Info = 1,
+    Warn = 2,
+    Urgent = 3,
 }
 
 export interface OpenApsStatus {

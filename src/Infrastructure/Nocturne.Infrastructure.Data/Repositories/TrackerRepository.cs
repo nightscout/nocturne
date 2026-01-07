@@ -32,7 +32,7 @@ public class TrackerRepository
     {
         return await _context
             .TrackerDefinitions.Include(d => d.NotificationThresholds)
-            .Where(d => d.UserId == userId)
+            .Where(d => d.UserId == userId || d.Visibility == TrackerVisibility.Public)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
     }
@@ -61,7 +61,7 @@ public class TrackerRepository
     {
         return await _context
             .TrackerDefinitions.Include(d => d.NotificationThresholds)
-            .Where(d => d.UserId == userId && d.Category == category)
+            .Where(d => (d.UserId == userId || d.Visibility == TrackerVisibility.Public) && d.Category == category)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
     }
@@ -135,9 +135,17 @@ public class TrackerRepository
         existing.TriggerNotesContains = updated.TriggerNotesContains;
         existing.LifespanHours = updated.LifespanHours;
         existing.IsFavorite = updated.IsFavorite;
+        existing.DashboardVisibility = updated.DashboardVisibility;
+        existing.Visibility = updated.Visibility;
+        existing.StartEventType = updated.StartEventType;
+        existing.CompletionEventType = updated.CompletionEventType;
         existing.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Reload thresholds to ensure we return the complete object
+        await _context.Entry(existing).Collection(d => d.NotificationThresholds).LoadAsync(cancellationToken);
+
         return existing;
     }
 
@@ -197,13 +205,13 @@ public class TrackerRepository
     /// Get active (not completed) tracker instances for a user
     /// </summary>
     public virtual async Task<TrackerInstanceEntity[]> GetActiveInstancesAsync(
-        string userId,
+        string? userId,
         CancellationToken cancellationToken = default
     )
     {
         return await _context
             .TrackerInstances.Include(i => i.Definition)
-            .Where(i => i.UserId == userId && i.CompletedAt == null)
+            .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToArrayAsync(cancellationToken);
     }
@@ -229,7 +237,7 @@ public class TrackerRepository
     /// Get upcoming instance expirations for calendar display
     /// </summary>
     public virtual async Task<TrackerInstanceEntity[]> GetUpcomingInstancesAsync(
-        string userId,
+        string? userId,
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken = default
@@ -239,7 +247,7 @@ public class TrackerRepository
         var instances = await _context
             .TrackerInstances.Include(i => i.Definition)
             .Where(i =>
-                i.UserId == userId && i.CompletedAt == null && i.Definition.LifespanHours != null
+                ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null && i.Definition.LifespanHours != null
             )
             .ToArrayAsync(cancellationToken);
 
@@ -305,6 +313,7 @@ public class TrackerRepository
         CompletionReason reason,
         string? completionNotes = null,
         string? completeTreatmentId = null,
+        DateTime? completedAt = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -315,7 +324,7 @@ public class TrackerRepository
         if (instance == null)
             return null;
 
-        instance.CompletedAt = DateTime.UtcNow;
+        instance.CompletedAt = completedAt ?? DateTime.UtcNow;
         instance.CompletionReason = reason;
         instance.CompletionNotes = completionNotes;
         instance.CompleteTreatmentId = completeTreatmentId;

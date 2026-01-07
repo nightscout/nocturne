@@ -189,6 +189,7 @@ builder.Services.AddScoped<INotificationV1Service, NotificationV1Service>();
 builder.Services.AddScoped<IApnsClientFactory, ApnsClientFactory>();
 builder.Services.AddScoped<ILoopService, LoopService>();
 builder.Services.AddScoped<IOpenApsService, OpenApsService>();
+builder.Services.AddScoped<IPumpAlertService, PumpAlertService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<IAlexaService, AlexaService>();
 

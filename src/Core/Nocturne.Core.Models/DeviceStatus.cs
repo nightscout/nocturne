@@ -189,6 +189,37 @@ public class PumpStatus
     /// </summary>
     [JsonPropertyName("iob")]
     public PumpIob? Iob { get; set; }
+
+    /// <summary>
+    /// Display override for reservoir (e.g., "50+U" for Omnipod)
+    /// Used when pump doesn't report exact reservoir levels
+    /// </summary>
+    [JsonPropertyName("reservoir_display_override")]
+    public string? ReservoirDisplayOverride { get; set; }
+
+    /// <summary>
+    /// Level override for reservoir alerts
+    /// </summary>
+    [JsonPropertyName("reservoir_level_override")]
+    public PumpAlertLevel? ReservoirLevelOverride { get; set; }
+
+    /// <summary>
+    /// Pump manufacturer (e.g., "Insulet", "Medtronic", "Tandem")
+    /// </summary>
+    [JsonPropertyName("manufacturer")]
+    public string? Manufacturer { get; set; }
+
+    /// <summary>
+    /// Pump model identifier
+    /// </summary>
+    [JsonPropertyName("model")]
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// Extended pump data (arbitrary key-value pairs from the device)
+    /// </summary>
+    [JsonPropertyName("extended")]
+    public Dictionary<string, object>? Extended { get; set; }
 }
 
 /// <summary>

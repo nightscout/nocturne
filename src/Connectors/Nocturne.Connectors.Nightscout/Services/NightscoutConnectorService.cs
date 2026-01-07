@@ -335,11 +335,13 @@ namespace Nocturne.Connectors.Nightscout.Services
                     // Auth headers are automatically added by NightscoutAuthHandler
                     var response = await _httpClient.GetAsync(urlBuilder.ToString());
 
-                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized || response.StatusCode == System.Net.HttpStatusCode.NotFound)
                     {
-                        // Handler already tried to refresh JWT; fall back to v1 API
+                        // Handler already tried to refresh JWT (for 401); or endpoint doesn't exist (404);
+                        // fall back to v1 API
                         _logger.LogWarning(
-                            "v3 API returned 401 for {Collection} after auth retry, falling back to v1 API",
+                            "v3 API returned {StatusCode} for {Collection}, falling back to v1 API",
+                            response.StatusCode,
                             collection
                         );
                         return await FetchCollectionV1Async<T>(
