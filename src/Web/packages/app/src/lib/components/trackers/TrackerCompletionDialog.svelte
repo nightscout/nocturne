@@ -1,17 +1,27 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
   import { Textarea } from "$lib/components/ui/textarea";
+  import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Check } from "lucide-svelte";
-  import { CompletionReason } from "$api";
+  import { CompletionReason, TrackerCategory } from "$api";
   import * as trackersRemote from "$lib/data/trackers.remote";
+  import * as treatmentsRemote from "$lib/data/treatments.remote";
 
   interface TrackerCompletionDialogProps {
     open: boolean;
     instanceId: string | null;
     instanceName?: string;
+    /** Category of the tracker definition for default reason selection */
+    category?: TrackerCategory;
+    /** Definition ID for "Start Another" functionality */
+    definitionId?: string;
+    /** Event type to create on completion */
+    completionEventType?: string;
     onClose: () => void;
     onComplete?: () => void;
   }
@@ -20,13 +30,43 @@
     open = $bindable(false),
     instanceId,
     instanceName = "tracker",
+    category,
+    definitionId,
+    completionEventType,
     onClose,
     onComplete,
   }: TrackerCompletionDialogProps = $props();
 
   let completionReason = $state<CompletionReason>(CompletionReason.Completed);
   let completionNotes = $state("");
+  let completedAt = $state("");
+  let startAnother = $state(false);
   let isSubmitting = $state(false);
+
+  // Get default completion reason based on tracker category
+  function getDefaultReasonForCategory(
+    cat?: TrackerCategory
+  ): CompletionReason {
+    switch (cat) {
+      case TrackerCategory.Reservoir:
+        return CompletionReason.Refilled;
+      case TrackerCategory.Appointment:
+        return CompletionReason.Attended;
+      case TrackerCategory.Sensor:
+      case TrackerCategory.Cannula:
+      case TrackerCategory.Consumable:
+      case TrackerCategory.Battery:
+        return CompletionReason.Completed;
+      default:
+        return CompletionReason.Completed;
+    }
+  }
+
+  // Format date for datetime-local input (YYYY-MM-DDTHH:mm)
+  function formatDateTimeLocal(date: Date): string {
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
 
   // Completion reason labels
   const completionReasonLabels: Record<CompletionReason, string> = {
@@ -47,8 +87,10 @@
   // Reset form when dialog opens
   $effect(() => {
     if (open) {
-      completionReason = CompletionReason.Completed;
+      completionReason = getDefaultReasonForCategory(category);
       completionNotes = "";
+      completedAt = formatDateTimeLocal(new Date());
+      startAnother = false;
     }
   });
 
@@ -61,9 +103,32 @@
         request: {
           reason: completionReason,
           completionNotes: completionNotes || undefined,
+          completedAt: completedAt ? new Date(completedAt) : undefined,
         },
       });
+
+      // If "Start Another" is checked and we have a definitionId, start a new instance
+      if (startAnother && definitionId) {
+        await trackersRemote.startInstance({
+          definitionId,
+          startedAt: completedAt ? new Date(completedAt) : undefined,
+        });
+      }
+
+      // Create treatment event if configured
+      if (completionEventType) {
+        await treatmentsRemote.createTreatment({
+          eventType: completionEventType,
+          created_at: completedAt
+            ? new Date(completedAt).toISOString()
+            : new Date().toISOString(),
+          notes: completionNotes || undefined,
+          enteredBy: "Nocturne Tracker",
+        });
+      }
+
       open = false;
+      await tick();
       onComplete?.();
     } catch (err) {
       console.error("Failed to complete tracker:", err);
@@ -87,6 +152,14 @@
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
+      <div class="space-y-2">
+        <Label for="completedAt">Completed At</Label>
+        <Input
+          id="completedAt"
+          type="datetime-local"
+          bind:value={completedAt}
+        />
+      </div>
       <div class="space-y-2">
         <Label for="reason">Completion Reason</Label>
         <Select.Root type="single" bind:value={completionReason}>
@@ -123,6 +196,14 @@
           placeholder="e.g., Sensor error E2 on day 8"
         />
       </div>
+      {#if definitionId}
+        <div class="flex items-center gap-2">
+          <Checkbox id="startAnother" bind:checked={startAnother} />
+          <Label for="startAnother" class="text-sm font-normal cursor-pointer">
+            Start another {instanceName} after completion
+          </Label>
+        </div>
+      {/if}
     </div>
     <Dialog.Footer>
       <Button variant="outline" onclick={handleClose} disabled={isSubmitting}>

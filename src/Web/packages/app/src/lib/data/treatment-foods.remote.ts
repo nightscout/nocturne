@@ -43,7 +43,9 @@ export const addTreatmentFood = command(
     const { apiClient } = locals;
 
     try {
-      return await apiClient.treatmentFoods.addTreatmentFood(treatmentId, request);
+      const result = await apiClient.treatmentFoods.addTreatmentFood(treatmentId, request);
+      await getTreatmentFoodBreakdown(treatmentId).refresh();
+      return result;
     } catch (err) {
       console.error("Error adding treatment food:", err);
       throw error(500, "Failed to add treatment food");
@@ -65,11 +67,13 @@ export const updateTreatmentFood = command(
     const { apiClient } = locals;
 
     try {
-      return await apiClient.treatmentFoods.updateTreatmentFood(
+      const result = await apiClient.treatmentFoods.updateTreatmentFood(
         treatmentId,
         entryId,
         request
       );
+      await getTreatmentFoodBreakdown(treatmentId).refresh();
+      return result;
     } catch (err) {
       console.error("Error updating treatment food:", err);
       throw error(500, "Failed to update treatment food");
@@ -90,10 +94,12 @@ export const deleteTreatmentFood = command(
     const { apiClient } = locals;
 
     try {
-      return await apiClient.treatmentFoods.deleteTreatmentFood(
+      await apiClient.treatmentFoods.deleteTreatmentFood(
         treatmentId,
         entryId
       );
+      await getTreatmentFoodBreakdown(treatmentId).refresh();
+      return { success: true };
     } catch (err) {
       console.error("Error deleting treatment food:", err);
       throw error(500, "Failed to delete treatment food");
@@ -202,6 +208,7 @@ export const addFavoriteFood = command(z.string(), async (foodId) => {
 
   try {
     await apiClient.foodsV4.addFavorite(foodId);
+    await getFavoriteFoods().refresh();
     return { success: true };
   } catch (err) {
     console.error("Error adding favorite food:", err);
@@ -218,6 +225,7 @@ export const removeFavoriteFood = command(z.string(), async (foodId) => {
 
   try {
     await apiClient.foodsV4.removeFavorite(foodId);
+    await getFavoriteFoods().refresh();
     return { success: true };
   } catch (err) {
     console.error("Error removing favorite food:", err);
@@ -253,7 +261,11 @@ export const createNewFood = command(
     const { apiClient } = locals;
 
     try {
-      const result = await apiClient.food.createFood2(food as any);
+      const result = await apiClient.food.createFood2(food);
+      await Promise.all([
+        getAllFoods().refresh(),
+        getRecentFoods(undefined).refresh(),
+      ]);
       return { success: true, record: result[0] };
     } catch (err) {
       console.error("Error creating food:", err);
@@ -273,7 +285,12 @@ export const updateExistingFood = command(foodRecordSchema, async (food) => {
     if (!food._id) {
       throw error(400, "Food ID is required for update");
     }
-    await apiClient.food.updateFood2(food._id, food as any);
+    await apiClient.food.updateFood2(food._id, food);
+    await Promise.all([
+      getAllFoods().refresh(),
+      getFoodById(food._id).refresh(),
+      getRecentFoods(undefined).refresh(),
+    ]);
     return { success: true, record: food };
   } catch (err) {
     console.error("Error updating food:", err);

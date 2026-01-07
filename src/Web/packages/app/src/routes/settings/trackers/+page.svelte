@@ -18,6 +18,8 @@
   import { DurationInput } from "$lib/components/ui/duration-input";
   import {
     TrackerNotificationEditor,
+    TrackerCompletionDialog,
+    TrackerStartDialog,
     type TrackerNotification,
   } from "$lib/components/trackers";
   import EventTypeCombobox from "$lib/components/treatments/EventTypeCombobox.svelte";
@@ -39,7 +41,6 @@
   import { cn } from "$lib/utils";
   import { tick } from "svelte";
   import * as trackersRemote from "$lib/data/trackers.remote";
-  import * as treatmentsRemote from "$lib/data/treatments.remote";
   import {
     NotificationUrgency,
     TrackerCategory,
@@ -127,106 +128,28 @@
   }
 
   // Start instance dialog
-  // Start instance
   let isStartDialogOpen = $state(false);
-  let startDefinitionId = $state<string | null>(null);
-  let startNotes = $state("");
-  let startedAtString = $state(""); // YYYY-MM-DDTHH:mm
+  let startDefinition = $state<TrackerDefinitionDto | null>(null);
 
-  // Initialize dialog with current local time
-  function openStartDialog(definitionId: string) {
-    startDefinitionId = definitionId;
-    startNotes = "";
-
-    // Default to now, formatted for datetime-local
-    const now = new Date();
-    // Offset for local timezone
-    const offset = now.getTimezoneOffset() * 60000;
-    const localIso = new Date(now.getTime() - offset)
-      .toISOString()
-      .slice(0, 16);
-    startedAtString = localIso;
-
+  function openStartDialog(definition: TrackerDefinitionDto) {
+    startDefinition = definition;
     isStartDialogOpen = true;
   }
 
-  async function startInstanceHandler() {
-    if (!startDefinitionId) return;
-    const defId = startDefinitionId;
-    const notes = startNotes;
-    const startedAt = startedAtString ? new Date(startedAtString) : undefined;
-    isStartDialogOpen = false;
-    try {
-      await trackersRemote.startInstance({
-        definitionId: defId,
-        startNotes: notes || undefined,
-        startedAt: startedAt,
-      });
-
-      // Create treatment event if configured on the definition
-      const def = definitions.find((d) => d.id === defId);
-      if (def?.startEventType) {
-        await treatmentsRemote.createTreatment({
-          eventType: def.startEventType,
-          created_at: (startedAt ?? new Date()).toISOString(),
-          notes: notes || undefined,
-          enteredBy: "Nocturne Tracker",
-        });
-      }
-
-      await loadData();
-      await tick();
-    } catch (err) {
-      console.error("Failed to start instance:", err);
-    }
-  }
-
-  // Derived for Start Dialog
-  const startDefinition = $derived(
-    definitions.find((d) => d.id === startDefinitionId)
-  );
-
-  const startPreview = $derived.by(() => {
-    if (
-      !startDefinition ||
-      !startDefinition.notificationThresholds ||
-      !startedAtString
-    )
-      return [];
-
-    const start = new Date(startedAtString);
-    const now = new Date();
-
-    // Safety check for invalid date
-    if (isNaN(start.getTime())) return [];
-
-    return startDefinition.notificationThresholds
-      .filter((n) => n.hours !== undefined)
-      .map((n) => {
-        const triggerTime = new Date(
-          start.getTime() + n.hours! * 60 * 60 * 1000
-        );
-        const timeUntil = triggerTime.getTime() - now.getTime();
-        const hoursUntil = timeUntil / (1000 * 60 * 60);
-
-        return {
-          ...n,
-          triggerTime,
-          isPast: timeUntil < 0,
-          relativeTime:
-            Math.abs(hoursUntil) < 1
-              ? `${Math.abs(Math.round(hoursUntil * 60))} mins`
-              : `${Math.abs(hoursUntil).toFixed(1)} hours`,
-        };
-      })
-      .sort((a, b) => (a.hours ?? 0) - (b.hours ?? 0));
-  });
-
   // Complete instance dialog
   let isCompleteDialogOpen = $state(false);
-  let completingInstanceId = $state<string | null>(null);
-  let completionReason = $state<CompletionReason>(CompletionReason.Completed);
-  let completionNotes = $state("");
+  let completingInstance = $state<TrackerInstanceDto | null>(null);
+  let completingDefinition = $state<TrackerDefinitionDto | null>(null);
+
+  function openCompleteDialog(instanceId: string) {
+    const instance = activeInstances.find((i) => i.id === instanceId);
+    if (!instance) return;
+
+    completingInstance = instance;
+    completingDefinition =
+      definitions.find((d) => d.id === instance.definitionId) || null;
+    isCompleteDialogOpen = true;
+  }
 
   // Derived counts
   const activeCount = $derived(activeInstances.length);
@@ -317,6 +240,21 @@
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  // Get time remaining for instance
+  function getTimeRemaining(instance: TrackerInstanceDto): number | undefined {
+    const def = definitions.find((d) => d.id === instance.definitionId);
+    if (!def || !def.lifespanHours || instance.ageHours === undefined)
+      return undefined;
+    return def.lifespanHours - instance.ageHours;
+  }
+
+  // Format time remaining
+  function formatTimeRemaining(hours: number | undefined): string {
+    if (hours === undefined) return "";
+    if (hours <= 0) return "Overdue";
+    return `${formatAge(hours)} left`;
   }
 
   // Get notification level for instance
@@ -458,51 +396,6 @@
   }
 
   // Start instance
-
-  // Complete instance
-  function openCompleteDialog(instanceId: string) {
-    completingInstanceId = instanceId;
-    completionReason = CompletionReason.Completed;
-    completionNotes = "";
-    isCompleteDialogOpen = true;
-  }
-
-  async function completeInstanceHandler() {
-    if (!completingInstanceId) return;
-    const instanceId = completingInstanceId;
-    const reason = completionReason;
-    const notes = completionNotes;
-    // Find the instance to get the definition
-    const instance = activeInstances.find((i) => i.id === instanceId);
-    const def = instance
-      ? definitions.find((d) => d.id === instance.definitionId)
-      : null;
-    isCompleteDialogOpen = false;
-    try {
-      await trackersRemote.completeInstance({
-        id: instanceId,
-        request: {
-          reason: reason,
-          completionNotes: notes || undefined,
-        },
-      });
-
-      // Create treatment event if configured on the definition
-      if (def?.completionEventType) {
-        await treatmentsRemote.createTreatment({
-          eventType: def.completionEventType,
-          created_at: new Date().toISOString(),
-          notes: notes || undefined,
-          enteredBy: "Nocturne Tracker",
-        });
-      }
-
-      await loadData();
-      await tick();
-    } catch (err) {
-      console.error("Failed to complete instance:", err);
-    }
-  }
 
   // Delete instance
   function openDeleteInstanceDialog(id: string) {
@@ -661,7 +554,7 @@
                     <Select.Item
                       value={def.id ?? ""}
                       label={def.name ?? ""}
-                      onclick={() => openStartDialog(def.id!)}
+                      onclick={() => openStartDialog(def)}
                     />
                   {/each}
                 </Select.Content>
@@ -679,6 +572,7 @@
               <div class="space-y-3">
                 {#each activeInstances as instance}
                   {@const level = getInstanceLevel(instance)}
+                  {@const remaining = getTimeRemaining(instance)}
                   <div
                     class={cn(
                       "flex items-center justify-between p-4 rounded-lg border",
@@ -691,8 +585,25 @@
                       </div>
                       <div>
                         <div class="font-medium">{instance.definitionName}</div>
-                        <div class="text-sm text-muted-foreground">
+                        <div
+                          class="text-sm text-muted-foreground flex items-center gap-1.5"
+                        >
                           Started {formatDate(instance.startedAt)}
+                          {#if remaining !== undefined}
+                            ·
+                            <span
+                              class={cn(
+                                "font-medium",
+                                remaining <= 0
+                                  ? "text-destructive"
+                                  : remaining < 6
+                                    ? "text-yellow-600 dark:text-yellow-400"
+                                    : "text-primary"
+                              )}
+                            >
+                              {formatTimeRemaining(remaining)}
+                            </span>
+                          {/if}
                           {#if instance.startNotes}
                             · {instance.startNotes}
                           {/if}
@@ -834,7 +745,7 @@
                       <Button
                         variant="outline"
                         size="sm"
-                        onclick={() => openStartDialog(def.id!)}
+                        onclick={() => openStartDialog(def)}
                       >
                         <Play class="h-4 w-4 mr-1" />
                         Start
@@ -1132,149 +1043,28 @@
 </Dialog.Root>
 
 <!-- Start Instance Dialog -->
-<Dialog.Root bind:open={isStartDialogOpen}>
-  <Dialog.Content class="sm:max-w-[425px]">
-    <Dialog.Header>
-      <Dialog.Title>Start Tracker</Dialog.Title>
-      <Dialog.Description>
-        Begin tracking {startDefinition?.name ?? "tracker"}.
-      </Dialog.Description>
-    </Dialog.Header>
-    <div class="grid gap-4 py-4">
-      <div class="space-y-2">
-        <Label for="startedAt">Start Time</Label>
-        <Input
-          type="datetime-local"
-          id="startedAt"
-          bind:value={startedAtString}
-        />
-        <p class="text-[10px] text-muted-foreground">
-          Adjust if you started this earlier.
-        </p>
-      </div>
-
-      <div class="space-y-2">
-        <Label for="startNotes">Notes (optional)</Label>
-        <Input
-          id="startNotes"
-          bind:value={startNotes}
-          placeholder="e.g., Left arm, Lot #12345"
-        />
-      </div>
-
-      {#if startPreview.length > 0}
-        <div class="rounded-lg border bg-muted/50 p-3 mt-2">
-          <Label class="text-xs mb-2 block font-medium">
-            Notification Schedule (Adjusted)
-          </Label>
-          <div class="space-y-2">
-            {#each startPreview as preview}
-              {@const isPast = preview.isPast}
-              {@const urgencyLower = String(preview.urgency).toLowerCase()}
-              <div class="flex items-center justify-between text-xs">
-                <div class="flex items-center gap-2">
-                  <div
-                    class={cn(
-                      "w-2 h-2 rounded-full",
-                      (urgencyLower === "info" || urgencyLower === "0") &&
-                        "bg-blue-500",
-                      (urgencyLower === "warn" || urgencyLower === "1") &&
-                        "bg-yellow-500",
-                      (urgencyLower === "hazard" || urgencyLower === "2") &&
-                        "bg-orange-500",
-                      (urgencyLower === "urgent" || urgencyLower === "3") &&
-                        "bg-red-500"
-                    )}
-                  ></div>
-                  <span>{preview.hours}h</span>
-                </div>
-                <div
-                  class={cn(
-                    "flex flex-col items-end",
-                    isPast ? "text-destructive" : "text-muted-foreground"
-                  )}
-                >
-                  <span>
-                    {isPast ? "Triggered" : "Triggering in"}
-                    {preview.relativeTime}
-                  </span>
-                  <span class="text-[10px] opacity-70">
-                    {preview.triggerTime.toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/if}
-    </div>
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (isStartDialogOpen = false)}>
-        Cancel
-      </Button>
-      <Button onclick={startInstanceHandler}>
-        <Play class="h-4 w-4 mr-2" />
-        Start
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+<TrackerStartDialog
+  bind:open={isStartDialogOpen}
+  definition={startDefinition}
+  history={historyInstances}
+  onClose={() => (startDefinition = null)}
+  onStart={loadData}
+/>
 
 <!-- Complete Instance Dialog -->
-<Dialog.Root bind:open={isCompleteDialogOpen}>
-  <Dialog.Content>
-    <Dialog.Header>
-      <Dialog.Title>Complete Tracker</Dialog.Title>
-    </Dialog.Header>
-    <div class="space-y-4 py-4">
-      <div class="space-y-2">
-        <Label for="reason">Completion Reason</Label>
-        <Select.Root type="single" bind:value={completionReason}>
-          <Select.Trigger>
-            {completionReasonLabels[completionReason]}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value={CompletionReason.Completed} label="Completed" />
-            <Select.Item value={CompletionReason.Expired} label="Expired" />
-            <Select.Item value={CompletionReason.Failed} label="Failed" />
-            <Select.Item value={CompletionReason.FellOff} label="Fell Off" />
-            <Select.Item
-              value={CompletionReason.ReplacedEarly}
-              label="Replaced Early"
-            />
-            <Select.Item value={CompletionReason.Empty} label="Empty" />
-            <Select.Item value={CompletionReason.Refilled} label="Refilled" />
-            <Select.Item value={CompletionReason.Attended} label="Attended" />
-            <Select.Item
-              value={CompletionReason.Rescheduled}
-              label="Rescheduled"
-            />
-            <Select.Item value={CompletionReason.Cancelled} label="Cancelled" />
-            <Select.Item value={CompletionReason.Missed} label="Missed" />
-            <Select.Item value={CompletionReason.Other} label="Other" />
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="space-y-2">
-        <Label for="completionNotes">Notes (optional)</Label>
-        <Textarea
-          id="completionNotes"
-          bind:value={completionNotes}
-          placeholder="e.g., Sensor error E2 on day 8"
-        />
-      </div>
-    </div>
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (isCompleteDialogOpen = false)}>
-        Cancel
-      </Button>
-      <Button onclick={completeInstanceHandler}>
-        <Check class="h-4 w-4 mr-2" />
-        Complete
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+<TrackerCompletionDialog
+  bind:open={isCompleteDialogOpen}
+  instanceId={completingInstance?.id ?? null}
+  instanceName={completingInstance?.definitionName ?? "tracker"}
+  category={completingDefinition?.category}
+  definitionId={completingInstance?.definitionId}
+  completionEventType={completingDefinition?.completionEventType}
+  onClose={() => {
+    completingInstance = null;
+    completingDefinition = null;
+  }}
+  onComplete={loadData}
+/>
 
 <!-- Delete Definition Confirmation Dialog -->
 <AlertDialog.Root bind:open={isDeleteDefinitionDialogOpen}>

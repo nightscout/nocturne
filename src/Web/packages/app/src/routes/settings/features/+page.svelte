@@ -19,13 +19,11 @@
   import {
     Sparkles,
     Eye,
-    Layout,
-    BarChart3,
-    Syringe,
-    Activity,
     Clock,
     Pill,
     Droplets,
+    Syringe,
+    Activity,
     AlertCircle,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
@@ -131,118 +129,6 @@
               }
             }}
           />
-        </div>
-      </CardContent>
-    </Card>
-
-    <!-- Dashboard Widgets -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Layout class="h-5 w-5" />
-          Dashboard Widgets
-        </CardTitle>
-        <CardDescription>
-          Choose which widgets appear on your dashboard
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="flex items-center justify-between p-3 rounded-lg border">
-            <div class="flex items-center gap-3">
-              <Activity class="h-5 w-5 text-muted-foreground" />
-              <Label>Glucose Chart</Label>
-            </div>
-            <Switch
-              checked={store.features.dashboardWidgets?.glucoseChart ?? true}
-              onCheckedChange={(checked) => {
-                if (store.features?.dashboardWidgets) {
-                  store.features.dashboardWidgets.glucoseChart = checked;
-                  store.markChanged();
-                }
-              }}
-            />
-          </div>
-
-          <div class="flex items-center justify-between p-3 rounded-lg border">
-            <div class="flex items-center gap-3">
-              <BarChart3 class="h-5 w-5 text-muted-foreground" />
-              <Label>Statistics</Label>
-            </div>
-            <Switch
-              checked={store.features.dashboardWidgets?.statistics ?? true}
-              onCheckedChange={(checked) => {
-                if (store.features?.dashboardWidgets) {
-                  store.features.dashboardWidgets.statistics = checked;
-                  store.markChanged();
-                }
-              }}
-            />
-          </div>
-
-          <div class="flex items-center justify-between p-3 rounded-lg border">
-            <div class="flex items-center gap-3">
-              <Syringe class="h-5 w-5 text-muted-foreground" />
-              <Label>Treatments</Label>
-            </div>
-            <Switch
-              checked={store.features.dashboardWidgets?.treatments ?? true}
-              onCheckedChange={(checked) => {
-                if (store.features?.dashboardWidgets) {
-                  store.features.dashboardWidgets.treatments = checked;
-                  store.markChanged();
-                }
-              }}
-            />
-          </div>
-
-          <div class="flex items-center justify-between p-3 rounded-lg border">
-            <div class="flex items-center gap-3">
-              <Activity class="h-5 w-5 text-muted-foreground" />
-              <Label>Predictions</Label>
-            </div>
-            <Switch
-              checked={store.features.dashboardWidgets?.predictions ?? true}
-              onCheckedChange={(checked) => {
-                if (store.features?.dashboardWidgets) {
-                  store.features.dashboardWidgets.predictions = checked;
-                  store.markChanged();
-                }
-              }}
-            />
-          </div>
-
-          <div class="flex items-center justify-between p-3 rounded-lg border">
-            <div class="flex items-center gap-3">
-              <BarChart3 class="h-5 w-5 text-muted-foreground" />
-              <Label>AGP Summary</Label>
-            </div>
-            <Switch
-              checked={store.features.dashboardWidgets?.agp ?? false}
-              onCheckedChange={(checked) => {
-                if (store.features?.dashboardWidgets) {
-                  store.features.dashboardWidgets.agp = checked;
-                  store.markChanged();
-                }
-              }}
-            />
-          </div>
-
-          <div class="flex items-center justify-between p-3 rounded-lg border">
-            <div class="flex items-center gap-3">
-              <Clock class="h-5 w-5 text-muted-foreground" />
-              <Label>Daily Stats</Label>
-            </div>
-            <Switch
-              checked={store.features.dashboardWidgets?.dailyStats ?? true}
-              onCheckedChange={(checked) => {
-                if (store.features?.dashboardWidgets) {
-                  store.features.dashboardWidgets.dailyStats = checked;
-                  store.markChanged();
-                }
-              }}
-            />
-          </div>
         </div>
       </CardContent>
     </Card>

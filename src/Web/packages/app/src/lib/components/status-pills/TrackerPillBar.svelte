@@ -1,7 +1,11 @@
 <script lang="ts">
   import TrackerPill from "./TrackerPill.svelte";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
-  import { DashboardVisibility, NotificationUrgency } from "$lib/api";
+  import {
+    DashboardVisibility,
+    NotificationUrgency,
+    TrackerCategory,
+  } from "$lib/api";
   import { cn } from "$lib/utils";
 
   interface TrackerPillBarProps {
@@ -12,7 +16,13 @@
     /** Additional CSS classes */
     class?: string;
     /** Callback when complete button is clicked */
-    onComplete?: (instanceId: string, instanceName: string) => void;
+    onComplete?: (
+      instanceId: string,
+      instanceName: string,
+      category: TrackerCategory,
+      definitionId: string,
+      completionEventType?: string
+    ) => void;
   }
 
   let {
@@ -115,6 +125,8 @@
   });
 
   const hasVisiblePills = $derived(visibleInstances.length > 0);
+
+  $inspect(instances, definitions, visibleInstances).with(console.trace);
 </script>
 
 {#if hasVisiblePills}

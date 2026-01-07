@@ -8,12 +8,12 @@ import {
 	TrackerCategory,
 	CompletionReason,
 	NotificationUrgency,
+	DashboardVisibility,
+	TrackerVisibility,
 	type CreateTrackerDefinitionRequest,
 	type UpdateTrackerDefinitionRequest,
-	type StartTrackerInstanceRequest,
 	type CompleteTrackerInstanceRequest,
 	type AckTrackerRequest,
-	type ApplyPresetRequest,
 } from '$api';
 
 /**
@@ -22,7 +22,7 @@ import {
 export const getDefinitions = query(
 	z
 		.object({
-			category: z.nativeEnum(TrackerCategory).optional(),
+			category: z.enum(TrackerCategory).optional(),
 		})
 		.optional(),
 	async (params) => {
@@ -60,13 +60,13 @@ export const createDefinition = command(
 	z.object({
 		name: z.string(),
 		description: z.string().optional(),
-		category: z.nativeEnum(TrackerCategory).optional(),
+		category: z.enum(TrackerCategory).optional(),
 		icon: z.string().optional(),
 		triggerEventTypes: z.array(z.string()).optional(),
 		triggerNotesContains: z.string().optional(),
 		lifespanHours: z.number().optional(),
 		notificationThresholds: z.array(z.object({
-			urgency: z.nativeEnum(NotificationUrgency).optional(),
+			urgency: z.enum(NotificationUrgency).optional(),
 			hours: z.number().optional(),
 			description: z.string().optional(),
 			displayOrder: z.number().optional(),
@@ -79,7 +79,9 @@ export const createDefinition = command(
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
 		try {
-			return await apiClient.trackers.createDefinition(request);
+			const result = await apiClient.trackers.createDefinition(request);
+			await getDefinitions(undefined).refresh();
+			return result;
 		} catch (err) {
 			console.error('Error creating tracker definition:', err);
 			throw error(500, 'Failed to create tracker definition');
@@ -96,18 +98,20 @@ export const updateDefinition = command(
 		request: z.object({
 			name: z.string().optional(),
 			description: z.string().optional(),
-			category: z.nativeEnum(TrackerCategory).optional(),
+			category: z.enum(TrackerCategory).optional(),
 			icon: z.string().optional(),
 			triggerEventTypes: z.array(z.string()).optional(),
 			triggerNotesContains: z.string().optional(),
 			lifespanHours: z.number().optional(),
 			notificationThresholds: z.array(z.object({
-				urgency: z.nativeEnum(NotificationUrgency).optional(),
+				urgency: z.enum(NotificationUrgency).optional(),
 				hours: z.number().optional(),
 				description: z.string().optional(),
 				displayOrder: z.number().optional(),
 			})).optional(),
 			isFavorite: z.boolean().optional(),
+			dashboardVisibility: z.enum(DashboardVisibility).optional(),
+			visibility: z.enum(TrackerVisibility).optional(),
 			startEventType: z.string().optional(),
 			completionEventType: z.string().optional(),
 		}),
@@ -117,10 +121,15 @@ export const updateDefinition = command(
 		const { apiClient } = locals;
 
 		try {
-			return await apiClient.trackers.updateDefinition(
+			const result = await apiClient.trackers.updateDefinition(
 				id,
 				request as UpdateTrackerDefinitionRequest
 			);
+			await Promise.all([
+				getDefinitions(undefined).refresh(),
+				getDefinition(id).refresh(),
+			]);
+			return result;
 		} catch (err) {
 			console.error('Error updating tracker definition:', err);
 			throw error(500, 'Failed to update tracker definition');
@@ -137,6 +146,7 @@ export const deleteDefinition = command(z.string(), async (id) => {
 
 	try {
 		await apiClient.trackers.deleteDefinition(id);
+		await getDefinitions(undefined).refresh();
 		return { success: true };
 	} catch (err) {
 		console.error('Error deleting tracker definition:', err);
@@ -212,7 +222,12 @@ export const startInstance = command(
 		const { apiClient } = locals;
 
 		try {
-			return await apiClient.trackers.startInstance(request as StartTrackerInstanceRequest);
+			const result = await apiClient.trackers.startInstance(request);
+			await Promise.all([
+				getActiveInstances().refresh(),
+				getInstanceHistory(undefined).refresh(),
+			]);
+			return result;
 		} catch (err) {
 			console.error('Error starting tracker instance:', err);
 			throw error(500, 'Failed to start tracker instance');
@@ -227,9 +242,10 @@ export const completeInstance = command(
 	z.object({
 		id: z.string(),
 		request: z.object({
-			reason: z.nativeEnum(CompletionReason),
+			reason: z.enum(CompletionReason),
 			completionNotes: z.string().optional(),
 			completeTreatmentId: z.string().optional(),
+			completedAt: z.date().optional(),
 		}),
 	}),
 	async ({ id, request }) => {
@@ -237,10 +253,15 @@ export const completeInstance = command(
 		const { apiClient } = locals;
 
 		try {
-			return await apiClient.trackers.completeInstance(
+			const result = await apiClient.trackers.completeInstance(
 				id,
 				request as CompleteTrackerInstanceRequest
 			);
+			await Promise.all([
+				getActiveInstances().refresh(),
+				getInstanceHistory(undefined).refresh(),
+			]);
+			return result;
 		} catch (err) {
 			console.error('Error completing tracker instance:', err);
 			throw error(500, 'Failed to complete tracker instance');
@@ -265,6 +286,7 @@ export const ackInstance = command(
 
 		try {
 			await apiClient.trackers.ackInstance(id, request as AckTrackerRequest);
+			await getActiveInstances().refresh();
 			return { success: true };
 		} catch (err) {
 			console.error('Error acknowledging tracker instance:', err);
@@ -282,6 +304,10 @@ export const deleteInstance = command(z.string(), async (id) => {
 
 	try {
 		await apiClient.trackers.deleteInstance(id);
+		await Promise.all([
+			getActiveInstances().refresh(),
+			getInstanceHistory(undefined).refresh(),
+		]);
 		return { success: true };
 	} catch (err) {
 		console.error('Error deleting tracker instance:', err);
@@ -321,7 +347,12 @@ export const applyPreset = command(
 		const { apiClient } = locals;
 
 		try {
-			return await apiClient.trackers.applyPreset(id, (request ?? {}) as ApplyPresetRequest);
+			const result = await apiClient.trackers.applyPreset(id, (request ?? {}));
+			await Promise.all([
+				getActiveInstances().refresh(),
+				getInstanceHistory(undefined).refresh(),
+			]);
+			return result;
 		} catch (err) {
 			console.error('Error applying tracker preset:', err);
 			throw error(500, 'Failed to apply tracker preset');
@@ -343,7 +374,9 @@ export const createPreset = command(
 		const { apiClient } = locals;
 
 		try {
-			return await apiClient.trackers.createPreset(request);
+			const result = await apiClient.trackers.createPreset(request);
+			await getPresets().refresh();
+			return result;
 		} catch (err) {
 			console.error('Error creating tracker preset:', err);
 			throw error(500, 'Failed to create tracker preset');
@@ -360,6 +393,7 @@ export const deletePreset = command(z.string(), async (id) => {
 
 	try {
 		await apiClient.trackers.deletePreset(id);
+		await getPresets().refresh();
 		return { success: true };
 	} catch (err) {
 		console.error('Error deleting tracker preset:', err);

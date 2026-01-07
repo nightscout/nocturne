@@ -44,7 +44,9 @@ export const createSubject = command(
 				roles: request.roles,
 				notes: request.notes,
 			};
-			return await apiClient.authorization.createSubject(subject);
+			const result = await apiClient.authorization.createSubject(subject);
+			await getSubjects().refresh();
+			return result;
 		} catch (err) {
 			console.error('Error creating subject:', err);
 			throw error(500, 'Failed to create subject');
@@ -73,7 +75,9 @@ export const updateSubject = command(
 				roles: request.roles,
 				notes: request.notes,
 			};
-			return await apiClient.authorization.updateSubject(subject);
+			const result = await apiClient.authorization.updateSubject(subject);
+			await getSubjects().refresh();
+			return result;
 		} catch (err) {
 			console.error('Error updating subject:', err);
 			throw error(500, 'Failed to update subject');
@@ -90,6 +94,7 @@ export const deleteSubject = command(z.string(), async (id) => {
 
 	try {
 		await apiClient.authorization.deleteSubject(id);
+		await getSubjects().refresh();
 		return { success: true };
 	} catch (err) {
 		console.error('Error deleting subject:', err);
@@ -135,7 +140,9 @@ export const createRole = command(
 				permissions: request.permissions,
 				notes: request.notes,
 			};
-			return await apiClient.authorization.createRole(role);
+			const result = await apiClient.authorization.createRole(role);
+			await getRoles().refresh();
+			return result;
 		} catch (err) {
 			console.error('Error creating role:', err);
 			throw error(500, 'Failed to create role');
@@ -164,7 +171,9 @@ export const updateRole = command(
 				permissions: request.permissions,
 				notes: request.notes,
 			};
-			return await apiClient.authorization.updateRole(role);
+			const result = await apiClient.authorization.updateRole(role);
+			await getRoles().refresh();
+			return result;
 		} catch (err) {
 			console.error('Error updating role:', err);
 			throw error(500, 'Failed to update role');
@@ -181,6 +190,7 @@ export const deleteRole = command(z.string(), async (id) => {
 
 	try {
 		await apiClient.authorization.deleteRole(id);
+		await getRoles().refresh();
 		return { success: true };
 	} catch (err) {
 		console.error('Error deleting role:', err);

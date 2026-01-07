@@ -3,7 +3,6 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { formatTime } from "$lib/utils";
 
   const realtimeStore = getRealtimeStore();
 

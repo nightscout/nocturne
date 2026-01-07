@@ -44,6 +44,7 @@ export const deleteDemoData = command(async () => {
 
 	try {
 		const result = await apiClient.services.deleteDemoData();
+		await getServicesOverview().refresh();
 		return {
 			success: result.success ?? false,
 			entriesDeleted: result.entriesDeleted,
@@ -67,6 +68,7 @@ export const deleteDataSourceData = command(z.string(), async (dataSourceId) => 
 
 	try {
 		const result = await apiClient.services.deleteDataSourceData(dataSourceId);
+		await getServicesOverview().refresh();
 		return {
 			success: result.success ?? false,
 			entriesDeleted: result.entriesDeleted,
@@ -90,6 +92,7 @@ export const deleteConnectorData = command(z.string(), async (connectorId) => {
 
 	try {
 		const result = await apiClient.services.deleteConnectorData(connectorId);
+		await getServicesOverview().refresh();
 		return {
 			success: result.success ?? false,
 			entriesDeleted: result.entriesDeleted,

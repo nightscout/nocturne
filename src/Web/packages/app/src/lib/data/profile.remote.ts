@@ -155,6 +155,11 @@ export const createProfileForm = form(createProfileSchema, async (data, issue) =
 
     const result = await apiClient.profile.createProfile(newProfile);
 
+    await Promise.all([
+      getProfiles({}).refresh(),
+      getCurrentProfile({}).refresh(),
+    ]);
+
     return {
       success: true,
       message: "Profile created successfully",
@@ -179,6 +184,12 @@ export const updateProfileForm = form(updateProfileSchema, async (data, issue) =
       data.profile as Profile
     );
 
+    await Promise.all([
+      getProfiles({}).refresh(),
+      getCurrentProfile({}).refresh(),
+      getProfileById({ id: data.profileId }).refresh(),
+    ]);
+
     return {
       success: true,
       message: "Profile updated successfully",
@@ -199,6 +210,11 @@ export const deleteProfileForm = form(deleteProfileSchema, async (data, issue) =
 
   try {
     await apiClient.profile.deleteProfile(data.profileId);
+
+    await Promise.all([
+      getProfiles({}).refresh(),
+      getCurrentProfile({}).refresh(),
+    ]);
 
     return {
       success: true,

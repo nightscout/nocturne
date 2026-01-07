@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Entry, Treatment } from "$lib/api";
+  import { TrackerCategory } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
   import { StatusPillBar, TrackerPillBar } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
@@ -160,10 +161,22 @@
   let showCompletionDialog = $state(false);
   let completingInstanceId = $state<string | null>(null);
   let completingInstanceName = $state("");
+  let completingCategory = $state<TrackerCategory | undefined>(undefined);
+  let completingDefinitionId = $state<string | undefined>(undefined);
+  let completingCompletionEventType = $state<string | undefined>(undefined);
 
-  function handleTrackerComplete(instanceId: string, instanceName: string) {
+  function handleTrackerComplete(
+    instanceId: string,
+    instanceName: string,
+    category: TrackerCategory,
+    definitionId: string,
+    completionEventType?: string
+  ) {
     completingInstanceId = instanceId;
     completingInstanceName = instanceName;
+    completingCategory = category;
+    completingDefinitionId = definitionId;
+    completingCompletionEventType = completionEventType;
     showCompletionDialog = true;
   }
 
@@ -171,6 +184,9 @@
     showCompletionDialog = false;
     completingInstanceId = null;
     completingInstanceName = "";
+    completingCategory = undefined;
+    completingDefinitionId = undefined;
+    completingCompletionEventType = undefined;
   }
 </script>
 
@@ -263,5 +279,8 @@
   bind:open={showCompletionDialog}
   instanceId={completingInstanceId}
   instanceName={completingInstanceName}
+  category={completingCategory}
+  definitionId={completingDefinitionId}
+  completionEventType={completingCompletionEventType}
   onClose={handleCompletionDialogClose}
 />

@@ -291,10 +291,10 @@ public class TrackersController : ControllerBase
     /// Get active tracker instances
     /// </summary>
     [HttpGet("instances")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetActiveInstances()
     {
-        var userId = HttpContext.GetSubjectIdString()!;
+        var userId = HttpContext.GetSubjectIdString();
         var instances = await _repository.GetActiveInstancesAsync(userId, HttpContext.RequestAborted);
 
         return Ok(instances.Select(TrackerInstanceDto.FromEntity).ToArray());
@@ -323,13 +323,13 @@ public class TrackersController : ControllerBase
     /// Get upcoming tracker expirations for calendar
     /// </summary>
     [HttpGet("instances/upcoming")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetUpcomingInstances(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
+        var userId = HttpContext.GetSubjectIdString();
         var fromDate = from ?? DateTime.UtcNow;
         var toDate = to ?? DateTime.UtcNow.AddDays(30);
 
@@ -416,6 +416,7 @@ public class TrackersController : ControllerBase
             request.Reason,
             request.CompletionNotes,
             request.CompleteTreatmentId,
+            request.CompletedAt,
             HttpContext.RequestAborted
         );
 
@@ -854,6 +855,10 @@ public class CompleteTrackerInstanceRequest
     public CompletionReason Reason { get; set; }
     public string? CompletionNotes { get; set; }
     public string? CompleteTreatmentId { get; set; }
+    /// <summary>
+    /// Optional custom completion time for backdating. Defaults to now if not provided.
+    /// </summary>
+    public DateTime? CompletedAt { get; set; }
 }
 
 public class AckTrackerRequest

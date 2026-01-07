@@ -21049,6 +21049,12 @@
           "completeTreatmentId": {
             "type": "string",
             "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "Optional custom completion time for backdating. Defaults to now if not provided.",
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
@@ -22494,9 +22500,12 @@
             "nullable": true
           },
           "reservoir_level_override": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpAlertLevel"
+              }
+            ]
           },
           "manufacturer": {
             "type": "string",
@@ -22571,6 +22580,22 @@
             "nullable": true
           }
         }
+      },
+      "PumpAlertLevel": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "None",
+          "Info",
+          "Warn",
+          "Urgent"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ]
       },
       "OpenApsStatus": {
         "type": "object",

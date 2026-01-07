@@ -2,9 +2,10 @@
   import * as Popover from "$lib/components/ui/popover";
   import { Button } from "$lib/components/ui/button";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
-  import { NotificationUrgency } from "$lib/api";
+  import { NotificationUrgency, TrackerCategory } from "$lib/api";
   import { cn } from "$lib/utils";
   import { Check, Clock, Timer } from "lucide-svelte";
+  import { TrackerCategoryIcon } from "$lib/components/icons";
 
   type AlertLevel = "none" | "info" | "warn" | "hazard" | "urgent";
 
@@ -16,7 +17,13 @@
     /** Additional CSS classes */
     class?: string;
     /** Callback when complete button is clicked */
-    onComplete?: (instanceId: string, instanceName: string) => void;
+    onComplete?: (
+      instanceId: string,
+      instanceName: string,
+      category: TrackerCategory,
+      definitionId: string,
+      completionEventType?: string
+    ) => void;
   }
 
   let {
@@ -126,7 +133,13 @@
 
   function handleComplete() {
     popoverOpen = false;
-    onComplete?.(instance.id!, label);
+    onComplete?.(
+      instance.id!,
+      label,
+      instance.category ?? definition?.category ?? TrackerCategory.Custom,
+      (instance.definitionId ?? definition?.id ?? "").toString(),
+      definition?.completionEventType
+    );
   }
 </script>
 
@@ -139,14 +152,20 @@
         aria-hidden="true"
       ></span>
     {/if}
-    <Timer class="relative h-3 w-3 opacity-75" />
+    <TrackerCategoryIcon
+      category={definition?.category ?? TrackerCategory.Custom}
+      class="relative h-3 w-3 opacity-75"
+    />
     <span class="relative text-xs font-normal opacity-75">{label}</span>
     <span class="relative">{ageDisplay}</span>
   </Popover.Trigger>
   <Popover.Content class="w-72 p-0" align="center" side="bottom">
     <div class="px-4 py-3 border-b border-border">
       <h4 class="font-semibold text-sm flex items-center gap-2">
-        <Timer class="h-4 w-4" />
+        <TrackerCategoryIcon
+          category={definition?.category ?? TrackerCategory.Custom}
+          class="h-4 w-4"
+        />
         {label}
       </h4>
       <p class="text-xs text-muted-foreground">Active tracker</p>

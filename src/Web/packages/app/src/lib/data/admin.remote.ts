@@ -32,10 +32,12 @@ export const setTemporaryPassword = command(
     const { apiClient } = locals;
 
     try {
-      return (await apiClient.localAuth.setTemporaryPassword({
+      const result = (await apiClient.localAuth.setTemporaryPassword({
         email: request.email,
         temporaryPassword: request.temporaryPassword,
       })) as SetTemporaryPasswordResponse;
+      await getPendingPasswordResets().refresh();
+      return result;
     } catch (err) {
       console.error("Error setting temporary password:", err);
       throw error(500, "Failed to set temporary password");
@@ -48,9 +50,11 @@ export const handlePasswordReset = command(z.string(), async (requestId) => {
   const { apiClient } = locals;
 
   try {
-    return (await apiClient.localAuth.handlePasswordReset(
+    const result = (await apiClient.localAuth.handlePasswordReset(
       requestId
     )) as HandlePasswordResetResponse;
+    await getPendingPasswordResets().refresh();
+    return result;
   } catch (err) {
     console.error("Error handling password reset request:", err);
     throw error(500, "Failed to handle password reset request");

@@ -25,13 +25,19 @@
   // Calculate current urgency level based on age and thresholds
   function getCurrentUrgency(
     ageHours: number | undefined,
-    thresholds: Array<{ hours: number; urgency: NotificationUrgency }> | undefined
+    thresholds:
+      | Array<{ hours?: number; urgency?: NotificationUrgency }>
+      | undefined
   ): NotificationUrgency {
     if (!ageHours || !thresholds?.length) return NotificationUrgency.Info;
 
     let currentUrgency = NotificationUrgency.Info;
     for (const threshold of thresholds) {
-      if (ageHours >= threshold.hours) {
+      if (
+        threshold.hours !== undefined &&
+        threshold.urgency !== undefined &&
+        ageHours >= threshold.hours
+      ) {
         currentUrgency = threshold.urgency;
       }
     }
@@ -54,7 +60,7 @@
         const age = instance.startedAt
           ? (realtimeStore.now - new Date(instance.startedAt).getTime()) /
             (1000 * 60 * 60)
-          : instance.ageHours ?? 0;
+          : (instance.ageHours ?? 0);
 
         const urgency = getCurrentUrgency(age, def.notificationThresholds);
 
