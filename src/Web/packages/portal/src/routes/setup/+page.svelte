@@ -18,6 +18,9 @@
         AlertCircle,
         CheckCircle2,
         Droplet,
+        Plus,
+        ArrowLeftRight,
+        BookOpen,
     } from "@lucide/svelte";
     import { useSearchParams } from "runed/kit";
     import { z } from "zod";
@@ -27,16 +30,21 @@
     const SetupParamsSchema = z.object({
         type: z
             .enum(["fresh", "migrate", "compatibility-proxy"])
-            .default("fresh"),
+            .optional(),
     });
 
     const params = useSearchParams(SetupParamsSchema);
 
-    // Reactive setup type from URL params
+    // Reactive setup type from URL params - undefined means show type selection
     const setupType = $derived(params.type);
 
+    // Track if user has selected a type (to show configuration)
+    const hasSelectedType = $derived(setupType !== undefined);
+
     $effect(() => {
-        wizardStore.setSetupType(setupType);
+        if (setupType) {
+            wizardStore.setSetupType(setupType);
+        }
     });
 
     let nightscoutUrl = $state("");
@@ -154,22 +162,103 @@
 </script>
 
 <div class="max-w-3xl mx-auto pb-12">
-    <!-- Back Button -->
-    <Button
-        href="/"
-        variant="ghost"
-        size="sm"
-        class="mb-6 gap-1.5 text-muted-foreground hover:text-foreground transition-colors -ml-2"
-    >
-        <ChevronLeft size={18} />
-        Back to setup types
-    </Button>
+    {#if !hasSelectedType}
+        <!-- Type Selection Screen -->
+        <div class="text-center mb-12">
+            <h1
+                class="text-4xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent"
+            >
+                Configure Your Nocturne Instance
+            </h1>
+            <p class="text-lg text-muted-foreground">
+                Choose how you'd like to set up Nocturne
+            </p>
+        </div>
 
-    <!-- Header Section -->
-    <div class="mb-10">
-        <h1 class="text-4xl font-bold tracking-tight mb-3">{pageTitle}</h1>
-        <p class="text-lg text-muted-foreground">{pageDescription}</p>
-    </div>
+        <div class="grid gap-4">
+            <Button
+                href="/setup?type=fresh"
+                variant="ghost"
+                class="h-auto p-6 justify-start text-left border border-border/50 bg-card/50 hover:bg-card hover:border-primary/50"
+            >
+                <div class="flex items-start gap-4 w-full">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center text-primary shrink-0"
+                    >
+                        <Plus size={24} />
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-semibold mb-1">Fresh Install</h2>
+                        <p class="text-muted-foreground font-normal">
+                            New Nocturne instance with no existing data
+                        </p>
+                    </div>
+                </div>
+            </Button>
+
+            <Button
+                href="/setup?type=migrate"
+                variant="ghost"
+                class="h-auto p-6 justify-start text-left border border-border/50 bg-card/50 hover:bg-card hover:border-blue-500/50"
+            >
+                <div class="flex items-start gap-4 w-full">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0"
+                    >
+                        <ArrowLeftRight size={24} />
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-semibold mb-1">
+                            Migrate from Nightscout
+                        </h2>
+                        <p class="text-muted-foreground font-normal">
+                            Import existing data from your Nightscout instance
+                        </p>
+                    </div>
+                </div>
+            </Button>
+
+            <Button
+                href="/setup?type=compatibility-proxy"
+                variant="ghost"
+                class="h-auto p-6 justify-start text-left border border-border/50 bg-card/50 hover:bg-card hover:border-amber-500/50"
+            >
+                <div class="flex items-start gap-4 w-full">
+                    <div
+                        class="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 shrink-0"
+                    >
+                        <BookOpen size={24} />
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-semibold mb-1">
+                            Compatibility Proxy
+                        </h2>
+                        <p class="text-muted-foreground font-normal">
+                            Try Nocturne alongside your existing Nightscout - "try
+                            before you buy"
+                        </p>
+                    </div>
+                </div>
+            </Button>
+        </div>
+    {:else}
+        <!-- Configuration Screen -->
+        <!-- Back Button -->
+        <Button
+            href="/setup"
+            variant="ghost"
+            size="sm"
+            class="mb-6 gap-1.5 text-muted-foreground hover:text-foreground transition-colors -ml-2"
+        >
+            <ChevronLeft size={18} />
+            Back to setup types
+        </Button>
+
+        <!-- Header Section -->
+        <div class="mb-10">
+            <h1 class="text-4xl font-bold tracking-tight mb-3">{pageTitle}</h1>
+            <p class="text-lg text-muted-foreground">{pageDescription}</p>
+        </div>
 
     <div class="space-y-6">
         <!-- Nightscout Configuration (for migrate/proxy modes) -->
@@ -563,4 +652,5 @@
             </Button>
         </div>
     </div>
+    {/if}
 </div>
