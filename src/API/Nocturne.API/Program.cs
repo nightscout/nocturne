@@ -213,7 +213,7 @@ builder.Services.AddScoped<IOidcAuthService, OidcAuthService>();
 // Local identity provider services (built-in authentication without external OIDC)
 builder.Services.AddScoped<ILocalIdentityService, LocalIdentityService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddHostedService<AdminSeedService>();
+builder.Services.AddHostedService<UserSeedService>();
 builder.Services.AddHostedService<AuthorizationSeedService>();
 
 // Register authentication handlers for the middleware pipeline

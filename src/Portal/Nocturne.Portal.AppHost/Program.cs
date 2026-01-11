@@ -14,7 +14,6 @@ var api = builder
     .WithHttpsDeveloperCertificate()
     .WithHttpsEndpoint(port: 1610);
 
-
 // Conditional demo instance (Nocturne API + Web with demo data)
 var demoEnabled = builder.Configuration.GetValue<bool>("Parameters:DemoApi:Enabled", false);
 
@@ -26,17 +25,18 @@ if (demoEnabled)
     Console.WriteLine("[Portal] Demo API enabled - adding demo instance");
 
     // Add dedicated PostgreSQL for demo
-    var demoPostgres = builder.AddPostgres("demo-postgres")
+    var demoPostgres = builder
+        .AddPostgres("demo-postgres")
         .WithLifetime(ContainerLifetime.Persistent)
         .WithDataVolume("demo-postgres-data");
 
     var demoDatabase = demoPostgres.AddDatabase("nocturne-postgres", "nocturne_demo");
 
-
     // Add Nocturne API in demo mode
     // Note: We pass launchProfileName: null to avoid port conflicts with the default
     // launchSettings.json ports (1612/7209) which may already be in use by other instances
-    demoApi = builder.AddProject<Projects.Nocturne_API>("demo-api", launchProfileName: null)
+    demoApi = builder
+        .AddProject<Projects.Nocturne_API>("demo-api", launchProfileName: null)
         .WithReference(demoDatabase)
         .WaitFor(demoDatabase)
         .WithHttpsDeveloperCertificate()
@@ -62,7 +62,8 @@ if (demoEnabled)
         .WithEnvironment("LocalIdentity__SeedUsers__2__Roles__1", "caregiver");
 
     // Add Demo Data Service
-    var demoService = builder.AddProject<Projects.Nocturne_Services_Demo>("demo-service")
+    var demoService = builder
+        .AddProject<Projects.Nocturne_Services_Demo>("demo-service")
         .WithReference(demoDatabase)
         .WaitFor(demoDatabase)
         .WaitFor(demoApi)
@@ -74,11 +75,11 @@ if (demoEnabled)
         .WithEnvironment("DemoMode__IntervalMinutes", "5")
         .WithEnvironment("DemoMode__ResetIntervalMinutes", "20");
 
-    demoApi
-        .WithEnvironment("DemoService__Url", demoService.GetEndpoint("demo-service-https"));
+    demoApi.WithEnvironment("DemoService__Url", demoService.GetEndpoint("demo-service-https"));
 
     // Add Nocturne Web pointing to demo API
-    demoWeb = builder.AddViteApp("demo-web", "../../Web/packages/app")
+    demoWeb = builder
+        .AddViteApp("demo-web", "../../Web/packages/app")
         .WithReference(demoApi)
         .WaitFor(demoApi)
         .WithEnvironment("PUBLIC_API_URL", demoApi.GetEndpoint("demo-api"))
@@ -90,7 +91,8 @@ if (demoEnabled)
 }
 
 // Add the Portal Web frontend
-var portalWeb = builder.AddViteApp("portal-web", "../../Web/packages/portal")
+var portalWeb = builder
+    .AddViteApp("portal-web", "../../Web/packages/portal")
     .WithReference(api)
     .WaitFor(api)
     .WithEnvironment("VITE_PORTAL_API_URL", api.GetEndpoint("https"))

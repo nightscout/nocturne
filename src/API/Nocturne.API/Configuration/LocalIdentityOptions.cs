@@ -47,31 +47,42 @@ public class LocalIdentityOptions
     public TokenSettings Tokens { get; set; } = new();
 
     /// <summary>
-    /// Admin account to seed on startup (optional)
-    /// If set, this account will be created automatically if it doesn't exist
+    /// Users to seed on startup (optional)
+    /// These accounts will be created automatically if they don't exist
     /// </summary>
-    public AdminSeedOptions? AdminSeed { get; set; }
+    public List<SeedUserOptions> SeedUsers { get; set; } = new();
 }
 
 /// <summary>
-/// Options for seeding an initial admin account
+/// Options for seeding a user account on startup
 /// </summary>
-public class AdminSeedOptions
+public class SeedUserOptions
 {
     /// <summary>
-    /// Admin email address
+    /// User email address
     /// </summary>
     public string Email { get; set; } = string.Empty;
 
     /// <summary>
-    /// Admin password (only used for initial seeding)
+    /// User password (only used for initial seeding)
     /// </summary>
     public string Password { get; set; } = string.Empty;
 
     /// <summary>
-    /// Admin display name
+    /// Display name (optional)
     /// </summary>
-    public string? DisplayName { get; set; } = "Admin";
+    public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// Roles to assign to the seeded user
+    /// </summary>
+    public List<string> Roles { get; set; } = new();
+
+    /// <summary>
+    /// If true, assigns the admin role and ensures the admin role exists
+    /// This user will have full administrative access
+    /// </summary>
+    public bool IsAdmin { get; set; } = false;
 }
 
 /// <summary>

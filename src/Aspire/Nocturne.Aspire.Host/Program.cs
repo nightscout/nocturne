@@ -261,9 +261,8 @@ class Program
         var webPackagePath = Path.Combine(solutionRoot, "src", "Web", "packages", "app");
 
 #pragma warning disable ASPIRECERTIFICATES001
-        var web = JavaScriptHostingExtensions.AddViteApp(
-                builder, ServiceNames.NocturneWeb, webPackagePath
-            )
+        var web = JavaScriptHostingExtensions
+            .AddViteApp(builder, ServiceNames.NocturneWeb, webPackagePath)
             .WithPnpm()
             .WithDeveloperCertificateForVite()
             .WithHttpsEndpoint(env: "PORT", port: 1612)
