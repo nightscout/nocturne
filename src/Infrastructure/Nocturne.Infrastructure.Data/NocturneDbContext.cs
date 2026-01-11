@@ -187,6 +187,18 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<SystemEventEntity> SystemEvents { get; set; }
 
+    // Migration tracking entities
+
+    /// <summary>
+    /// Gets or sets the MigrationSources table for tracking migration sources (Nightscout instances or MongoDB databases)
+    /// </summary>
+    public DbSet<MigrationSourceEntity> MigrationSources { get; set; }
+
+    /// <summary>
+    /// Gets or sets the MigrationRuns table for tracking individual migration job runs
+    /// </summary>
+    public DbSet<MigrationRunEntity> MigrationRuns { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -895,6 +907,51 @@ public class NocturneDbContext : DbContext
             .Entity<SystemEventEntity>()
             .HasIndex(e => e.OriginalId)
             .HasDatabaseName("ix_system_events_original_id");
+
+        // Migration source indexes
+        modelBuilder
+            .Entity<MigrationSourceEntity>()
+            .HasIndex(s => s.SourceIdentifier)
+            .HasDatabaseName("ix_migration_sources_identifier")
+            .IsUnique();
+
+        modelBuilder
+            .Entity<MigrationSourceEntity>()
+            .HasIndex(s => s.LastMigrationAt)
+            .HasDatabaseName("ix_migration_sources_last_migration");
+
+        modelBuilder
+            .Entity<MigrationSourceEntity>()
+            .HasIndex(s => s.Mode)
+            .HasDatabaseName("ix_migration_sources_mode");
+
+        modelBuilder
+            .Entity<MigrationSourceEntity>()
+            .HasIndex(s => s.CreatedAt)
+            .HasDatabaseName("ix_migration_sources_created_at")
+            .IsDescending();
+
+        // Migration run indexes
+        modelBuilder
+            .Entity<MigrationRunEntity>()
+            .HasIndex(r => r.SourceId)
+            .HasDatabaseName("ix_migration_runs_source_id");
+
+        modelBuilder
+            .Entity<MigrationRunEntity>()
+            .HasIndex(r => r.State)
+            .HasDatabaseName("ix_migration_runs_state");
+
+        modelBuilder
+            .Entity<MigrationRunEntity>()
+            .HasIndex(r => r.StartedAt)
+            .HasDatabaseName("ix_migration_runs_started_at")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<MigrationRunEntity>()
+            .HasIndex(r => new { r.SourceId, r.State })
+            .HasDatabaseName("ix_migration_runs_source_state");
 
     }
 

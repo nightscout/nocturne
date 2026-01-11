@@ -16,7 +16,7 @@ public class CompatibilityController : ControllerBase
 {
     private readonly IDiscrepancyPersistenceService _persistenceService;
     private readonly DiscrepancyAnalysisRepository _repository;
-    private readonly ICompatibilityReportService _reportService;
+
     private readonly CompatibilityProxyConfiguration _configuration;
     private readonly ILogger<CompatibilityController> _logger;
 
@@ -26,14 +26,13 @@ public class CompatibilityController : ControllerBase
     public CompatibilityController(
         IDiscrepancyPersistenceService persistenceService,
         DiscrepancyAnalysisRepository repository,
-        ICompatibilityReportService reportService,
         IOptions<CompatibilityProxyConfiguration> configuration,
         ILogger<CompatibilityController> logger
     )
     {
         _persistenceService = persistenceService;
         _repository = repository;
-        _reportService = reportService;
+
         _configuration = configuration.Value;
         _logger = logger;
     }
@@ -249,59 +248,9 @@ public class CompatibilityController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get migration readiness assessment
-    /// </summary>
-    [HttpGet("migration-assessment")]
-    [ProducesResponseType(typeof(MigrationReadinessReport), StatusCodes.Status200OK)]
-    public async Task<ActionResult<MigrationReadinessReport>> GetMigrationAssessment(
-        [FromQuery] DateTimeOffset? fromDate = null,
-        [FromQuery] DateTimeOffset? toDate = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var report = await _reportService.GenerateMigrationAssessmentAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
-            return Ok(report);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating migration assessment");
-            return StatusCode(500, new { error = "Failed to generate migration assessment" });
-        }
-    }
 
-    /// <summary>
-    /// Get text report
-    /// </summary>
-    [HttpGet("report")]
-    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-    public async Task<ActionResult<string>> GetTextReport(
-        [FromQuery] DateTimeOffset? fromDate = null,
-        [FromQuery] DateTimeOffset? toDate = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var report = await _reportService.GenerateTextReportAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
-            return Ok(new { report });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating text report");
-            return StatusCode(500, new { error = "Failed to generate text report" });
-        }
-    }
+
+
 
     /// <summary>
     /// Test API compatibility by comparing responses from Nightscout and Nocturne

@@ -118,4 +118,27 @@ public class MigrationController : ControllerBase
         var history = await _migrationService.GetHistoryAsync();
         return Ok(history);
     }
+
+    /// <summary>
+    /// Get pending migration configuration from environment variables
+    /// </summary>
+    [HttpGet("pending-config")]
+    [ProducesResponseType(typeof(PendingMigrationConfig), StatusCodes.Status200OK)]
+    public ActionResult<PendingMigrationConfig> GetPendingConfig()
+    {
+        var config = _migrationService.GetPendingConfig();
+        return Ok(config);
+    }
+
+    /// <summary>
+    /// Get saved migration sources with their last migration timestamps
+    /// </summary>
+    [HttpGet("sources")]
+    [ProducesResponseType(typeof(IReadOnlyList<MigrationSourceDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MigrationSourceDto>>> GetSources(CancellationToken ct)
+    {
+        var sources = await _migrationService.GetSourcesAsync(ct);
+        return Ok(sources);
+    }
 }
+

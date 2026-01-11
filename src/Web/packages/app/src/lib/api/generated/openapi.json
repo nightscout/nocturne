@@ -3110,92 +3110,6 @@
         }
       }
     },
-    "/api/v4/compatibility/migration-assessment": {
-      "get": {
-        "tags": [
-          "Compatibility"
-        ],
-        "summary": "Get migration readiness assessment",
-        "operationId": "Compatibility_GetMigrationAssessment",
-        "parameters": [
-          {
-            "name": "fromDate",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "toDate",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MigrationReadinessReport"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/compatibility/report": {
-      "get": {
-        "tags": [
-          "Compatibility"
-        ],
-        "summary": "Get text report",
-        "operationId": "Compatibility_GetTextReport",
-        "parameters": [
-          {
-            "name": "fromDate",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "toDate",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v4/compatibility/test": {
       "post": {
         "tags": [
@@ -3721,84 +3635,6 @@
         }
       }
     },
-    "/api/v4/devices/{id}/health": {
-      "get": {
-        "tags": [
-          "V4 Device Health"
-        ],
-        "summary": "Get device health information",
-        "operationId": "DeviceHealth_GetDeviceHealth",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "Device identifier",
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Device health information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceHealthAnalysis"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "V4 Device Health"
-        ],
-        "summary": "Update device health metrics",
-        "operationId": "DeviceHealth_UpdateDeviceHealth",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "Device identifier",
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "update",
-          "description": "Device health update",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeviceHealthUpdate"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": "Success response",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v4/devices/{id}": {
       "get": {
         "tags": [
@@ -3911,13 +3747,13 @@
         }
       }
     },
-    "/api/v4/devices/{id}/report": {
-      "get": {
+    "/api/v4/devices/{id}/health": {
+      "put": {
         "tags": [
           "V4 Device Health"
         ],
-        "summary": "Get device health report",
-        "operationId": "DeviceHealth_GetDeviceHealthReport",
+        "summary": "Update device health metrics",
+        "operationId": "DeviceHealth_UpdateDeviceHealth",
         "parameters": [
           {
             "name": "id",
@@ -3928,59 +3764,29 @@
               "type": "string"
             },
             "x-position": 1
-          },
-          {
-            "name": "period",
-            "in": "query",
-            "description": "Report period in days (default: 30)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 30
-            },
-            "x-position": 2
           }
         ],
-        "responses": {
-          "200": {
-            "description": "Device health report",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceHealthReport"
-                }
+        "requestBody": {
+          "x-name": "update",
+          "description": "Device health update",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceHealthUpdate"
               }
             }
-          }
-        }
-      }
-    },
-    "/api/v4/devices/{id}/maintenance/prediction": {
-      "get": {
-        "tags": [
-          "V4 Device Health"
-        ],
-        "summary": "Get maintenance predictions for a device",
-        "operationId": "DeviceHealth_GetMaintenancePrediction",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "Device identifier",
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
+          },
+          "required": true,
+          "x-position": 2
+        },
         "responses": {
           "200": {
-            "description": "Maintenance prediction",
+            "description": "Success response",
             "content": {
-              "application/json": {
+              "application/octet-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/MaintenancePrediction"
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
@@ -4220,96 +4026,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CompatibilityStatus"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/Discrepancy/reports/text": {
-      "get": {
-        "tags": [
-          "V4 Discrepancy"
-        ],
-        "summary": "Generate a text-based compatibility report",
-        "operationId": "Discrepancy_GetTextReport",
-        "parameters": [
-          {
-            "name": "fromDate",
-            "in": "query",
-            "description": "Start date for report (optional)",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "toDate",
-            "in": "query",
-            "description": "End date for report (optional)",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Text-based compatibility report",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/Discrepancy/reports/migration-assessment": {
-      "get": {
-        "tags": [
-          "V4 Discrepancy"
-        ],
-        "summary": "Generate a migration readiness assessment",
-        "operationId": "Discrepancy_GetMigrationAssessment",
-        "parameters": [
-          {
-            "name": "fromDate",
-            "in": "query",
-            "description": "Start date for assessment (optional)",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "toDate",
-            "in": "query",
-            "description": "End date for assessment (optional)",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Migration readiness assessment",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MigrationReadinessReport"
                 }
               }
             }
@@ -4670,6 +4386,51 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/MigrationJobInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/migration/pending-config": {
+      "get": {
+        "tags": [
+          "Migration"
+        ],
+        "summary": "Get pending migration configuration from environment variables",
+        "operationId": "Migration_GetPendingConfig",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingMigrationConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/migration/sources": {
+      "get": {
+        "tags": [
+          "Migration"
+        ],
+        "summary": "Get saved migration sources with their last migration timestamps",
+        "operationId": "Migration_GetSources",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MigrationSourceDto"
                   }
                 }
               }
@@ -18129,87 +17890,6 @@
           2
         ]
       },
-      "MigrationReadinessReport": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "periodStart": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "periodEnd": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "overallCompatibilityScore": {
-            "type": "number",
-            "format": "double"
-          },
-          "totalRequestsAnalyzed": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "criticalIssues": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "majorIssues": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "minorIssues": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "readinessLevel": {
-            "$ref": "#/components/schemas/MigrationReadinessLevel"
-          },
-          "recommendation": {
-            "type": "string"
-          },
-          "riskAreas": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "performanceRatio": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "performanceWarning": {
-            "type": "string",
-            "nullable": true
-          },
-          "performanceNote": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "MigrationReadinessLevel": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "NotReady",
-          "NeedsWork",
-          "NearReady",
-          "Ready"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3
-        ]
-      },
       "ManualTestResult": {
         "type": "object",
         "description": "Result of manual API comparison test",
@@ -18938,108 +18618,6 @@
           }
         }
       },
-      "DeviceHealthAnalysis": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "deviceId": {
-            "type": "string"
-          },
-          "healthScore": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "healthStatus": {
-            "$ref": "#/components/schemas/DeviceHealthStatus"
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "issues": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DeviceHealthIssue"
-            }
-          },
-          "recommendations": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "nextMaintenanceDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          }
-        }
-      },
-      "DeviceHealthStatus": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Excellent",
-          "Good",
-          "Fair",
-          "Poor",
-          "Critical"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ]
-      },
-      "DeviceHealthIssue": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "type": {
-            "$ref": "#/components/schemas/DeviceIssueType"
-          },
-          "severity": {
-            "$ref": "#/components/schemas/DeviceIssueSeverity"
-          },
-          "description": {
-            "type": "string"
-          },
-          "detectedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "suggestedResolution": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "DeviceIssueType": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "LowBattery",
-          "SensorExpiring",
-          "CalibrationOverdue",
-          "DataGap",
-          "CommunicationError",
-          "DeviceError",
-          "PerformanceDegradation",
-          "MaintenanceRequired"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7
-        ]
-      },
       "DeviceSettingsUpdate": {
         "type": "object",
         "additionalProperties": false,
@@ -19103,102 +18681,6 @@
             "additionalProperties": {}
           }
         }
-      },
-      "DeviceHealthReport": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "deviceId": {
-            "type": "string"
-          },
-          "periodStart": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "periodEnd": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "averageHealthScore": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "uptimePercentage": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "totalAlerts": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "healthTrend": {
-            "$ref": "#/components/schemas/HealthTrend"
-          },
-          "keyMetrics": {
-            "type": "object",
-            "additionalProperties": {}
-          }
-        }
-      },
-      "HealthTrend": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Improving",
-          "Stable",
-          "Declining",
-          "Unknown"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3
-        ]
-      },
-      "MaintenancePrediction": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "deviceId": {
-            "type": "string"
-          },
-          "predictedMaintenanceDate": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "confidenceLevel": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "maintenanceType": {
-            "$ref": "#/components/schemas/MaintenanceType"
-          },
-          "reasons": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "MaintenanceType": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "BatteryReplacement",
-          "SensorReplacement",
-          "Calibration",
-          "GeneralMaintenance",
-          "DeviceReplacement"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ]
       },
       "DiscrepancyAnalysisDto": {
         "type": "object",
@@ -19440,8 +18922,45 @@
           "sourceDescription": {
             "type": "string",
             "nullable": true
+          },
+          "state": {
+            "$ref": "#/components/schemas/MigrationJobState"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
           }
         }
+      },
+      "MigrationJobState": {
+        "type": "integer",
+        "description": "Current state of a migration job",
+        "x-enumNames": [
+          "Pending",
+          "Validating",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
       },
       "StartMigrationRequest": {
         "type": "object",
@@ -19543,26 +19062,6 @@
           }
         }
       },
-      "MigrationJobState": {
-        "type": "integer",
-        "description": "Current state of a migration job",
-        "x-enumNames": [
-          "Pending",
-          "Validating",
-          "Running",
-          "Completed",
-          "Failed",
-          "Cancelled"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5
-        ]
-      },
       "CollectionProgress": {
         "type": "object",
         "description": "Progress for a specific collection",
@@ -19585,6 +19084,91 @@
           },
           "isComplete": {
             "type": "boolean"
+          }
+        }
+      },
+      "PendingMigrationConfig": {
+        "type": "object",
+        "description": "Pending migration configuration from environment variables",
+        "additionalProperties": false,
+        "properties": {
+          "hasPendingConfig": {
+            "type": "boolean",
+            "description": "Whether there is a pending migration configuration in env vars"
+          },
+          "mode": {
+            "description": "Migration mode from MIGRATION_MODE env var",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MigrationMode"
+              }
+            ]
+          },
+          "nightscoutUrl": {
+            "type": "string",
+            "description": "Nightscout URL from MIGRATION_NS_URL env var",
+            "nullable": true
+          },
+          "hasApiSecret": {
+            "type": "boolean",
+            "description": "Whether MIGRATION_NS_API_SECRET is set (never returns the actual secret)"
+          },
+          "hasMongoConnectionString": {
+            "type": "boolean",
+            "description": "Whether MIGRATION_MONGO_CONNECTION_STRING is set (never returns the actual string)"
+          },
+          "mongoDatabaseName": {
+            "type": "string",
+            "description": "MongoDB database name from MIGRATION_MONGO_DATABASE_NAME env var",
+            "nullable": true
+          }
+        }
+      },
+      "MigrationSourceDto": {
+        "type": "object",
+        "description": "Migration source DTO for API responses",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this source",
+            "format": "guid"
+          },
+          "mode": {
+            "description": "Migration mode (Api or MongoDb)",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MigrationMode"
+              }
+            ]
+          },
+          "nightscoutUrl": {
+            "type": "string",
+            "description": "Nightscout URL (for API mode)",
+            "nullable": true
+          },
+          "mongoDatabaseName": {
+            "type": "string",
+            "description": "MongoDB database name (for MongoDB mode)",
+            "nullable": true
+          },
+          "lastMigrationAt": {
+            "type": "string",
+            "description": "When the last successful migration completed",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastMigratedDataTimestamp": {
+            "type": "string",
+            "description": "Newest data timestamp migrated (for \"since last\" default)",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When this source was first added",
+            "format": "date-time"
           }
         }
       },

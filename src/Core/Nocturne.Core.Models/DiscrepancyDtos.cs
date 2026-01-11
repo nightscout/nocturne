@@ -80,37 +80,7 @@ public class CompatibilityStatus
     public int MinorIssues { get; set; }
 }
 
-/// <summary>
-/// Migration readiness assessment report
-/// </summary>
-public class MigrationReadinessReport
-{
-    public DateTimeOffset GeneratedAt { get; set; }
-    public DateTimeOffset? PeriodStart { get; set; }
-    public DateTimeOffset? PeriodEnd { get; set; }
-    public double OverallCompatibilityScore { get; set; }
-    public int TotalRequestsAnalyzed { get; set; }
-    public int CriticalIssues { get; set; }
-    public int MajorIssues { get; set; }
-    public int MinorIssues { get; set; }
-    public MigrationReadinessLevel ReadinessLevel { get; set; }
-    public string Recommendation { get; set; } = string.Empty;
-    public List<string> RiskAreas { get; set; } = new();
-    public double? PerformanceRatio { get; set; }
-    public string? PerformanceWarning { get; set; }
-    public string? PerformanceNote { get; set; }
-}
 
-/// <summary>
-/// Migration readiness levels
-/// </summary>
-public enum MigrationReadinessLevel
-{
-    NotReady = 0,
-    NeedsWork = 1,
-    NearReady = 2,
-    Ready = 3,
-}
 
 /// <summary>
 /// Type of response match

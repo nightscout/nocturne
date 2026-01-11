@@ -3922,92 +3922,6 @@ export class CompatibilityClient {
     }
 
     /**
-     * Get migration readiness assessment
-     * @param fromDate (optional) 
-     * @param toDate (optional) 
-     */
-    getMigrationAssessment(fromDate?: Date | null | undefined, toDate?: Date | null | undefined, signal?: AbortSignal): Promise<MigrationReadinessReport> {
-        let url_ = this.baseUrl + "/api/v4/compatibility/migration-assessment?";
-        if (fromDate !== undefined && fromDate !== null)
-            url_ += "fromDate=" + encodeURIComponent(fromDate ? "" + fromDate.toISOString() : "") + "&";
-        if (toDate !== undefined && toDate !== null)
-            url_ += "toDate=" + encodeURIComponent(toDate ? "" + toDate.toISOString() : "") + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetMigrationAssessment(_response);
-        });
-    }
-
-    protected processGetMigrationAssessment(response: Response): Promise<MigrationReadinessReport> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MigrationReadinessReport;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<MigrationReadinessReport>(null as any);
-    }
-
-    /**
-     * Get text report
-     * @param fromDate (optional) 
-     * @param toDate (optional) 
-     */
-    getTextReport(fromDate?: Date | null | undefined, toDate?: Date | null | undefined, signal?: AbortSignal): Promise<string> {
-        let url_ = this.baseUrl + "/api/v4/compatibility/report?";
-        if (fromDate !== undefined && fromDate !== null)
-            url_ += "fromDate=" + encodeURIComponent(fromDate ? "" + fromDate.toISOString() : "") + "&";
-        if (toDate !== undefined && toDate !== null)
-            url_ += "toDate=" + encodeURIComponent(toDate ? "" + toDate.toISOString() : "") + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTextReport(_response);
-        });
-    }
-
-    protected processGetTextReport(response: Response): Promise<string> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as string;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<string>(null as any);
-    }
-
-    /**
      * Test API compatibility by comparing responses from Nightscout and Nocturne
      */
     testApiComparison(request: ManualTestRequest, signal?: AbortSignal): Promise<ManualTestResult> {
@@ -4778,100 +4692,6 @@ export class DeviceHealthClient {
     }
 
     /**
-     * Get device health information
-     * @param id Device identifier
-     * @return Device health information
-     */
-    getDeviceHealth(id: string, signal?: AbortSignal): Promise<DeviceHealthAnalysis> {
-        let url_ = this.baseUrl + "/api/v4/devices/{id}/health";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceHealth(_response);
-        });
-    }
-
-    protected processGetDeviceHealth(response: Response): Promise<DeviceHealthAnalysis> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceHealthAnalysis;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceHealthAnalysis>(null as any);
-    }
-
-    /**
-     * Update device health metrics
-     * @param id Device identifier
-     * @param update Device health update
-     * @return Success response
-     */
-    updateDeviceHealth(id: string, update: DeviceHealthUpdate, signal?: AbortSignal): Promise<FileResponse> {
-        let url_ = this.baseUrl + "/api/v4/devices/{id}/health";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(update);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "PUT",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/octet-stream"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processUpdateDeviceHealth(_response);
-        });
-    }
-
-    protected processUpdateDeviceHealth(response: Response): Promise<FileResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<FileResponse>(null as any);
-    }
-
-    /**
      * Get device information
      * @param id Device identifier
      * @return Device information
@@ -5013,92 +4833,55 @@ export class DeviceHealthClient {
     }
 
     /**
-     * Get device health report
+     * Update device health metrics
      * @param id Device identifier
-     * @param period (optional) Report period in days (default: 30)
-     * @return Device health report
+     * @param update Device health update
+     * @return Success response
      */
-    getDeviceHealthReport(id: string, period?: number | undefined, signal?: AbortSignal): Promise<DeviceHealthReport> {
-        let url_ = this.baseUrl + "/api/v4/devices/{id}/report?";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        if (period === null)
-            throw new globalThis.Error("The parameter 'period' cannot be null.");
-        else if (period !== undefined)
-            url_ += "period=" + encodeURIComponent("" + period) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceHealthReport(_response);
-        });
-    }
-
-    protected processGetDeviceHealthReport(response: Response): Promise<DeviceHealthReport> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceHealthReport;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceHealthReport>(null as any);
-    }
-
-    /**
-     * Get maintenance predictions for a device
-     * @param id Device identifier
-     * @return Maintenance prediction
-     */
-    getMaintenancePrediction(id: string, signal?: AbortSignal): Promise<MaintenancePrediction> {
-        let url_ = this.baseUrl + "/api/v4/devices/{id}/maintenance/prediction";
+    updateDeviceHealth(id: string, update: DeviceHealthUpdate, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/devices/{id}/health";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
         url_ = url_.replace("{id}", encodeURIComponent("" + id));
         url_ = url_.replace(/[?&]$/, "");
 
+        const content_ = JSON.stringify(update);
+
         let options_: RequestInit = {
-            method: "GET",
+            body: content_,
+            method: "PUT",
             signal,
             headers: {
-                "Accept": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "application/octet-stream"
             }
         };
 
         return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetMaintenancePrediction(_response);
+            return this.processUpdateDeviceHealth(_response);
         });
     }
 
-    protected processGetMaintenancePrediction(response: Response): Promise<MaintenancePrediction> {
+    protected processUpdateDeviceHealth(response: Response): Promise<FileResponse> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MaintenancePrediction;
-            return result200;
-            });
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<MaintenancePrediction>(null as any);
+        return Promise.resolve<FileResponse>(null as any);
     }
 }
 
@@ -5338,94 +5121,6 @@ export class DiscrepancyClient {
             });
         }
         return Promise.resolve<CompatibilityStatus>(null as any);
-    }
-
-    /**
-     * Generate a text-based compatibility report
-     * @param fromDate (optional) Start date for report (optional)
-     * @param toDate (optional) End date for report (optional)
-     * @return Text-based compatibility report
-     */
-    getTextReport(fromDate?: Date | null | undefined, toDate?: Date | null | undefined, signal?: AbortSignal): Promise<string> {
-        let url_ = this.baseUrl + "/api/v4/Discrepancy/reports/text?";
-        if (fromDate !== undefined && fromDate !== null)
-            url_ += "fromDate=" + encodeURIComponent(fromDate ? "" + fromDate.toISOString() : "") + "&";
-        if (toDate !== undefined && toDate !== null)
-            url_ += "toDate=" + encodeURIComponent(toDate ? "" + toDate.toISOString() : "") + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTextReport(_response);
-        });
-    }
-
-    protected processGetTextReport(response: Response): Promise<string> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as string;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<string>(null as any);
-    }
-
-    /**
-     * Generate a migration readiness assessment
-     * @param fromDate (optional) Start date for assessment (optional)
-     * @param toDate (optional) End date for assessment (optional)
-     * @return Migration readiness assessment
-     */
-    getMigrationAssessment(fromDate?: Date | null | undefined, toDate?: Date | null | undefined, signal?: AbortSignal): Promise<MigrationReadinessReport> {
-        let url_ = this.baseUrl + "/api/v4/Discrepancy/reports/migration-assessment?";
-        if (fromDate !== undefined && fromDate !== null)
-            url_ += "fromDate=" + encodeURIComponent(fromDate ? "" + fromDate.toISOString() : "") + "&";
-        if (toDate !== undefined && toDate !== null)
-            url_ += "toDate=" + encodeURIComponent(toDate ? "" + toDate.toISOString() : "") + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetMigrationAssessment(_response);
-        });
-    }
-
-    protected processGetMigrationAssessment(response: Response): Promise<MigrationReadinessReport> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MigrationReadinessReport;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<MigrationReadinessReport>(null as any);
     }
 
     /**
@@ -5892,6 +5587,80 @@ export class MigrationClient {
             });
         }
         return Promise.resolve<MigrationJobInfo[]>(null as any);
+    }
+
+    /**
+     * Get pending migration configuration from environment variables
+     */
+    getPendingConfig(signal?: AbortSignal): Promise<PendingMigrationConfig> {
+        let url_ = this.baseUrl + "/api/v4/migration/pending-config";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPendingConfig(_response);
+        });
+    }
+
+    protected processGetPendingConfig(response: Response): Promise<PendingMigrationConfig> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PendingMigrationConfig;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PendingMigrationConfig>(null as any);
+    }
+
+    /**
+     * Get saved migration sources with their last migration timestamps
+     */
+    getSources(signal?: AbortSignal): Promise<MigrationSourceDto[]> {
+        let url_ = this.baseUrl + "/api/v4/migration/sources";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSources(_response);
+        });
+    }
+
+    protected processGetSources(response: Response): Promise<MigrationSourceDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MigrationSourceDto[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<MigrationSourceDto[]>(null as any);
     }
 }
 
@@ -17124,30 +16893,6 @@ export enum DiscrepancySeverity {
     Critical = 2,
 }
 
-export interface MigrationReadinessReport {
-    generatedAt?: Date;
-    periodStart?: Date | undefined;
-    periodEnd?: Date | undefined;
-    overallCompatibilityScore?: number;
-    totalRequestsAnalyzed?: number;
-    criticalIssues?: number;
-    majorIssues?: number;
-    minorIssues?: number;
-    readinessLevel?: MigrationReadinessLevel;
-    recommendation?: string;
-    riskAreas?: string[];
-    performanceRatio?: number | undefined;
-    performanceWarning?: string | undefined;
-    performanceNote?: string | undefined;
-}
-
-export enum MigrationReadinessLevel {
-    NotReady = 0,
-    NeedsWork = 1,
-    NearReady = 2,
-    Ready = 3,
-}
-
 /** Result of manual API comparison test */
 export interface ManualTestResult {
     /** The API path that was tested */
@@ -17396,43 +17141,6 @@ export interface DeviceRegistrationRequest {
     sensorExpiration?: Date | undefined;
 }
 
-export interface DeviceHealthAnalysis {
-    deviceId?: string;
-    healthScore?: number;
-    healthStatus?: DeviceHealthStatus;
-    timestamp?: Date;
-    issues?: DeviceHealthIssue[];
-    recommendations?: string[];
-    nextMaintenanceDate?: Date | undefined;
-}
-
-export enum DeviceHealthStatus {
-    Excellent = 0,
-    Good = 1,
-    Fair = 2,
-    Poor = 3,
-    Critical = 4,
-}
-
-export interface DeviceHealthIssue {
-    type?: DeviceIssueType;
-    severity?: DeviceIssueSeverity;
-    description?: string;
-    detectedAt?: Date;
-    suggestedResolution?: string | undefined;
-}
-
-export enum DeviceIssueType {
-    LowBattery = 0,
-    SensorExpiring = 1,
-    CalibrationOverdue = 2,
-    DataGap = 3,
-    CommunicationError = 4,
-    DeviceError = 5,
-    PerformanceDegradation = 6,
-    MaintenanceRequired = 7,
-}
-
 export interface DeviceSettingsUpdate {
     batteryWarningThreshold?: number | undefined;
     sensorExpirationWarningHours?: number | undefined;
@@ -17447,40 +17155,6 @@ export interface DeviceHealthUpdate {
     status?: DeviceStatusType | undefined;
     lastErrorMessage?: string | undefined;
     deviceSpecificData?: { [key: string]: any; } | undefined;
-}
-
-export interface DeviceHealthReport {
-    deviceId?: string;
-    periodStart?: Date;
-    periodEnd?: Date;
-    averageHealthScore?: number;
-    uptimePercentage?: number;
-    totalAlerts?: number;
-    healthTrend?: HealthTrend;
-    keyMetrics?: { [key: string]: any; };
-}
-
-export enum HealthTrend {
-    Improving = 0,
-    Stable = 1,
-    Declining = 2,
-    Unknown = 3,
-}
-
-export interface MaintenancePrediction {
-    deviceId?: string;
-    predictedMaintenanceDate?: Date;
-    confidenceLevel?: number;
-    maintenanceType?: MaintenanceType;
-    reasons?: string[];
-}
-
-export enum MaintenanceType {
-    BatteryReplacement = 0,
-    SensorReplacement = 1,
-    Calibration = 2,
-    GeneralMaintenance = 3,
-    DeviceReplacement = 4,
 }
 
 export interface DiscrepancyAnalysisDto {
@@ -17557,6 +17231,20 @@ export interface MigrationJobInfo {
     mode?: MigrationMode;
     createdAt?: Date;
     sourceDescription?: string | undefined;
+    state?: MigrationJobState;
+    startedAt?: Date | undefined;
+    completedAt?: Date | undefined;
+    errorMessage?: string | undefined;
+}
+
+/** Current state of a migration job */
+export enum MigrationJobState {
+    Pending = 0,
+    Validating = 1,
+    Running = 2,
+    Completed = 3,
+    Failed = 4,
+    Cancelled = 5,
 }
 
 /** Request to start a new migration job */
@@ -17592,16 +17280,6 @@ export interface MigrationJobStatus {
     collectionProgress?: { [key: string]: CollectionProgress; };
 }
 
-/** Current state of a migration job */
-export enum MigrationJobState {
-    Pending = 0,
-    Validating = 1,
-    Running = 2,
-    Completed = 3,
-    Failed = 4,
-    Cancelled = 5,
-}
-
 /** Progress for a specific collection */
 export interface CollectionProgress {
     collectionName?: string;
@@ -17609,6 +17287,40 @@ export interface CollectionProgress {
     documentsMigrated?: number;
     documentsFailed?: number;
     isComplete?: boolean;
+}
+
+/** Pending migration configuration from environment variables */
+export interface PendingMigrationConfig {
+    /** Whether there is a pending migration configuration in env vars */
+    hasPendingConfig?: boolean;
+    /** Migration mode from MIGRATION_MODE env var */
+    mode?: MigrationMode | undefined;
+    /** Nightscout URL from MIGRATION_NS_URL env var */
+    nightscoutUrl?: string | undefined;
+    /** Whether MIGRATION_NS_API_SECRET is set (never returns the actual secret) */
+    hasApiSecret?: boolean;
+    /** Whether MIGRATION_MONGO_CONNECTION_STRING is set (never returns the actual string) */
+    hasMongoConnectionString?: boolean;
+    /** MongoDB database name from MIGRATION_MONGO_DATABASE_NAME env var */
+    mongoDatabaseName?: string | undefined;
+}
+
+/** Migration source DTO for API responses */
+export interface MigrationSourceDto {
+    /** Unique identifier for this source */
+    id?: string;
+    /** Migration mode (Api or MongoDb) */
+    mode?: MigrationMode;
+    /** Nightscout URL (for API mode) */
+    nightscoutUrl?: string | undefined;
+    /** MongoDB database name (for MongoDB mode) */
+    mongoDatabaseName?: string | undefined;
+    /** When the last successful migration completed */
+    lastMigrationAt?: Date | undefined;
+    /** Newest data timestamp migrated (for "since last" default) */
+    lastMigratedDataTimestamp?: Date | undefined;
+    /** When this source was first added */
+    createdAt?: Date;
 }
 
 export interface MyFitnessPalMatchingSettings {

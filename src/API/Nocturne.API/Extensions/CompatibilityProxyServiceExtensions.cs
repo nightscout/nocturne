@@ -45,7 +45,7 @@ public static class CompatibilityProxyServiceExtensions
         services.AddScoped<DiscrepancyAnalysisRepository>();
         services.AddScoped<IDiscrepancyForwardingService, DiscrepancyForwardingService>();
         services.AddScoped<IDiscrepancyPersistenceService, DiscrepancyPersistenceService>();
-        services.AddScoped<ICompatibilityReportService, CompatibilityReportService>();
+
 
         services.AddHostedService<DiscrepancyMaintenanceService>();
 

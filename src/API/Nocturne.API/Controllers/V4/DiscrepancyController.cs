@@ -16,17 +16,16 @@ namespace Nocturne.API.Controllers.V4;
 public class DiscrepancyController : ControllerBase
 {
     private readonly DiscrepancyAnalysisRepository _discrepancyRepository;
-    private readonly ICompatibilityReportService _reportService;
+
     private readonly ILogger<DiscrepancyController> _logger;
 
     public DiscrepancyController(
         DiscrepancyAnalysisRepository discrepancyRepository,
-        ICompatibilityReportService reportService,
         ILogger<DiscrepancyController> logger
     )
     {
         _discrepancyRepository = discrepancyRepository;
-        _reportService = reportService;
+
         _logger = logger;
     }
 
@@ -337,79 +336,9 @@ public class DiscrepancyController : ControllerBase
         };
     }
 
-    /// <summary>
-    /// Generate a text-based compatibility report
-    /// </summary>
-    /// <param name="fromDate">Start date for report (optional)</param>
-    /// <param name="toDate">End date for report (optional)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Text-based compatibility report</returns>
-    [HttpGet("reports/text")]
-    public async Task<ActionResult<string>> GetTextReport(
-        [FromQuery] DateTimeOffset? fromDate = null,
-        [FromQuery] DateTimeOffset? toDate = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            _logger.LogDebug(
-                "Generating text report from {FromDate} to {ToDate}",
-                fromDate,
-                toDate
-            );
 
-            var report = await _reportService.GenerateTextReportAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
 
-            return Content(report, "text/plain");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating text report");
-            return StatusCode(500, "Error generating compatibility report");
-        }
-    }
 
-    /// <summary>
-    /// Generate a migration readiness assessment
-    /// </summary>
-    /// <param name="fromDate">Start date for assessment (optional)</param>
-    /// <param name="toDate">End date for assessment (optional)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Migration readiness assessment</returns>
-    [HttpGet("reports/migration-assessment")]
-    public async Task<ActionResult<MigrationReadinessReport>> GetMigrationAssessment(
-        [FromQuery] DateTimeOffset? fromDate = null,
-        [FromQuery] DateTimeOffset? toDate = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            _logger.LogDebug(
-                "Generating migration assessment from {FromDate} to {ToDate}",
-                fromDate,
-                toDate
-            );
-
-            var assessment = await _reportService.GenerateMigrationAssessmentAsync(
-                fromDate,
-                toDate,
-                cancellationToken
-            );
-
-            return Ok(assessment);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating migration assessment");
-            return StatusCode(500, "Error generating migration assessment");
-        }
-    }
 
     /// <summary>
     /// Receive forwarded discrepancies from remote Nocturne instances

@@ -18,7 +18,7 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     private readonly ISignalRBroadcastService _signalRBroadcastService;
     private readonly ILogger<DeviceAlertEngine> _logger;
     private readonly DeviceHealthOptions _options;
-    private readonly IDeviceHealthAnalysisService _healthAnalysisService;
+
 
     /// <summary>
     /// Initializes a new instance of the DeviceAlertEngine
@@ -28,14 +28,14 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     /// <param name="signalRBroadcastService">SignalR broadcast service</param>
     /// <param name="logger">Logger</param>
     /// <param name="options">Device health options</param>
-    /// <param name="healthAnalysisService">Device health analysis service</param>
+
     public DeviceAlertEngine(
         NocturneDbContext dbContext,
         NotificationPreferencesRepository notificationPreferencesRepository,
         ISignalRBroadcastService signalRBroadcastService,
         ILogger<DeviceAlertEngine> logger,
-        IOptions<DeviceHealthOptions> options,
-        IDeviceHealthAnalysisService healthAnalysisService
+        IOptions<DeviceHealthOptions> options
+
     )
     {
         _dbContext = dbContext;
@@ -43,7 +43,7 @@ public class DeviceAlertEngine : IDeviceAlertEngine
         _signalRBroadcastService = signalRBroadcastService;
         _logger = logger;
         _options = options.Value;
-        _healthAnalysisService = healthAnalysisService;
+
     }
 
     /// <summary>

@@ -82,8 +82,7 @@ public class DeviceHealthMonitoringService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         var deviceRegistry = scope.ServiceProvider.GetRequiredService<IDeviceRegistryService>();
-        var healthAnalysis =
-            scope.ServiceProvider.GetRequiredService<IDeviceHealthAnalysisService>();
+
         var alertEngine = scope.ServiceProvider.GetRequiredService<IDeviceAlertEngine>();
 
         _logger.LogDebug("Starting device health check cycle");
@@ -103,7 +102,7 @@ public class DeviceHealthMonitoringService : BackgroundService
                 await ProcessDeviceBatchAsync(
                     batch,
                     deviceRegistry,
-                    healthAnalysis,
+
                     alertEngine,
                     cancellationToken
                 );
@@ -147,14 +146,14 @@ public class DeviceHealthMonitoringService : BackgroundService
     /// </summary>
     /// <param name="deviceIds">List of device IDs to process</param>
     /// <param name="deviceRegistry">Device registry service</param>
-    /// <param name="healthAnalysis">Health analysis service</param>
+
     /// <param name="alertEngine">Alert engine service</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
     private async Task ProcessDeviceBatchAsync(
         List<string> deviceIds,
         IDeviceRegistryService deviceRegistry,
-        IDeviceHealthAnalysisService healthAnalysis,
+
         IDeviceAlertEngine alertEngine,
         CancellationToken cancellationToken
     )
@@ -163,7 +162,7 @@ public class DeviceHealthMonitoringService : BackgroundService
             ProcessSingleDeviceAsync(
                 deviceId,
                 deviceRegistry,
-                healthAnalysis,
+
                 alertEngine,
                 cancellationToken
             )
@@ -177,14 +176,14 @@ public class DeviceHealthMonitoringService : BackgroundService
     /// </summary>
     /// <param name="deviceId">Device identifier</param>
     /// <param name="deviceRegistry">Device registry service</param>
-    /// <param name="healthAnalysis">Health analysis service</param>
+
     /// <param name="alertEngine">Alert engine service</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
     private async Task ProcessSingleDeviceAsync(
         string deviceId,
         IDeviceRegistryService deviceRegistry,
-        IDeviceHealthAnalysisService healthAnalysis,
+
         IDeviceAlertEngine alertEngine,
         CancellationToken cancellationToken
     )
@@ -204,25 +203,7 @@ public class DeviceHealthMonitoringService : BackgroundService
                 return;
             }
 
-            // Analyze device health
-            var healthAnalysisResult = await healthAnalysis.AnalyzeDeviceHealthAsync(
-                deviceId,
-                cancellationToken
-            );
 
-            // Log health status if it's concerning
-            if (
-                healthAnalysisResult.HealthStatus == DeviceHealthStatus.Poor
-                || healthAnalysisResult.HealthStatus == DeviceHealthStatus.Critical
-            )
-            {
-                _logger.LogWarning(
-                    "Device {DeviceId} has {HealthStatus} health with score {HealthScore}",
-                    deviceId,
-                    healthAnalysisResult.HealthStatus,
-                    healthAnalysisResult.HealthScore
-                );
-            }
 
             // Generate and process alerts
             var alerts = await alertEngine.ProcessDeviceAlertsAsync(device, cancellationToken);
@@ -246,7 +227,7 @@ public class DeviceHealthMonitoringService : BackgroundService
             }
 
             // Perform device-specific monitoring
-            await PerformDeviceSpecificMonitoringAsync(device, healthAnalysis, cancellationToken);
+            await PerformDeviceSpecificMonitoringAsync(device, cancellationToken);
 
             if (_options.EnableDebugLogging)
             {
@@ -266,12 +247,12 @@ public class DeviceHealthMonitoringService : BackgroundService
     /// Perform device-specific monitoring based on device type
     /// </summary>
     /// <param name="device">Device to monitor</param>
-    /// <param name="healthAnalysis">Health analysis service</param>
+
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
     private async Task PerformDeviceSpecificMonitoringAsync(
         DeviceHealth device,
-        IDeviceHealthAnalysisService healthAnalysis,
+
         CancellationToken cancellationToken
     )
     {

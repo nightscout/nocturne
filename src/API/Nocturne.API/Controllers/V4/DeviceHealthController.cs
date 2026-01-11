@@ -17,23 +17,23 @@ namespace Nocturne.API.Controllers.V4;
 public class DeviceHealthController : ControllerBase
 {
     private readonly IDeviceRegistryService _deviceRegistryService;
-    private readonly IDeviceHealthAnalysisService _healthAnalysisService;
+
     private readonly ILogger<DeviceHealthController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the DeviceHealthController
     /// </summary>
     /// <param name="deviceRegistryService">Device registry service</param>
-    /// <param name="healthAnalysisService">Health analysis service</param>
+
     /// <param name="logger">Logger</param>
     public DeviceHealthController(
         IDeviceRegistryService deviceRegistryService,
-        IDeviceHealthAnalysisService healthAnalysisService,
+
         ILogger<DeviceHealthController> logger
     )
     {
         _deviceRegistryService = deviceRegistryService;
-        _healthAnalysisService = healthAnalysisService;
+
         _logger = logger;
     }
 
@@ -111,48 +111,6 @@ public class DeviceHealthController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get device health information
-    /// </summary>
-    /// <param name="id">Device identifier</param>
-    /// <returns>Device health information</returns>
-    [HttpGet("{id}/health")]
-    public async Task<ActionResult<DeviceHealthAnalysis>> GetDeviceHealth([Required] string id)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return BadRequest("Device ID is required");
-            }
-
-            var device = await _deviceRegistryService.GetDeviceAsync(
-                id,
-                HttpContext.RequestAborted
-            );
-            if (device == null)
-            {
-                return NotFound($"Device {id} not found");
-            }
-
-            var userId = HttpContext.GetSubjectIdString();
-            if (device.UserId != userId && !HttpContext.IsAdmin())
-            {
-                return Forbid();
-            }
-
-            var healthAnalysis = await _healthAnalysisService.AnalyzeDeviceHealthAsync(
-                id,
-                HttpContext.RequestAborted
-            );
-            return Ok(healthAnalysis);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting device health for device {DeviceId}", id);
-            return StatusCode(500, "Internal server error");
-        }
-    }
 
     /// <summary>
     /// Get device information
@@ -373,101 +331,4 @@ public class DeviceHealthController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get device health report
-    /// </summary>
-    /// <param name="id">Device identifier</param>
-    /// <param name="period">Report period in days (default: 30)</param>
-    /// <returns>Device health report</returns>
-    [HttpGet("{id}/report")]
-    public async Task<ActionResult<DeviceHealthReport>> GetDeviceHealthReport(
-        [Required] string id,
-        [FromQuery] int period = 30
-    )
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return BadRequest("Device ID is required");
-            }
-
-            if (period <= 0 || period > 365)
-            {
-                return BadRequest("Period must be between 1 and 365 days");
-            }
-
-            var device = await _deviceRegistryService.GetDeviceAsync(
-                id,
-                HttpContext.RequestAborted
-            );
-            if (device == null)
-            {
-                return NotFound($"Device {id} not found");
-            }
-
-            var userId = HttpContext.GetSubjectIdString();
-            if (device.UserId != userId && !HttpContext.IsAdmin())
-            {
-                return Forbid();
-            }
-
-            var report = await _healthAnalysisService.GenerateHealthReportAsync(
-                id,
-                period,
-                HttpContext.RequestAborted
-            );
-            return Ok(report);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating health report for device {DeviceId}", id);
-            return StatusCode(500, "Internal server error");
-        }
-    }
-
-    /// <summary>
-    /// Get maintenance predictions for a device
-    /// </summary>
-    /// <param name="id">Device identifier</param>
-    /// <returns>Maintenance prediction</returns>
-    [HttpGet("{id}/maintenance/prediction")]
-    public async Task<ActionResult<MaintenancePrediction>> GetMaintenancePrediction(
-        [Required] string id
-    )
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return BadRequest("Device ID is required");
-            }
-
-            var device = await _deviceRegistryService.GetDeviceAsync(
-                id,
-                HttpContext.RequestAborted
-            );
-            if (device == null)
-            {
-                return NotFound($"Device {id} not found");
-            }
-
-            var userId = HttpContext.GetSubjectIdString();
-            if (device.UserId != userId && !HttpContext.IsAdmin())
-            {
-                return Forbid();
-            }
-
-            var prediction = await _healthAnalysisService.PredictMaintenanceNeedsAsync(
-                id,
-                HttpContext.RequestAborted
-            );
-            return Ok(prediction);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting maintenance prediction for device {DeviceId}", id);
-            return StatusCode(500, "Internal server error");
-        }
-    }
 }
