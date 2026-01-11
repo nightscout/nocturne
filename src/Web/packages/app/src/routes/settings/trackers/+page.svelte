@@ -365,7 +365,7 @@
       } else if (editingDefinition) {
         await trackersRemote.updateDefinition({
           id: editingDefinition.id!,
-          request: data,
+          ...data,
         });
       }
       await loadData();
@@ -1048,7 +1048,10 @@
   definition={startDefinition}
   history={historyInstances}
   onClose={() => (startDefinition = null)}
-  onStart={loadData}
+  onStart={() => {
+    startDefinition = null;
+    loadData();
+  }}
 />
 
 <!-- Complete Instance Dialog -->
@@ -1063,7 +1066,11 @@
     completingInstance = null;
     completingDefinition = null;
   }}
-  onComplete={loadData}
+  onComplete={() => {
+    completingInstance = null;
+    completingDefinition = null;
+    loadData();
+  }}
 />
 
 <!-- Delete Definition Confirmation Dialog -->
