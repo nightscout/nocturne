@@ -253,6 +253,15 @@ jobs:
       - name: Setup appsettings.json for NSwag
         run: cp appsettings.example.json appsettings.json
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build oref.wasm
+        working-directory: src/Core/oref
+        run: cargo build --release --target wasm32-unknown-unknown
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:

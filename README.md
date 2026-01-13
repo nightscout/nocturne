@@ -45,7 +45,25 @@ Nocturne/
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [NodeJS](https://nodejs.org/)
 - [pnpm](https://pnpm.io/)
-- [Rust](https://www.rust-lang.org/)
+- [Rust](https://www.rust-lang.org/) with the `wasm32-unknown-unknown` target
+
+#### Rust Setup
+
+Nocturne uses a Rust-based implementation of the [oref0](https://github.com/openaps/oref0) algorithm, compiled to WebAssembly for cross-platform compatibility. To set up Rust:
+
+```bash
+# Install Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Add the WebAssembly target
+rustup target add wasm32-unknown-unknown
+
+# Build the oref.wasm module (done automatically by Aspire, but can be run manually)
+cd src/Core/oref
+cargo build --release --target wasm32-unknown-unknown
+```
+
+The compiled `oref.wasm` file is automatically copied to the API output directory during build.
 
 
 Copy the appsettings.example.json, and rename it to `appsettings.json`. Fill in the values for the connection strings, and any other settings you want to change. If you'd like to pipe in your Nightscout values into it just to test it out, do so in the `Connector.Nightscout` section, *not* the CompatibilityProxy; they are fundamentally different things.
