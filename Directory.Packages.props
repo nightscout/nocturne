@@ -5,7 +5,6 @@
   <ItemGroup>
     <!-- Aspire packages -->
     <!-- Aspire packages -->
-
     <PackageVersion Include="Aspire.Hosting.Python" Version="13.1.0" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.0.1" />
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.1.0" />
@@ -58,6 +57,7 @@
     <PackageVersion Include="MongoDB.Bson" Version="3.5.0" />
     <PackageVersion Include="StackExchange.Redis" Version="2.9.32" />
     <PackageVersion Include="System.Text.Json" Version="10.0.0" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />
     <PackageVersion Include="Polly" Version="8.6.4" />
     <PackageVersion Include="Polly.Extensions.Http" Version="3.0.0" />
     <!-- Health Check packages -->

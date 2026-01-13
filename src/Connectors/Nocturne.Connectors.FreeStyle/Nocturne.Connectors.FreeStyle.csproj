@@ -15,9 +15,11 @@
     <ContainerWorkingDirectory>/app</ContainerWorkingDirectory>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
     <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
     <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
     <ProjectReference Include="..\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj" />
     <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 </Project>

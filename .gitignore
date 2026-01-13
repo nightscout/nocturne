@@ -13,6 +13,7 @@ LegacyApp
 mongodb-dump
 .env
 .azure
+.idea
 appsettings.Development.json
 
 coveragereport/

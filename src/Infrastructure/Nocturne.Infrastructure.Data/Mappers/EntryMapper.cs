@@ -18,7 +18,7 @@ public static class EntryMapper
         return new EntryEntity
         {
             Id = string.IsNullOrEmpty(entry.Id) ? Guid.CreateVersion7() : ParseIdToGuid(entry.Id),
-            OriginalId = string.IsNullOrEmpty(entry.Id) ? null : entry.Id,
+            OriginalId = MongoIdUtils.IsValidMongoId(entry.Id) ? entry.Id : null,
             Mills = entry.Mills,
             DateString = entry.DateString,
             Mgdl = entry.Mgdl,

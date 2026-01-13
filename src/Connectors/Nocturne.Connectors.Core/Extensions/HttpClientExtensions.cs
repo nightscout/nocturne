@@ -108,8 +108,8 @@ public static class HttpClientExtensions
                     new MediaTypeWithQualityHeaderValue("application/json")
                 );
                 client.DefaultRequestHeaders.Add("User-Agent", "Nocturne-Connect/1.0");
-                client.DefaultRequestHeaders.Add("version", "4.7.0");
-                client.DefaultRequestHeaders.Add("product", "llu.android");
+                client.DefaultRequestHeaders.Add("Version", "4.16.0");
+                client.DefaultRequestHeaders.Add("Product", "llu.android");
                 client.Timeout = TimeSpan.FromMinutes(2);
             })
             .ConfigurePrimaryHttpMessageHandler(() =>

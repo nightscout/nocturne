@@ -66,8 +66,6 @@ public class Program
         builder.Services.AddSingleton<IAuthTokenProvider>(sp =>
             sp.GetRequiredService<LibreLinkAuthTokenProvider>());
 
-
-
         // Configure API data submitter for HTTP-based data submission
         builder.Services.AddConnectorApiDataSubmitter(builder.Configuration);
         builder.Services.AddHostedService<FreeStyleHostedService>();

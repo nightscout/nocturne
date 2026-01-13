@@ -1,10 +1,5 @@
-using System;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Extensions;
@@ -18,19 +13,22 @@ namespace Nocturne.Connectors.FreeStyle.Services;
 /// Token provider for LibreLinkUp authentication.
 /// Returns a Bearer token for API requests.
 /// </summary>
-public class LibreLinkAuthTokenProvider : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>
+public class LibreLinkAuthTokenProvider(
+    IOptions<LibreLinkUpConnectorConfiguration> config,
+    HttpClient httpClient,
+    ILogger<LibreLinkAuthTokenProvider> logger,
+    IRetryDelayStrategy retryDelayStrategy
+) : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>(config.Value, httpClient, logger)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
-
-    public LibreLinkAuthTokenProvider(
-        IOptions<LibreLinkUpConnectorConfiguration> config,
-        HttpClient httpClient,
-        ILogger<LibreLinkAuthTokenProvider> logger,
-        IRetryDelayStrategy retryDelayStrategy)
-        : base(config.Value, httpClient, logger)
+    private readonly IRetryDelayStrategy _retryDelayStrategy = 
+        retryDelayStrategy 
+        ?? throw new ArgumentNullException(nameof(retryDelayStrategy))
+    ;
+    
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-    }
+        PropertyNameCaseInsensitive = true,
+    };
 
     /// <summary>
     /// LibreLinkUp tokens typically last 24 hours.
@@ -41,7 +39,7 @@ public class LibreLinkAuthTokenProvider : AuthTokenProviderBase<LibreLinkUpConne
     {
         const int maxRetries = LibreLinkUpConstants.Configuration.MaxRetries;
 
-        for (int attempt = 0; attempt < maxRetries; attempt++)
+        for (var attempt = 0; attempt < maxRetries; attempt++)
         {
             try
             {
@@ -94,7 +92,10 @@ public class LibreLinkAuthTokenProvider : AuthTokenProviderBase<LibreLinkUpConne
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                var loginResponse = JsonSerializer.Deserialize<LibreLoginResponse>(responseContent);
+                var loginResponse = JsonSerializer.Deserialize<LibreLoginResponse>(
+                    responseContent,
+                    JsonOptions
+                );
 
                 if (loginResponse?.Data?.AuthTicket?.Token == null)
                 {
