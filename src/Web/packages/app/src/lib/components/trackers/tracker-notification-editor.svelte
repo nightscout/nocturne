@@ -132,7 +132,8 @@
               After (hours)
             </Label>
             <DurationInput
-              bind:value={notification.hours}
+              value={notification.hours}
+              onchange={(v) => updateNotification(i, "hours", v)}
               placeholder="e.g., 7x24"
             />
           </div>

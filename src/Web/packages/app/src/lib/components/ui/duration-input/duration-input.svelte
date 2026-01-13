@@ -16,6 +16,8 @@
     id?: string;
     /** Disabled state */
     disabled?: boolean;
+    /** Callback when value changes (alternative to bind:value) */
+    onchange?: (value: number | undefined) => void;
   }
 
   let {
@@ -24,6 +26,7 @@
     class: className,
     id,
     disabled = false,
+    onchange,
   }: Props = $props();
 
   // Internal state for the text input
@@ -88,9 +91,11 @@
     const parsed = parseExpression(inputValue);
     if (parsed !== null) {
       value = parsed;
+      onchange?.(parsed);
       parseError = false;
     } else if (inputValue.trim() === "") {
       value = undefined;
+      onchange?.(undefined);
       parseError = false;
     } else {
       parseError = true;

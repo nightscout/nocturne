@@ -830,6 +830,13 @@ public class NocturneDbContext : DbContext
             .HasIndex(p => p.DefinitionId)
             .HasDatabaseName("ix_tracker_presets_definition_id");
 
+        // Tracker Notification Thresholds - configure relationship to use TrackerDefinitionId
+        modelBuilder
+            .Entity<TrackerNotificationThresholdEntity>()
+            .HasOne(t => t.Definition)
+            .WithMany(d => d.NotificationThresholds)
+            .HasForeignKey(t => t.TrackerDefinitionId);
+
         // Tracker Notification Thresholds indexes
         modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()

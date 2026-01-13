@@ -346,6 +346,7 @@
     try {
       const notificationThresholds =
         notificationsToApiFormat(formNotifications);
+
       const data = {
         name: formName,
         description: formDescription || undefined,
