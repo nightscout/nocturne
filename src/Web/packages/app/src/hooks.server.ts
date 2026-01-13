@@ -8,6 +8,14 @@ import { createHash } from "crypto";
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
+import * as main from '../../../locales/main.loader.server.svelte.js'
+import * as js from '../../../locales/js.loader.server.js'
+import { locales } from '../../../locales/data.js'
+
+// load at server startup
+loadLocales(main.key, main.loadIDs, main.loadCatalog, locales)
+loadLocales(js.key, js.loadIDs, js.loadCatalog, locales)
 
 // Turn off SSL validation during development for self-signed certs
 if (dev) {
@@ -252,5 +260,10 @@ export const handleError: HandleServerError = async ({ error, event }) => {
   };
 };
 
+export const locale: Handle = async ({ event, resolve }) => {
+    const locale = event.url.searchParams.get('locale') ?? 'en'
+    return await runWithLocale(locale, () => resolve(event))
+}
+
 // Chain the auth handler, proxy handler, and API client handler
-export const handle: Handle = sequence(authHandle, proxyHandle, apiClientHandle);
+export const handle: Handle = sequence(authHandle, proxyHandle, apiClientHandle, locale);

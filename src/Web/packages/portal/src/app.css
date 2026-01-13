@@ -1,3 +1,4 @@
 /* Import shared styles from main app */
 @source "../../app/src";
 @import "@nocturne/app/src/app.css";
+@source not "../locales/";

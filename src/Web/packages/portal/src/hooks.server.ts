@@ -1,13 +1,22 @@
 import type { Handle, HandleFetch } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
+import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
+import { sequence } from '@sveltejs/kit/hooks';
+import * as main from '../../../locales/main.loader.server.svelte.js'
+import * as js from '../../../locales/js.loader.server.js'
+import { locales } from '../../../locales/data.js'
+
+// load at server startup
+loadLocales(main.key, main.loadIDs, main.loadCatalog, locales)
+loadLocales(js.key, js.loadIDs, js.loadCatalog, locales)
 
 // Turn off SSL validation during development for self-signed certs
 if (dev) {
 	process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
-export const handle: Handle = async ({ event, resolve }) => {
+export const proxy: Handle = async ({ event, resolve }) => {
 	// Proxy /api requests to the backend
 	if (event.url.pathname.startsWith('/api')) {
 		const apiUrl = env.VITE_PORTAL_API_URL;
@@ -63,3 +72,11 @@ export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
 	}
 	return fetch(request);
 };
+
+export const locale: Handle = async ({ event, resolve }) => {
+    const locale = event.url.searchParams.get('locale') ?? 'en'
+    return await runWithLocale(locale, () => resolve(event))
+}
+
+
+export const handle: Handle = sequence(proxy, locale);

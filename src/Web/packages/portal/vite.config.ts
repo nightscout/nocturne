@@ -1,12 +1,18 @@
 
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
+import { wuchale } from '@wuchale/vite-plugin';
+import lingo from 'vite-plugin-lingo';
 import { defineConfig } from 'vite';
 import fs from 'fs';
 
 
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit()],
+  plugins: [tailwindcss(), wuchale(),
+    lingo({
+      route: '/_translations',  // Route where editor UI is served
+      localesDir: '../../locales',  // Path to .po files
+    }), sveltekit()],
   server: {
     https: process.env.SSL_CRT_FILE && process.env.SSL_KEY_FILE ? {
       cert: fs.readFileSync(process.env.SSL_CRT_FILE),
