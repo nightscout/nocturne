@@ -346,6 +346,55 @@ public class DataSourceService : IDataSourceService
                 },
                 DocumentationUrl = null,
             },
+            new()
+            {
+                Id = "mylife",
+                Name = "MyLife",
+                Category = "pump",
+                Description = "Sync data from MyLife pump services.",
+                Icon = "mylife",
+                Available = true,
+                RequiresServerConfig = true,
+                ConfigFields = new List<ConnectorConfigField>
+                {
+                    new()
+                    {
+                        Id = "username",
+                        Label = "MyLife Username",
+                        Type = "text",
+                        Required = true,
+                    },
+                    new()
+                    {
+                        Id = "password",
+                        Label = "MyLife Password",
+                        Type = "password",
+                        Required = true,
+                    },
+                    new()
+                    {
+                        Id = "patientId",
+                        Label = "Patient Id",
+                        Type = "text",
+                        Required = false,
+                    },
+                    new()
+                    {
+                        Id = "enableGlucoseSync",
+                        Label = "Enable Glucose Sync",
+                        Type = "checkbox",
+                        Required = false,
+                    },
+                    new()
+                    {
+                        Id = "enableManualBgSync",
+                        Label = "Enable Manual BG Sync",
+                        Type = "checkbox",
+                        Required = false,
+                    },
+                },
+                DocumentationUrl = null,
+            },
         };
 
 

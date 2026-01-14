@@ -80,6 +80,8 @@ public static class DataSources
     /// </summary>
     public const string MyFitnessPalConnector = "myfitnesspal-connector";
 
+    public const string MyLifeConnector = "mylife-connector";
+
     // ============================================================================
     // Manual Entry Sources
     // ============================================================================

@@ -34,6 +34,7 @@ public static class ServiceNames
     public const string MyFitnessPalConnector = "myfitnesspal-connector";
     public const string TidepoolConnector = "tidepool-connector";
     public const string TConnectSyncConnector = "tconnectsync-connector";
+    public const string MyLifeConnector = "mylife-connector";
 
     // Docker Container Names
     public static class Docker
@@ -98,6 +99,7 @@ public static class ServiceNames
         public const string MyFitnessPalPrefix = "Parameters__Connectors__MyFitnessPal__";
         public const string TidepoolPrefix = "Parameters__Connectors__Tidepool__";
         public const string TConnectSyncPrefix = "Parameters__Connectors__TConnectSync__";
+        public const string MyLifePrefix = "Parameters__Connectors__MyLife__";
     }
 
     /// <summary>

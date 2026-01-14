@@ -121,6 +121,27 @@ public class ConnectConfiguration : IToolConfiguration
 
     public string LibreRegion { get; set; } = "EU";
 
+    [RequiredIf(
+        nameof(ConnectSource),
+        "mylife",
+        ErrorMessage = "MyLife username is required when using MyLife as source"
+    )]
+    public string? MyLifeUsername { get; set; }
+
+    [RequiredIf(
+        nameof(ConnectSource),
+        "mylife",
+        ErrorMessage = "MyLife password is required when using MyLife as source"
+    )]
+    public string? MyLifePassword { get; set; }
+
+    public string? MyLifePatientId { get; set; }
+    public bool MyLifeEnableGlucoseSync { get; set; } = true;
+    public bool MyLifeEnableManualBgSync { get; set; } = true;
+    public bool MyLifeEnableMealCarbConsolidation { get; set; } = true;
+    public bool MyLifeEnableTempBasalConsolidation { get; set; } = true;
+    public int MyLifeTempBasalConsolidationWindowMinutes { get; set; } = 5;
+
     // Nightscout Source Configuration
     [RequiredIf(
         nameof(ConnectSource),
@@ -147,6 +168,7 @@ public class ConnectConfiguration : IToolConfiguration
             "dexcomshare",
             "linkup",
             "nightscout",
+            "mylife",
         };
 
         if (!validSources.Contains(ConnectSource?.ToLowerInvariant()))

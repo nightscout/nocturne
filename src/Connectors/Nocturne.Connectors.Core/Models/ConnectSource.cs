@@ -47,4 +47,6 @@ public enum ConnectSource
     /// Tandem t:connect data source
     /// </summary>
     TConnectSync,
+
+    MyLife,
 }

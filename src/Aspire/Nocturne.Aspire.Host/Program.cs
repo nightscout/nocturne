@@ -207,6 +207,7 @@ class Program
         builder.AddMiniMedConnector(api, apiSecret);
         builder.AddNightscoutConnector(api, apiSecret);
         builder.AddMyFitnessPalConnector(api, apiSecret);
+        builder.AddMyLifeConnector(api, apiSecret);
 
         // Add TConnectSync Connector (via Source Generator)
         builder.AddTConnectSyncConnector(api, apiSecret);

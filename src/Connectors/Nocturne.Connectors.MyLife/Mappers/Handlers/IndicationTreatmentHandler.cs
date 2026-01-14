@@ -1,0 +1,31 @@
+using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Mappers.Helpers;
+using Nocturne.Connectors.MyLife.Models;
+using Nocturne.Core.Models;
+
+namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
+
+internal sealed class IndicationTreatmentHandler : IMyLifeTreatmentHandler
+{
+    public bool CanHandle(MyLifeEvent ev)
+    {
+        return ev.EventTypeId == MyLifeEventTypeIds.Indication;
+    }
+
+    public IEnumerable<Treatment> Handle(MyLifeEvent ev, MyLifeTreatmentContext context)
+    {
+        var treatment = MyLifeTreatmentFactory.Create(ev, MyLifeTreatmentTypes.Indication);
+        if (MyLifeMapperHelpers.IsBatteryRemovedIndication(
+                MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice)
+            ))
+        {
+            treatment.EventType = MyLifeTreatmentTypes.PumpBatteryChange;
+        }
+
+        treatment.Notes = ev.InformationFromDevice;
+        return
+        [
+            treatment
+        ];
+    }
+}

@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Configurations;
@@ -14,6 +9,8 @@ using Nocturne.Connectors.FreeStyle.Services;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Connectors.MiniMed.Services;
 using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Connectors.MyLife.Mappers;
+using Nocturne.Connectors.MyLife.Services;
 using Nocturne.Core.Models;
 using Nocturne.Tools.Connect.Configuration;
 
@@ -22,22 +19,15 @@ namespace Nocturne.Tools.Connect.Services;
 /// <summary>
 /// Service for executing connector synchronization operations
 /// </summary>
-public class ConnectorExecutionService
+public class ConnectorExecutionService(
+    ILogger<ConnectorExecutionService> logger,
+    ILoggerFactory loggerFactory,
+    DaemonStatusService? daemonStatusService = null)
 {
-    private readonly ILogger<ConnectorExecutionService> _logger;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly DaemonStatusService? _daemonStatusService;
+    private readonly ILogger<ConnectorExecutionService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly ILoggerFactory _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
 
-    public ConnectorExecutionService(
-        ILogger<ConnectorExecutionService> logger,
-        ILoggerFactory loggerFactory,
-        DaemonStatusService? daemonStatusService = null
-    )
-    {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _daemonStatusService = daemonStatusService; // Optional dependency
-    }
+    // Optional dependency
 
     /// <summary>
     /// Executes the connector synchronization operation
@@ -103,9 +93,9 @@ public class ConnectorExecutionService
             if (daemon)
             {
                 // Register daemon process for status monitoring
-                if (_daemonStatusService != null)
+                if (daemonStatusService != null)
                 {
-                    await _daemonStatusService.RegisterDaemonAsync(
+                    await daemonStatusService.RegisterDaemonAsync(
                         config.ConnectSource,
                         interval,
                         cancellationToken
@@ -199,9 +189,9 @@ public class ConnectorExecutionService
                     );
 
                     // Update daemon status with successful sync
-                    if (_daemonStatusService != null)
+                    if (daemonStatusService != null)
                     {
-                        await _daemonStatusService.RecordSyncSuccessAsync(cancellationToken);
+                        await daemonStatusService.RecordSyncSuccessAsync(cancellationToken);
                     }
                 }
                 else
@@ -213,9 +203,9 @@ public class ConnectorExecutionService
                     );
 
                     // Update daemon status with error
-                    if (_daemonStatusService != null)
+                    if (daemonStatusService != null)
                     {
-                        await _daemonStatusService.RecordSyncErrorAsync(
+                        await daemonStatusService.RecordSyncErrorAsync(
                             $"Sync operation #{syncCount} failed",
                             cancellationToken
                         );
@@ -239,9 +229,9 @@ public class ConnectorExecutionService
                     elapsed += waitTime;
 
                     // Update heartbeat
-                    if (_daemonStatusService != null && !cancellationToken.IsCancellationRequested)
+                    if (daemonStatusService != null && !cancellationToken.IsCancellationRequested)
                     {
-                        await _daemonStatusService.UpdateHeartbeatAsync(cancellationToken);
+                        await daemonStatusService.UpdateHeartbeatAsync(cancellationToken);
                     }
                 }
             }
@@ -258,9 +248,9 @@ public class ConnectorExecutionService
                 _logger.LogError(ex, "Error in daemon mode sync operation #{SyncCount}", syncCount);
 
                 // Record error in daemon status
-                if (_daemonStatusService != null)
+                if (daemonStatusService != null)
                 {
-                    await _daemonStatusService.RecordSyncErrorAsync(ex.Message, cancellationToken);
+                    await daemonStatusService.RecordSyncErrorAsync(ex.Message, cancellationToken);
                 }
 
                 // Continue daemon mode even after individual sync failures
@@ -274,9 +264,9 @@ public class ConnectorExecutionService
         );
 
         // Clean up daemon status when stopping
-        if (_daemonStatusService != null)
+        if (daemonStatusService != null)
         {
-            await _daemonStatusService.RemoveDaemonStatusAsync(cancellationToken);
+            await daemonStatusService.RemoveDaemonStatusAsync(cancellationToken);
         }
 
         return true;
@@ -408,6 +398,21 @@ public class ConnectorExecutionService
                     NightscoutUrl = config.NightscoutUrl,
                     NightscoutApiSecret = config.NightscoutApiSecret,
                 },
+                "mylife" => new MyLifeConnectorConfiguration
+                {
+                    ConnectSource = ConnectSource.MyLife,
+                    MyLifeUsername = config.MyLifeUsername ?? string.Empty,
+                    MyLifePassword = config.MyLifePassword ?? string.Empty,
+                    MyLifePatientId = config.MyLifePatientId ?? string.Empty,
+                    EnableGlucoseSync = config.MyLifeEnableGlucoseSync,
+                    EnableManualBgSync = config.MyLifeEnableManualBgSync,
+                    EnableMealCarbConsolidation = config.MyLifeEnableMealCarbConsolidation,
+                    EnableTempBasalConsolidation = config.MyLifeEnableTempBasalConsolidation,
+                    TempBasalConsolidationWindowMinutes = config.MyLifeTempBasalConsolidationWindowMinutes,
+                    Mode = ConnectorMode.Standalone,
+                    NightscoutUrl = config.NightscoutUrl,
+                    NightscoutApiSecret = config.NightscoutApiSecret,
+                },
                 _ => null,
             };
         }
@@ -446,6 +451,7 @@ public class ConnectorExecutionService
                     (LibreLinkUpConnectorConfiguration)config
                 ),
                 "nightscout" => CreateNightscoutWrapper((NightscoutConnectorConfiguration)config),
+                "mylife" => CreateMyLifeWrapper((MyLifeConnectorConfiguration)config),
                 _ => null,
             };
         }
@@ -519,6 +525,46 @@ public class ConnectorExecutionService
             null  // IApiDataSubmitter
         );
         return new ConnectorServiceWrapper<LibreLinkUpConnectorConfiguration>(service);
+    }
+
+    private IConnectorService<IConnectorConfiguration> CreateMyLifeWrapper(
+        MyLifeConnectorConfiguration config
+    )
+    {
+        var sessionStore = new MyLifeSessionStore();
+        var soapClient = new MyLifeSoapClient(
+            new HttpClient(),
+            _loggerFactory.CreateLogger<MyLifeSoapClient>()
+        );
+        var tokenProvider = new MyLifeAuthTokenProvider(
+            Options.Create(config),
+            new HttpClient(),
+            soapClient,
+            sessionStore,
+            _loggerFactory.CreateLogger<MyLifeAuthTokenProvider>()
+        );
+        var eventsCache = new MyLifeEventsCache(
+            sessionStore,
+            new MyLifeSyncService(
+                soapClient,
+                new MyLifeArchiveReader()
+            ),
+            _loggerFactory.CreateLogger<MyLifeEventsCache>()
+        );
+        var mapper = new MyLifeEventProcessor();
+        var service = new MyLifeConnectorService(
+            new HttpClient(),
+            Options.Create(config),
+            _loggerFactory.CreateLogger<MyLifeConnectorService>(),
+            tokenProvider,
+            eventsCache,
+            mapper,
+            sessionStore,
+            null,
+            null,
+            null
+        );
+        return new ConnectorServiceWrapper<MyLifeConnectorConfiguration>(service);
     }
 
     private IConnectorService<IConnectorConfiguration> CreateNightscoutWrapper(

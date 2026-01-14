@@ -26,7 +26,8 @@ public class ConnectorHealthService : IConnectorHealthService
         new ConnectorDefinition("libre", ServiceNames.LibreConnector, "LibreLinkUp"),
         new ConnectorDefinition("glooko", ServiceNames.GlookoConnector, "Glooko"),
         new ConnectorDefinition("carelink", ServiceNames.MiniMedConnector, "CareLink"),
-        new ConnectorDefinition("myfitnesspal", ServiceNames.MyFitnessPalConnector, "MyFitnessPal")
+        new ConnectorDefinition("myfitnesspal", ServiceNames.MyFitnessPalConnector, "MyFitnessPal"),
+        new ConnectorDefinition("mylife", ServiceNames.MyLifeConnector, "MyLife")
     };
 
     public ConnectorHealthService(

@@ -36,6 +36,7 @@ namespace Nocturne.Connectors.Core.Services
                 "linkup" or "librelinkup" => ConnectSource.LibreLinkUp,
                 "nightscout" => ConnectSource.Nightscout,
                 "myfitnesspal" => ConnectSource.MyFitnessPal,
+                "mylife" => ConnectSource.MyLife,
                 _ => throw new ArgumentException(
                     $"Unknown CONNECT_SOURCE: {connectSource}. Supported sources: {string.Join(", ", GetSupportedSources())}"
                 ),
@@ -59,6 +60,7 @@ namespace Nocturne.Connectors.Core.Services
                 "linkup",
                 "nightscout",
                 "myfitnesspal",
+                "mylife",
             };
         }
 

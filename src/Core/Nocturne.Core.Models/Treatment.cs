@@ -59,6 +59,24 @@ public class Treatment : ProcessableDocumentBase
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(EventType))
+            {
+                if (EventType.Contains("Temp Basal", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_insulin.HasValue)
+                    {
+                        return _insulin;
+                    }
+
+                    if (_amount.HasValue)
+                    {
+                        return _amount;
+                    }
+
+                    return null;
+                }
+            }
+
             if (_insulin.HasValue) return _insulin;
             if (_amount.HasValue) return _amount;
 

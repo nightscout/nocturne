@@ -58,6 +58,19 @@ public static class ConnectorEnvironmentVariables
     public const string LibreServer = "CONNECT_LINK_UP_SERVER";
     public const string LibrePatientId = "CONNECT_LINK_UP_PATIENT_ID";
 
+    public const string MyLifeUsername = "CONNECT_MYLIFE_USERNAME";
+    public const string MyLifePassword = "CONNECT_MYLIFE_PASSWORD";
+    public const string MyLifePatientId = "CONNECT_MYLIFE_PATIENT_ID";
+    public const string MyLifeServiceUrl = "CONNECT_MYLIFE_SERVICE_URL";
+    public const string MyLifeEnableGlucoseSync = "CONNECT_MYLIFE_ENABLE_GLUCOSE_SYNC";
+    public const string MyLifeEnableManualBgSync = "CONNECT_MYLIFE_ENABLE_MANUAL_BG_SYNC";
+    public const string MyLifeEnableMealCarbConsolidation = "CONNECT_MYLIFE_ENABLE_MEAL_CARB_CONSOLIDATION";
+    public const string MyLifeEnableTempBasalConsolidation = "CONNECT_MYLIFE_ENABLE_TEMP_BASAL_CONSOLIDATION";
+    public const string MyLifeTempBasalConsolidationWindowMinutes = "CONNECT_MYLIFE_TEMP_BASAL_CONSOLIDATION_WINDOW_MINUTES";
+    public const string MyLifeAppPlatform = "CONNECT_MYLIFE_APP_PLATFORM";
+    public const string MyLifeAppVersion = "CONNECT_MYLIFE_APP_VERSION";
+    public const string MyLifeSyncMonths = "CONNECT_MYLIFE_SYNC_MONTHS";
+
     // Nightscout Source Configuration
     public const string SourceEndpoint = "CONNECT_SOURCE_ENDPOINT";
     public const string SourceApiSecret = "CONNECT_SOURCE_API_SECRET";
