@@ -7,21 +7,24 @@ public class MyLifeEventsCache(
     MyLifeSyncService syncService,
     ILogger<MyLifeEventsCache> logger)
 {
+    private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(5);
+
     private readonly SemaphoreSlim _lock = new(1, 1);
     private Task<IReadOnlyList<MyLifeEvent>>? _currentTask;
     private DateTime? _since;
+    private DateTime _cachedAt;
 
     public async Task<IReadOnlyList<MyLifeEvent>> GetEventsAsync(
         DateTime since,
         int maxMonths,
         CancellationToken cancellationToken)
     {
-        if (_currentTask != null && _since.HasValue && since >= _since.Value) return await _currentTask;
+        if (IsCacheValid(since)) return await _currentTask!;
 
         await _lock.WaitAsync(cancellationToken);
         try
         {
-            if (_currentTask != null && _since.HasValue && since >= _since.Value) return await _currentTask;
+            if (IsCacheValid(since)) return await _currentTask!;
 
             if (string.IsNullOrWhiteSpace(sessionStore.AuthToken))
             {
@@ -42,6 +45,7 @@ public class MyLifeEventsCache(
             }
 
             _since = since;
+            _cachedAt = DateTime.UtcNow;
             _currentTask = syncService.FetchEventsAsync(
                 sessionStore.ServiceUrl,
                 sessionStore.AuthToken,
@@ -57,5 +61,25 @@ public class MyLifeEventsCache(
         {
             _lock.Release();
         }
+    }
+
+    public void Invalidate()
+    {
+        _currentTask = null;
+        _since = null;
+    }
+
+    private bool IsCacheValid(DateTime since)
+    {
+        if (_currentTask == null || !_since.HasValue)
+            return false;
+
+        if (since < _since.Value)
+            return false;
+
+        if (DateTime.UtcNow - _cachedAt > CacheExpiration)
+            return false;
+
+        return true;
     }
 }
