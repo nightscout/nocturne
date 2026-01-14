@@ -37,12 +37,24 @@ internal sealed class ProfileSwitchTreatmentHandler : IMyLifeTreatmentHandler
             return false;
         }
 
-        if (string.Equals(key, MyLifeJsonKeys.IndicationBasalProfileXChanged, StringComparison.OrdinalIgnoreCase))
+        if (
+            string.Equals(
+                key,
+                MyLifeJsonKeys.IndicationBasalProfileXChanged,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             return true;
         }
 
-        if (string.Equals(key, MyLifeJsonKeys.IndicationBasalProfileChanged, StringComparison.OrdinalIgnoreCase))
+        if (
+            string.Equals(
+                key,
+                MyLifeJsonKeys.IndicationBasalProfileChanged,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             return true;
         }
@@ -60,58 +72,56 @@ internal sealed class ProfileSwitchTreatmentHandler : IMyLifeTreatmentHandler
         );
         profileSwitch.Notes = ev.InformationFromDevice;
 
-        if (info != null)
+        var profile = ExtractProfileName(info);
+        if (!string.IsNullOrWhiteSpace(profile))
         {
-            if (info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var keyElement))
-            {
-                if (keyElement.ValueKind == JsonValueKind.String)
-                {
-                    var key = keyElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(key))
-                    {
-                        if (string.Equals(
-                                key,
-                                MyLifeJsonKeys.IndicationBasalProfileXChanged,
-                                StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (info.Value.TryGetProperty(MyLifeJsonKeys.Parameter0, out var profileElement))
-                            {
-                                if (profileElement.ValueKind == JsonValueKind.String)
-                                {
-                                    var profile = profileElement.GetString();
-                                    if (!string.IsNullOrWhiteSpace(profile))
-                                    {
-                                        profileSwitch.Profile = profile;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (string.Equals(
-                                key,
-                                MyLifeJsonKeys.IndicationBasalProfileChanged,
-                                StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (info.Value.TryGetProperty(MyLifeJsonKeys.Parameter1, out var profileElement))
-                            {
-                                if (profileElement.ValueKind == JsonValueKind.String)
-                                {
-                                    var profile = profileElement.GetString();
-                                    if (!string.IsNullOrWhiteSpace(profile))
-                                    {
-                                        profileSwitch.Profile = profile;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            profileSwitch.Profile = profile;
         }
 
-        return new List<Treatment>
+        return [profileSwitch];
+    }
+
+    private static string? ExtractProfileName(JsonElement? info)
+    {
+        if (info is not { } element)
+            return null;
+
+        if (
+            !element.TryGetProperty(MyLifeJsonKeys.Key, out var keyElement)
+            || keyElement.ValueKind != JsonValueKind.String
+        )
+            return null;
+
+        var key = keyElement.GetString();
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        var parameterKey = key switch
         {
-            profileSwitch
+            _
+                when string.Equals(
+                    key,
+                    MyLifeJsonKeys.IndicationBasalProfileXChanged,
+                    StringComparison.OrdinalIgnoreCase
+                ) => MyLifeJsonKeys.Parameter0,
+            _
+                when string.Equals(
+                    key,
+                    MyLifeJsonKeys.IndicationBasalProfileChanged,
+                    StringComparison.OrdinalIgnoreCase
+                ) => MyLifeJsonKeys.Parameter1,
+            _ => null,
         };
+
+        if (parameterKey == null)
+            return null;
+
+        if (
+            !element.TryGetProperty(parameterKey, out var profileElement)
+            || profileElement.ValueKind != JsonValueKind.String
+        )
+            return null;
+
+        return profileElement.GetString();
     }
 }
