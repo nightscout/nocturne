@@ -18,4 +18,15 @@ internal static class MyLifeTreatmentFactory
             Created_at = timestamp.UtcDateTime.ToString(MyLifeFormats.IsoTimestamp)
         };
     }
+
+    internal static Treatment CreateWithSuffix(MyLifeEvent ev, string eventType, string suffix)
+    {
+        var treatment = Create(ev, eventType);
+        if (!string.IsNullOrWhiteSpace(suffix))
+        {
+            treatment.Id = $"{treatment.Id}-{suffix}";
+        }
+
+        return treatment;
+    }
 }

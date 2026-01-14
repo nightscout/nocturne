@@ -18,6 +18,7 @@ internal static class MyLifeTreatmentTypes
     internal const string TimeChanged = "Time Changed";
     internal const string Indication = "Indication";
     internal const string PumpBatteryChange = "Pump Battery Change";
+    internal const string ProfileSwitch = "Profile Switch";
     internal const string SiteChange = "Site Change";
     internal const string Priming = "Priming";
     internal const string TubePriming = "Tube Priming";

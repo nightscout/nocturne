@@ -33,9 +33,22 @@ internal sealed class PrimingTreatmentHandler : IMyLifeTreatmentHandler
             treatment.Insulin = amount;
         }
 
-        return
-        [
+        var treatments = new List<Treatment>
+        {
             treatment
-        ];
+        };
+
+        if (ev.EventTypeId == MyLifeEventTypeIds.NeedlePriming)
+        {
+            var siteChange = MyLifeTreatmentFactory.CreateWithSuffix(
+                ev,
+                MyLifeTreatmentTypes.SiteChange,
+                MyLifeIdSuffixes.SiteChange
+            );
+            siteChange.Notes = ev.InformationFromDevice;
+            treatments.Add(siteChange);
+        }
+
+        return treatments;
     }
 }

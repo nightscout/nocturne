@@ -100,7 +100,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Connectors", "Connectors", "{237CDB4C-E7C4-795B-969A-4CCB7C8B335B}"
 	ProjectSection(SolutionItems) = preProject
 		src\Connectors\Nocturne.Connectors.MyLife\Constants\MyLifeConstants.cs = src\Connectors\Nocturne.Connectors.MyLife\Constants\MyLifeConstants.cs
-		src\Connectors\Nocturne.Connectors.MyLife\Resources\event_mappings.json = src\Connectors\Nocturne.Connectors.MyLife\Resources\event_mappings.json
 		src\Connectors\Nocturne.Connectors.MyLife\Models\MyLifeLoginResult.cs = src\Connectors\Nocturne.Connectors.MyLife\Models\MyLifeLoginResult.cs
 		src\Connectors\Nocturne.Connectors.MyLife\Models\MyLifePatient.cs = src\Connectors\Nocturne.Connectors.MyLife\Models\MyLifePatient.cs
 		src\Connectors\Nocturne.Connectors.MyLife\Models\MyLifeLocation.cs = src\Connectors\Nocturne.Connectors.MyLife\Models\MyLifeLocation.cs
