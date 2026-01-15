@@ -17584,14 +17584,22 @@
           "PumpConnectivity",
           "Override",
           "Profile",
-          "TempBasal"
+          "TempBasal",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel"
         ],
         "enum": [
           "PumpMode",
           "PumpConnectivity",
           "Override",
           "Profile",
-          "TempBasal"
+          "TempBasal",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel"
         ]
       },
       "ProxyConfigurationDto": {

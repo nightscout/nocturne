@@ -7,6 +7,7 @@ using Nocturne.Infrastructure.Cache.Configuration;
 using Nocturne.Infrastructure.Cache.Constants;
 using Nocturne.Infrastructure.Cache.Keys;
 using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services;
 
@@ -20,6 +21,7 @@ public class TreatmentService : ITreatmentService
     private readonly ICacheService _cacheService;
     private readonly CacheConfiguration _cacheConfig;
     private readonly IDemoModeService _demoModeService;
+    private readonly IStateSpanService _stateSpanService;
     private readonly ILogger<TreatmentService> _logger;
     private const string CollectionName = "treatments";
     private const string DefaultTenantId = "default"; // TODO: Replace with actual tenant context
@@ -30,6 +32,7 @@ public class TreatmentService : ITreatmentService
         ICacheService cacheService,
         IOptions<CacheConfiguration> cacheConfig,
         IDemoModeService demoModeService,
+        IStateSpanService stateSpanService,
         ILogger<TreatmentService> logger
     )
     {
@@ -38,6 +41,7 @@ public class TreatmentService : ITreatmentService
         _cacheService = cacheService;
         _cacheConfig = cacheConfig.Value;
         _demoModeService = demoModeService;
+        _stateSpanService = stateSpanService;
         _logger = logger;
     }
 
@@ -69,12 +73,12 @@ public class TreatmentService : ITreatmentService
             );
             var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
                 count: actualCount,
-                skip: actualSkip,
+                skip: 0, // We'll handle skip in the merge
                 findQuery: findQuery,
                 reverseResults: false,
                 cancellationToken: cancellationToken
             );
-            return treatments;
+            return await MergeWithTempBasalsAsync(treatments, findQuery, actualCount, actualSkip, cancellationToken);
         }
 
         // Cache recent treatments for common queries (skip = 0 and common counts)
@@ -91,7 +95,7 @@ public class TreatmentService : ITreatmentService
                 CacheConstants.Defaults.RecentTreatmentsExpirationSeconds
             );
 
-            return await _cacheService.GetOrSetAsync(
+            var cachedTreatments = await _cacheService.GetOrSetAsync(
                 cacheKey,
                 async () =>
                 {
@@ -104,7 +108,7 @@ public class TreatmentService : ITreatmentService
                     );
                     var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
                         count: actualCount,
-                        skip: actualSkip,
+                        skip: 0, // We'll handle skip in the merge
                         findQuery: findQuery,
                         reverseResults: false,
                         cancellationToken: cancellationToken
@@ -114,17 +118,18 @@ public class TreatmentService : ITreatmentService
                 cacheTtl,
                 cancellationToken
             );
+            return await MergeWithTempBasalsAsync(cachedTreatments, findQuery, actualCount, actualSkip, cancellationToken);
         }
 
         // Non-cached path for non-standard queries
         var allTreatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
             count: actualCount,
-            skip: actualSkip,
+            skip: 0, // We'll handle skip in the merge
             findQuery: findQuery,
             reverseResults: false,
             cancellationToken: cancellationToken
         );
-        return allTreatments;
+        return await MergeWithTempBasalsAsync(allTreatments, findQuery, actualCount, actualSkip, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -151,7 +156,7 @@ public class TreatmentService : ITreatmentService
                 CacheConstants.Defaults.RecentTreatmentsExpirationSeconds
             );
 
-            return await _cacheService.GetOrSetAsync(
+            var cachedTreatments = await _cacheService.GetOrSetAsync(
                 cacheKey,
                 async () =>
                 {
@@ -164,7 +169,7 @@ public class TreatmentService : ITreatmentService
                     );
                     var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
                         count: count,
-                        skip: skip,
+                        skip: 0, // We'll handle skip in the merge
                         findQuery: findQuery,
                         reverseResults: false,
                         cancellationToken: cancellationToken
@@ -174,17 +179,18 @@ public class TreatmentService : ITreatmentService
                 cacheTtl,
                 cancellationToken
             );
+            return await MergeWithTempBasalsAsync(cachedTreatments, findQuery, count, skip, cancellationToken);
         }
 
         // Non-cached path for non-standard queries
         var allTreatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
             count: count,
-            skip: skip,
+            skip: 0, // We'll handle skip in the merge
             findQuery: findQuery,
             reverseResults: false,
             cancellationToken: cancellationToken
         );
-        return allTreatments;
+        return await MergeWithTempBasalsAsync(allTreatments, findQuery, count, skip, cancellationToken);
     }
 
     /// <summary>
@@ -212,6 +218,61 @@ public class TreatmentService : ITreatmentService
         };
     }
 
+    /// <summary>
+    /// Parse time range from MongoDB-style find query
+    /// </summary>
+    private static (long? from, long? to) ParseTimeRangeFromFind(string? find)
+    {
+        if (string.IsNullOrEmpty(find))
+            return (null, null);
+
+        long? from = null;
+        long? to = null;
+
+        // Look for $gte (greater than or equal - "from")
+        var gteMatch = System.Text.RegularExpressions.Regex.Match(
+            find, @"\$gte[=\]]+(\d+)");
+        if (gteMatch.Success && long.TryParse(gteMatch.Groups[1].Value, out var gteVal))
+            from = gteVal;
+
+        // Look for $lte (less than or equal - "to")
+        var lteMatch = System.Text.RegularExpressions.Regex.Match(
+            find, @"\$lte[=\]]+(\d+)");
+        if (lteMatch.Success && long.TryParse(lteMatch.Groups[1].Value, out var lteVal))
+            to = lteVal;
+
+        return (from, to);
+    }
+
+    /// <summary>
+    /// Merges regular treatments with temp basals from StateSpans
+    /// </summary>
+    private async Task<IEnumerable<Treatment>> MergeWithTempBasalsAsync(
+        IEnumerable<Treatment> treatments,
+        string? findQuery,
+        int count,
+        int skip,
+        CancellationToken cancellationToken)
+    {
+        var (fromMills, toMills) = ParseTimeRangeFromFind(findQuery);
+        var tempBasalTreatments = await _stateSpanService.GetTempBasalsAsTreatmentsAsync(
+            from: fromMills,
+            to: toMills,
+            count: count,
+            skip: 0, // We'll handle skip in the merge
+            cancellationToken: cancellationToken);
+
+        // Merge and sort
+        var allTreatments = treatments
+            .Concat(tempBasalTreatments)
+            .OrderByDescending(t => t.Mills)
+            .Skip(skip)
+            .Take(count)
+            .ToList();
+
+        return allTreatments;
+    }
+
     /// <inheritdoc />
     public async Task<Treatment?> GetTreatmentByIdAsync(
         string id,
@@ -227,54 +288,117 @@ public class TreatmentService : ITreatmentService
         CancellationToken cancellationToken = default
     )
     {
-        var createdTreatments = await _postgreSqlService.CreateTreatmentsAsync(
-            treatments,
-            cancellationToken
-        );
+        var treatmentList = treatments.ToList();
+        var regularTreatments = new List<Treatment>();
+        var tempBasalTreatments = new List<Treatment>();
 
-        // Invalidate all recent treatments caches since new treatments were created
-        try
+        // Separate temp basals from regular treatments
+        foreach (var treatment in treatmentList)
         {
-            var recentTreatmentsPattern = CacheKeyBuilder.BuildRecentTreatmentsPattern(
-                DefaultTenantId
-            );
-            await _cacheService.RemoveByPatternAsync(recentTreatmentsPattern, cancellationToken);
-            _logger.LogInformation(
-                "Cache INVALIDATION: recent treatments pattern '{Pattern}' after creating {Count} treatments",
-                recentTreatmentsPattern,
-                createdTreatments.Count()
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to invalidate treatment caches");
+            if (TreatmentStateSpanMapper.IsTempBasalTreatment(treatment))
+            {
+                tempBasalTreatments.Add(treatment);
+            }
+            else
+            {
+                regularTreatments.Add(treatment);
+            }
         }
 
-        // Broadcast create events for each treatment (replaces legacy ctx.bus.emit('storage-socket-create'))
-        foreach (var treatment in createdTreatments)
+        var results = new List<Treatment>();
+
+        // Process temp basals through StateSpanService
+        foreach (var tempBasal in tempBasalTreatments)
         {
             try
             {
-                await _broadcastService.BroadcastStorageCreateAsync(
-                    CollectionName,
-                    new { colName = CollectionName, doc = treatment }
+                var stateSpan = await _stateSpanService.CreateTempBasalFromTreatmentAsync(
+                    tempBasal, cancellationToken);
+
+                // Convert back to Treatment for response
+                var createdTreatment = TreatmentStateSpanMapper.ToTreatment(stateSpan);
+                if (createdTreatment != null)
+                {
+                    results.Add(createdTreatment);
+
+                    // Broadcast as treatment for v1-v3 socket compatibility
+                    try
+                    {
+                        await _broadcastService.BroadcastStorageCreateAsync(
+                            CollectionName,
+                            new { colName = CollectionName, doc = createdTreatment });
+                        _logger.LogDebug(
+                            "Broadcasted storage create event for temp basal treatment {TreatmentId}",
+                            createdTreatment.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Failed to broadcast storage create event for temp basal {TreatmentId}",
+                            createdTreatment.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create temp basal StateSpan for treatment {Id}", tempBasal.Id);
+            }
+        }
+
+        // Process regular treatments through existing path
+        if (regularTreatments.Count > 0)
+        {
+            var createdTreatments = await _postgreSqlService.CreateTreatmentsAsync(
+                regularTreatments,
+                cancellationToken
+            );
+
+            // Invalidate all recent treatments caches since new treatments were created
+            try
+            {
+                var recentTreatmentsPattern = CacheKeyBuilder.BuildRecentTreatmentsPattern(
+                    DefaultTenantId
                 );
-                _logger.LogDebug(
-                    "Broadcasted storage create event for treatment {TreatmentId}",
-                    treatment.Id
+                await _cacheService.RemoveByPatternAsync(recentTreatmentsPattern, cancellationToken);
+                _logger.LogInformation(
+                    "Cache INVALIDATION: recent treatments pattern '{Pattern}' after creating {Count} treatments",
+                    recentTreatmentsPattern,
+                    createdTreatments.Count()
                 );
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Failed to broadcast storage create event for treatment {TreatmentId}",
-                    treatment.Id
-                );
+                _logger.LogWarning(ex, "Failed to invalidate treatment caches");
             }
+
+            // Broadcast create events for each treatment (replaces legacy ctx.bus.emit('storage-socket-create'))
+            foreach (var treatment in createdTreatments)
+            {
+                try
+                {
+                    await _broadcastService.BroadcastStorageCreateAsync(
+                        CollectionName,
+                        new { colName = CollectionName, doc = treatment }
+                    );
+                    _logger.LogDebug(
+                        "Broadcasted storage create event for treatment {TreatmentId}",
+                        treatment.Id
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to broadcast storage create event for treatment {TreatmentId}",
+                        treatment.Id
+                    );
+                }
+            }
+
+            results.AddRange(createdTreatments);
         }
 
-        return createdTreatments;
+        return results;
     }
 
     /// <inheritdoc />
@@ -284,13 +408,54 @@ public class TreatmentService : ITreatmentService
         CancellationToken cancellationToken = default
     )
     {
-        var updatedTreatment = await _postgreSqlService.UpdateTreatmentAsync(
+        // Check if this is a temp basal in StateSpans
+        var existingStateSpan = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
+
+        if (existingStateSpan != null && existingStateSpan.Category == StateSpanCategory.TempBasal)
+        {
+            // Update as StateSpan
+            var updatedSpan = TreatmentStateSpanMapper.ToStateSpan(treatment);
+            if (updatedSpan != null)
+            {
+                updatedSpan.Id = existingStateSpan.Id;
+                updatedSpan.OriginalId = existingStateSpan.OriginalId ?? id;
+
+                var result = await _stateSpanService.UpdateStateSpanAsync(id, updatedSpan, cancellationToken);
+                if (result != null)
+                {
+                    var updatedTreatment = TreatmentStateSpanMapper.ToTreatment(result);
+                    if (updatedTreatment != null)
+                    {
+                        try
+                        {
+                            await _broadcastService.BroadcastStorageUpdateAsync(
+                                CollectionName,
+                                new { colName = CollectionName, doc = updatedTreatment });
+                            _logger.LogDebug(
+                                "Broadcasted storage update event for temp basal treatment {TreatmentId}",
+                                updatedTreatment.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex,
+                                "Failed to broadcast storage update event for temp basal {TreatmentId}",
+                                updatedTreatment.Id);
+                        }
+                    }
+                    return updatedTreatment;
+                }
+            }
+            return null;
+        }
+
+        // Fall back to regular treatment update
+        var regularUpdatedTreatment = await _postgreSqlService.UpdateTreatmentAsync(
             id,
             treatment,
             cancellationToken
         );
 
-        if (updatedTreatment != null)
+        if (regularUpdatedTreatment != null)
         {
             // Invalidate all recent treatments caches since a treatment was updated
             try
@@ -317,11 +482,11 @@ public class TreatmentService : ITreatmentService
             {
                 await _broadcastService.BroadcastStorageUpdateAsync(
                     CollectionName,
-                    new { colName = CollectionName, doc = updatedTreatment }
+                    new { colName = CollectionName, doc = regularUpdatedTreatment }
                 );
                 _logger.LogDebug(
                     "Broadcasted storage update event for treatment {TreatmentId}",
-                    updatedTreatment.Id
+                    regularUpdatedTreatment.Id
                 );
             }
             catch (Exception ex)
@@ -329,12 +494,12 @@ public class TreatmentService : ITreatmentService
                 _logger.LogError(
                     ex,
                     "Failed to broadcast storage update event for treatment {TreatmentId}",
-                    updatedTreatment.Id
+                    regularUpdatedTreatment.Id
                 );
             }
         }
 
-        return updatedTreatment;
+        return regularUpdatedTreatment;
     }
 
     /// <inheritdoc />
@@ -343,15 +508,49 @@ public class TreatmentService : ITreatmentService
         CancellationToken cancellationToken = default
     )
     {
+        // Check if this is a temp basal in StateSpans
+        var existingStateSpan = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
+
+        if (existingStateSpan != null && existingStateSpan.Category == StateSpanCategory.TempBasal)
+        {
+            var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);
+
+            if (deleted)
+            {
+                var treatmentForBroadcast = TreatmentStateSpanMapper.ToTreatment(existingStateSpan);
+                if (treatmentForBroadcast != null)
+                {
+                    try
+                    {
+                        await _broadcastService.BroadcastStorageDeleteAsync(
+                            CollectionName,
+                            new { colName = CollectionName, doc = treatmentForBroadcast });
+                        _logger.LogDebug(
+                            "Broadcasted storage delete event for temp basal treatment {TreatmentId}",
+                            treatmentForBroadcast.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Failed to broadcast storage delete event for temp basal {TreatmentId}",
+                            treatmentForBroadcast.Id);
+                    }
+                }
+            }
+
+            return deleted;
+        }
+
+        // Fall back to regular treatment delete
         // Get the treatment before deleting for broadcasting
         var treatmentToDelete = await _postgreSqlService.GetTreatmentByIdAsync(
             id,
             cancellationToken
         );
 
-        var deleted = await _postgreSqlService.DeleteTreatmentAsync(id, cancellationToken);
+        var regularDeleted = await _postgreSqlService.DeleteTreatmentAsync(id, cancellationToken);
 
-        if (deleted && treatmentToDelete != null)
+        if (regularDeleted && treatmentToDelete != null)
         {
             // Invalidate all recent treatments caches since a treatment was deleted
             try
@@ -395,7 +594,7 @@ public class TreatmentService : ITreatmentService
             }
         }
 
-        return deleted;
+        return regularDeleted;
     }
 
     /// <inheritdoc />

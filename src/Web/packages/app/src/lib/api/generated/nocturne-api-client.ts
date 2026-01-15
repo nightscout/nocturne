@@ -16876,6 +16876,10 @@ export enum StateSpanCategory {
     Override = "Override",
     Profile = "Profile",
     TempBasal = "TempBasal",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Illness = "Illness",
+    Travel = "Travel",
 }
 
 /** Proxy configuration DTO */

@@ -31,7 +31,27 @@ public enum StateSpanCategory
     /// <summary>
     /// Temporary basal rate override
     /// </summary>
-    TempBasal
+    TempBasal,
+
+    /// <summary>
+    /// User-annotated sleep period
+    /// </summary>
+    Sleep,
+
+    /// <summary>
+    /// User-annotated exercise/activity period
+    /// </summary>
+    Exercise,
+
+    /// <summary>
+    /// User-annotated illness period (affects insulin sensitivity)
+    /// </summary>
+    Illness,
+
+    /// <summary>
+    /// User-annotated travel/timezone change period
+    /// </summary>
+    Travel
 }
 
 /// <summary>

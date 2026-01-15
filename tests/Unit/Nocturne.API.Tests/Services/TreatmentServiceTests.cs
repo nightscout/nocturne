@@ -23,6 +23,7 @@ public class TreatmentServiceTests
     private readonly Mock<ICacheService> _mockCacheService;
     private readonly Mock<IOptions<CacheConfiguration>> _mockCacheConfig;
     private readonly Mock<IDemoModeService> _mockDemoModeService;
+    private readonly Mock<IStateSpanService> _mockStateSpanService;
     private readonly Mock<ILogger<TreatmentService>> _mockLogger;
     private readonly TreatmentService _treatmentService;
 
@@ -33,10 +34,19 @@ public class TreatmentServiceTests
         _mockCacheService = new Mock<ICacheService>();
         _mockCacheConfig = new Mock<IOptions<CacheConfiguration>>();
         _mockDemoModeService = new Mock<IDemoModeService>();
+        _mockStateSpanService = new Mock<IStateSpanService>();
         _mockLogger = new Mock<ILogger<TreatmentService>>();
 
         _mockCacheConfig.Setup(x => x.Value).Returns(new CacheConfiguration());
         _mockDemoModeService.Setup(x => x.IsEnabled).Returns(false);
+        _mockStateSpanService
+            .Setup(x => x.GetTempBasalsAsTreatmentsAsync(
+                It.IsAny<long?>(),
+                It.IsAny<long?>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>());
 
         _treatmentService = new TreatmentService(
             _mockPostgreSqlService.Object,
@@ -44,6 +54,7 @@ public class TreatmentServiceTests
             _mockCacheService.Object,
             _mockCacheConfig.Object,
             _mockDemoModeService.Object,
+            _mockStateSpanService.Object,
             _mockLogger.Object
         );
     }

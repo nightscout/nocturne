@@ -367,6 +367,7 @@ builder.Services.AddScoped<IUISettingsService, UISettingsService>();
 // Register domain services for WebSocket broadcasting
 builder.Services.AddScoped<ITreatmentService, TreatmentService>();
 builder.Services.AddScoped<IEntryService, EntryService>();
+builder.Services.AddScoped<IStateSpanService, StateSpanService>();
 builder.Services.AddScoped<IDeviceStatusService, DeviceStatusService>();
 builder.Services.AddScoped<IBatteryService, BatteryService>();
 builder.Services.AddScoped<IProfileDataService, ProfileDataService>();

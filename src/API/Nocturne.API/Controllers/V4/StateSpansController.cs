@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -13,11 +13,11 @@ namespace Nocturne.API.Controllers.V4;
 [Authorize]
 public class StateSpansController : ControllerBase
 {
-    private readonly StateSpanRepository _repository;
+    private readonly IStateSpanService _stateSpanService;
 
-    public StateSpansController(StateSpanRepository repository)
+    public StateSpansController(IStateSpanService stateSpanService)
     {
-        _repository = repository;
+        _stateSpanService = stateSpanService;
     }
 
     /// <summary>
@@ -35,7 +35,7 @@ public class StateSpansController : ControllerBase
         [FromQuery] int skip = 0,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _repository.GetStateSpansAsync(
+        var spans = await _stateSpanService.GetStateSpansAsync(
             category, state, from, to, source, active, count, skip, cancellationToken);
         return Ok(spans);
     }
@@ -49,7 +49,7 @@ public class StateSpansController : ControllerBase
         [FromQuery] long? to = null,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _repository.GetByCategory(StateSpanCategory.PumpMode, from, to, cancellationToken);
+        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.PumpMode, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(spans);
     }
 
@@ -62,7 +62,7 @@ public class StateSpansController : ControllerBase
         [FromQuery] long? to = null,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _repository.GetByCategory(StateSpanCategory.PumpConnectivity, from, to, cancellationToken);
+        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.PumpConnectivity, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(spans);
     }
 
@@ -75,7 +75,7 @@ public class StateSpansController : ControllerBase
         [FromQuery] long? to = null,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _repository.GetByCategory(StateSpanCategory.Override, from, to, cancellationToken);
+        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Override, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(spans);
     }
 
@@ -88,7 +88,7 @@ public class StateSpansController : ControllerBase
         [FromQuery] long? to = null,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _repository.GetByCategory(StateSpanCategory.Profile, from, to, cancellationToken);
+        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Profile, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(spans);
     }
 
@@ -101,7 +101,7 @@ public class StateSpansController : ControllerBase
         [FromQuery] long? to = null,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _repository.GetByCategory(StateSpanCategory.TempBasal, from, to, cancellationToken);
+        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.TempBasal, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(spans);
     }
 
@@ -111,7 +111,7 @@ public class StateSpansController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<StateSpan>> GetStateSpan(string id, CancellationToken cancellationToken = default)
     {
-        var span = await _repository.GetStateSpanByIdAsync(id, cancellationToken);
+        var span = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
         if (span == null)
             return NotFound();
         return Ok(span);
@@ -136,7 +136,7 @@ public class StateSpansController : ControllerBase
             OriginalId = request.OriginalId,
         };
 
-        var created = await _repository.UpsertStateSpanAsync(stateSpan, cancellationToken);
+        var created = await _stateSpanService.UpsertStateSpanAsync(stateSpan, cancellationToken);
         return CreatedAtAction(nameof(GetStateSpan), new { id = created.Id }, created);
     }
 
@@ -149,7 +149,7 @@ public class StateSpansController : ControllerBase
         [FromBody] UpdateStateSpanRequest request,
         CancellationToken cancellationToken = default)
     {
-        var existing = await _repository.GetStateSpanByIdAsync(id, cancellationToken);
+        var existing = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
         if (existing == null)
             return NotFound();
 
@@ -165,7 +165,7 @@ public class StateSpansController : ControllerBase
             OriginalId = existing.OriginalId,
         };
 
-        var result = await _repository.UpdateStateSpanAsync(id, updated, cancellationToken);
+        var result = await _stateSpanService.UpdateStateSpanAsync(id, updated, cancellationToken);
         return Ok(result);
     }
 
@@ -175,7 +175,7 @@ public class StateSpansController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
     {
-        var deleted = await _repository.DeleteStateSpanAsync(id, cancellationToken);
+        var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);
         if (!deleted)
             return NotFound();
         return NoContent();
