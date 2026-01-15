@@ -73,7 +73,6 @@
   } from "$lib/components/ui/tabs";
   import { cn } from "$lib/utils";
   import {
-    Activity,
     TrendingUp,
     Target,
     BarChart3,
@@ -97,7 +96,7 @@
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import { GlucoseChart } from "$lib/components/glucose-chart";
+  import GlucoseChartCard from "$lib/components/dashboard/GlucoseChartCard.svelte";
   import GlucoseScoreCard from "$lib/components/reports/GlucoseScoreCard.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
@@ -111,23 +110,30 @@
   } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
+  import { resource } from "runed";
 
-  // Get date range params - uses memoized dateRangeInput to prevent infinite loops
+  // Get date range params
   const reportsParams = useDateParams();
 
-  // Query for reports data - uses the stable memoized dateRangeInput
-  // This prevents re-creating the query on every render
-  const reportsQuery = $derived(getReportsData(reportsParams.dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
+    },
+    { debounce: 100 }
+  );
 
-  // Unwrap the data from the query with null safety
-  // Use a single $derived to minimize reactive recalculations
-  const queryData = $derived(reportsQuery.current);
+  // Loading state
+  const isLoading = $derived(reportsResource.loading);
+
+  // Unwrap the data from the resource with null safety
+  const queryData = $derived(reportsResource.current);
 
   // Stable accessors for the data - these are simple property accesses, not new objects
   const entries = $derived(queryData?.entries ?? []);
   const treatments = $derived(queryData?.treatments ?? []);
   const analysis = $derived(queryData?.analysis);
-  const summary = $derived(queryData?.summary);
   const averagedStats = $derived(queryData?.averagedStats);
   const dateRange = $derived(
     queryData?.dateRange ?? {
@@ -405,27 +411,23 @@
   />
 </svelte:head>
 
-<svelte:boundary>
-  {#snippet pending()}
-    <ReportsSkeleton />
-  {/snippet}
-
-  {#snippet failed(error)}
-    <div class="container mx-auto space-y-8 px-4 py-6">
-      <div class="flex items-center justify-center h-64">
-        <div class="text-center space-y-4">
-          <p class="text-destructive font-medium">Failed to load reports</p>
-          <p class="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : "An error occurred"}
-          </p>
-          <Button variant="outline" onclick={() => reportsQuery.refresh()}>
-            Try again
-          </Button>
-        </div>
+{#if isLoading && !reportsResource.current}
+  <ReportsSkeleton />
+{:else if reportsResource.error}
+  <div class="container mx-auto space-y-8 px-4 py-6">
+    <div class="flex items-center justify-center h-64">
+      <div class="text-center space-y-4">
+        <p class="text-destructive font-medium">Failed to load reports</p>
+        <p class="text-sm text-muted-foreground">
+          {reportsResource.error instanceof Error ? reportsResource.error.message : "An error occurred"}
+        </p>
+        <Button variant="outline" onclick={() => reportsResource.refetch()}>
+          Try again
+        </Button>
       </div>
     </div>
-  {/snippet}
-
+  </div>
+{:else}
   <div class="container mx-auto space-y-8 px-4 py-6">
     <!-- Welcome Header with Context -->
     <div class="space-y-3 text-center">
@@ -593,40 +595,11 @@
       <ClinicalInsights {analysis} showClinicalNotes={true} maxInsights={4} />
 
       <!-- Recent Glucose Preview -->
-      <Card class="border">
-        <CardHeader>
-          <div class="flex items-center justify-between">
-            <div>
-              <CardTitle class="flex items-center gap-2 text-lg">
-                <Activity class="h-5 w-5 text-muted-foreground" />
-                Recent Glucose
-              </CardTitle>
-              <CardDescription>
-                Your glucose levels over the selected period
-              </CardDescription>
-            </div>
-            <Button
-              href="/reports/readings"
-              variant="outline"
-              size="sm"
-              class="gap-1"
-            >
-              Day-by-Day View
-              <ArrowRight class="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent class="h-72 md:h-96">
-          <GlucoseChart
-            {entries}
-            {treatments}
-            dateRange={{
-              from: new Date(dateRange.from),
-              to: new Date(dateRange.to),
-            }}
-          />
-        </CardContent>
-      </Card>
+      <GlucoseChartCard
+        {entries}
+        {treatments}
+        dateRange={{ from: dateRange.from, to: dateRange.to }}
+      />
 
       <!-- Additional Statistics Grid -->
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -687,7 +660,7 @@
           <div class="text-[10px] text-muted-foreground/60">data quality</div>
         </Card>
       </div>
-    {:else if reportsQuery.isPending}
+    {:else if isLoading}
       <ReportsSkeleton />
     {:else}
       <Card class="border border-destructive/50 bg-destructive/5">
@@ -945,4 +918,4 @@
       </p>
     </div>
   </div>
-</svelte:boundary>
+{/if}

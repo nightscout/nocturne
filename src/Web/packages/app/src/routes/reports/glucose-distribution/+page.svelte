@@ -6,22 +6,32 @@
   import { AlertTriangle } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
+  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { useDateParams } from "$lib/hooks/date-params.svelte";
+  import { resource } from "runed";
 
   // Build date range input from URL parameters
   const reportsParams = useDateParams();
-  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
+    },
+    { debounce: 100 }
+  );
 
-  // Unwrap the data from the query with null safety
+  // Loading state
+  const isLoading = $derived(reportsResource.loading);
+
+  // Unwrap the data from the resource with null safety
   const data = $derived({
-    entries: reportsQuery.current?.entries ?? [],
-    treatments: reportsQuery.current?.treatments ?? [],
-    analysis: reportsQuery.current?.analysis,
-    averagedStats: reportsQuery.current?.averagedStats,
-    dateRange: reportsQuery.current?.dateRange ?? {
+    entries: reportsResource.current?.entries ?? [],
+    treatments: reportsResource.current?.treatments ?? [],
+    analysis: reportsResource.current?.analysis,
+    averagedStats: reportsResource.current?.averagedStats,
+    dateRange: reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
       to: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
@@ -39,7 +49,7 @@
   ] as const;
 
   const rangeStats = $derived.by(() => {
-    const analysis = reportsQuery.current?.analysis;
+    const analysis = reportsResource.current?.analysis;
     const tir = analysis?.timeInRange?.percentages;
 
     if (!tir) {
@@ -147,45 +157,32 @@
   });
 </script>
 
-<svelte:boundary>
-  {#snippet pending()}
-    <div class="space-y-6 p-4">
-      <div class="flex items-center justify-center h-64">
-        <div class="text-center space-y-4">
-          <div
-            class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"
-          ></div>
-          <p class="text-muted-foreground">Loading glucose distribution...</p>
-        </div>
-      </div>
-    </div>
-  {/snippet}
-
-  {#snippet failed(error)}
-    <div class="space-y-6 p-4">
-      <Card.Root class="border-2 border-destructive">
-        <Card.Header>
-          <Card.Title class="flex items-center gap-2 text-destructive">
-            <AlertTriangle class="w-5 h-5" />
-            Error Loading Data
-          </Card.Title>
-        </Card.Header>
-        <Card.Content>
-          <p class="text-destructive-foreground">
-            {error instanceof Error ? error.message : String(error)}
-          </p>
-          <Button
-            variant="outline"
-            class="mt-4"
-            onclick={() => getReportsData(dateRangeInput).refresh()}
-          >
-            Try again
-          </Button>
-        </Card.Content>
-      </Card.Root>
-    </div>
-  {/snippet}
-
+{#if isLoading && !reportsResource.current}
+  <ReportsSkeleton />
+{:else if reportsResource.error}
+  <div class="space-y-6 p-4">
+    <Card.Root class="border-2 border-destructive">
+      <Card.Header>
+        <Card.Title class="flex items-center gap-2 text-destructive">
+          <AlertTriangle class="w-5 h-5" />
+          Error Loading Data
+        </Card.Title>
+      </Card.Header>
+      <Card.Content>
+        <p class="text-destructive-foreground">
+          {reportsResource.error instanceof Error ? reportsResource.error.message : String(reportsResource.error)}
+        </p>
+        <Button
+          variant="outline"
+          class="mt-4"
+          onclick={() => reportsResource.refetch()}
+        >
+          Try again
+        </Button>
+      </Card.Content>
+    </Card.Root>
+  </div>
+{:else}
   <div class="space-y-6 p-4">
     <!-- Header -->
     <Card.Root>
@@ -413,4 +410,4 @@
       </Card.Content>
     </Card.Root>
   </div>
-</svelte:boundary>
+{/if}

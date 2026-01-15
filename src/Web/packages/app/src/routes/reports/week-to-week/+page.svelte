@@ -7,6 +7,7 @@
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { bg } from "$lib/utils/formatting";
+  import { resource } from "runed";
 
   // Day of week series config
   const DAY_SERIES = [
@@ -46,7 +47,14 @@
     to: currentWeekRange.end.toISOString(),
   });
 
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => dateRangeInput,
+    async (input) => {
+      return await getReportsData(input);
+    },
+    { debounce: 100 }
+  );
 
   const weekRangeDisplay = $derived.by(() => {
     const { start, end } = currentWeekRange;
@@ -60,7 +68,7 @@
 
   // Transform entries into chart data: each row = { time, sun?, mon?, tue?, ... }
   const chartData = $derived.by(() => {
-    const entries = reportsQuery.current?.entries ?? [];
+    const entries = reportsResource.current?.entries ?? [];
     const { start, end } = currentWeekRange;
 
     // Filter to current week and group by normalized time

@@ -2550,7 +2550,6 @@ msgstr "Failed to load reports"
 #: src/routes/reports/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 msgid "Try again"
 msgstr "Try again"
 
@@ -2666,17 +2665,14 @@ msgstr "Glucose pattern over 24 hours (darker = more common)"
 msgid "Full Report <0/>"
 msgstr "Full Report <0/>"
 
-#: src/routes/reports/+page.svelte
-msgid "<0/> Recent Glucose"
-msgstr "<0/> Recent Glucose"
+#~ msgid "<0/> Recent Glucose"
+#~ msgstr "<0/> Recent Glucose"
 
-#: src/routes/reports/+page.svelte
-msgid "Your glucose levels over the selected period"
-msgstr "Your glucose levels over the selected period"
+#~ msgid "Your glucose levels over the selected period"
+#~ msgstr "Your glucose levels over the selected period"
 
-#: src/routes/reports/+page.svelte
-msgid "Day-by-Day View <0/>"
-msgstr "Day-by-Day View <0/>"
+#~ msgid "Day-by-Day View <0/>"
+#~ msgstr "Day-by-Day View <0/>"
 
 #: src/lib/components/reports/DailyStatistics.svelte
 #: src/routes/reports/+page.svelte
@@ -8444,9 +8440,8 @@ msgstr ""
 msgid "Tight Range"
 msgstr "Tight Range"
 
-#: src/routes/reports/glucose-distribution/+page.svelte
-msgid "Loading glucose distribution..."
-msgstr "Loading glucose distribution..."
+#~ msgid "Loading glucose distribution..."
+#~ msgstr "Loading glucose distribution..."
 
 #: src/routes/reports/glucose-distribution/+page.svelte
 msgid "<0/> Error Loading Data"
@@ -8572,9 +8567,8 @@ msgstr "Executive Summary - Nocturne Reports"
 msgid "High-level overview of your diabetes management metrics"
 msgstr "High-level overview of your diabetes management metrics"
 
-#: src/routes/reports/executive-summary/+page.svelte
-msgid "Loading executive summary..."
-msgstr "Loading executive summary..."
+#~ msgid "Loading executive summary..."
+#~ msgstr "Loading executive summary..."
 
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "<0/> Error Loading Executive Summary"
@@ -9046,9 +9040,8 @@ msgstr "<0>I:C Ratio Check:</0> Your average insulin-to-carb ratio of 1:{0} <1/>
 msgid "Basal Rate Analysis <0/>"
 msgstr "Basal Rate Analysis <0/>"
 
-#: src/routes/reports/readings/+page.svelte
-msgid "Loading readings..."
-msgstr "Loading readings..."
+#~ msgid "Loading readings..."
+#~ msgstr "Loading readings..."
 
 #: src/routes/reports/month-to-month/+page.svelte
 msgid "Redirecting to Calendar..."
@@ -9062,26 +9055,23 @@ msgstr "Treatment Log - Nocturne"
 msgid "View and manage your diabetes treatments, insulin doses, and carb entries"
 msgstr "View and manage your diabetes treatments, insulin doses, and carb entries"
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "Loading treatments..."
-msgstr "Loading treatments..."
+#~ msgid "Loading treatments..."
+#~ msgstr "Loading treatments..."
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "<0/> Error Loading Treatments"
-msgstr "<0/> Error Loading Treatments"
+#~ msgid "<0/> Error Loading Treatments"
+#~ msgstr "<0/> Error Loading Treatments"
 
 #. placeholder {0}: treatments.length.toLocaleString()
 #: src/routes/reports/treatments/+page.svelte
 msgid "{0} treatments"
 msgstr "{0} treatments"
 
-#: src/routes/reports/treatments/+page.svelte
-msgid ""
-"Review and manage your insulin doses, carb entries, and device events.\n"
-"Use filters to find specific treatments."
-msgstr ""
-"Review and manage your insulin doses, carb entries, and device events.\n"
-"Use filters to find specific treatments."
+#~ msgid ""
+#~ "Review and manage your insulin doses, carb entries, and device events.\n"
+#~ "Use filters to find specific treatments."
+#~ msgstr ""
+#~ "Review and manage your insulin doses, carb entries, and device events.\n"
+#~ "Use filters to find specific treatments."
 
 #: src/routes/reports/treatments/+page.svelte
 msgid "Search"
@@ -12123,3 +12113,11 @@ msgstr ""
 "This connector is not currently enabled, but historical data from\n"
 "previous syncs is still stored. Enable the connector in your\n"
 "server configuration to resume syncing, or delete the data below."
+
+#: src/routes/reports/treatments/+page.svelte
+msgid ""
+"Review and manage your insulin doses, carb entries, and device events. Use\n"
+"filters to find specific treatments."
+msgstr ""
+"Review and manage your insulin doses, carb entries, and device events. Use\n"
+"filters to find specific treatments."

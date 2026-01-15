@@ -25,17 +25,23 @@
   import type { Treatment } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
   import { useDateParams } from "$lib/hooks/date-params.svelte";
+  import { resource } from "runed";
 
   // Build date range input from URL parameters - default to 30 days for basal analysis
   const reportsParams = useDateParams(30);
-  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
+    },
+    { debounce: 100 }
+  );
 
-  const treatments = $derived(reportsQuery.current?.treatments ?? []);
+  const treatments = $derived(reportsResource.current?.treatments ?? []);
   const dateRange = $derived(
-    reportsQuery.current?.dateRange ?? {
+    reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
       to: new Date().toISOString(),
     }

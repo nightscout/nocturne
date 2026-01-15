@@ -22,27 +22,37 @@
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { useDateParams } from "$lib/hooks/date-params.svelte";
+  import { resource } from "runed";
 
   // Build date range input from URL parameters - default to 14 days for AGP
   const reportsParams = useDateParams(14);
-  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
+    },
+    { debounce: 100 }
+  );
 
-  // Unwrap the data from the query with null safety
+  // Unwrap the data from the resource with null safety
   const data = $derived({
-    entries: reportsQuery.current?.entries ?? [],
-    analysis: reportsQuery.current?.analysis,
-    averagedStats: reportsQuery.current?.averagedStats,
-    dateRange: reportsQuery.current?.dateRange ?? {
+    entries: reportsResource.current?.entries ?? [],
+    analysis: reportsResource.current?.analysis,
+    averagedStats: reportsResource.current?.averagedStats,
+    dateRange: reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
       to: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
     },
   });
+
+  // Loading state
+  const isLoading = $derived(reportsResource.loading);
 
   // Derived values from data
   const entries = $derived(data.entries);
@@ -68,6 +78,9 @@
   />
 </svelte:head>
 
+{#if isLoading && !reportsResource.current}
+  <ReportsSkeleton />
+{:else}
 <div class="container mx-auto px-4 py-6 space-y-8 max-w-7xl">
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">
@@ -397,3 +410,4 @@
     Last updated {new Date(dateRange.lastUpdated).toLocaleString()}.
   </div>
 </div>
+{/if}

@@ -25,25 +25,35 @@
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
+  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { useDateParams } from "$lib/hooks/date-params.svelte";
+  import { resource } from "runed";
 
   // Build date range input from URL parameters - default to 14 days for executive summary
   const reportsParams = useDateParams(14);
-  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
+    },
+    { debounce: 100 }
+  );
+
+  // Loading state
+  const isLoading = $derived(reportsResource.loading);
 
   const dateRange = $derived(
-    reportsQuery.current?.dateRange ?? {
+    reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
       to: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
     }
   );
-  const entries = $derived(reportsQuery.current?.entries ?? []);
-  const analysis = $derived(reportsQuery.current?.analysis);
+  const entries = $derived(reportsResource.current?.entries ?? []);
+  const analysis = $derived(reportsResource.current?.analysis);
 
   // Helper to get date values
   const startDate = $derived(new Date(dateRange.from));
@@ -138,45 +148,32 @@
   />
 </svelte:head>
 
-<svelte:boundary>
-  {#snippet pending()}
-    <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
-      <div class="flex items-center justify-center h-64">
-        <div class="text-center space-y-4">
-          <div
-            class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"
-          ></div>
-          <p class="text-muted-foreground">Loading executive summary...</p>
-        </div>
-      </div>
-    </div>
-  {/snippet}
-
-  {#snippet failed(error)}
-    <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
-      <Card class="border-2 border-destructive">
-        <CardHeader>
-          <CardTitle class="flex items-center gap-2 text-destructive">
-            <AlertTriangle class="w-5 h-5" />
-            Error Loading Executive Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p class="text-destructive-foreground">
-            {error instanceof Error ? error.message : String(error)}
-          </p>
-          <Button
-            variant="outline"
-            class="mt-4"
-            onclick={() => getReportsData(dateRangeInput).refresh()}
-          >
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  {/snippet}
-
+{#if isLoading && !reportsResource.current}
+  <ReportsSkeleton />
+{:else if reportsResource.error}
+  <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
+    <Card class="border-2 border-destructive">
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2 text-destructive">
+          <AlertTriangle class="w-5 h-5" />
+          Error Loading Executive Summary
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p class="text-destructive-foreground">
+          {reportsResource.error instanceof Error ? reportsResource.error.message : String(reportsResource.error)}
+        </p>
+        <Button
+          variant="outline"
+          class="mt-4"
+          onclick={() => reportsResource.refetch()}
+        >
+          Try again
+        </Button>
+      </CardContent>
+    </Card>
+  </div>
+{:else}
   <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
     <!-- Print-Friendly Header -->
     <div class="print:block hidden text-center mb-8">
@@ -799,7 +796,7 @@
       </p>
     </div>
   </div>
-</svelte:boundary>
+{/if}
 
 <style>
   @media print {

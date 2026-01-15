@@ -27,26 +27,32 @@
   import { getReportsData } from "$lib/data/reports.remote";
   import { useDateParams } from "$lib/hooks/date-params.svelte";
   import { countTreatmentsByCategory } from "$lib/constants/treatment-categories";
+  import { resource } from "runed";
 
   // Build date range input from URL parameters - default to 30 days
   const reportsParams = useDateParams(30);
-  const dateRangeInput = $derived(reportsParams.getDateRangeInput());
 
-  // Query for reports data
-  const reportsQuery = $derived(getReportsData(dateRangeInput));
+  // Use resource for controlled reactivity - prevents excessive re-fetches
+  const reportsResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
+    },
+    { debounce: 100 }
+  );
 
   const treatments = $derived(
-    (reportsQuery.current?.treatments ?? []) as Treatment[]
+    (reportsResource.current?.treatments ?? []) as Treatment[]
   );
   const dateRange = $derived(
-    reportsQuery.current?.dateRange ?? {
+    reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
       to: new Date().toISOString(),
     }
   );
 
   const treatmentSummary = $derived(
-    reportsQuery.current?.analysis?.treatmentSummary ??
+    reportsResource.current?.analysis?.treatmentSummary ??
       ({
         totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
         treatmentCount: 0,
