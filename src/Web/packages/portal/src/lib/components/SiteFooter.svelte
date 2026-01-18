@@ -1,6 +1,6 @@
 <script lang="ts">
     import { Github, Heart } from "@lucide/svelte";
-    import LanguageSelector from "@nocturne/app/components/LanguageSelector.svelte";
+    import LanguageSelector from "./LanguageSelector.svelte";
 </script>
 
 <footer class="border-t border-border/40 bg-muted/30">

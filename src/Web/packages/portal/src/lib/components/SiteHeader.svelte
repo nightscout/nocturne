@@ -5,7 +5,7 @@
     import {
         DEMO_ENABLED,
     } from "$lib/config";
-    import LanguageSelector from "@nocturne/app/components/LanguageSelector.svelte";
+    import LanguageSelector from "./LanguageSelector.svelte";
 
     let mobileMenuOpen = $state(false);
 

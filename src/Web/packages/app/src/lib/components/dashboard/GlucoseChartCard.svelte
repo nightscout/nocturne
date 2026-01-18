@@ -535,6 +535,18 @@
     )
   );
 
+  // Glucose data for chart (convert to display units)
+  const glucoseData = $derived(
+    filteredEntries
+      .filter((e) => e.sgv !== null && e.sgv !== undefined)
+      .map((e) => ({
+        time: new Date(e.mills ?? 0),
+        sgv: Number(bg(e.sgv ?? 0)),
+        color: getGlucoseColor(e.sgv ?? 0),
+      }))
+      .sort((a, b) => a.time.getTime() - b.time.getTime())
+  );
+
   // Calculate median glucose value for positioning device markers
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100; // Default fallback
@@ -619,18 +631,6 @@
     const maxDisplayValue = bg(Math.min(400, Math.max(280, maxSgv) + 20));
     return Number(maxDisplayValue);
   });
-
-  // Glucose data for chart (convert to display units)
-  const glucoseData = $derived(
-    filteredEntries
-      .filter((e) => e.sgv !== null && e.sgv !== undefined)
-      .map((e) => ({
-        time: new Date(e.mills ?? 0),
-        sgv: Number(bg(e.sgv ?? 0)),
-        color: getGlucoseColor(e.sgv ?? 0),
-      }))
-      .sort((a, b) => a.time.getTime() - b.time.getTime())
-  );
 
   // Use server-side data for IOB and basal, with fallbacks
   const iobData = $derived(serverChartData?.iobSeries ?? []);
