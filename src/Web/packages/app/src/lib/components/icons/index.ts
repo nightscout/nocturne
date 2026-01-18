@@ -41,6 +41,7 @@ export { default as PumpModeIcon } from './PumpModeIcon.svelte';
 export { default as DeviceEventIcon } from './DeviceEventIcon.svelte';
 export { default as TrackerCategoryIcon } from './TrackerCategoryIcon.svelte';
 export { default as TreatmentTypeIcon } from './TreatmentTypeIcon.svelte';
+export { default as ActivityCategoryIcon } from './ActivityCategoryIcon.svelte';
 
 // Treatment Marker Icons (for charts and legends)
 export { default as BolusIcon } from './BolusIcon.svelte';

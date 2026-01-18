@@ -72,4 +72,18 @@ public class StateSpan
     /// </summary>
     [JsonIgnore]
     public bool IsActive => !EndMills.HasValue;
+
+    /// <summary>
+    /// Gets or sets the canonical group ID for deduplication.
+    /// Records with the same CanonicalId represent the same underlying event from different sources.
+    /// </summary>
+    [JsonPropertyName("canonicalId")]
+    public Guid? CanonicalId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the list of data sources that contributed to this unified record.
+    /// Only populated when returning merged/unified DTOs.
+    /// </summary>
+    [JsonPropertyName("sources")]
+    public string[]? Sources { get; set; }
 }

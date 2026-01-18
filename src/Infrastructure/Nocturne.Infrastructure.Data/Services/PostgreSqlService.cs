@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -27,17 +26,19 @@ public class PostgreSqlService : IPostgreSqlService
     /// Initializes a new instance of the PostgreSqlService class
     /// </summary>
     /// <param name="context">The database context for PostgreSQL operations</param>
-    /// <param name="queryParser">MongoDB query parser for advanced filtering</param>
+    /// <param name="entryRepository">Repository for entry operations</param>
+    /// <param name="treatmentRepository">Repository for treatment operations</param>
     /// <param name="logger">Logger instance for this service</param>
     public PostgreSqlService(
         NocturneDbContext context,
-        IQueryParser queryParser,
+        EntryRepository entryRepository,
+        TreatmentRepository treatmentRepository,
         ILogger<PostgreSqlService> logger
     )
     {
         _context = context;
-        _entryRepository = new EntryRepository(context, queryParser);
-        _treatmentRepository = new TreatmentRepository(context, queryParser);
+        _entryRepository = entryRepository;
+        _treatmentRepository = treatmentRepository;
         _foodRepository = new FoodRepository(context);
         _settingsRepository = new SettingsRepository(context);
         _deviceStatusRepository = new DeviceStatusRepository(context);

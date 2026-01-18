@@ -4335,6 +4335,320 @@ export class DebugClient {
     }
 }
 
+export class DeduplicationClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Start a deduplication job to link related records from different data sources.
+    The job runs in the background and can be monitored using the status endpoint.
+     * @return Job ID for tracking progress
+     */
+    startDeduplicationJob(signal?: AbortSignal): Promise<DeduplicationJobResponse> {
+        let url_ = this.baseUrl + "/api/v4/admin/deduplication/run";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processStartDeduplicationJob(_response);
+        });
+    }
+
+    protected processStartDeduplicationJob(response: Response): Promise<DeduplicationJobResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 202) {
+            return response.text().then((_responseText) => {
+            let result202: any = null;
+            result202 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeduplicationJobResponse;
+            return result202;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeduplicationJobResponse>(null as any);
+    }
+
+    /**
+     * Get the status of a deduplication job.
+     * @param jobId The job ID returned from the run endpoint
+     * @return Current status and progress of the job
+     */
+    getJobStatus(jobId: string, signal?: AbortSignal): Promise<DeduplicationJobStatus> {
+        let url_ = this.baseUrl + "/api/v4/admin/deduplication/status/{jobId}";
+        if (jobId === undefined || jobId === null)
+            throw new globalThis.Error("The parameter 'jobId' must be defined.");
+        url_ = url_.replace("{jobId}", encodeURIComponent("" + jobId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetJobStatus(_response);
+        });
+    }
+
+    protected processGetJobStatus(response: Response): Promise<DeduplicationJobStatus> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeduplicationJobStatus;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeduplicationJobStatus>(null as any);
+    }
+
+    /**
+     * Cancel a running deduplication job.
+     * @param jobId The job ID to cancel
+     * @return Whether the job was successfully cancelled
+     */
+    cancelJob(jobId: string, signal?: AbortSignal): Promise<CancelJobResponse> {
+        let url_ = this.baseUrl + "/api/v4/admin/deduplication/cancel/{jobId}";
+        if (jobId === undefined || jobId === null)
+            throw new globalThis.Error("The parameter 'jobId' must be defined.");
+        url_ = url_.replace("{jobId}", encodeURIComponent("" + jobId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCancelJob(_response);
+        });
+    }
+
+    protected processCancelJob(response: Response): Promise<CancelJobResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CancelJobResponse;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<CancelJobResponse>(null as any);
+    }
+
+    /**
+     * Get linked records for a specific entry by its canonical group.
+     * @param entryId The entry ID
+     * @return All linked records in the same canonical group
+     */
+    getEntryLinkedRecords(entryId: string, signal?: AbortSignal): Promise<LinkedRecordsResponse> {
+        let url_ = this.baseUrl + "/api/v4/admin/deduplication/entries/{entryId}/sources";
+        if (entryId === undefined || entryId === null)
+            throw new globalThis.Error("The parameter 'entryId' must be defined.");
+        url_ = url_.replace("{entryId}", encodeURIComponent("" + entryId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetEntryLinkedRecords(_response);
+        });
+    }
+
+    protected processGetEntryLinkedRecords(response: Response): Promise<LinkedRecordsResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as LinkedRecordsResponse;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<LinkedRecordsResponse>(null as any);
+    }
+
+    /**
+     * Get linked records for a specific treatment by its canonical group.
+     * @param treatmentId The treatment ID
+     * @return All linked records in the same canonical group
+     */
+    getTreatmentLinkedRecords(treatmentId: string, signal?: AbortSignal): Promise<LinkedRecordsResponse> {
+        let url_ = this.baseUrl + "/api/v4/admin/deduplication/treatments/{treatmentId}/sources";
+        if (treatmentId === undefined || treatmentId === null)
+            throw new globalThis.Error("The parameter 'treatmentId' must be defined.");
+        url_ = url_.replace("{treatmentId}", encodeURIComponent("" + treatmentId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatmentLinkedRecords(_response);
+        });
+    }
+
+    protected processGetTreatmentLinkedRecords(response: Response): Promise<LinkedRecordsResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as LinkedRecordsResponse;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<LinkedRecordsResponse>(null as any);
+    }
+
+    /**
+     * Get linked records for a specific state span by its canonical group.
+     * @param stateSpanId The state span ID
+     * @return All linked records in the same canonical group
+     */
+    getStateSpanLinkedRecords(stateSpanId: string, signal?: AbortSignal): Promise<LinkedRecordsResponse> {
+        let url_ = this.baseUrl + "/api/v4/admin/deduplication/state-spans/{stateSpanId}/sources";
+        if (stateSpanId === undefined || stateSpanId === null)
+            throw new globalThis.Error("The parameter 'stateSpanId' must be defined.");
+        url_ = url_.replace("{stateSpanId}", encodeURIComponent("" + stateSpanId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStateSpanLinkedRecords(_response);
+        });
+    }
+
+    protected processGetStateSpanLinkedRecords(response: Response): Promise<LinkedRecordsResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as LinkedRecordsResponse;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<LinkedRecordsResponse>(null as any);
+    }
+}
+
 export class DeviceAlertsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -7111,6 +7425,221 @@ export class StateSpansClient {
     }
 
     protected processGetTempBasals(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get sleep state spans (user-annotated sleep periods)
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getSleep(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/sleep?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSleep(_response);
+        });
+    }
+
+    protected processGetSleep(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get exercise state spans (user-annotated activity periods)
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getExercise(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/exercise?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetExercise(_response);
+        });
+    }
+
+    protected processGetExercise(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get illness state spans (user-annotated illness periods)
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getIllness(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/illness?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetIllness(_response);
+        });
+    }
+
+    protected processGetIllness(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get travel state spans (user-annotated travel/timezone change periods)
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getTravel(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/travel?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTravel(_response);
+        });
+    }
+
+    protected processGetTravel(response: Response): Promise<StateSpan[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan[]>(null as any);
+    }
+
+    /**
+     * Get all activity state spans (sleep, exercise, illness, travel)
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getActivities(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/activities?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetActivities(_response);
+        });
+    }
+
+    protected processGetActivities(response: Response): Promise<StateSpan[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 200) {
@@ -16066,6 +16595,8 @@ export interface Entry extends ProcessableDocumentBase {
     modified_at?: Date | undefined;
     data_source?: string | undefined;
     meta?: { [key: string]: any; } | undefined;
+    canonicalId?: string | undefined;
+    sources?: string[] | undefined;
 }
 
 export function isEntry(object: any): object is Entry {
@@ -16289,6 +16820,8 @@ export interface Treatment extends ProcessableDocumentBase {
     bloodGlucoseInputSource?: string | undefined;
     calculationType?: CalculationType | undefined;
     additional_properties?: { [key: string]: any; } | undefined;
+    canonicalId?: string | undefined;
+    sources?: string[] | undefined;
 }
 
 export function isTreatment(object: any): object is Treatment {
@@ -16868,6 +17401,8 @@ export interface StateSpan {
     originalId?: string | undefined;
     createdAt?: Date | undefined;
     updatedAt?: Date | undefined;
+    canonicalId?: string | undefined;
+    sources?: string[] | undefined;
 }
 
 export enum StateSpanCategory {
@@ -16876,6 +17411,10 @@ export enum StateSpanCategory {
     Override = "Override",
     Profile = "Profile",
     TempBasal = "TempBasal",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Illness = "Illness",
+    Travel = "Travel",
 }
 
 /** Proxy configuration DTO */
@@ -17126,6 +17665,83 @@ export interface ConnectorFoodImport {
     energy?: number;
     portion?: number;
     unit?: string | undefined;
+}
+
+/** Response for starting a deduplication job */
+export interface DeduplicationJobResponse {
+    jobId?: string;
+    message?: string;
+    statusUrl?: string;
+}
+
+export interface DeduplicationJobStatus {
+    jobId?: string;
+    state?: DeduplicationJobState;
+    startedAt?: Date;
+    completedAt?: Date | undefined;
+    progress?: DeduplicationProgress | undefined;
+    result?: DeduplicationResult | undefined;
+}
+
+export enum DeduplicationJobState {
+    Pending = "Pending",
+    Running = "Running",
+    Completed = "Completed",
+    Failed = "Failed",
+    Cancelled = "Cancelled",
+}
+
+export interface DeduplicationProgress {
+    totalRecords?: number;
+    processedRecords?: number;
+    groupsFound?: number;
+    recordsLinked?: number;
+    currentPhase?: string;
+    percentComplete?: number;
+}
+
+export interface DeduplicationResult {
+    totalRecordsProcessed?: number;
+    canonicalGroupsCreated?: number;
+    recordsLinked?: number;
+    duplicateGroupsFound?: number;
+    duration?: string;
+    entriesProcessed?: number;
+    treatmentsProcessed?: number;
+    stateSpansProcessed?: number;
+    success?: boolean;
+    errorMessage?: string | undefined;
+}
+
+/** Response for cancelling a job */
+export interface CancelJobResponse {
+    jobId?: string;
+    cancelled?: boolean;
+    message?: string;
+}
+
+/** Response containing linked records for a canonical group */
+export interface LinkedRecordsResponse {
+    canonicalId?: string;
+    recordType?: RecordType;
+    linkedRecords?: LinkedRecord[];
+}
+
+export enum RecordType {
+    Entry = "Entry",
+    Treatment = "Treatment",
+    StateSpan = "StateSpan",
+}
+
+export interface LinkedRecord {
+    id?: string | undefined;
+    canonicalId?: string;
+    recordType?: RecordType;
+    recordId?: string;
+    sourceTimestamp?: number;
+    dataSource?: string;
+    isPrimary?: boolean;
+    createdAt?: Date;
 }
 
 export interface DeviceAlert {

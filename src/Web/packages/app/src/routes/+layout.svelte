@@ -67,8 +67,8 @@
     }
   }
 
-  onMount(async () => {
-    await realtimeStore.initialize();
+  onMount(() => {
+    realtimeStore.initialize();
     titleFaviconService.initialize();
 
     // Reload settings after hydration (SSR fix)
@@ -173,13 +173,8 @@
       <svelte:boundary>
         {@render children()}
 
-        {#snippet pending()}
-          <div class="flex items-center justify-center h-full">
-            <div class="text-muted-foreground">Loading...</div>
-          </div>
-        {/snippet}
         {#snippet failed(e)}
-          <Card.Root class="flex items-center justify-center h-full ">
+          <Card.Root class="flex items-center justify-center h-full">
             <Card.Header>
               <Card.Title>Error</Card.Title>
             </Card.Header>

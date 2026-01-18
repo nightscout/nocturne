@@ -255,15 +255,23 @@ export const predictionDisplayMode = new PersistedState<PredictionDisplayMode>(
 // Chart Lookback Settings
 // ==========================================
 
-export type TimeRangeOption = "2" | "4" | "6" | "12" | "24";
+export type TimeRangeOption = "2" | "4" | "6" | "12" | "24" | "48";
 
 /**
- * Glucose chart lookback hours preference
+ * Glucose chart lookback hours preference (display window width)
+ * This controls the span of time shown, always ending at "now"
+ * Can be a preset value or a custom number from brush selection
  */
-export const glucoseChartLookback = new PersistedState<TimeRangeOption>(
+export const glucoseChartLookback = new PersistedState<number>(
   "nocturne-glucose-chart-lookback",
-  "6"
+  12
 );
+
+/**
+ * Default fetch range in hours for glucose chart data
+ * Always fetches this much data regardless of display range
+ */
+export const GLUCOSE_CHART_FETCH_HOURS = 48;
 
 // ==========================================
 // Language Preference

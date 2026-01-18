@@ -227,7 +227,6 @@ msgid "Save Changes"
 msgstr "Save Changes"
 
 #: src/lib/components/layout/MobileHeader.svelte
-#: src/routes/+layout.svelte
 #: src/routes/settings/support/+page.svelte
 #: src/routes/settings/support/+page.svelte
 #: src/routes/settings/support/+page.svelte
@@ -3659,7 +3658,6 @@ msgstr "No GI level found."
 msgid "Dashboard"
 msgstr "Dashboard"
 
-#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/compatibility/[id]/+page.svelte
 msgid "Overview"
@@ -11942,97 +11940,6 @@ msgstr "Your language preference will be saved to your account and synced across
 msgid "Sign in to sync your language preference across devices."
 msgstr "Sign in to sync your language preference across devices."
 
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Offline"
-msgstr "Offline"
-
-#: src/routes/settings/services/+page.svelte
-msgid "<0/> Has Data"
-msgstr "<0/> Has Data"
-
-#~ msgid ""
-#~ "{0} entries\n"
-#~ "• Last seen {1}"
-#~ msgstr ""
-#~ "{0} entries\n"
-#~ "• Last seen {1}"
-
-#: src/routes/settings/services/+page.svelte
-msgid "Connector Not Running"
-msgstr "Connector Not Running"
-
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"This connector is not currently running, but data from previous\n"
-"syncs is still stored. You can delete this data below."
-msgstr ""
-"This connector is not currently running, but data from previous\n"
-"syncs is still stored. You can delete this data below."
-
-#: src/routes/settings/services/+page.svelte
-msgid "Total entries"
-msgstr "Total entries"
-
-#: src/routes/settings/services/+page.svelte
-msgid "Entries in last 24 hours"
-msgstr "Entries in last 24 hours"
-
-#: src/routes/settings/services/+page.svelte
-msgid "Last entry received"
-msgstr "Last entry received"
-
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Disabled"
-msgstr "Disabled"
-
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "<0/> Disabled"
-msgstr "<0/> Disabled"
-
-#. placeholder {0}: entries24h.toLocaleString()
-#: src/routes/settings/services/+page.svelte
-msgid "({0} in 24h)"
-msgstr "({0} in 24h)"
-
-#. placeholder {0}: entryCount?.toLocaleString() ?? 0
-#. placeholder {1}: formatLastSeen(lastSeen)
-#: src/routes/settings/services/+page.svelte
-msgid "{0} entries <0/> • Last seen {1}"
-msgstr "{0} entries <0/> • Last seen {1}"
-
-#: src/routes/settings/services/+page.svelte
-msgid "Connector Disabled"
-msgstr "Connector Disabled"
-
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"This connector is not currently enabled, but historical data from\n"
-"previous syncs is still stored. Enable the connector in your\n"
-"server configuration to resume syncing, or delete the data below."
-msgstr ""
-"This connector is not currently enabled, but historical data from\n"
-"previous syncs is still stored. Enable the connector in your\n"
-"server configuration to resume syncing, or delete the data below."
-
-#: src/routes/reports/treatments/+page.svelte
-msgid ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
-msgstr ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
-
 #: src/routes/reports/+page.svelte
 msgid "Your key metrics at a glance"
 msgstr "Your key metrics at a glance"
@@ -12152,3 +12059,87 @@ msgid ""
 msgstr ""
 "This report is for informational purposes. Always consult your\n"
 "healthcare provider for medical advice."
+
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Disabled"
+msgstr "Disabled"
+
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Offline"
+msgstr "Offline"
+
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Disabled"
+msgstr "<0/> Disabled"
+
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Has Data"
+msgstr "<0/> Has Data"
+
+#. placeholder {0}: entries24h.toLocaleString()
+#: src/routes/settings/services/+page.svelte
+msgid "({0} in 24h)"
+msgstr "({0} in 24h)"
+
+#. placeholder {0}: entryCount?.toLocaleString() ?? 0
+#. placeholder {1}: formatLastSeen(lastSeen)
+#: src/routes/settings/services/+page.svelte
+msgid "{0} entries <0/> • Last seen {1}"
+msgstr "{0} entries <0/> • Last seen {1}"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Connector Disabled"
+msgstr "Connector Disabled"
+
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"This connector is not currently enabled, but historical data from\n"
+"previous syncs is still stored. Enable the connector in your\n"
+"server configuration to resume syncing, or delete the data below."
+msgstr ""
+"This connector is not currently enabled, but historical data from\n"
+"previous syncs is still stored. Enable the connector in your\n"
+"server configuration to resume syncing, or delete the data below."
+
+#: src/routes/settings/services/+page.svelte
+msgid "Connector Not Running"
+msgstr "Connector Not Running"
+
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"This connector is not currently running, but data from previous\n"
+"syncs is still stored. You can delete this data below."
+msgstr ""
+"This connector is not currently running, but data from previous\n"
+"syncs is still stored. You can delete this data below."
+
+#: src/routes/settings/services/+page.svelte
+msgid "Total entries"
+msgstr "Total entries"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Entries in last 24 hours"
+msgstr "Entries in last 24 hours"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Last entry received"
+msgstr "Last entry received"
+
+#: src/routes/reports/treatments/+page.svelte
+msgid ""
+"Review and manage your insulin doses, carb entries, and device events. Use\n"
+"filters to find specific treatments."
+msgstr ""
+"Review and manage your insulin doses, carb entries, and device events. Use\n"
+"filters to find specific treatments."

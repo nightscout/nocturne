@@ -663,4 +663,20 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("additional_properties")]
     [NocturneOnly]
     public Dictionary<string, object>? AdditionalProperties { get; set; }
+
+    /// <summary>
+    /// Gets or sets the canonical group ID for deduplication.
+    /// Records with the same CanonicalId represent the same underlying event from different sources.
+    /// </summary>
+    [JsonPropertyName("canonicalId")]
+    [NocturneOnly]
+    public Guid? CanonicalId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the list of data sources that contributed to this unified record.
+    /// Only populated when returning merged/unified DTOs.
+    /// </summary>
+    [JsonPropertyName("sources")]
+    [NocturneOnly]
+    public string[]? Sources { get; set; }
 }

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
@@ -11,13 +13,23 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class StateSpanRepository
 {
     private readonly NocturneDbContext _context;
+    private readonly IDeduplicationService _deduplicationService;
+    private readonly ILogger<StateSpanRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
-    public StateSpanRepository(NocturneDbContext context)
+    /// <param name="context">The database context</param>
+    /// <param name="deduplicationService">Service for deduplicating records</param>
+    /// <param name="logger">Logger instance</param>
+    public StateSpanRepository(
+        NocturneDbContext context,
+        IDeduplicationService deduplicationService,
+        ILogger<StateSpanRepository> logger)
     {
         _context = context;
+        _deduplicationService = deduplicationService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -90,13 +102,14 @@ public class StateSpanRepository
     }
 
     /// <summary>
-    /// Create or update a state span (upsert by originalId)
+    /// Create or update a state span (upsert by originalId) and link to canonical groups
     /// </summary>
     public async Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
         CancellationToken cancellationToken = default)
     {
         StateSpanEntity? entity = null;
+        var isNew = false;
 
         // Check for existing by originalId
         if (!string.IsNullOrEmpty(stateSpan.OriginalId))
@@ -114,9 +127,43 @@ public class StateSpanRepository
         {
             entity = StateSpanMapper.ToEntity(stateSpan);
             _context.StateSpans.Add(entity);
+            isNew = true;
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Link new state spans to canonical groups for deduplication
+        if (isNew)
+        {
+            try
+            {
+                var criteria = new MatchCriteria
+                {
+                    Category = Enum.TryParse<StateSpanCategory>(entity.Category, true, out var cat) ? cat : null,
+                    State = entity.State
+                };
+
+                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
+                    RecordType.StateSpan,
+                    entity.StartMills,
+                    criteria,
+                    cancellationToken);
+
+                await _deduplicationService.LinkRecordAsync(
+                    canonicalId,
+                    RecordType.StateSpan,
+                    entity.Id,
+                    entity.StartMills,
+                    entity.Source ?? "unknown",
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the insert if deduplication fails
+                _logger.LogWarning(ex, "Failed to deduplicate state span {StateSpanId}", entity.Id);
+            }
+        }
+
         return StateSpanMapper.ToDomainModel(entity);
     }
 
@@ -217,4 +264,150 @@ public class StateSpanRepository
             to: to,
             cancellationToken: cancellationToken);
     }
+
+    #region Activity Compatibility Methods
+
+    /// <summary>
+    /// Get state spans that represent Activity records (Exercise, Sleep, Illness, Travel categories)
+    /// </summary>
+    public async Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(
+        string? type = null,
+        int count = 10,
+        int skip = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var activityCategories = ActivityStateSpanMapper.ActivityCategories
+            .Select(c => c.ToString())
+            .ToList();
+
+        var query = _context.StateSpans
+            .Where(s => activityCategories.Contains(s.Category));
+
+        // Filter by type/state if provided
+        if (!string.IsNullOrEmpty(type))
+            query = query.Where(s => s.State == type);
+
+        var entities = await query
+            .OrderByDescending(s => s.StartMills)
+            .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(StateSpanMapper.ToDomainModel);
+    }
+
+    /// <summary>
+    /// Get a state span by ID that represents an Activity record
+    /// </summary>
+    public async Task<StateSpan?> GetActivityStateSpanByIdAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var activityCategories = ActivityStateSpanMapper.ActivityCategories
+            .Select(c => c.ToString())
+            .ToList();
+
+        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            cancellationToken);
+
+        if (entity == null && Guid.TryParse(id, out var guidId))
+        {
+            entity = await _context.StateSpans.FirstOrDefaultAsync(
+                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                cancellationToken);
+        }
+
+        return entity != null ? StateSpanMapper.ToDomainModel(entity) : null;
+    }
+
+    /// <summary>
+    /// Create or update a state span from an Activity (upsert by originalId)
+    /// </summary>
+    public async Task<StateSpan> UpsertActivityAsStateSpanAsync(
+        StateSpan stateSpan,
+        CancellationToken cancellationToken = default)
+    {
+        // Use the standard upsert method - Activity-specific logic is in the mapper
+        return await UpsertStateSpanAsync(stateSpan, cancellationToken);
+    }
+
+    /// <summary>
+    /// Create multiple state spans from Activities
+    /// </summary>
+    public async Task<IEnumerable<StateSpan>> CreateActivitiesAsStateSpansAsync(
+        IEnumerable<StateSpan> stateSpans,
+        CancellationToken cancellationToken = default)
+    {
+        var results = new List<StateSpan>();
+        foreach (var span in stateSpans)
+        {
+            var created = await UpsertActivityAsStateSpanAsync(span, cancellationToken);
+            results.Add(created);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Update an existing Activity state span
+    /// </summary>
+    public async Task<StateSpan?> UpdateActivityStateSpanAsync(
+        string id,
+        StateSpan stateSpan,
+        CancellationToken cancellationToken = default)
+    {
+        var activityCategories = ActivityStateSpanMapper.ActivityCategories
+            .Select(c => c.ToString())
+            .ToList();
+
+        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            cancellationToken);
+
+        if (entity == null && Guid.TryParse(id, out var guidId))
+        {
+            entity = await _context.StateSpans.FirstOrDefaultAsync(
+                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                cancellationToken);
+        }
+
+        if (entity == null)
+            return null;
+
+        StateSpanMapper.UpdateEntity(entity, stateSpan);
+        await _context.SaveChangesAsync(cancellationToken);
+        return StateSpanMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
+    /// Delete an Activity state span by ID
+    /// </summary>
+    public async Task<bool> DeleteActivityStateSpanAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var activityCategories = ActivityStateSpanMapper.ActivityCategories
+            .Select(c => c.ToString())
+            .ToList();
+
+        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            cancellationToken);
+
+        if (entity == null && Guid.TryParse(id, out var guidId))
+        {
+            entity = await _context.StateSpans.FirstOrDefaultAsync(
+                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                cancellationToken);
+        }
+
+        if (entity == null)
+            return false;
+
+        _context.StateSpans.Remove(entity);
+        var result = await _context.SaveChangesAsync(cancellationToken);
+        return result > 0;
+    }
+
+    #endregion
 }

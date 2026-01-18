@@ -138,7 +138,7 @@ export const getInstanceHistory = query(z.number().optional(), async (limit) => 
 		return await apiClient.trackers.getInstanceHistory(limit ?? 100);
 	} catch (err) {
 		console.error('Error loading tracker history:', err);
-		throw error(500, 'Failed to load tracker history');
+		return [];
 	}
 });
 

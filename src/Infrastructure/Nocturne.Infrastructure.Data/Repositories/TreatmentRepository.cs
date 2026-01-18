@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -13,16 +14,26 @@ public class TreatmentRepository
 {
     private readonly NocturneDbContext _context;
     private readonly IQueryParser _queryParser;
+    private readonly IDeduplicationService _deduplicationService;
+    private readonly ILogger<TreatmentRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the TreatmentRepository class
     /// </summary>
     /// <param name="context">The database context</param>
     /// <param name="queryParser">MongoDB query parser for advanced filtering</param>
-    public TreatmentRepository(NocturneDbContext context, IQueryParser queryParser)
+    /// <param name="deduplicationService">Service for deduplicating records</param>
+    /// <param name="logger">Logger instance</param>
+    public TreatmentRepository(
+        NocturneDbContext context,
+        IQueryParser queryParser,
+        IDeduplicationService deduplicationService,
+        ILogger<TreatmentRepository> logger)
     {
         _context = context;
         _queryParser = queryParser;
+        _deduplicationService = deduplicationService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -79,7 +90,7 @@ public class TreatmentRepository
     }
 
     /// <summary>
-    /// Create new treatments
+    /// Create new treatments and link to canonical groups for deduplication
     /// </summary>
     public async Task<IEnumerable<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments,
@@ -88,6 +99,7 @@ public class TreatmentRepository
     {
         var entities = treatments.Select(TreatmentMapper.ToEntity).ToList();
         var resultEntities = new List<TreatmentEntity>();
+        var newEntities = new List<TreatmentEntity>();
 
         foreach (var entity in entities)
         {
@@ -108,10 +120,46 @@ public class TreatmentRepository
                 // Add new entity
                 _context.Treatments.Add(entity);
                 resultEntities.Add(entity);
+                newEntities.Add(entity);
             }
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Link new treatments to canonical groups for deduplication
+        foreach (var entity in newEntities)
+        {
+            try
+            {
+                var criteria = new MatchCriteria
+                {
+                    EventType = entity.EventType,
+                    Insulin = entity.Insulin,
+                    InsulinTolerance = 0.1, // 0.1 unit tolerance
+                    Carbs = entity.Carbs,
+                    CarbsTolerance = 1.0 // 1g tolerance
+                };
+
+                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
+                    RecordType.Treatment,
+                    entity.Mills,
+                    criteria,
+                    cancellationToken);
+
+                await _deduplicationService.LinkRecordAsync(
+                    canonicalId,
+                    RecordType.Treatment,
+                    entity.Id,
+                    entity.Mills,
+                    entity.DataSource ?? "unknown",
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the insert if deduplication fails
+                _logger.LogWarning(ex, "Failed to deduplicate treatment {TreatmentId}", entity.Id);
+            }
+        }
 
         return resultEntities.Select(TreatmentMapper.ToDomainModel);
     }

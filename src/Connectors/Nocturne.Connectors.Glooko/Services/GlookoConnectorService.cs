@@ -898,6 +898,10 @@ namespace Nocturne.Connectors.Glooko.Services
 
             return insulins.FirstOrDefault(insulin =>
             {
+                // Skip insulin entries with 0 value - these are carb-only events
+                if (insulin.Value <= 0)
+                    return false;
+
                 var insulinDate = DateTime.Parse(insulin.Timestamp);
                 var timeDifference = Math.Abs((foodDate - insulinDate).TotalMinutes);
                 return timeDifference < 46; // Within 45 minutes

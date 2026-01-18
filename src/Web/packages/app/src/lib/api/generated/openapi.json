@@ -3397,6 +3397,262 @@
         }
       }
     },
+    "/api/v4/admin/deduplication/run": {
+      "post": {
+        "tags": [
+          "Deduplication"
+        ],
+        "summary": "Start a deduplication job to link related records from different data sources.\nThe job runs in the background and can be monitored using the status endpoint.",
+        "operationId": "Deduplication_StartDeduplicationJob",
+        "responses": {
+          "202": {
+            "description": "Job ID for tracking progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeduplicationJobResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/admin/deduplication/status/{jobId}": {
+      "get": {
+        "tags": [
+          "Deduplication"
+        ],
+        "summary": "Get the status of a deduplication job.",
+        "operationId": "Deduplication_GetJobStatus",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "description": "The job ID returned from the run endpoint",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current status and progress of the job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeduplicationJobStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/admin/deduplication/cancel/{jobId}": {
+      "post": {
+        "tags": [
+          "Deduplication"
+        ],
+        "summary": "Cancel a running deduplication job.",
+        "operationId": "Deduplication_CancelJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "description": "The job ID to cancel",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether the job was successfully cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelJobResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/admin/deduplication/entries/{entryId}/sources": {
+      "get": {
+        "tags": [
+          "Deduplication"
+        ],
+        "summary": "Get linked records for a specific entry by its canonical group.",
+        "operationId": "Deduplication_GetEntryLinkedRecords",
+        "parameters": [
+          {
+            "name": "entryId",
+            "in": "path",
+            "required": true,
+            "description": "The entry ID",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All linked records in the same canonical group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedRecordsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/admin/deduplication/treatments/{treatmentId}/sources": {
+      "get": {
+        "tags": [
+          "Deduplication"
+        ],
+        "summary": "Get linked records for a specific treatment by its canonical group.",
+        "operationId": "Deduplication_GetTreatmentLinkedRecords",
+        "parameters": [
+          {
+            "name": "treatmentId",
+            "in": "path",
+            "required": true,
+            "description": "The treatment ID",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All linked records in the same canonical group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedRecordsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/admin/deduplication/state-spans/{stateSpanId}/sources": {
+      "get": {
+        "tags": [
+          "Deduplication"
+        ],
+        "summary": "Get linked records for a specific state span by its canonical group.",
+        "operationId": "Deduplication_GetStateSpanLinkedRecords",
+        "parameters": [
+          {
+            "name": "stateSpanId",
+            "in": "path",
+            "required": true,
+            "description": "The state span ID",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All linked records in the same canonical group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedRecordsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v4/devices/alerts": {
       "get": {
         "tags": [
@@ -5659,6 +5915,236 @@
         ],
         "summary": "Get temp basal state spans",
         "operationId": "StateSpans_GetTempBasals",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/sleep": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get sleep state spans (user-annotated sleep periods)",
+        "operationId": "StateSpans_GetSleep",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/exercise": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get exercise state spans (user-annotated activity periods)",
+        "operationId": "StateSpans_GetExercise",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/illness": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get illness state spans (user-annotated illness periods)",
+        "operationId": "StateSpans_GetIllness",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/travel": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get travel state spans (user-annotated travel/timezone change periods)",
+        "operationId": "StateSpans_GetTravel",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StateSpan"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/state-spans/activities": {
+      "get": {
+        "tags": [
+          "StateSpans"
+        ],
+        "summary": "Get all activity state spans (sleep, exercise, illness, travel)",
+        "operationId": "StateSpans_GetActivities",
         "parameters": [
           {
             "name": "from",
@@ -14862,6 +15348,18 @@
                 "type": "object",
                 "nullable": true,
                 "additionalProperties": {}
+              },
+              "canonicalId": {
+                "type": "string",
+                "format": "guid",
+                "nullable": true
+              },
+              "sources": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -15676,6 +16174,18 @@
                 "type": "object",
                 "nullable": true,
                 "additionalProperties": {}
+              },
+              "canonicalId": {
+                "type": "string",
+                "format": "guid",
+                "nullable": true
+              },
+              "sources": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -17573,6 +18083,18 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "canonicalId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "sources": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -17584,14 +18106,22 @@
           "PumpConnectivity",
           "Override",
           "Profile",
-          "TempBasal"
+          "TempBasal",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel"
         ],
         "enum": [
           "PumpMode",
           "PumpConnectivity",
           "Override",
           "Profile",
-          "TempBasal"
+          "TempBasal",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel"
         ]
       },
       "ProxyConfigurationDto": {
@@ -18353,6 +18883,239 @@
           "unit": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "DeduplicationJobResponse": {
+        "type": "object",
+        "description": "Response for starting a deduplication job",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "message": {
+            "type": "string"
+          },
+          "statusUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "DeduplicationJobStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DeduplicationJobState"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "progress": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeduplicationProgress"
+              }
+            ]
+          },
+          "result": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeduplicationResult"
+              }
+            ]
+          }
+        }
+      },
+      "DeduplicationJobState": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pending",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "enum": [
+          "Pending",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ]
+      },
+      "DeduplicationProgress": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "totalRecords": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "processedRecords": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupsFound": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "recordsLinked": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "currentPhase": {
+            "type": "string"
+          },
+          "percentComplete": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "DeduplicationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "totalRecordsProcessed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "canonicalGroupsCreated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "recordsLinked": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "duplicateGroupsFound": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "duration": {
+            "type": "string",
+            "format": "duration"
+          },
+          "entriesProcessed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "treatmentsProcessed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stateSpansProcessed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CancelJobResponse": {
+        "type": "object",
+        "description": "Response for cancelling a job",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkedRecordsResponse": {
+        "type": "object",
+        "description": "Response containing linked records for a canonical group",
+        "additionalProperties": false,
+        "properties": {
+          "canonicalId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "recordType": {
+            "$ref": "#/components/schemas/RecordType"
+          },
+          "linkedRecords": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedRecord"
+            }
+          }
+        }
+      },
+      "RecordType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Entry",
+          "Treatment",
+          "StateSpan"
+        ],
+        "enum": [
+          "Entry",
+          "Treatment",
+          "StateSpan"
+        ]
+      },
+      "LinkedRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "canonicalId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "recordType": {
+            "$ref": "#/components/schemas/RecordType"
+          },
+          "recordId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "sourceTimestamp": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "dataSource": {
+            "type": "string"
+          },
+          "isPrimary": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -167,7 +167,6 @@
       icon: Settings,
       children: [
         { title: "Account", href: "/settings/account", icon: User },
-        { title: "Overview", href: "/settings", icon: Settings },
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
         { title: "Devices", href: "/settings/devices", icon: Smartphone },
         { title: "Therapy", href: "/profile", icon: Syringe }, // Redirects to Profile page

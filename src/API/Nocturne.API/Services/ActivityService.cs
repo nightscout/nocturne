@@ -1,29 +1,29 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services;
 
 /// <summary>
-/// Domain service implementation for activity operations with WebSocket broadcasting
+/// Domain service implementation for activity operations with WebSocket broadcasting.
+/// Activities are stored as StateSpans under the hood for unified data management.
 /// </summary>
 public class ActivityService : IActivityService
 {
-    private readonly IPostgreSqlService _postgreSqlService;
+    private readonly IStateSpanService _stateSpanService;
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly ISignalRBroadcastService _signalRBroadcastService;
     private readonly ILogger<ActivityService> _logger;
 
     public ActivityService(
-        IPostgreSqlService postgreSqlService,
+        IStateSpanService stateSpanService,
         IDocumentProcessingService documentProcessingService,
         ISignalRBroadcastService signalRBroadcastService,
         ILogger<ActivityService> logger
     )
     {
-        _postgreSqlService =
-            postgreSqlService ?? throw new ArgumentNullException(nameof(postgreSqlService));
+        _stateSpanService =
+            stateSpanService ?? throw new ArgumentNullException(nameof(stateSpanService));
         _documentProcessingService =
             documentProcessingService
             ?? throw new ArgumentNullException(nameof(documentProcessingService));
@@ -49,11 +49,12 @@ public class ActivityService : IActivityService
                 count,
                 skip
             );
-            // Note: MongoDB service doesn't support find parameter for activities yet
-            return await _postgreSqlService.GetActivitiesAsync(
-                count ?? 10,
-                skip ?? 0,
-                cancellationToken
+
+            return await _stateSpanService.GetActivitiesAsync(
+                type: find,
+                count: count ?? 10,
+                skip: skip ?? 0,
+                cancellationToken: cancellationToken
             );
         }
         catch (Exception ex)
@@ -72,7 +73,7 @@ public class ActivityService : IActivityService
         try
         {
             _logger.LogDebug("Getting activity record by ID: {Id}", id);
-            return await _postgreSqlService.GetActivityByIdAsync(id, cancellationToken);
+            return await _stateSpanService.GetActivityByIdAsync(id, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -98,8 +99,8 @@ public class ActivityService : IActivityService
             );
             var processedList = processedActivities.ToList();
 
-            // Create in database
-            var createdActivities = await _postgreSqlService.CreateActivitiesAsync(
+            // Create via StateSpanService (stored as StateSpans)
+            var createdActivities = await _stateSpanService.CreateActivitiesAsync(
                 processedList,
                 cancellationToken
             );
@@ -137,7 +138,7 @@ public class ActivityService : IActivityService
         {
             _logger.LogDebug("Updating activity record with ID: {Id}", id);
 
-            var updatedActivity = await _postgreSqlService.UpdateActivityAsync(
+            var updatedActivity = await _stateSpanService.UpdateActivityAsync(
                 id,
                 activity,
                 cancellationToken
@@ -178,7 +179,7 @@ public class ActivityService : IActivityService
         {
             _logger.LogDebug("Deleting activity record with ID: {Id}", id);
 
-            var deleted = await _postgreSqlService.DeleteActivityAsync(id, cancellationToken);
+            var deleted = await _stateSpanService.DeleteActivityAsync(id, cancellationToken);
 
             if (deleted)
             {
@@ -210,8 +211,7 @@ public class ActivityService : IActivityService
         {
             _logger.LogDebug("Bulk deleting activity records with filter: {Find}", find);
 
-            // TODO: Implement BulkDeleteActivitiesAsync in IDataService
-            // For now, return 0 as bulk delete is not implemented for activities
+            // TODO: Implement bulk delete for activities stored as StateSpans
             _logger.LogWarning("Bulk delete for activities is not implemented yet");
             return await Task.FromResult(0L);
         }

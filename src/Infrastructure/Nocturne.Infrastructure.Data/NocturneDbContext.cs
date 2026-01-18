@@ -199,6 +199,11 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<MigrationRunEntity> MigrationRuns { get; set; }
 
+    /// <summary>
+    /// Gets or sets the LinkedRecords table for deduplication linking
+    /// </summary>
+    public DbSet<LinkedRecordEntity> LinkedRecords { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -960,6 +965,33 @@ public class NocturneDbContext : DbContext
             .HasIndex(r => new { r.SourceId, r.State })
             .HasDatabaseName("ix_migration_runs_source_state");
 
+        // LinkedRecords indexes - optimized for deduplication queries
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => l.CanonicalId)
+            .HasDatabaseName("ix_linked_records_canonical");
+
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.RecordType, l.RecordId })
+            .HasDatabaseName("ix_linked_records_record");
+
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.RecordType, l.RecordId })
+            .IsUnique()
+            .HasDatabaseName("ix_linked_records_unique");
+
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.RecordType, l.CanonicalId, l.IsPrimary })
+            .HasDatabaseName("ix_linked_records_type_canonical_primary");
+
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.RecordType, l.SourceTimestamp })
+            .HasDatabaseName("ix_linked_records_type_timestamp");
+
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1082,6 +1114,11 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<SystemEventEntity>()
             .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .Property(l => l.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 
         modelBuilder
@@ -1531,6 +1568,13 @@ public class NocturneDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Configure LinkedRecordEntity defaults
+        modelBuilder.Entity<LinkedRecordEntity>(entity =>
+        {
+            entity.Property(e => e.IsPrimary).HasDefaultValue(false);
+            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+        });
+
         // Configure PasswordResetRequest entity
         modelBuilder.Entity<PasswordResetRequestEntity>(entity =>
         {
@@ -1748,6 +1792,13 @@ public class NocturneDbContext : DbContext
                 if (entry.State == EntityState.Added)
                 {
                     authAuditLogEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is LinkedRecordEntity linkedRecordEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    linkedRecordEntity.SysCreatedAt = utcNow;
                 }
             }
         }

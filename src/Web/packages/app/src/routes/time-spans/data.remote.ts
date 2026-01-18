@@ -27,6 +27,12 @@ export interface ProcessedSpan {
   endTime: Date;
   color: string;
   metadata?: Record<string, unknown>;
+  /** Temp basal rate (U/hr) if applicable */
+  rate?: number | null;
+  /** Temp basal percent if applicable */
+  percent?: number | null;
+  /** Profile name if applicable */
+  profileName?: string | null;
 }
 
 /**
@@ -37,6 +43,7 @@ export interface TimeSpansPageData {
   profileSpans: ProcessedSpan[];
   tempBasalSpans: ProcessedSpan[];
   overrideSpans: ProcessedSpan[];
+  activitySpans: ProcessedSpan[];
   entries: Entry[];
   dateRange: { from: Date; to: Date };
 }
@@ -88,6 +95,19 @@ function getOverrideColor(state: string): string {
 }
 
 /**
+ * Map activity category to CSS color variable
+ */
+function getActivityColor(category: StateSpanCategory): string {
+  const categoryColors: Record<string, string> = {
+    [StateSpanCategory.Sleep]: "var(--pump-mode-sleep)",
+    [StateSpanCategory.Exercise]: "var(--pump-mode-exercise)",
+    [StateSpanCategory.Illness]: "var(--system-event-warning)",
+    [StateSpanCategory.Travel]: "var(--chart-3)",
+  };
+  return categoryColors[category] ?? "var(--muted-foreground)";
+}
+
+/**
  * Process raw state spans into chart-ready format
  */
 function processSpans(
@@ -115,6 +135,11 @@ function processSpans(
       endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
       color: colorFn(span.state ?? ""),
       metadata: span.metadata,
+      // Extract temp basal rate/percent from metadata
+      rate: (span.metadata?.rate as number) ?? (span.metadata?.absolute as number) ?? null,
+      percent: (span.metadata?.percent as number) ?? null,
+      // Extract profile name from metadata
+      profileName: (span.metadata?.profileName as string) ?? (span.metadata?.name as string) ?? null,
     }));
 }
 
@@ -153,12 +178,13 @@ export const getTimeSpansData = query(
 
     try {
       // Fetch all state span categories in parallel
-      const [pumpModeSpans, profileSpans, tempBasalSpans, overrideSpans, entries] =
+      const [pumpModeSpans, profileSpans, tempBasalSpans, overrideSpans, activitySpans, entries] =
         await Promise.all([
           apiClient.stateSpans.getPumpModes(startTime, endTime),
           apiClient.stateSpans.getProfiles(startTime, endTime),
           apiClient.stateSpans.getTempBasals(startTime, endTime),
           apiClient.stateSpans.getOverrides(startTime, endTime),
+          apiClient.stateSpans.getActivities(startTime, endTime),
           apiClient.entries.getEntries2(
             JSON.stringify({
               date: {
@@ -194,6 +220,24 @@ export const getTimeSpansData = query(
           endTime,
           getOverrideColor
         ),
+        activitySpans: (activitySpans ?? [])
+          .filter((span) => {
+            const spanStart = span.startMills ?? 0;
+            const spanEnd = span.endMills ?? endTime;
+            return spanEnd > startTime && spanStart < endTime;
+          })
+          .map((span) => ({
+            id: span.id ?? crypto.randomUUID(),
+            category: span.category ?? StateSpanCategory.Sleep,
+            state: span.state ?? "Unknown",
+            startTime: new Date(Math.max(span.startMills ?? 0, startTime)),
+            endTime: new Date(Math.min(span.endMills ?? endTime, endTime)),
+            color: getActivityColor(span.category ?? StateSpanCategory.Sleep),
+            metadata: span.metadata,
+            rate: null,
+            percent: null,
+            profileName: null,
+          })),
         entries: Array.isArray(entries) ? entries : [],
         dateRange: { from: startOfRange, to: endOfRange },
       };
@@ -205,6 +249,7 @@ export const getTimeSpansData = query(
         profileSpans: [],
         tempBasalSpans: [],
         overrideSpans: [],
+        activitySpans: [],
         entries: [],
         dateRange: { from: startOfRange, to: endOfRange },
       };

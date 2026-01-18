@@ -7,6 +7,9 @@
     deleteDataSourceData as deleteDataSourceDataRemote,
     deleteConnectorData as deleteConnectorDataRemote,
     getConnectorStatuses,
+    startDeduplicationJob,
+    getDeduplicationJobStatus,
+    cancelDeduplicationJob,
   } from "$lib/data/services.remote";
   import type {
     ServicesOverview,
@@ -17,6 +20,7 @@
     SyncRequest,
     SyncResult,
     AvailableConnector,
+    DeduplicationJobStatus,
   } from "$lib/api/generated/nocturne-api-client";
   import {
     Card,
@@ -56,6 +60,8 @@
     Sparkles,
     Pencil,
     Download,
+    Link2,
+    Wrench,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import Apple from "lucide-svelte/icons/apple";
@@ -137,10 +143,21 @@
     error?: string;
   } | null>(null);
 
+  // Deduplication state
+  let showDeduplicationDialog = $state(false);
+  let isDeduplicating = $state(false);
+  let deduplicationJobId = $state<string | null>(null);
+  let deduplicationStatus = $state<DeduplicationJobStatus | null>(null);
+  let deduplicationError = $state<string | null>(null);
+  let deduplicationPollingInterval = $state<ReturnType<typeof setInterval> | null>(null);
+
   onMount(async () => {
-    await loadServices();
-    await loadConnectorStatuses();
+    await Promise.all([loadServices(), loadConnectorStatuses()]);
   });
+
+  async function refreshAll() {
+    await Promise.all([loadServices(), loadConnectorStatuses()]);
+  }
 
   $inspect(connectorStatuses);
   async function loadServices() {
@@ -197,6 +214,85 @@
       };
     } finally {
       isDeletingConnector = false;
+    }
+  }
+
+  async function startDeduplication() {
+    isDeduplicating = true;
+    deduplicationError = null;
+    deduplicationStatus = null;
+
+    try {
+      const result = await startDeduplicationJob();
+      if (result.success && result.jobId) {
+        deduplicationJobId = result.jobId;
+        // Start polling for status
+        startDeduplicationPolling();
+      } else {
+        deduplicationError = result.error ?? "Failed to start deduplication job";
+        isDeduplicating = false;
+      }
+    } catch (e) {
+      deduplicationError = e instanceof Error ? e.message : "Failed to start deduplication";
+      isDeduplicating = false;
+    }
+  }
+
+  function startDeduplicationPolling() {
+    // Poll every 2 seconds
+    deduplicationPollingInterval = setInterval(async () => {
+      if (!deduplicationJobId) return;
+
+      try {
+        const status = await getDeduplicationJobStatus(deduplicationJobId);
+        if (status) {
+          deduplicationStatus = status;
+
+          // Check if job is complete
+          if (status.state === "Completed" || status.state === "Failed" || status.state === "Cancelled") {
+            stopDeduplicationPolling();
+            isDeduplicating = false;
+
+            if (status.state === "Failed") {
+              deduplicationError = status.result?.errorMessage ?? "Job failed";
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to get deduplication status:", e);
+      }
+    }, 2000);
+  }
+
+  function stopDeduplicationPolling() {
+    if (deduplicationPollingInterval) {
+      clearInterval(deduplicationPollingInterval);
+      deduplicationPollingInterval = null;
+    }
+  }
+
+  async function cancelDeduplication() {
+    if (!deduplicationJobId) return;
+
+    try {
+      const result = await cancelDeduplicationJob(deduplicationJobId);
+      if (result.success) {
+        stopDeduplicationPolling();
+        isDeduplicating = false;
+      }
+    } catch (e) {
+      console.error("Failed to cancel deduplication:", e);
+    }
+  }
+
+  function closeDeduplicationDialog() {
+    showDeduplicationDialog = false;
+    stopDeduplicationPolling();
+    // Reset state for next time
+    if (!isDeduplicating) {
+      deduplicationJobId = null;
+      deduplicationStatus = null;
+      deduplicationError = null;
     }
   }
 
@@ -672,8 +768,8 @@
         See what's sending data to Nocturne and set up new connections
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={loadServices} class="gap-2">
-      <RefreshCw class="h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+    <Button variant="outline" size="sm" onclick={refreshAll} class="gap-2">
+      <RefreshCw class="h-4 w-4 {isLoading || isLoadingConnectorStatuses ? 'animate-spin' : ''}" />
       Refresh
     </Button>
   </div>
@@ -790,7 +886,7 @@
                       {formatLastSeen(source.lastSeen)}
                     </div>
                     <div class="text-xs text-muted-foreground mt-1">
-                      {source.entriesLast24h ?? 0} entries (24h)
+                      {source.entriesLast24h ?? 0} records (24h)
                     </div>
                   </div>
                   <ChevronRight class="h-4 w-4 text-muted-foreground" />
@@ -1099,7 +1195,7 @@
                     {/if}
                   </div>
                   <p class="text-sm text-muted-foreground">
-                    {connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0} entries
+                    {connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0} records
                     (24h)
                   </p>
                 </div>
@@ -1173,7 +1269,7 @@
                     </Badge>
                   </div>
                   <p class="text-sm text-muted-foreground">
-                    {entryCount?.toLocaleString() ?? 0} entries
+                    {entryCount?.toLocaleString() ?? 0} records
                     {#if entries24h > 0}
                       ({entries24h.toLocaleString()} in 24h)
                     {/if}
@@ -1303,6 +1399,42 @@
         </CardContent>
       </Card>
     {/if}
+
+    <!-- Data Maintenance -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Wrench class="h-5 w-5" />
+          Data Maintenance
+        </CardTitle>
+        <CardDescription>
+          Administrative tools for managing your data
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Link2 class="h-5 w-5 text-primary" />
+          </div>
+          <div class="flex-1">
+            <h4 class="font-medium">Deduplicate Records</h4>
+            <p class="text-sm text-muted-foreground mt-1">
+              Link records from multiple data sources that represent the same underlying event.
+              This improves data quality when the same glucose readings or treatments are uploaded from different apps.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              class="mt-3 gap-2"
+              onclick={() => (showDeduplicationDialog = true)}
+            >
+              <Link2 class="h-4 w-4" />
+              Run Deduplication
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   {/if}
 </div>
 
@@ -1471,7 +1603,7 @@
               <span class="font-medium">Demo data cleared successfully</span>
             </div>
             <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-              Deleted {demoDeleteResult.entriesDeleted?.toLocaleString() ?? 0} entries
+              Deleted {demoDeleteResult.entriesDeleted?.toLocaleString() ?? 0} records
             </p>
           </div>
         {:else}
@@ -1571,13 +1703,13 @@
             </p>
           </div>
           <div>
-            <span class="text-muted-foreground">Entries (24h)</span>
+            <span class="text-muted-foreground">Records (24h)</span>
             <p class="mt-1 font-medium">
               {selectedDataSource.entriesLast24h?.toLocaleString() ?? 0}
             </p>
           </div>
           <div>
-            <span class="text-muted-foreground">Total Entries</span>
+            <span class="text-muted-foreground">Total Records</span>
             <p class="mt-1 font-medium">
               {selectedDataSource.totalEntries?.toLocaleString() ?? 0}
             </p>
@@ -1652,8 +1784,8 @@
               class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
             >
               <li>
-                All glucose entries ({selectedDataSource.totalEntries?.toLocaleString() ??
-                  0} entries)
+                All glucose records ({selectedDataSource.totalEntries?.toLocaleString() ??
+                  0} records)
               </li>
               <li>All treatments entered by this device</li>
               <li>All device status records</li>
@@ -1672,7 +1804,7 @@
                   <span class="font-medium">Data deleted successfully</span>
                 </div>
                 <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-                  Deleted {deleteResult.entriesDeleted?.toLocaleString() ?? 0} entries
+                  Deleted {deleteResult.entriesDeleted?.toLocaleString() ?? 0} records
                 </p>
               </div>
             {:else}
@@ -1942,7 +2074,7 @@
           <!-- Metrics -->
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground">Total entries</span>
+              <span class="text-sm text-muted-foreground">Total records</span>
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   <span
@@ -1980,7 +2112,7 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="text-sm text-muted-foreground">
-                Entries in last 24 hours
+                Records in last 24 hours
               </span>
               <Tooltip.Root>
                 <Tooltip.Trigger>
@@ -2021,7 +2153,7 @@
             {#if selectedConnector.lastEntryTime}
               <div class="flex items-center justify-between">
                 <span class="text-sm text-muted-foreground">
-                  Last entry received
+                  Last record received
                 </span>
                 <span class="font-medium">
                   {formatLastSeen(selectedConnector.lastEntryTime)}
@@ -2244,8 +2376,8 @@
               class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
             >
               <li>
-                All glucose entries ({selectedConnector.totalEntries?.toLocaleString() ??
-                  0} entries)
+                All glucose records ({selectedConnector.totalEntries?.toLocaleString() ??
+                  0} records)
               </li>
               <li>
                 Any treatments and device status records from this connector
@@ -2266,7 +2398,7 @@
                 </div>
                 <p class="text-sm text-green-700 dark:text-green-300 mt-1">
                   Deleted {connectorDeleteResult.entriesDeleted?.toLocaleString() ??
-                    0} entries
+                    0} records
                 </p>
               </div>
             {:else}
@@ -2327,3 +2459,135 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<!-- Deduplication Dialog -->
+<Dialog.Root bind:open={showDeduplicationDialog} onOpenChange={(open) => !open && closeDeduplicationDialog()}>
+  <Dialog.Content class="max-w-md">
+    <Dialog.Header>
+      <Dialog.Title class="flex items-center gap-2">
+        <Link2 class="h-5 w-5 text-primary" />
+        Deduplicate Records
+      </Dialog.Title>
+      <Dialog.Description>
+        Link records from multiple data sources that represent the same underlying event
+      </Dialog.Description>
+    </Dialog.Header>
+
+    <div class="space-y-4 py-4">
+      {#if deduplicationError}
+        <div
+          class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
+        >
+          <div class="flex items-center gap-2 text-red-800 dark:text-red-200">
+            <AlertCircle class="h-5 w-5" />
+            <span class="font-medium">Error</span>
+          </div>
+          <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+            {deduplicationError}
+          </p>
+        </div>
+      {:else if deduplicationStatus?.state === "Completed"}
+        <div
+          class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4"
+        >
+          <div class="flex items-center gap-2 text-green-800 dark:text-green-200">
+            <CheckCircle class="h-5 w-5" />
+            <span class="font-medium">Deduplication Complete</span>
+          </div>
+          {#if deduplicationStatus.result}
+            <div class="mt-3 space-y-1 text-sm text-green-700 dark:text-green-300">
+              <div class="flex justify-between">
+                <span>Records processed:</span>
+                <span class="font-mono">{deduplicationStatus.result.totalRecordsProcessed?.toLocaleString() ?? 0}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Groups created:</span>
+                <span class="font-mono">{deduplicationStatus.result.canonicalGroupsCreated?.toLocaleString() ?? 0}</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Duplicates found:</span>
+                <span class="font-mono">{deduplicationStatus.result.duplicateGroupsFound?.toLocaleString() ?? 0}</span>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {:else if deduplicationStatus?.state === "Cancelled"}
+        <div
+          class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4"
+        >
+          <div class="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+            <AlertTriangle class="h-5 w-5" />
+            <span class="font-medium">Job Cancelled</span>
+          </div>
+        </div>
+      {:else if isDeduplicating}
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <Loader2 class="h-5 w-5 animate-spin text-primary" />
+            <div>
+              <p class="font-medium">Running deduplication...</p>
+              <p class="text-sm text-muted-foreground">
+                {deduplicationStatus?.progress?.currentPhase ?? "Initializing"}
+              </p>
+            </div>
+          </div>
+
+          {#if deduplicationStatus?.progress}
+            <div class="space-y-2">
+              <div class="flex justify-between text-sm">
+                <span class="text-muted-foreground">Progress</span>
+                <span class="font-medium">
+                  {deduplicationStatus.progress.percentComplete?.toFixed(1) ?? 0}%
+                </span>
+              </div>
+              <div class="w-full h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-primary transition-all duration-300"
+                  style="width: {deduplicationStatus.progress.percentComplete ?? 0}%"
+                ></div>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div>
+                  Processed: {deduplicationStatus.progress.processedRecords?.toLocaleString() ?? 0}
+                  / {deduplicationStatus.progress.totalRecords?.toLocaleString() ?? 0}
+                </div>
+                <div class="text-right">
+                  Groups: {deduplicationStatus.progress.groupsFound?.toLocaleString() ?? 0}
+                </div>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <div class="rounded-lg border bg-muted/50 p-4">
+          <p class="text-sm text-muted-foreground">
+            This process will scan all your glucose records, treatments, and state spans
+            to identify and link records that represent the same event from different data sources.
+          </p>
+          <ul class="mt-3 text-sm text-muted-foreground list-disc list-inside space-y-1">
+            <li>Records within 30 seconds are considered potential matches</li>
+            <li>Matching criteria include timestamps and values</li>
+            <li>Original data is preserved; only links are created</li>
+            <li>Safe to run multiple times</li>
+          </ul>
+        </div>
+      {/if}
+    </div>
+
+    <Dialog.Footer>
+      <Button variant="outline" onclick={closeDeduplicationDialog}>
+        {deduplicationStatus?.state === "Completed" ? "Done" : "Close"}
+      </Button>
+      {#if isDeduplicating}
+        <Button variant="destructive" onclick={cancelDeduplication} class="gap-2">
+          Cancel Job
+        </Button>
+      {:else if !deduplicationStatus || deduplicationStatus.state === "Failed" || deduplicationStatus.state === "Cancelled"}
+        <Button onclick={startDeduplication} class="gap-2">
+          <Link2 class="h-4 w-4" />
+          Start Deduplication
+        </Button>
+      {/if}
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

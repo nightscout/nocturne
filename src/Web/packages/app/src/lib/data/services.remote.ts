@@ -122,3 +122,64 @@ export const getConnectorStatuses = query(async () => {
 		return [];
 	}
 });
+
+/**
+ * Start a deduplication job
+ */
+export const startDeduplicationJob = command(async () => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		const result = await apiClient.deduplication.startDeduplicationJob();
+		return {
+			success: true,
+			jobId: result.jobId,
+			message: result.message,
+			statusUrl: result.statusUrl,
+		};
+	} catch (err) {
+		console.error('Error starting deduplication job:', err);
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : 'Failed to start deduplication job',
+		};
+	}
+});
+
+/**
+ * Get deduplication job status
+ */
+export const getDeduplicationJobStatus = query(z.string(), async (jobId) => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		return await apiClient.deduplication.getJobStatus(jobId);
+	} catch (err) {
+		console.error('Error getting deduplication job status:', err);
+		return null;
+	}
+});
+
+/**
+ * Cancel a deduplication job
+ */
+export const cancelDeduplicationJob = command(z.string(), async (jobId) => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		const result = await apiClient.deduplication.cancelJob(jobId);
+		return {
+			success: result.cancelled ?? false,
+			message: result.message,
+		};
+	} catch (err) {
+		console.error('Error cancelling deduplication job:', err);
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : 'Failed to cancel job',
+		};
+	}
+});

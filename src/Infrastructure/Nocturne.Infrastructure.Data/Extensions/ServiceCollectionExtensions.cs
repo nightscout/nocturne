@@ -283,6 +283,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SystemEventRepository>();
         services.AddScoped<TreatmentFoodRepository>();
         services.AddScoped<UserFoodFavoriteRepository>();
+        services.AddScoped<EntryRepository>();
+        services.AddScoped<TreatmentRepository>();
         return services;
     }
 }

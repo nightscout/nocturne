@@ -24,7 +24,10 @@ let singletonStore: RealtimeStore | null = null;
 
 export class RealtimeStore {
   private websocketClient!: WebSocketClient;
-  private initialized = false;
+  private _initStarted = false;
+
+  /** Loading state - false until initial data is loaded */
+  isReady = $state(false);
 
   /** Current time state (updated every second) */
   now = $state(Date.now());
@@ -179,12 +182,10 @@ export class RealtimeStore {
 
   /** Initialize WebSocket connection - data will be populated via real-time events */
   async initialize(): Promise<void> {
-    if (this.initialized) {
+    if (this._initStarted) {
       return;
     }
-
-    // Set initialized flag immediately to prevent re-entry during reactive updates
-    this.initialized = true;
+    this._initStarted = true;
 
     // Start time ticker and visibility change listener
     if (typeof window !== "undefined") {
@@ -253,10 +254,13 @@ export class RealtimeStore {
         if (trackerActive && trackerActive.length > 0) {
           this.trackerInstances = trackerActive;
         }
+
+        this.isReady = true;
       });
     } catch (error) {
       console.error("Failed to fetch historical data:", error);
       toast.error("Failed to load historical data");
+      this.isReady = true; // Still mark as ready to unblock UI
     }
 
     // Connect to WebSocket bridge

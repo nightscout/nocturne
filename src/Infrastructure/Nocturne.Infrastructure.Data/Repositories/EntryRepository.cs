@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -13,16 +14,26 @@ public class EntryRepository
 {
     private readonly NocturneDbContext _context;
     private readonly IQueryParser _queryParser;
+    private readonly IDeduplicationService _deduplicationService;
+    private readonly ILogger<EntryRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the EntryRepository class
     /// </summary>
     /// <param name="context">The database context</param>
     /// <param name="queryParser">MongoDB query parser for advanced filtering</param>
-    public EntryRepository(NocturneDbContext context, IQueryParser queryParser)
+    /// <param name="deduplicationService">Service for deduplicating records</param>
+    /// <param name="logger">Logger instance</param>
+    public EntryRepository(
+        NocturneDbContext context,
+        IQueryParser queryParser,
+        IDeduplicationService deduplicationService,
+        ILogger<EntryRepository> logger)
     {
         _context = context;
         _queryParser = queryParser;
+        _deduplicationService = deduplicationService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -91,7 +102,7 @@ public class EntryRepository
     }
 
     /// <summary>
-    /// Create new entries, skipping duplicates
+    /// Create new entries, skipping duplicates and linking to canonical groups
     /// </summary>
     public async Task<IEnumerable<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
@@ -125,6 +136,38 @@ public class EntryRepository
 
         _context.Entries.AddRange(newEntities);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Link new entries to canonical groups for deduplication
+        foreach (var entity in newEntities)
+        {
+            try
+            {
+                var criteria = new MatchCriteria
+                {
+                    GlucoseValue = entity.Sgv ?? entity.Mgdl,
+                    GlucoseTolerance = 1.0 // 1 mg/dL tolerance for glucose matching
+                };
+
+                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
+                    RecordType.Entry,
+                    entity.Mills,
+                    criteria,
+                    cancellationToken);
+
+                await _deduplicationService.LinkRecordAsync(
+                    canonicalId,
+                    RecordType.Entry,
+                    entity.Id,
+                    entity.Mills,
+                    entity.DataSource ?? "unknown",
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the insert if deduplication fails
+                _logger.LogWarning(ex, "Failed to deduplicate entry {EntryId}", entity.Id);
+            }
+        }
 
         return newEntities.Select(EntryMapper.ToDomainModel);
     }
