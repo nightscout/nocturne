@@ -1,37 +1,37 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Controllers.V1;
 
 /// <summary>
 /// Controller for managing Nightscout activity data
 /// Provides full CRUD operations for activity records
+/// Activities are stored as StateSpans under the hood for unified data management
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
 public class ActivityController : ControllerBase
 {
-    private readonly IPostgreSqlService _postgreSqlService;
+    private readonly IStateSpanService _stateSpanService;
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly ILogger<ActivityController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the ActivityController
     /// </summary>
-    /// <param name="postgreSqlService">PostgreSQL service for data operations</param>
+    /// <param name="stateSpanService">StateSpan service for data operations (activities stored as StateSpans)</param>
     /// <param name="documentProcessingService">Document processing service for sanitization and timestamp handling</param>
     /// <param name="logger">Logger instance</param>
     public ActivityController(
-        IPostgreSqlService postgreSqlService,
+        IStateSpanService stateSpanService,
         IDocumentProcessingService documentProcessingService,
         ILogger<ActivityController> logger
     )
     {
-        _postgreSqlService =
-            postgreSqlService ?? throw new ArgumentNullException(nameof(postgreSqlService));
+        _stateSpanService =
+            stateSpanService ?? throw new ArgumentNullException(nameof(stateSpanService));
         _documentProcessingService =
             documentProcessingService
             ?? throw new ArgumentNullException(nameof(documentProcessingService));
@@ -60,10 +60,10 @@ public class ActivityController : ControllerBase
         {
             _logger.LogDebug("Getting activities with count: {Count}, skip: {Skip}", count, skip);
 
-            var activities = await _postgreSqlService.GetActivitiesAsync(
-                count,
-                skip,
-                cancellationToken
+            var activities = await _stateSpanService.GetActivitiesAsync(
+                count: count,
+                skip: skip,
+                cancellationToken: cancellationToken
             );
 
             // Set Last-Modified header if we have activities
@@ -114,7 +114,7 @@ public class ActivityController : ControllerBase
         {
             _logger.LogDebug("Getting activity with ID: {Id}", id);
 
-            var activity = await _postgreSqlService.GetActivityByIdAsync(id, cancellationToken);
+            var activity = await _stateSpanService.GetActivityByIdAsync(id, cancellationToken);
             if (activity == null)
             {
                 _logger.LogDebug("Activity with ID {Id} not found", id);
@@ -198,7 +198,7 @@ public class ActivityController : ControllerBase
             );
             var processedList = processedActivities.ToList();
 
-            var createdActivities = await _postgreSqlService.CreateActivitiesAsync(
+            var createdActivities = await _stateSpanService.CreateActivitiesAsync(
                 processedList,
                 cancellationToken
             );
@@ -248,7 +248,7 @@ public class ActivityController : ControllerBase
                 return BadRequest(new { error = "Activity data is required" });
             }
 
-            var updatedActivity = await _postgreSqlService.UpdateActivityAsync(
+            var updatedActivity = await _stateSpanService.UpdateActivityAsync(
                 id,
                 activity,
                 cancellationToken
@@ -293,7 +293,7 @@ public class ActivityController : ControllerBase
         {
             _logger.LogDebug("Deleting activity with ID: {Id}", id);
 
-            var deleted = await _postgreSqlService.DeleteActivityAsync(id, cancellationToken);
+            var deleted = await _stateSpanService.DeleteActivityAsync(id, cancellationToken);
             if (!deleted)
             {
                 _logger.LogDebug("Activity with ID {Id} not found for deletion", id);

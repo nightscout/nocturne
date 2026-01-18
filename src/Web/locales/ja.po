@@ -391,6 +391,7 @@ msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3073,8 +3074,9 @@ msgstr ""
 msgid "Temp Basal"
 msgstr ""
 
-#~ msgid "Override"
-#~ msgstr ""
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "Override"
+msgstr ""
 
 #: src/routes/compatibility/test/+page.svelte
 #: src/routes/time-spans/+page.svelte
@@ -3106,6 +3108,8 @@ msgstr ""
 #~ msgid "Pump Modes"
 #~ msgstr ""
 
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Automatic"
 msgstr ""
@@ -3213,7 +3217,6 @@ msgstr ""
 msgid "IOB only"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "IOB"
@@ -3454,7 +3457,6 @@ msgstr ""
 msgid "Very Low"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "COB"
 msgstr ""
@@ -3619,7 +3621,6 @@ msgstr ""
 msgid "Dashboard"
 msgstr ""
 
-#: src/lib/components/dashboard/MiniOverviewChart.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/compatibility/[id]/+page.svelte
@@ -12076,9 +12077,8 @@ msgstr ""
 msgid "({0} min)"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
-msgid "Shift"
-msgstr ""
+#~ msgid "Shift"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 msgid "Zoomed view"
@@ -12086,3 +12086,35 @@ msgstr ""
 
 #~ msgid "Shift held: drag will lock to {0}"
 #~ msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "MODE"
+msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "OVERRIDE"
+msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "PROFILE"
+msgstr ""
+
+#~ msgid "SLEEP"
+#~ msgstr ""
+
+#~ msgid "EXERCISE"
+#~ msgstr ""
+
+#~ msgid "ILLNESS"
+#~ msgstr ""
+
+#~ msgid "TRAVEL"
+#~ msgstr ""
+
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "Full Range Overview"
+msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "ACTIVITY"
+msgstr ""

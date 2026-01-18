@@ -98,4 +98,64 @@ public interface IStateSpanService
         string id,
         StateSpan stateSpan,
         CancellationToken cancellationToken = default);
+
+    #region Activity Compatibility Methods
+
+    /// <summary>
+    /// Get activities stored as StateSpans for v1 API compatibility
+    /// </summary>
+    /// <param name="type">Optional activity type filter</param>
+    /// <param name="count">Maximum number of activities to return</param>
+    /// <param name="skip">Number of activities to skip for pagination</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Collection of activities</returns>
+    Task<IEnumerable<Activity>> GetActivitiesAsync(
+        string? type = null,
+        int count = 10,
+        int skip = 0,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get a specific activity by ID
+    /// </summary>
+    /// <param name="id">Activity ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Activity if found, null otherwise</returns>
+    Task<Activity?> GetActivityByIdAsync(
+        string id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Create activities and store as StateSpans
+    /// </summary>
+    /// <param name="activities">Activities to create</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Created activities</returns>
+    Task<IEnumerable<Activity>> CreateActivitiesAsync(
+        IEnumerable<Activity> activities,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Update an existing activity (stored as StateSpan)
+    /// </summary>
+    /// <param name="id">Activity ID to update</param>
+    /// <param name="activity">Updated activity data</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Updated activity if successful, null otherwise</returns>
+    Task<Activity?> UpdateActivityAsync(
+        string id,
+        Activity activity,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete an activity (stored as StateSpan)
+    /// </summary>
+    /// <param name="id">Activity ID to delete</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if deleted successfully, false otherwise</returns>
+    Task<bool> DeleteActivityAsync(
+        string id,
+        CancellationToken cancellationToken = default);
+
+    #endregion
 }

@@ -5,19 +5,24 @@
     Area,
     Spline,
     Axis,
+    Text,
     BrushContext,
+    ChartClipPath,
   } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
   import type { BrushContextValue } from "layerchart";
-  import ChevronUp from "lucide-svelte/icons/chevron-up";
-  import ChevronDown from "lucide-svelte/icons/chevron-down";
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
 
   interface GlucosePoint {
     time: Date;
     sgv: number;
     color: string;
+  }
+
+  interface PredictionPoint {
+    time: Date;
+    value: number;
   }
 
   interface Props {
@@ -37,6 +42,10 @@
     highThreshold?: number;
     /** Low threshold for coloring (reserved for future use) */
     lowThreshold?: number;
+    /** Prediction data to display */
+    predictionData?: PredictionPoint[] | null;
+    /** Whether to show predictions */
+    showPredictions?: boolean;
   }
 
   let {
@@ -48,6 +57,8 @@
     onSelectionChange,
     highThreshold: _highThreshold = 180,
     lowThreshold: _lowThreshold = 70,
+    predictionData = null,
+    showPredictions = false,
   }: Props = $props();
 
   // Reserved for future threshold coloring
@@ -118,30 +129,14 @@
     selectedXDomain = null;
     onSelectionChange?.(null);
   }
-
-  // Toggle expanded state
-  function toggleExpanded() {
-    expanded = !expanded;
-  }
 </script>
 
 <div class="mini-overview-chart">
-  <!-- Header with toggle -->
+  <!-- Header with reset button -->
   <div
     class="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground"
   >
-    <button
-      type="button"
-      class="flex items-center gap-2 hover:bg-accent/50 transition-colors rounded px-2 py-1 -ml-2"
-      onclick={toggleExpanded}
-    >
-      <span class="font-medium">Overview</span>
-      {#if expanded}
-        <ChevronUp size={14} />
-      {:else}
-        <ChevronDown size={14} />
-      {/if}
-    </button>
+    <span class="font-medium">Full Range Overview</span>
     {#if hasSelection}
       <button
         type="button"
@@ -154,7 +149,7 @@
     {/if}
   </div>
 
-  <!-- Mini chart (collapsible) -->
+  <!-- Mini chart -->
   {#if expanded}
     <div class="h-[80px] px-2 pb-2">
       <Chart
@@ -169,26 +164,39 @@
       >
         {#snippet children()}
           <Svg>
-            <!-- Glucose area fill -->
-            <Area
-              {data}
-              x={(d: GlucosePoint) => d.time}
-              y="sgv"
-              y0={() => yDomain[0]}
-              curve={curveMonotoneX}
-              fill="var(--glucose-in-range)"
-              class="opacity-20"
-            />
+            <ChartClipPath>
+              <!-- Glucose area fill -->
+              <Area
+                {data}
+                x={(d: GlucosePoint) => d.time}
+                y="sgv"
+                y0={() => yDomain[0]}
+                curve={curveMonotoneX}
+                fill="var(--glucose-in-range)"
+                class="opacity-20"
+              />
 
-            <!-- Glucose line -->
-            <Spline
-              {data}
-              x={(d: GlucosePoint) => d.time}
-              y="sgv"
-              curve={curveMonotoneX}
-              class="stroke-glucose-in-range stroke-1 fill-none"
-            />
+              <!-- Glucose line -->
+              <Spline
+                {data}
+                x={(d: GlucosePoint) => d.time}
+                y="sgv"
+                curve={curveMonotoneX}
+                class="stroke-glucose-in-range stroke-1 fill-none"
+              />
 
+              <!-- Prediction line -->
+              {#if showPredictions && predictionData && predictionData.length > 0}
+                <Spline
+                  data={predictionData}
+                  x={(d: PredictionPoint) => d.time}
+                  y={(d: PredictionPoint) => d.value}
+                  curve={curveMonotoneX}
+                  class="stroke-primary/60 stroke-1 fill-none"
+                  stroke-dasharray="3,3"
+                />
+              {/if}
+            </ChartClipPath>
             <!-- X axis -->
             <Axis
               placement="bottom"
@@ -217,7 +225,8 @@
                 <!-- Left handle label -->
                 <div
                   class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
-                  style="left: {bc.range.x - 2}px; top: {bc.range.y - 18}px; transform: translateX(-100%)"
+                  style="left: {bc.range.x + bc.range.width / 2 - 2}px; top: {bc
+                    .range.y - 18}px; transform: translateX(-100%)"
                 >
                   {formatDateTime(new Date(bc.xDomain[0] as number))}
                 </div>
@@ -225,7 +234,8 @@
                 <!-- Right handle label -->
                 <div
                   class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
-                  style="left: {bc.range.x + bc.range.width + 2}px; top: {bc.range.y - 18}px;"
+                  style="left: {bc.range.x + bc.range.width + 2}px; top: {bc
+                    .range.y - 18}px;"
                 >
                   {formatDateTime(new Date(bc.xDomain[1] as number))}
                 </div>

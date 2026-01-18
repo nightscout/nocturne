@@ -391,6 +391,7 @@ msgstr "Basal Value"
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3095,8 +3096,9 @@ msgstr "Pump Mode"
 msgid "Temp Basal"
 msgstr "Temp Basal"
 
-#~ msgid "Override"
-#~ msgstr "Override"
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "Override"
+msgstr "Override"
 
 #: src/routes/compatibility/test/+page.svelte
 #: src/routes/time-spans/+page.svelte
@@ -3128,6 +3130,8 @@ msgstr "Time Spans"
 #~ msgid "Pump Modes"
 #~ msgstr "Pump Modes"
 
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Automatic"
 msgstr "Automatic"
@@ -3235,7 +3239,6 @@ msgstr "Lines"
 msgid "IOB only"
 msgstr "IOB only"
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "IOB"
@@ -3476,7 +3479,6 @@ msgstr "Very High"
 msgid "Very Low"
 msgstr "Very Low"
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "COB"
 msgstr "COB"
@@ -3641,7 +3643,6 @@ msgstr "No GI level found."
 msgid "Dashboard"
 msgstr "Dashboard"
 
-#: src/lib/components/dashboard/MiniOverviewChart.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/compatibility/[id]/+page.svelte
@@ -12333,3 +12334,35 @@ msgstr "Zoomed view"
 
 #~ msgid "Shift held: drag will lock to {0}"
 #~ msgstr "Shift held: drag will lock to {0}"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "MODE"
+msgstr "MODE"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "OVERRIDE"
+msgstr "OVERRIDE"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "PROFILE"
+msgstr "PROFILE"
+
+#~ msgid "SLEEP"
+#~ msgstr "SLEEP"
+
+#~ msgid "EXERCISE"
+#~ msgstr "EXERCISE"
+
+#~ msgid "ILLNESS"
+#~ msgstr "ILLNESS"
+
+#~ msgid "TRAVEL"
+#~ msgstr "TRAVEL"
+
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "Full Range Overview"
+msgstr "Full Range Overview"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "ACTIVITY"
+msgstr "ACTIVITY"

@@ -151,4 +151,121 @@ public class StateSpanService : IStateSpanService
 
         return result;
     }
+
+    #region Activity Compatibility Methods
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Activity>> GetActivitiesAsync(
+        string? type = null,
+        int count = 10,
+        int skip = 0,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug(
+            "Getting activities with type: {Type}, count: {Count}, skip: {Skip}",
+            type, count, skip);
+
+        // Get Activity StateSpans from repository
+        var stateSpans = await _repository.GetActivityStateSpansAsync(
+            type: type,
+            count: count,
+            skip: skip,
+            cancellationToken: cancellationToken);
+
+        // Convert each StateSpan to an Activity using the mapper
+        var activities = stateSpans
+            .Select(ActivityStateSpanMapper.ToActivity)
+            .Where(a => a != null)
+            .Cast<Activity>()
+            .ToList();
+
+        _logger.LogDebug("Converted {Count} state spans to activities", activities.Count);
+
+        return activities;
+    }
+
+    /// <inheritdoc />
+    public async Task<Activity?> GetActivityByIdAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Getting activity by ID: {Id}", id);
+
+        var stateSpan = await _repository.GetActivityStateSpanByIdAsync(id, cancellationToken);
+
+        if (stateSpan == null)
+            return null;
+
+        return ActivityStateSpanMapper.ToActivity(stateSpan);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Activity>> CreateActivitiesAsync(
+        IEnumerable<Activity> activities,
+        CancellationToken cancellationToken = default)
+    {
+        var activityList = activities.ToList();
+        _logger.LogDebug("Creating {Count} activities", activityList.Count);
+
+        // Convert activities to StateSpans
+        var stateSpans = activityList.Select(ActivityStateSpanMapper.ToStateSpan).ToList();
+
+        // Create the StateSpans
+        var createdSpans = await _repository.CreateActivitiesAsStateSpansAsync(
+            stateSpans,
+            cancellationToken);
+
+        // Convert back to activities
+        var createdActivities = createdSpans
+            .Select(ActivityStateSpanMapper.ToActivity)
+            .Where(a => a != null)
+            .Cast<Activity>()
+            .ToList();
+
+        _logger.LogDebug("Successfully created {Count} activities", createdActivities.Count);
+
+        return createdActivities;
+    }
+
+    /// <inheritdoc />
+    public async Task<Activity?> UpdateActivityAsync(
+        string id,
+        Activity activity,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Updating activity with ID: {Id}", id);
+
+        // Convert activity to StateSpan
+        var stateSpan = ActivityStateSpanMapper.ToStateSpan(activity);
+
+        // Update the StateSpan
+        var updatedSpan = await _repository.UpdateActivityStateSpanAsync(
+            id,
+            stateSpan,
+            cancellationToken);
+
+        if (updatedSpan == null)
+            return null;
+
+        _logger.LogDebug("Successfully updated activity with ID: {Id}", id);
+
+        return ActivityStateSpanMapper.ToActivity(updatedSpan);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DeleteActivityAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Deleting activity with ID: {Id}", id);
+
+        var deleted = await _repository.DeleteActivityStateSpanAsync(id, cancellationToken);
+
+        if (deleted)
+            _logger.LogDebug("Successfully deleted activity with ID: {Id}", id);
+
+        return deleted;
+    }
+
+    #endregion
 }
