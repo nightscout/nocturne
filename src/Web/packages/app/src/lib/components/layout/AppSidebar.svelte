@@ -56,6 +56,7 @@
     title: string;
     href?: string;
     icon: typeof Home;
+    strict?: boolean;
     isActive?: boolean;
     children?: NavItem[];
   };
@@ -65,6 +66,7 @@
       title: "Dashboard",
       href: "/",
       icon: Home,
+      strict: true,
     },
     {
       title: "Calendar",
@@ -80,7 +82,7 @@
       title: "Reports",
       icon: BarChart3,
       children: [
-        { title: "Overview", href: "/reports", icon: PieChart },
+        { title: "Overview", href: "/reports", icon: PieChart, strict: true },
         { title: "AGP", href: "/reports/agp", icon: LineChart },
         {
           title: "Executive Summary",
@@ -142,11 +144,6 @@
       icon: Utensils,
     },
     {
-      title: "Profile",
-      href: "/profile",
-      icon: User,
-    },
-    {
       title: "Dev Tools",
       icon: Terminal,
       children: [
@@ -154,6 +151,7 @@
           title: "Compatibility",
           href: "/compatibility",
           icon: CheckCircle,
+          strict: true,
         },
         {
           title: "Test Endpoint Compatibility",
@@ -169,7 +167,7 @@
         { title: "Account", href: "/settings/account", icon: User },
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
         { title: "Devices", href: "/settings/devices", icon: Smartphone },
-        { title: "Therapy", href: "/profile", icon: Syringe }, // Redirects to Profile page
+        { title: "Therapy", href: "/settings/profile", icon: Syringe },
         { title: "Algorithm", href: "/settings/algorithm", icon: Brain },
         { title: "Features", href: "/settings/features", icon: Sparkles },
         { title: "Alarms", href: "/settings/alarms", icon: Bell },
@@ -192,19 +190,35 @@
   let openMenus = $state<Record<string, boolean>>({});
 
   // Check if current path matches or starts with a nav item path
+  // const isActive = (item: NavItem): boolean => {
+  //   if (item.href) {
+  //     if (item.href === "/") {
+  //       return page.url.pathname === "/";
+  //     }
+  //     return page.url.pathname.startsWith(item.href);
+  //   }
+  //   if (item.children) {
+  //     return item.children.some((child) => isActive(child));
+  //   }
+  //   return false;
+  // };
+
   const isActive = (item: NavItem): boolean => {
+    if (item.href && item?.strict) {
+      return page.url.pathname === item.href;
+    }
+    
     if (item.href) {
-      if (item.href === "/") {
-        return page.url.pathname === "/";
-      }
-      return page.url.pathname.startsWith(item.href);
+      return page.url.pathname.startsWith(item.href)
     }
+
     if (item.children) {
-      return item.children.some((child) => isActive(child));
+      return item.children.some(child => isActive(child, item?.strict));
     }
+
     return false;
   };
-
+  
   // Initialize open state for menus that have active children
   $effect(() => {
     navigation.forEach((item) => {

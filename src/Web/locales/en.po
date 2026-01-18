@@ -60,7 +60,6 @@ msgstr "Note"
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Exercise"
 msgstr "Exercise"
 
@@ -231,7 +230,6 @@ msgstr "Save Changes"
 #: src/routes/settings/support/+page.svelte
 #: src/routes/settings/support/+page.svelte
 #: src/routes/settings/support/+page.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Loading..."
 msgstr "Loading..."
 
@@ -252,6 +250,7 @@ msgstr "Loading..."
 #: src/routes/food/food-state.svelte.ts
 #: src/routes/food/food-state.svelte.ts
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Error"
 msgstr "Error"
@@ -353,7 +352,6 @@ msgstr "Time"
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/clock/config/+page.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Blood Glucose"
 msgstr "Blood Glucose"
 
@@ -391,13 +389,12 @@ msgid "Basal Value"
 msgstr "Basal Value"
 
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/profile/+page.svelte
-#: src/routes/time-spans/+page.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Profile"
 msgstr "Profile"
 
@@ -1864,6 +1861,9 @@ msgstr "Save"
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Completed"
 msgstr "Completed"
@@ -1887,6 +1887,9 @@ msgstr "Other"
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Failed"
 msgstr "Failed"
@@ -1944,6 +1947,9 @@ msgstr "Rescheduled"
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Cancelled"
 msgstr "Cancelled"
@@ -3079,22 +3085,16 @@ msgid "Configure your Nocturne experience"
 msgstr "Configure your Nocturne experience"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/routes/time-spans/+page.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Pump Mode"
 msgstr "Pump Mode"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
-#: src/routes/time-spans/+page.svelte
-#: src/routes/time-spans/+page.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Temp Basal"
 msgstr "Temp Basal"
 
-#: src/routes/time-spans/+page.svelte
-#: src/routes/time-spans/+page.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 msgid "Override"
 msgstr "Override"
 
@@ -3104,85 +3104,70 @@ msgid "<0/> Back to Dashboard"
 msgstr "<0/> Back to Dashboard"
 
 #: src/lib/components/layout/AppSidebar.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Time Spans"
 msgstr "Time Spans"
 
-#: src/routes/time-spans/+page.svelte
-msgid "State changes throughout the selected period"
-msgstr "State changes throughout the selected period"
+#~ msgid "State changes throughout the selected period"
+#~ msgstr "State changes throughout the selected period"
 
-#: src/routes/time-spans/+page.svelte
-msgid "No state spans found for this period"
-msgstr "No state spans found for this period"
+#~ msgid "No state spans found for this period"
+#~ msgstr "No state spans found for this period"
 
-#: src/routes/time-spans/+page.svelte
-msgid "Glucose Overlay"
-msgstr "Glucose Overlay"
+#~ msgid "Glucose Overlay"
+#~ msgstr "Glucose Overlay"
 
-#: src/routes/time-spans/+page.svelte
-msgid "Blood glucose readings during this period"
-msgstr "Blood glucose readings during this period"
+#~ msgid "Blood glucose readings during this period"
+#~ msgstr "Blood glucose readings during this period"
 
-#: src/routes/time-spans/+page.svelte
-msgid "No glucose data"
-msgstr "No glucose data"
+#~ msgid "No glucose data"
+#~ msgstr "No glucose data"
 
-#: src/routes/time-spans/+page.svelte
-msgid "Legend"
-msgstr "Legend"
+#~ msgid "Legend"
+#~ msgstr "Legend"
 
-#: src/routes/time-spans/+page.svelte
-msgid "Pump Modes"
-msgstr "Pump Modes"
+#~ msgid "Pump Modes"
+#~ msgstr "Pump Modes"
 
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Automatic"
 msgstr "Automatic"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Limited"
 msgstr "Limited"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Manual"
 msgstr "Manual"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Suspended"
 msgstr "Suspended"
 
-#: src/routes/time-spans/+page.svelte
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 msgid "Overrides"
 msgstr "Overrides"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Boost"
 msgstr "Boost"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Sleep"
 msgstr "Sleep"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "EaseOff"
 msgstr "EaseOff"
 
 #: src/lib/components/status-pills/BasalPill.svelte
-#: src/routes/time-spans/+page.svelte
 msgid "Active Temp Basal"
 msgstr "Active Temp Basal"
 
-#: src/routes/time-spans/+page.svelte
-msgid "Glucose Line"
-msgstr "Glucose Line"
+#~ msgid "Glucose Line"
+#~ msgstr "Glucose Line"
 
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "No pattern data"
@@ -3252,7 +3237,6 @@ msgstr "Lines"
 msgid "IOB only"
 msgstr "IOB only"
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "IOB"
@@ -3493,7 +3477,6 @@ msgstr "Very High"
 msgid "Very Low"
 msgstr "Very Low"
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "COB"
 msgstr "COB"
@@ -5152,6 +5135,7 @@ msgstr "Last Bolus"
 msgid "Basal IOB"
 msgstr "Basal IOB"
 
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 msgid "Activity"
 msgstr "Activity"
@@ -9608,6 +9592,7 @@ msgstr "No access token available for this subject."
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
 msgid "Close"
 msgstr "Close"
 
@@ -10728,6 +10713,7 @@ msgid "Monitor the progress of your current migration."
 msgstr "Monitor the progress of your current migration."
 
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/services/+page.svelte
 msgid "Progress"
 msgstr "Progress"
 
@@ -10891,10 +10877,8 @@ msgstr "Set up an uploader app to start sending data to Nocturne"
 msgid "<0/> Demo"
 msgstr "<0/> Demo"
 
-#. placeholder {0}: source.entriesLast24h ?? 0
-#: src/routes/settings/services/+page.svelte
-msgid "{0} entries (24h)"
-msgstr "{0} entries (24h)"
+#~ msgid "{0} entries (24h)"
+#~ msgstr "{0} entries (24h)"
 
 #: src/routes/settings/services/+page.svelte
 msgid "<0/> Set Up an Uploader"
@@ -10956,14 +10940,12 @@ msgstr "<0/> Backing Off"
 msgid "<0/> Error"
 msgstr "<0/> Error"
 
-#. placeholder {0}: connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"{0} entries\n"
-"(24h)"
-msgstr ""
-"{0} entries\n"
-"(24h)"
+#~ msgid ""
+#~ "{0} entries\n"
+#~ "(24h)"
+#~ msgstr ""
+#~ "{0} entries\n"
+#~ "(24h)"
 
 #: src/routes/settings/services/+page.svelte
 msgid "Server Config"
@@ -11043,14 +11025,8 @@ msgstr "Manage the simulated demo data in your Nocturne instance"
 msgid "Demo data cleared successfully"
 msgstr "Demo data cleared successfully"
 
-#. placeholder {0}: demoDeleteResult.entriesDeleted?.toLocaleString() ?? 0
-#. placeholder {0}: deleteResult.entriesDeleted?.toLocaleString() ?? 0
-#. placeholder {0}: connectorDeleteResult.entriesDeleted?.toLocaleString() ?? 0
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Deleted {0} entries"
-msgstr "Deleted {0} entries"
+#~ msgid "Deleted {0} entries"
+#~ msgstr "Deleted {0} entries"
 
 #: src/routes/settings/services/+page.svelte
 msgid "<0>This is demo data</0> — synthetic glucose readings generated for testing and demonstration purposes."
@@ -11086,13 +11062,11 @@ msgstr "<0/> Clear Demo Data"
 msgid "Last Seen"
 msgstr "Last Seen"
 
-#: src/routes/settings/services/+page.svelte
-msgid "Entries (24h)"
-msgstr "Entries (24h)"
+#~ msgid "Entries (24h)"
+#~ msgstr "Entries (24h)"
 
-#: src/routes/settings/services/+page.svelte
-msgid "Total Entries"
-msgstr "Total Entries"
+#~ msgid "Total Entries"
+#~ msgstr "Total Entries"
 
 #: src/routes/settings/services/+page.svelte
 msgid "Delete All Data from This Source"
@@ -11124,12 +11098,8 @@ msgstr "⚠️ THIS ACTION CANNOT BE UNDONE"
 msgid "You are about to permanently delete <0>all data</0> from <1/> . This includes:"
 msgstr "You are about to permanently delete <0>all data</0> from <1/> . This includes:"
 
-#. placeholder {0}: selectedDataSource.totalEntries?.toLocaleString() ?? 0
-#. placeholder {0}: selectedConnector.totalEntries?.toLocaleString() ?? 0
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "All glucose entries ({0} entries)"
-msgstr "All glucose entries ({0} entries)"
+#~ msgid "All glucose entries ({0} entries)"
+#~ msgstr "All glucose entries ({0} entries)"
 
 #: src/routes/settings/services/+page.svelte
 msgid "All treatments entered by this device"
@@ -12092,11 +12062,8 @@ msgstr "<0/> Has Data"
 msgid "({0} in 24h)"
 msgstr "({0} in 24h)"
 
-#. placeholder {0}: entryCount?.toLocaleString() ?? 0
-#. placeholder {1}: formatLastSeen(lastSeen)
-#: src/routes/settings/services/+page.svelte
-msgid "{0} entries <0/> • Last seen {1}"
-msgstr "{0} entries <0/> • Last seen {1}"
+#~ msgid "{0} entries <0/> • Last seen {1}"
+#~ msgstr "{0} entries <0/> • Last seen {1}"
 
 #: src/routes/settings/services/+page.svelte
 msgid "Connector Disabled"
@@ -12124,17 +12091,14 @@ msgstr ""
 "This connector is not currently running, but data from previous\n"
 "syncs is still stored. You can delete this data below."
 
-#: src/routes/settings/services/+page.svelte
-msgid "Total entries"
-msgstr "Total entries"
+#~ msgid "Total entries"
+#~ msgstr "Total entries"
 
-#: src/routes/settings/services/+page.svelte
-msgid "Entries in last 24 hours"
-msgstr "Entries in last 24 hours"
+#~ msgid "Entries in last 24 hours"
+#~ msgstr "Entries in last 24 hours"
 
-#: src/routes/settings/services/+page.svelte
-msgid "Last entry received"
-msgstr "Last entry received"
+#~ msgid "Last entry received"
+#~ msgstr "Last entry received"
 
 #: src/routes/reports/treatments/+page.svelte
 msgid ""
@@ -12143,3 +12107,221 @@ msgid ""
 msgstr ""
 "Review and manage your insulin doses, carb entries, and device events. Use\n"
 "filters to find specific treatments."
+
+#: src/routes/settings/services/+page.svelte
+msgid "Failed to start deduplication job"
+msgstr "Failed to start deduplication job"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Failed to start deduplication"
+msgstr "Failed to start deduplication"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Job failed"
+msgstr "Job failed"
+
+#. placeholder {0}: source.entriesLast24h ?? 0
+#: src/routes/settings/services/+page.svelte
+msgid "{0} records (24h)"
+msgstr "{0} records (24h)"
+
+#. placeholder {0}: connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"{0} records\n"
+"(24h)"
+msgstr ""
+"{0} records\n"
+"(24h)"
+
+#. placeholder {0}: entryCount?.toLocaleString() ?? 0
+#. placeholder {1}: formatLastSeen(lastSeen)
+#: src/routes/settings/services/+page.svelte
+msgid "{0} records <0/> • Last seen {1}"
+msgstr "{0} records <0/> • Last seen {1}"
+
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Data Maintenance"
+msgstr "<0/> Data Maintenance"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Administrative tools for managing your data"
+msgstr "Administrative tools for managing your data"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Deduplicate Records"
+msgstr "Deduplicate Records"
+
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"Link records from multiple data sources that represent the same underlying event.\n"
+"This improves data quality when the same glucose readings or treatments are uploaded from different apps."
+msgstr ""
+"Link records from multiple data sources that represent the same underlying event.\n"
+"This improves data quality when the same glucose readings or treatments are uploaded from different apps."
+
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Run Deduplication"
+msgstr "<0/> Run Deduplication"
+
+#. placeholder {0}: demoDeleteResult.entriesDeleted?.toLocaleString() ?? 0
+#. placeholder {0}: deleteResult.entriesDeleted?.toLocaleString() ?? 0
+#. placeholder {0}: connectorDeleteResult.entriesDeleted?.toLocaleString() ?? 0
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Deleted {0} records"
+msgstr "Deleted {0} records"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Records (24h)"
+msgstr "Records (24h)"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Total Records"
+msgstr "Total Records"
+
+#. placeholder {0}: selectedDataSource.totalEntries?.toLocaleString() ?? 0
+#. placeholder {0}: selectedConnector.totalEntries?.toLocaleString() ?? 0
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "All glucose records ({0} records)"
+msgstr "All glucose records ({0} records)"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Total records"
+msgstr "Total records"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Records in last 24 hours"
+msgstr "Records in last 24 hours"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Last record received"
+msgstr "Last record received"
+
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Deduplicate Records"
+msgstr "<0/> Deduplicate Records"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Link records from multiple data sources that represent the same underlying event"
+msgstr "Link records from multiple data sources that represent the same underlying event"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Deduplication Complete"
+msgstr "Deduplication Complete"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Records processed:"
+msgstr "Records processed:"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Groups created:"
+msgstr "Groups created:"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Duplicates found:"
+msgstr "Duplicates found:"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Job Cancelled"
+msgstr "Job Cancelled"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Running deduplication..."
+msgstr "Running deduplication..."
+
+#: src/routes/settings/services/+page.svelte
+msgid "Initializing"
+msgstr "Initializing"
+
+#. placeholder {0}: deduplicationStatus.progress.processedRecords?.toLocaleString() ?? 0
+#. placeholder {1}: deduplicationStatus.progress.totalRecords?.toLocaleString() ?? 0
+#: src/routes/settings/services/+page.svelte
+msgid "Processed: {0} / {1}"
+msgstr "Processed: {0} / {1}"
+
+#. placeholder {0}: deduplicationStatus.progress.groupsFound?.toLocaleString() ?? 0
+#: src/routes/settings/services/+page.svelte
+msgid "Groups: {0}"
+msgstr "Groups: {0}"
+
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"This process will scan all your glucose records, treatments, and state spans\n"
+"to identify and link records that represent the same event from different data sources."
+msgstr ""
+"This process will scan all your glucose records, treatments, and state spans\n"
+"to identify and link records that represent the same event from different data sources."
+
+#: src/routes/settings/services/+page.svelte
+msgid "Records within 30 seconds are considered potential matches"
+msgstr "Records within 30 seconds are considered potential matches"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Matching criteria include timestamps and values"
+msgstr "Matching criteria include timestamps and values"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Original data is preserved; only links are created"
+msgstr "Original data is preserved; only links are created"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Safe to run multiple times"
+msgstr "Safe to run multiple times"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Done"
+msgstr "Done"
+
+#: src/routes/settings/services/+page.svelte
+msgid "Cancel Job"
+msgstr "Cancel Job"
+
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Start Deduplication"
+msgstr "<0/> Start Deduplication"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "Zoomed view"
+msgstr "Zoomed view"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "<0/> Reset zoom"
+msgstr "<0/> Reset zoom"
+
+#. placeholder {0}: span.rate.toFixed(2)
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "{0}U/h"
+msgstr "{0}U/h"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "MODE"
+msgstr "MODE"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "OVERRIDE"
+msgstr "OVERRIDE"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "PROFILE"
+msgstr "PROFILE"
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+msgid "ACTIVITY"
+msgstr "ACTIVITY"
+
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "Full Range Overview"
+msgstr "Full Range Overview"
+
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "Viewing:"
+msgstr "Viewing:"
+
+#. placeholder {0}: Math.round( (selectedXDomain[1].getTime() - selectedXDomain[0].getTime()) / (1000 * 60) )
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "({0} min)"
+msgstr "({0} min)"
