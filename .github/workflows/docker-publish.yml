@@ -224,6 +224,9 @@ jobs:
           cat > Dockerfile.web << 'EOF'
           FROM node:24-alpine AS builder
           WORKDIR /app
+          # Increase Node.js heap size to avoid "JavaScript heap out of memory" in CI
+          ENV NODE_OPTIONS="--max-old-space-size=8192"
+
           RUN npm install -g pnpm@9
 
           # Copy workspace files
