@@ -44,7 +44,7 @@ public enum ConnectSource
     Tidepool,
 
     /// <summary>
-    /// Tandem t:connect data source
+    /// Tandem Source data source
     /// </summary>
     TConnectSync,
 

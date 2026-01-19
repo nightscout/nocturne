@@ -175,6 +175,17 @@ jobs:
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/myfitnesspal-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
+      - name: Build and push TConnectSync connector
+        if: github.event_name != 'pull_request'
+        working-directory: src/Connectors/Nocturne.Connectors.TConnectSync
+        run: |
+          dotnet publish \
+            -c Release \
+            -p:PublishProfile=DefaultContainer \
+            -p:ContainerRegistry=${{ env.REGISTRY }} \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/tconnectsync-connector \
+            -p:ContainerImageTag=${{ steps.version.outputs.version }}
+
       # Build web app using standard Docker build (Node.js/Vite apps don't use .NET container publishing)
       - name: Build and push Nocturne.Web container
         if: github.event_name != 'pull_request'

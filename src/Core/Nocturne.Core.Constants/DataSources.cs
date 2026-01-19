@@ -61,7 +61,7 @@ public static class DataSources
     public const string TidepoolConnector = "tidepool-connector";
 
     /// <summary>
-    /// Data fetched from Tandem t:connect via the TConnectSync connector.
+    /// Data fetched from Tandem Source via the TConnectSync connector.
     /// </summary>
     public const string TConnectSyncConnector = "tconnectsync-connector";
 

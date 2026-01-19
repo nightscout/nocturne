@@ -20,8 +20,8 @@ namespace Nocturne.Connectors.Configurations
         dataSourceId: "tconnectsync-connector",
         icon: "tconnect",
         category: ConnectorCategory.Pump,
-        description: "Connect to Tandem t:connect",
-        displayName: "Tandem t:connect",
+        description: "Connect to Tandem Source (formerly t:connect)",
+        displayName: "Tandem Source",
         type: ConnectorType.PythonApp,
         scriptPath: "../../Connectors/Nocturne.Connectors.TConnectSync"
     )]
@@ -33,26 +33,26 @@ namespace Nocturne.Connectors.Configurations
         }
 
         /// <summary>
-        /// Tandem t:connect email
+        /// Tandem Source email
         /// </summary>
         [Required]
         [EnvironmentVariable("TCONNECT_EMAIL")]
-        [AspireParameter("tconnect-email", "Email", secret: true, description: "Tandem t:connect email")]
+        [AspireParameter("tconnect-email", "Email", secret: true, description: "Tandem Source email")]
         public string Email { get; set; } = string.Empty;
 
         /// <summary>
-        /// Tandem t:connect password
+        /// Tandem Source password
         /// </summary>
         [Required]
         [EnvironmentVariable("TCONNECT_PASSWORD")]
-        [AspireParameter("tconnect-password", "Password", secret: true, description: "Tandem t:connect password")]
+        [AspireParameter("tconnect-password", "Password", secret: true, description: "Tandem Source password")]
         public string Password { get; set; } = string.Empty;
 
         /// <summary>
         /// Tandem server region (US or EU)
         /// </summary>
         [EnvironmentVariable("TCONNECT_REGION")]
-        [AspireParameter("tconnect-region", "Region", secret: false, description: "Tandem region (US or EU)", defaultValue: "US")]
+        [AspireParameter("tconnect-region", "Region", secret: false, description: "Tandem Source region (US or EU)", defaultValue: "US")]
         public string Region { get; set; } = "US";
 
         protected override void ValidateSourceSpecificConfiguration()
