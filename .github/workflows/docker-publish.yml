@@ -172,7 +172,7 @@ jobs:
             -c Release \
             -p:PublishProfile=DefaultContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/myfitnespal-connector \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/myfitnesspal-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
       # Build web app using standard Docker build (Node.js/Vite apps don't use .NET container publishing)
@@ -341,7 +341,7 @@ jobs:
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/freestyle-connector:${{ steps.version.outputs.version }}`
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/minimed-connector:${{ steps.version.outputs.version }}`
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nightscout-connector:${{ steps.version.outputs.version }}`
-          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/myfitnespal-connector:${{ steps.version.outputs.version }}`
+          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/myfitnesspal-connector:${{ steps.version.outputs.version }}`
 
           ## Files in this release
 
@@ -393,7 +393,7 @@ jobs:
   #         - freestyle-connector
   #         - minimed-connector
   #         - nightscout-connector
-  #         - myfitnespal-connector
+  #         - myfitnesspal-connector
 
   #   steps:
   #     - name: Log in to GitHub Container Registry
