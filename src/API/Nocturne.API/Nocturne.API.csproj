@@ -13,7 +13,7 @@
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
     <ContainerRepository>nocturne-api</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
-    <ContainerWorkingDirectory>/app</ContainerWorkingDirectory>
+    <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Alexa.NET" />

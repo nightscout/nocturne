@@ -10,7 +10,7 @@
         <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
         <ContainerRepository>mylife-connector</ContainerRepository>
         <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
-        <ContainerWorkingDirectory>/app</ContainerWorkingDirectory>
+        <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>

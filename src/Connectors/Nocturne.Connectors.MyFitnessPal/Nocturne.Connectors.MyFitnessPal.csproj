@@ -12,7 +12,7 @@
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
     <ContainerRepository>myfitnesspal-connector</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
-    <ContainerWorkingDirectory>/app</ContainerWorkingDirectory>
+    <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
