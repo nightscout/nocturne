@@ -283,11 +283,14 @@ jobs:
           # Copy built artifacts
           COPY --from=builder /app/packages/app/build ./build
 
+          # Copy custom server that integrates WebSocket bridge
+          COPY --from=builder /app/packages/app/server.js ./server.js
+
           ENV NODE_ENV=production
           ENV PORT=5173
           EXPOSE 5173
 
-          CMD ["node", "build"]
+          CMD ["node", "server.js"]
           EOF
 
           docker buildx build \
