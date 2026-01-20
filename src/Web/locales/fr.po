@@ -195,6 +195,7 @@ msgstr "Raison de ce traitement"
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -251,6 +252,7 @@ msgstr "Chargement..."
 #: src/routes/food/food-state.svelte.ts
 #: src/routes/food/food-state.svelte.ts
 #: src/routes/food/food-state.svelte.ts
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -1884,6 +1886,10 @@ msgstr "Enregistrer"
 msgid "Completed"
 msgstr "Terminé"
 
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
@@ -2576,6 +2582,7 @@ msgstr "Profil sans nom"
 #: src/routes/profile/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/devices/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/profile/+page.svelte
@@ -6033,6 +6040,7 @@ msgid "<0/> Additional Properties <1/>"
 msgstr "<0/> Propriétés supplémentaires <1/>"
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "<0/> Delete"
 msgstr "<0/> Supprimer"
 
@@ -7222,6 +7230,7 @@ msgstr "Mode démo"
 
 #: src/lib/components/ui/connector-toggle-group/connector-toggle-group-item.svelte
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/settings/services/+page.svelte
 msgid "<0/> Configure"
 msgstr "<0/> Configurer"
 
@@ -10537,6 +10546,7 @@ msgstr "Échec du déclenchement de la synchronisation"
 msgid "Failed to sync food data"
 msgstr "Échec de la synchronisation des données alimentaires"
 
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Inactive"
 msgstr "Inactif"
@@ -10636,15 +10646,13 @@ msgstr "<0/> En attente"
 msgid "<0/> Error"
 msgstr "<0/> Erreur"
 
-#: src/routes/settings/services/+page.svelte
-msgid "Server Config"
-msgstr "Configuration du serveur"
+#~ msgid "Server Config"
+#~ msgstr "Configuration du serveur"
 
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"Server connectors require environment variable configuration. See the\n"
-"documentation for setup instructions."
-msgstr "Les connecteurs serveur nécessitent une configuration par variables d'environnement. Consultez la documentation pour les instructions de mise en place."
+#~ msgid ""
+#~ "Server connectors require environment variable configuration. See the\n"
+#~ "documentation for setup instructions."
+#~ msgstr "Les connecteurs serveur nécessitent une configuration par variables d'environnement. Consultez la documentation pour les instructions de mise en place."
 
 #: src/routes/settings/services/+page.svelte
 msgid "<0/> API Information"
@@ -10730,6 +10738,7 @@ msgstr "Seules les données générées par la démonstration seront supprimées
 msgid "Your real health data (if any) is not affected"
 msgstr "Vos données médicales réelles (le cas échéant) ne sont pas concernées"
 
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -13310,4 +13319,167 @@ msgstr ""
 
 #: src/routes/faq/+page.svelte
 msgid "Visit GitHub"
+msgstr ""
+
+#: src/routes/settings/services/+page.svelte
+msgid "Not Configured"
+msgstr ""
+
+#: src/routes/settings/services/+page.svelte
+msgid "Click on a connector to configure credentials and settings. Changes take effect immediately."
+msgstr ""
+
+#. placeholder {0}: connectorName
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Connector \"{0}\" not found"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Failed to load connector configuration"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Configuration saved successfully"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Failed to save configuration"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Credentials saved successfully"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Failed to save credentials"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Connector enabled"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Connector disabled"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Failed to update connector state"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Failed to delete configuration"
+msgstr ""
+
+#. placeholder {0}: displayName
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "{0} - Connectors - Settings - Nocturne"
+msgstr ""
+
+#~ msgid "<0/> Back to Connectors"
+#~ msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Enable Connector"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "When enabled, the connector will actively sync data"
+msgstr ""
+
+#. placeholder {0}: displayName
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "<0/> View documentation for {0}"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Danger Zone"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Irreversible actions that affect this connector's configuration"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Delete Configuration"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Remove all configuration and credentials for this connector"
+msgstr ""
+
+#. placeholder {0}: displayName
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Delete {0} Configuration?"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid ""
+"This will permanently delete all configuration and credentials for this connector.\n"
+"The connector will stop syncing data. This action cannot be undone."
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Select..."
+msgstr ""
+
+#. placeholder {0}: propSchema.minimum
+#. placeholder {1}: propSchema.maximum
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Value must be between {0} and {1}"
+msgstr ""
+
+#. placeholder {0}: propSchema.minimum
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Minimum: {0}"
+msgstr ""
+
+#. placeholder {0}: propSchema.maximum
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Maximum: {0}"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "<0/> Saving..."
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "<0/> Save Configuration"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Credentials"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Sensitive credentials are stored encrypted and never displayed after saving."
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Enter to update (leave blank to keep current)"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "<0/> Update Credentials"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "<0/> Back to Services"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "No Runtime Configuration Available"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Check the documentation for environment variable configuration."
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Configure via environment variables on the server."
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "This connector does not support runtime configuration. <0/>"
 msgstr ""

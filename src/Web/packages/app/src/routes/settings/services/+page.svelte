@@ -1281,9 +1281,10 @@
                 />
               </button>
             {:else}
-              <!-- Not connected and no data - show with help link -->
-              <div
-                class="flex items-center gap-4 p-4 rounded-lg border bg-muted/30"
+              <!-- Not connected and no data - show with configure button -->
+              <a
+                href="/settings/connectors/{connector.name?.toLowerCase()}"
+                class="flex items-center gap-4 p-4 rounded-lg border bg-muted/30 hover:border-primary/50 hover:bg-accent/50 transition-colors group"
               >
                 <div
                   class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
@@ -1293,34 +1294,40 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium">{connector.name}</span>
-                    {#if connector.requiresServerConfig}
-                      <Badge variant="outline" class="text-xs">
-                        Server Config
-                      </Badge>
-                    {/if}
+                    <Badge variant="outline" class="text-xs">
+                      Not Configured
+                    </Badge>
                   </div>
                   <p class="text-sm text-muted-foreground">
                     {connector.description}
                   </p>
                 </div>
-                {#if connector.documentationUrl}
-                  <Button variant="ghost" size="sm">
-                    <a
-                      href={connector.documentationUrl}
-                      target="_blank"
-                      rel="noopener"
+                <div class="flex items-center gap-2">
+                  {#if connector.documentationUrl}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onclick={(e) => e.stopPropagation()}
                     >
-                      <ExternalLink class="h-4 w-4" />
-                    </a>
-                  </Button>
-                {/if}
-              </div>
+                      <a
+                        href={connector.documentationUrl}
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        <ExternalLink class="h-4 w-4" />
+                      </a>
+                    </Button>
+                  {/if}
+                  <ChevronRight
+                    class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
+                  />
+                </div>
+              </a>
             {/if}
           {/each}
         </div>
         <p class="text-sm text-muted-foreground mt-4">
-          Server connectors require environment variable configuration. See the
-          documentation for setup instructions.
+          Click on a connector to configure credentials and settings. Changes take effect immediately.
         </p>
       </CardContent>
     </Card>
@@ -2334,6 +2341,14 @@
       <Dialog.Footer>
         <Button variant="outline" onclick={() => (showConnectorDialog = false)}>
           Close
+        </Button>
+        <Button
+          variant="outline"
+          class="gap-2"
+          href="/settings/connectors/{selectedConnector.name?.toLowerCase()}"
+        >
+          <Wrench class="h-4 w-4" />
+          Configure
         </Button>
         {#if selectedConnector.totalEntries || selectedConnector.state === "Offline" || selectedConnector.state === "Disabled" || selectedConnector.isHealthy}
           <Button
