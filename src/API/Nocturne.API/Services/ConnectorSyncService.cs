@@ -58,15 +58,41 @@ public class ConnectorSyncService : IConnectorSyncService
 
     private bool IsConnectorConfiguredInternal(string connectorName)
     {
-        var section = _configuration.GetSection($"Parameters:Connectors:{connectorName}");
+        // Find connector metadata to get the service name
+        var connector = ConnectorMetadataService
+            .GetAll()
+            .FirstOrDefault(c =>
+                c.ConnectorName.Equals(connectorName, StringComparison.OrdinalIgnoreCase)
+                || c.ServiceName.Equals(connectorName, StringComparison.OrdinalIgnoreCase)
+            );
 
-        if (!section.Exists())
+        if (connector == null)
         {
             return false;
         }
 
-        // Check if explicitly enabled (defaults to true in BaseConnectorConfiguration)
-        return section.GetValue("Enabled", true);
+        // Check if the connector service URL is configured (indicates connector is deployed)
+        // The service URL is set via environment variables like GLOOKO_CONNECTOR_HTTP
+        var serviceUrlKey = $"services__{connector.ServiceName}__http__0";
+        var serviceUrl = _configuration[serviceUrlKey];
+
+        if (string.IsNullOrEmpty(serviceUrl))
+        {
+            // Also check the legacy format
+            var legacyKey = $"{connector.ServiceName.ToUpperInvariant().Replace("-", "_")}_HTTP";
+            serviceUrl = _configuration[legacyKey];
+        }
+
+        // If no service URL, connector is not deployed
+        if (string.IsNullOrEmpty(serviceUrl))
+        {
+            _logger.LogDebug("Connector {ConnectorName} has no service URL configured", connectorName);
+            return false;
+        }
+
+        // Connector is configured - it's enabled by default unless explicitly disabled
+        // The connector itself manages its enabled state
+        return true;
     }
 
     /// <inheritdoc />
