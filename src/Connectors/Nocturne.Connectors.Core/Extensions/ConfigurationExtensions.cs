@@ -146,24 +146,6 @@ namespace Nocturne.Connectors.Core.Extensions
                 config.SyncIntervalMinutes = syncIntervalMinutes;
             }
 
-            var nightscoutUrl = configuration["NightscoutUrl"];
-            if (!string.IsNullOrEmpty(nightscoutUrl))
-            {
-                config.NightscoutUrl = nightscoutUrl;
-            }
-
-            var nightscoutApiSecret = configuration["NightscoutApiSecret"];
-            if (!string.IsNullOrEmpty(nightscoutApiSecret))
-            {
-                config.NightscoutApiSecret = nightscoutApiSecret;
-            }
-
-            var apiSecret = configuration["ApiSecret"];
-            if (!string.IsNullOrEmpty(apiSecret))
-            {
-                config.ApiSecret = apiSecret;
-            }
-
             // Bind TimezoneOffset from environment variable (set by Aspire)
             if (double.TryParse(configuration["TimezoneOffset"], out var timezoneOffset))
             {

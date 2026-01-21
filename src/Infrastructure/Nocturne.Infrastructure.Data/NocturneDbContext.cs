@@ -1005,11 +1005,6 @@ public class NocturneDbContext : DbContext
             .HasIndex(c => c.ConnectorName)
             .HasDatabaseName("ix_connector_configurations_connector_name")
             .IsUnique();
-
-        modelBuilder
-            .Entity<ConnectorConfigurationEntity>()
-            .HasIndex(c => c.IsActive)
-            .HasDatabaseName("ix_connector_configurations_is_active");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)

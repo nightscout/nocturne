@@ -16002,6 +16002,7 @@ export class ConfigurationClient {
     /**
      * Saves or updates runtime configuration for a connector.
     Only properties marked with [RuntimeConfigurable] are accepted.
+    Validates the configuration against the connector's schema before saving.
      * @param connectorName The connector name
      * @param configuration Configuration values as JSON
      * @return The saved configuration
@@ -16038,6 +16039,12 @@ export class ConfigurationClient {
             let result200: any = null;
             result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ConnectorConfigurationResponse;
             return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
             });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
@@ -16094,6 +16101,7 @@ export class ConfigurationClient {
     /**
      * Gets the JSON Schema for a connector's configuration.
     Schema is generated from the connector's configuration class attributes.
+    This endpoint is public since schema is just metadata, not sensitive data.
      * @param connectorName The connector name
      * @return JSON Schema document
      */
@@ -16132,6 +16140,54 @@ export class ConfigurationClient {
             });
         }
         return Promise.resolve<JsonDocument>(null as any);
+    }
+
+    /**
+     * Gets the effective configuration from a running connector.
+    This returns the actual runtime values including those resolved from environment variables.
+    This endpoint is public since it only exposes non-secret configuration values.
+     * @param connectorName The connector name
+     * @return Dictionary of property names to effective values
+     */
+    getEffectiveConfiguration(connectorName: string, signal?: AbortSignal): Promise<{ [key: string]: any; }> {
+        let url_ = this.baseUrl + "/internal/config/{connectorName}/effective";
+        if (connectorName === undefined || connectorName === null)
+            throw new globalThis.Error("The parameter 'connectorName' must be defined.");
+        url_ = url_.replace("{connectorName}", encodeURIComponent("" + connectorName));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetEffectiveConfiguration(_response);
+        });
+    }
+
+    protected processGetEffectiveConfiguration(response: Response): Promise<{ [key: string]: any; }> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as { [key: string]: any; };
+            return result200;
+            });
+        } else if (status === 503) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<{ [key: string]: any; }>(null as any);
     }
 
     /**
@@ -20163,9 +20219,7 @@ export interface ConnectorStatusInfo {
     lastModified?: Date | undefined;
 }
 
-/** Request model for setting connector active state. */
 export interface SetActiveRequest {
-    /** Whether the connector should be active. */
     isActive?: boolean;
 }
 

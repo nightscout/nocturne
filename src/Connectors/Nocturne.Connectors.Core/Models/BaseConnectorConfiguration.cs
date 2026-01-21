@@ -22,7 +22,11 @@ namespace Nocturne.Connectors.Core.Models
         [RuntimeConfigurable("Save Raw Data", "Advanced")]
         public bool SaveRawData { get; set; } = false;
 
-        [RuntimeConfigurable("Enabled", "General", Order = 0)]
+        /// <summary>
+        /// Whether the connector is enabled and should sync data.
+        /// When disabled, the connector enters standby mode.
+        /// </summary>
+        [RuntimeConfigurable("Enabled", "General")]
         public bool Enabled { get; set; } = true;
 
         /// <summary>
@@ -80,19 +84,6 @@ namespace Nocturne.Connectors.Core.Models
         [RuntimeConfigurable("Sync Interval (Minutes)", "Sync")]
         [ConfigSchema(Minimum = 1, Maximum = 60)]
         public int SyncIntervalMinutes { get; set; } = 5;
-
-        [RuntimeConfigurable("Mode", "General")]
-        public ConnectorMode Mode { get; set; } = ConnectorMode.Nocturne;
-
-        [RuntimeConfigurable("Nightscout URL", "Connection")]
-        [ConfigSchema(Format = "uri")]
-        public string NightscoutUrl { get; set; } = string.Empty;
-
-        [Secret]
-        public string NightscoutApiSecret { get; set; } = string.Empty;
-
-        [Secret]
-        public string ApiSecret { get; set; } = string.Empty;
 
         public virtual void Validate()
         {

@@ -53,22 +53,6 @@ namespace Nocturne.Connectors.Core.Services
         /// </summary>
         protected static void PopulateBaseConfiguration(IConnectorConfiguration config)
         {
-            // Nightscout Target Configuration
-            config.NightscoutUrl =
-                Environment.GetEnvironmentVariable("NIGHTSCOUT_URL")
-                ?? Environment.GetEnvironmentVariable("url")
-                ?? string.Empty;
-
-            config.NightscoutApiSecret =
-                Environment.GetEnvironmentVariable("NIGHTSCOUT_API_SECRET")
-                ?? Environment.GetEnvironmentVariable("API_TOKEN")
-                ?? string.Empty;
-
-            config.ApiSecret =
-                Environment.GetEnvironmentVariable("API_SECRET")
-                ?? Environment.GetEnvironmentVariable("apiSecret")
-                ?? string.Empty;
-
             // File I/O Configuration
             config.SaveRawData =
                 bool.TryParse(

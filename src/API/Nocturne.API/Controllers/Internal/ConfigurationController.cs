@@ -43,7 +43,7 @@ public class ConfigurationController : ControllerBase
     {
         _logger.LogDebug("Getting configuration for connector {ConnectorName}", connectorName);
 
-        var config = await _configService.GetConfigurationAsync(connectorName, includeSecrets: false, ct);
+        var config = await _configService.GetConfigurationAsync(connectorName, ct);
         if (config == null)
         {
             return NotFound(new { message = $"No configuration found for connector '{connectorName}'" });
@@ -55,11 +55,13 @@ public class ConfigurationController : ControllerBase
     /// <summary>
     /// Gets the JSON Schema for a connector's configuration.
     /// Schema is generated from the connector's configuration class attributes.
+    /// This endpoint is public since schema is just metadata, not sensitive data.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>JSON Schema document</returns>
     [HttpGet("{connectorName}/schema")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(JsonDocument), StatusCodes.Status200OK)]
     public async Task<ActionResult<JsonDocument>> GetSchema(
         string connectorName,
@@ -72,8 +74,39 @@ public class ConfigurationController : ControllerBase
     }
 
     /// <summary>
+    /// Gets the effective configuration from a running connector.
+    /// This returns the actual runtime values including those resolved from environment variables.
+    /// This endpoint is public since it only exposes non-secret configuration values.
+    /// </summary>
+    /// <param name="connectorName">The connector name</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Dictionary of property names to effective values</returns>
+    [HttpGet("{connectorName}/effective")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(Dictionary<string, object?>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<Dictionary<string, object?>>> GetEffectiveConfiguration(
+        string connectorName,
+        CancellationToken ct)
+    {
+        _logger.LogDebug("Getting effective configuration for connector {ConnectorName}", connectorName);
+
+        var effectiveConfig = await _configService.GetEffectiveConfigurationAsync(connectorName, ct);
+        if (effectiveConfig == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = $"Connector '{connectorName}' is not available or not running"
+            });
+        }
+
+        return Ok(effectiveConfig);
+    }
+
+    /// <summary>
     /// Saves or updates runtime configuration for a connector.
     /// Only properties marked with [RuntimeConfigurable] are accepted.
+    /// Validates the configuration against the connector's schema before saving.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="configuration">Configuration values as JSON</param>
@@ -81,6 +114,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>The saved configuration</returns>
     [HttpPut("{connectorName}")]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> SaveConfiguration(
         string connectorName,
         [FromBody] JsonDocument configuration,
@@ -90,8 +124,127 @@ public class ConfigurationController : ControllerBase
         _logger.LogInformation("Saving configuration for connector {ConnectorName} by {ModifiedBy}",
             connectorName, modifiedBy);
 
+        // Validate the configuration against the schema
+        var validationErrors = await ValidateConfigurationAsync(connectorName, configuration, ct);
+        if (validationErrors.Count > 0)
+        {
+            _logger.LogWarning("Configuration validation failed for connector {ConnectorName}: {Errors}",
+                connectorName, string.Join(", ", validationErrors));
+            return BadRequest(new { message = "Configuration validation failed", errors = validationErrors });
+        }
+
         var result = await _configService.SaveConfigurationAsync(connectorName, configuration, modifiedBy, ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Validates the configuration against the connector's schema.
+    /// </summary>
+    private async Task<List<string>> ValidateConfigurationAsync(
+        string connectorName,
+        JsonDocument configuration,
+        CancellationToken ct)
+    {
+        var errors = new List<string>();
+
+        // Get the schema for this connector
+        var schema = await _configService.GetSchemaAsync(connectorName, ct);
+        var schemaRoot = schema.RootElement;
+
+        // Check if schema has properties defined
+        if (!schemaRoot.TryGetProperty("properties", out var schemaProperties))
+        {
+            // No schema available, allow any configuration
+            return errors;
+        }
+
+        var configRoot = configuration.RootElement;
+
+        // Validate required fields
+        if (schemaRoot.TryGetProperty("required", out var requiredFields))
+        {
+            foreach (var requiredField in requiredFields.EnumerateArray())
+            {
+                var fieldName = requiredField.GetString();
+                if (fieldName != null && !configRoot.TryGetProperty(fieldName, out _))
+                {
+                    errors.Add($"Required field '{fieldName}' is missing");
+                }
+            }
+        }
+
+        // Validate each property in the configuration
+        foreach (var configProp in configRoot.EnumerateObject())
+        {
+            // Skip 'enabled' field - it's always valid
+            if (configProp.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Check if the property exists in the schema
+            if (!schemaProperties.TryGetProperty(configProp.Name, out var propSchema))
+            {
+                // Unknown property - could be a secret field or removed property
+                // Don't error, just skip validation for unknown fields
+                continue;
+            }
+
+            // Validate type
+            if (propSchema.TryGetProperty("type", out var typeProp))
+            {
+                var expectedType = typeProp.GetString();
+                var actualValue = configProp.Value;
+
+                var typeValid = expectedType switch
+                {
+                    "boolean" => actualValue.ValueKind == JsonValueKind.True || actualValue.ValueKind == JsonValueKind.False,
+                    "integer" => actualValue.ValueKind == JsonValueKind.Number && actualValue.TryGetInt64(out _),
+                    "number" => actualValue.ValueKind == JsonValueKind.Number,
+                    "string" => actualValue.ValueKind == JsonValueKind.String,
+                    _ => true
+                };
+
+                if (!typeValid)
+                {
+                    errors.Add($"Field '{configProp.Name}' has invalid type. Expected {expectedType}");
+                }
+            }
+
+            // Validate minimum/maximum for numbers
+            if (propSchema.TryGetProperty("minimum", out var minProp) && configProp.Value.ValueKind == JsonValueKind.Number)
+            {
+                var minValue = minProp.GetDouble();
+                var actualValue = configProp.Value.GetDouble();
+                if (actualValue < minValue)
+                {
+                    errors.Add($"Field '{configProp.Name}' value {actualValue} is less than minimum {minValue}");
+                }
+            }
+
+            if (propSchema.TryGetProperty("maximum", out var maxProp) && configProp.Value.ValueKind == JsonValueKind.Number)
+            {
+                var maxValue = maxProp.GetDouble();
+                var actualValue = configProp.Value.GetDouble();
+                if (actualValue > maxValue)
+                {
+                    errors.Add($"Field '{configProp.Name}' value {actualValue} is greater than maximum {maxValue}");
+                }
+            }
+
+            // Validate enum values
+            if (propSchema.TryGetProperty("enum", out var enumProp) && configProp.Value.ValueKind == JsonValueKind.String)
+            {
+                var actualValue = configProp.Value.GetString();
+                var validValues = enumProp.EnumerateArray().Select(v => v.GetString()).ToList();
+                if (!validValues.Contains(actualValue))
+                {
+                    errors.Add($"Field '{configProp.Name}' value '{actualValue}' is not one of: {string.Join(", ", validValues)}");
+                }
+            }
+        }
+
+        return errors;
     }
 
     /// <summary>
@@ -184,15 +337,4 @@ public class ConfigurationController : ControllerBase
 
         return NoContent();
     }
-}
-
-/// <summary>
-/// Request model for setting connector active state.
-/// </summary>
-public class SetActiveRequest
-{
-    /// <summary>
-    /// Whether the connector should be active.
-    /// </summary>
-    public bool IsActive { get; set; }
 }

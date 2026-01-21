@@ -81,14 +81,13 @@ public interface IConnectorConfigurationService
 {
     /// <summary>
     /// Gets the configuration for a specific connector.
-    /// Returns merged configuration from database (runtime) and environment (secrets).
-    /// Secrets are returned decrypted for internal use but never exposed via API responses.
+    /// Returns runtime configuration from the database.
+    /// Secrets are never included - use GetSecretsAsync for internal connector use.
     /// </summary>
     /// <param name="connectorName">The connector name (e.g., "Dexcom")</param>
-    /// <param name="includeSecrets">If true, includes decrypted secrets in the response (for internal connector use only)</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Configuration response or null if not found</returns>
-    Task<ConnectorConfigurationResponse?> GetConfigurationAsync(string connectorName, bool includeSecrets = false, CancellationToken ct = default);
+    Task<ConnectorConfigurationResponse?> GetConfigurationAsync(string connectorName, CancellationToken ct = default);
 
     /// <summary>
     /// Saves or updates runtime configuration for a connector.
@@ -151,4 +150,24 @@ public interface IConnectorConfigurationService
     /// <param name="ct">Cancellation token</param>
     /// <returns>True if configuration was deleted, false if it didn't exist</returns>
     Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets the effective configuration from a running connector.
+    /// This returns the actual runtime values including those resolved from environment variables.
+    /// </summary>
+    /// <param name="connectorName">The connector name</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Dictionary of property names to effective values, or null if connector is not reachable</returns>
+    Task<Dictionary<string, object?>?> GetEffectiveConfigurationAsync(string connectorName, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Request model for setting connector active state.
+/// </summary>
+public class SetActiveRequest
+{
+    /// <summary>
+    /// Whether the connector should be active.
+    /// </summary>
+    public bool IsActive { get; set; }
 }

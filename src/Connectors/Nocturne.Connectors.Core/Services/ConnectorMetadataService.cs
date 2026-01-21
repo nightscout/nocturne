@@ -124,9 +124,21 @@ namespace Nocturne.Connectors.Core.Services
                 if (_initialized)
                     return;
 
+                // Force load the Configurations assembly if not already loaded
+                // .NET loads assemblies lazily, so we need to ensure it's loaded before scanning
+                try
+                {
+                    Assembly.Load("Nocturne.Connectors.Configurations");
+                }
+                catch
+                {
+                    // Assembly may not be available in all contexts
+                }
+
                 // Scan all loaded assemblies for ConnectorRegistration attributes
                 var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-                    .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true);
+                    .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
+                    .ToList();
 
                 foreach (var assembly in assemblies)
                 {

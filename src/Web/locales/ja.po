@@ -1395,6 +1395,7 @@ msgstr ""
 msgid "Nightscout URL"
 msgstr ""
 
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/routes/compatibility/+page.svelte
 msgid "Not configured"
 msgstr ""
@@ -1881,9 +1882,6 @@ msgstr ""
 msgid "Completed"
 msgstr ""
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
@@ -13314,11 +13312,10 @@ msgstr ""
 msgid "Delete {0} Configuration?"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid ""
-"This will permanently delete all configuration and credentials for this connector.\n"
-"The connector will stop syncing data. This action cannot be undone."
-msgstr ""
+#~ msgid ""
+#~ "This will permanently delete all configuration and credentials for this connector.\n"
+#~ "The connector will stop syncing data. This action cannot be undone."
+#~ msgstr ""
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Select..."
@@ -13349,13 +13346,11 @@ msgstr ""
 msgid "<0/> Save Configuration"
 msgstr ""
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-msgid "Credentials"
-msgstr ""
+#~ msgid "Credentials"
+#~ msgstr ""
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-msgid "Sensitive credentials are stored encrypted and never displayed after saving."
-msgstr ""
+#~ msgid "Sensitive credentials are stored encrypted and never displayed after saving."
+#~ msgstr ""
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Enter to update (leave blank to keep current)"
@@ -13383,4 +13378,73 @@ msgstr ""
 
 #: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "This connector does not support runtime configuration. <0/>"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Modified"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Reset to environment variable value"
+msgstr ""
+
+#~ msgid "(current: {0})"
+#~ msgstr ""
+
+#~ msgid "Environment variable: <0/> <1/>"
+#~ msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Advanced"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Unsaved"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "From Env"
+msgstr ""
+
+#. placeholder {0}: advancedGroup.properties.length
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "{0} settings"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "<0/> Credentials"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Configured"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid ""
+"Sensitive credentials are stored encrypted and never displayed after\n"
+"saving. <0/>"
+msgstr ""
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Environment variable: <0/>"
+msgstr ""
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid ""
+"This will permanently delete all configuration and credentials for this\n"
+"connector. The connector will stop syncing data. This action cannot be\n"
+"undone."
 msgstr ""

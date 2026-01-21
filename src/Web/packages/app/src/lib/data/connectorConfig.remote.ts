@@ -24,6 +24,10 @@ export interface JsonSchemaProperty {
 	maxLength?: number;
 	pattern?: string;
 	format?: string;
+	/** Environment variable name for this property (x-envVar extension) */
+	'x-envVar'?: string;
+	/** Category for UI grouping (x-category extension) */
+	'x-category'?: string;
 }
 
 export interface JsonSchema {
@@ -80,8 +84,9 @@ export const getConnectorSchema = query(z.string(), async (connectorName) => {
 
 	try {
 		const result = await apiClient.configuration.getSchema(connectorName);
-		// The API returns JsonDocument, extract the actual schema
-		const schema = result.rootElement as JsonSchema;
+		// The API returns JsonDocument which NSwag maps with rootElement,
+		// but sometimes the schema comes through directly as the response object
+		const schema = (result.rootElement ?? result) as JsonSchema;
 
 		// Handle case where schema is empty (connector type not found)
 		if (!schema || !schema.properties || Object.keys(schema.properties).length === 0) {
@@ -106,12 +111,34 @@ export const getConnectorSchema = query(z.string(), async (connectorName) => {
 });
 
 /**
+ * Get effective configuration from a running connector
+ * Returns the actual runtime values including those resolved from environment variables
+ */
+export const getConnectorEffectiveConfig = query(z.string(), async (connectorName) => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		const result = await apiClient.configuration.getEffectiveConfiguration(connectorName);
+		// The API returns the effective config directly as a dictionary
+		return result as Record<string, unknown>;
+	} catch (err: unknown) {
+		// 503 is expected when connector is not running
+		if (err && typeof err === 'object' && 'status' in err && err.status === 503) {
+			return null;
+		}
+		console.error('Error loading effective configuration:', err);
+		return null;
+	}
+});
+
+/**
  * Save connector configuration
  */
 export const saveConnectorConfiguration = command(
 	z.object({
 		connectorName: z.string(),
-		configuration: z.record(z.unknown()),
+		configuration: z.record(z.string(), z.unknown()),
 	}),
 	async ({ connectorName, configuration }) => {
 		const { locals } = getRequestEvent();
@@ -142,7 +169,7 @@ export const saveConnectorConfiguration = command(
 export const saveConnectorSecrets = command(
 	z.object({
 		connectorName: z.string(),
-		secrets: z.record(z.string()),
+		secrets: z.record(z.string(), z.string()),
 	}),
 	async ({ connectorName, secrets }) => {
 		const { locals } = getRequestEvent();

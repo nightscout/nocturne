@@ -10,14 +10,17 @@ namespace Nocturne.Infrastructure.Shared.Services;
 /// <summary>
 /// Encrypts and decrypts secrets using AES-256-GCM with a key derived from api-secret.
 /// The key is derived using PBKDF2-SHA256 with 100,000 iterations.
+/// Uses an installation-specific salt combined with a static component for added security.
 /// </summary>
 public class SecretEncryptionService : ISecretEncryptionService
 {
     private const int NonceSize = 12; // AES-GCM standard nonce size
     private const int TagSize = 16;   // AES-GCM standard tag size
     private const int KeySize = 32;   // 256 bits for AES-256
+    private const int SaltSize = 16;  // 128-bit installation salt
     private const int Iterations = 100_000;
-    private static readonly byte[] Salt = Encoding.UTF8.GetBytes("nocturne-secrets-v1");
+    private const string SaltConfigKey = "Nocturne:EncryptionSalt";
+    private static readonly byte[] StaticSaltComponent = Encoding.UTF8.GetBytes("nocturne-secrets-v2");
 
     private readonly byte[]? _encryptionKey;
     private readonly ILogger<SecretEncryptionService> _logger;
@@ -38,15 +41,76 @@ public class SecretEncryptionService : ISecretEncryptionService
             return;
         }
 
+        // Get or generate installation-specific salt
+        var salt = GetOrCreateInstallationSalt(configuration);
+
         // Derive encryption key from api-secret using PBKDF2
         _encryptionKey = KeyDerivation.Pbkdf2(
             password: apiSecret,
-            salt: Salt,
+            salt: salt,
             prf: KeyDerivationPrf.HMACSHA256,
             iterationCount: Iterations,
             numBytesRequested: KeySize);
 
-        _logger.LogDebug("Secret encryption service initialized");
+        _logger.LogDebug("Secret encryption service initialized with installation-specific salt");
+    }
+
+    /// <summary>
+    /// Gets the installation-specific salt from configuration, or generates a new one.
+    /// The salt is a combination of a static component and an installation-specific component.
+    /// </summary>
+    private byte[] GetOrCreateInstallationSalt(IConfiguration configuration)
+    {
+        // Try to get existing installation salt from configuration
+        var installationSaltBase64 = configuration[SaltConfigKey];
+
+        byte[] installationSalt;
+        if (!string.IsNullOrEmpty(installationSaltBase64))
+        {
+            try
+            {
+                installationSalt = Convert.FromBase64String(installationSaltBase64);
+                if (installationSalt.Length >= SaltSize)
+                {
+                    _logger.LogDebug("Using existing installation-specific encryption salt");
+                }
+                else
+                {
+                    _logger.LogWarning("Installation salt too short, generating new one");
+                    installationSalt = GenerateNewSalt();
+                }
+            }
+            catch (FormatException)
+            {
+                _logger.LogWarning("Invalid installation salt format, generating new one");
+                installationSalt = GenerateNewSalt();
+            }
+        }
+        else
+        {
+            // Generate a new installation-specific salt
+            // Note: In production, this should be persisted to appsettings.json or a secrets manager
+            installationSalt = GenerateNewSalt();
+            _logger.LogInformation(
+                "Generated new installation-specific encryption salt. " +
+                "To persist across restarts, add to configuration: {Key}={Value}",
+                SaltConfigKey,
+                Convert.ToBase64String(installationSalt));
+        }
+
+        // Combine static and installation-specific components
+        var combinedSalt = new byte[StaticSaltComponent.Length + installationSalt.Length];
+        Buffer.BlockCopy(StaticSaltComponent, 0, combinedSalt, 0, StaticSaltComponent.Length);
+        Buffer.BlockCopy(installationSalt, 0, combinedSalt, StaticSaltComponent.Length, installationSalt.Length);
+
+        return combinedSalt;
+    }
+
+    private static byte[] GenerateNewSalt()
+    {
+        var salt = new byte[SaltSize];
+        RandomNumberGenerator.Fill(salt);
+        return salt;
     }
 
     /// <inheritdoc />

@@ -71,30 +71,7 @@ namespace Nocturne.Connectors.Core.Interfaces
         /// </summary>
         string? RoutingKeyPrefix { get; set; }
 
-        /// <summary>
-        /// Sync interval in minutes between data synchronization cycles
-        /// </summary>
         int SyncIntervalMinutes { get; set; }
-
-        /// <summary>
-        /// Operational mode for the connector
-        /// </summary>
-        ConnectorMode Mode { get; set; }
-
-        /// <summary>
-        /// Destination Nightscout URL for uploading data (required for Standalone mode)
-        /// </summary>
-        string NightscoutUrl { get; set; }
-
-        /// <summary>
-        /// Destination Nightscout API secret for authentication (required for Standalone mode)
-        /// </summary>
-        string NightscoutApiSecret { get; set; }
-
-        /// <summary>
-        /// Alternative API secret (for backward compatibility)
-        /// </summary>
-        string ApiSecret { get; set; }
 
         /// <summary>
         /// Validates the configuration and throws ArgumentException if invalid

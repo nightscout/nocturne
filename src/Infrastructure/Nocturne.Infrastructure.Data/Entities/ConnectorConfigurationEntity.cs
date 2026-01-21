@@ -45,12 +45,6 @@ public class ConnectorConfigurationEntity
     public int SchemaVersion { get; set; } = 1;
 
     /// <summary>
-    /// Whether this configuration is currently active
-    /// </summary>
-    [Column("is_active")]
-    public bool IsActive { get; set; } = true;
-
-    /// <summary>
     /// When the configuration was last modified
     /// </summary>
     [Column("last_modified")]

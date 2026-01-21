@@ -1399,6 +1399,7 @@ msgstr "Configuration"
 msgid "Nightscout URL"
 msgstr "Nightscout URL"
 
+#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/routes/compatibility/+page.svelte
 msgid "Not configured"
 msgstr "Not configured"
@@ -1887,9 +1888,6 @@ msgstr "Save"
 msgid "Completed"
 msgstr "Completed"
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
@@ -13655,13 +13653,12 @@ msgstr "Remove all configuration and credentials for this connector"
 msgid "Delete {0} Configuration?"
 msgstr "Delete {0} Configuration?"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid ""
-"This will permanently delete all configuration and credentials for this connector.\n"
-"The connector will stop syncing data. This action cannot be undone."
-msgstr ""
-"This will permanently delete all configuration and credentials for this connector.\n"
-"The connector will stop syncing data. This action cannot be undone."
+#~ msgid ""
+#~ "This will permanently delete all configuration and credentials for this connector.\n"
+#~ "The connector will stop syncing data. This action cannot be undone."
+#~ msgstr ""
+#~ "This will permanently delete all configuration and credentials for this connector.\n"
+#~ "The connector will stop syncing data. This action cannot be undone."
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Select..."
@@ -13692,13 +13689,11 @@ msgstr "<0/> Saving..."
 msgid "<0/> Save Configuration"
 msgstr "<0/> Save Configuration"
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-msgid "Credentials"
-msgstr "Credentials"
+#~ msgid "Credentials"
+#~ msgstr "Credentials"
 
-#: src/lib/components/settings/ConnectorConfigForm.svelte
-msgid "Sensitive credentials are stored encrypted and never displayed after saving."
-msgstr "Sensitive credentials are stored encrypted and never displayed after saving."
+#~ msgid "Sensitive credentials are stored encrypted and never displayed after saving."
+#~ msgstr "Sensitive credentials are stored encrypted and never displayed after saving."
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "Enter to update (leave blank to keep current)"
@@ -13727,3 +13722,77 @@ msgstr "Configure via environment variables on the server."
 #: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "This connector does not support runtime configuration. <0/>"
 msgstr "This connector does not support runtime configuration. <0/>"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Modified"
+msgstr "Modified"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Reset to environment variable value"
+msgstr "Reset to environment variable value"
+
+#~ msgid "(current: {0})"
+#~ msgstr "(current: {0})"
+
+#~ msgid "Environment variable: <0/> <1/>"
+#~ msgstr "Environment variable: <0/> <1/>"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Advanced"
+msgstr "Advanced"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Unsaved"
+msgstr "Unsaved"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "From Env"
+msgstr "From Env"
+
+#. placeholder {0}: advancedGroup.properties.length
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "{0} settings"
+msgstr "{0} settings"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "<0/> Credentials"
+msgstr "<0/> Credentials"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Configured"
+msgstr "Configured"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid ""
+"Sensitive credentials are stored encrypted and never displayed after\n"
+"saving. <0/>"
+msgstr ""
+"Sensitive credentials are stored encrypted and never displayed after\n"
+"saving. <0/>"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Environment variable: <0/>"
+msgstr "Environment variable: <0/>"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid ""
+"This will permanently delete all configuration and credentials for this\n"
+"connector. The connector will stop syncing data. This action cannot be\n"
+"undone."
+msgstr ""
+"This will permanently delete all configuration and credentials for this\n"
+"connector. The connector will stop syncing data. This action cannot be\n"
+"undone."

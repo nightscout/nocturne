@@ -7,7 +7,10 @@ using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 
 namespace Nocturne.Connectors.Core.Extensions
@@ -139,7 +142,65 @@ namespace Nocturne.Connectors.Core.Extensions
                 }
             );
 
+            // Configure effective configuration endpoint
+            // This returns the current configuration values including those resolved from environment variables
+            app.MapGet(
+                "/config/effective",
+                (IServiceProvider serviceProvider) =>
+                {
+                    var config = serviceProvider.GetRequiredService<TConfig>();
+                    return Results.Ok(GetEffectiveConfiguration(config));
+                }
+            );
+
             return app;
+        }
+
+        /// <summary>
+        /// Extracts the effective configuration values for properties marked with [RuntimeConfigurable].
+        /// Returns only non-secret properties that can be displayed in the UI.
+        /// </summary>
+        private static Dictionary<string, object?> GetEffectiveConfiguration<TConfig>(TConfig config)
+            where TConfig : class, IConnectorConfiguration
+        {
+            var result = new Dictionary<string, object?>();
+            var configType = typeof(TConfig);
+
+            foreach (var property in configType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var runtimeAttr = property.GetCustomAttribute<RuntimeConfigurableAttribute>();
+                if (runtimeAttr == null)
+                    continue; // Only include runtime-configurable properties
+
+                var secretAttr = property.GetCustomAttribute<SecretAttribute>();
+                if (secretAttr != null)
+                    continue; // Don't include secrets
+
+                try
+                {
+                    var value = property.GetValue(config);
+                    // Convert enums to strings for JSON
+                    if (value != null && property.PropertyType.IsEnum)
+                    {
+                        value = value.ToString();
+                    }
+                    result[ToCamelCase(property.Name)] = value;
+                }
+                catch
+                {
+                    // Skip properties that throw on access
+                }
+            }
+
+            return result;
+        }
+
+        private static string ToCamelCase(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return name;
+
+            return char.ToLowerInvariant(name[0]) + name.Substring(1);
         }
     }
 }

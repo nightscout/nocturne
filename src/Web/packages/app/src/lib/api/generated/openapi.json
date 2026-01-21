@@ -13591,7 +13591,7 @@
         "tags": [
           "Configuration"
         ],
-        "summary": "Saves or updates runtime configuration for a connector.\nOnly properties marked with [RuntimeConfigurable] are accepted.",
+        "summary": "Saves or updates runtime configuration for a connector.\nOnly properties marked with [RuntimeConfigurable] are accepted.\nValidates the configuration against the connector's schema before saving.",
         "operationId": "Configuration_SaveConfiguration",
         "parameters": [
           {
@@ -13625,6 +13625,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConnectorConfigurationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -13671,7 +13681,7 @@
         "tags": [
           "Configuration"
         ],
-        "summary": "Gets the JSON Schema for a connector's configuration.\nSchema is generated from the connector's configuration class attributes.",
+        "summary": "Gets the JSON Schema for a connector's configuration.\nSchema is generated from the connector's configuration class attributes.\nThis endpoint is public since schema is just metadata, not sensitive data.",
         "operationId": "Configuration_GetSchema",
         "parameters": [
           {
@@ -13695,6 +13705,43 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/internal/config/{connectorName}/effective": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Gets the effective configuration from a running connector.\nThis returns the actual runtime values including those resolved from environment variables.\nThis endpoint is public since it only exposes non-secret configuration values.",
+        "operationId": "Configuration_GetEffectiveConfiguration",
+        "parameters": [
+          {
+            "name": "connectorName",
+            "in": "path",
+            "required": true,
+            "description": "The connector name",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dictionary of property names to effective values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": ""
           }
         }
       }
@@ -26184,12 +26231,10 @@
       },
       "SetActiveRequest": {
         "type": "object",
-        "description": "Request model for setting connector active state.",
         "additionalProperties": false,
         "properties": {
           "isActive": {
-            "type": "boolean",
-            "description": "Whether the connector should be active."
+            "type": "boolean"
           }
         }
       }

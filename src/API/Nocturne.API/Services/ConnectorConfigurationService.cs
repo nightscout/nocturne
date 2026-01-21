@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -20,6 +21,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly NocturneDbContext _context;
     private readonly ISecretEncryptionService _encryptionService;
     private readonly ISignalRBroadcastService _broadcastService;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -27,22 +29,37 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
+    /// <summary>
+    /// Maps connector IDs to their Aspire service names for HTTP calls.
+    /// </summary>
+    private static readonly Dictionary<string, string> ConnectorServiceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["nightscout"] = ServiceNames.NightscoutConnector,
+        ["dexcom"] = ServiceNames.DexcomConnector,
+        ["libre"] = ServiceNames.LibreConnector,
+        ["glooko"] = ServiceNames.GlookoConnector,
+        ["carelink"] = ServiceNames.MiniMedConnector,
+        ["myfitnesspal"] = ServiceNames.MyFitnessPalConnector,
+        ["mylife"] = ServiceNames.MyLifeConnector,
+    };
+
     public ConnectorConfigurationService(
         NocturneDbContext context,
         ISecretEncryptionService encryptionService,
         ISignalRBroadcastService broadcastService,
+        IHttpClientFactory httpClientFactory,
         ILogger<ConnectorConfigurationService> logger)
     {
         _context = context;
         _encryptionService = encryptionService;
         _broadcastService = broadcastService;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
     /// <inheritdoc />
     public async Task<ConnectorConfigurationResponse?> GetConfigurationAsync(
         string connectorName,
-        bool includeSecrets = false,
         CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
@@ -55,18 +72,18 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return null;
         }
 
+        // Read enabled from config JSON
+        var isActive = GetEnabledFromConfig(entity.ConfigurationJson);
+
         var response = new ConnectorConfigurationResponse
         {
             ConnectorName = entity.ConnectorName,
             Configuration = JsonDocument.Parse(entity.ConfigurationJson),
             SchemaVersion = entity.SchemaVersion,
-            IsActive = entity.IsActive,
+            IsActive = isActive,
             LastModified = entity.LastModified,
             ModifiedBy = entity.ModifiedBy
         };
-
-        // Note: We don't include secrets in the configuration response.
-        // Connectors should call GetSecretsAsync separately for internal use.
 
         return response;
     }
@@ -83,6 +100,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         var configJson = configuration.RootElement.GetRawText();
 
+        // Read the enabled state from the config JSON (defaults to false if not present)
+        var enabledFromConfig = GetEnabledFromConfig(configJson);
+
         if (entity == null)
         {
             entity = new ConnectorConfigurationEntity
@@ -90,7 +110,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 ConnectorName = connectorName,
                 ConfigurationJson = configJson,
                 SecretsJson = "{}",
-                IsActive = true,
                 LastModified = DateTimeOffset.UtcNow,
                 ModifiedBy = modifiedBy
             };
@@ -120,7 +139,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             ConnectorName = entity.ConnectorName,
             Configuration = JsonDocument.Parse(entity.ConfigurationJson),
             SchemaVersion = entity.SchemaVersion,
-            IsActive = entity.IsActive,
+            IsActive = enabledFromConfig,
             LastModified = entity.LastModified,
             ModifiedBy = entity.ModifiedBy
         };
@@ -152,7 +171,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 ConnectorName = connectorName,
                 ConfigurationJson = "{}",
                 SecretsJson = secretsJson,
-                IsActive = true,
                 LastModified = DateTimeOffset.UtcNow,
                 ModifiedBy = modifiedBy
             };
@@ -240,10 +258,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         {
             var hasDbConfig = dbConfigs.TryGetValue(connector.ConnectorName, out var dbConfig);
 
+            // Read enabled from config JSON
+            var isEnabled = hasDbConfig && GetEnabledFromConfig(dbConfig!.ConfigurationJson);
+
             var status = new ConnectorStatusInfo
             {
                 ConnectorName = connector.ConnectorName,
-                IsEnabled = hasDbConfig && dbConfig!.IsActive,
+                IsEnabled = isEnabled,
                 HasDatabaseConfig = hasDbConfig,
                 HasSecrets = hasDbConfig && !string.IsNullOrEmpty(dbConfig!.SecretsJson) && dbConfig.SecretsJson != "{}",
                 LastModified = hasDbConfig ? dbConfig!.LastModified : null
@@ -253,6 +274,27 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Reads the enabled field from the configuration JSON.
+    /// Returns false if the field is not present or there's a parsing error.
+    /// </summary>
+    private bool GetEnabledFromConfig(string configJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty("enabled", out var enabledProp))
+            {
+                return enabledProp.GetBoolean();
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogDebug(ex, "Failed to parse configuration JSON for enabled field");
+        }
+        return false;
     }
 
     /// <inheritdoc />
@@ -265,14 +307,16 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         var entity = await _context.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
 
+        // Create the config JSON with the enabled field
+        var configWithEnabled = CreateConfigWithEnabled(entity?.ConfigurationJson ?? "{}", isActive);
+
         if (entity == null)
         {
             entity = new ConnectorConfigurationEntity
             {
                 ConnectorName = connectorName,
-                ConfigurationJson = "{}",
+                ConfigurationJson = configWithEnabled,
                 SecretsJson = "{}",
-                IsActive = isActive,
                 LastModified = DateTimeOffset.UtcNow,
                 ModifiedBy = modifiedBy
             };
@@ -280,7 +324,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
         else
         {
-            entity.IsActive = isActive;
+            entity.ConfigurationJson = configWithEnabled;
             entity.LastModified = DateTimeOffset.UtcNow;
             entity.ModifiedBy = modifiedBy;
         }
@@ -295,6 +339,28 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             ChangeType = isActive ? "enabled" : "disabled",
             ModifiedBy = modifiedBy
         });
+    }
+
+    /// <summary>
+    /// Updates the configuration JSON to include the enabled field.
+    /// </summary>
+    private static string CreateConfigWithEnabled(string existingConfigJson, bool enabled)
+    {
+        var config = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(existingConfigJson, _jsonOptions)
+            ?? new Dictionary<string, JsonElement>();
+
+        // Remove existing enabled key if present (case-insensitive)
+        var keyToRemove = config.Keys.FirstOrDefault(k => k.Equals("enabled", StringComparison.OrdinalIgnoreCase));
+        if (keyToRemove != null)
+        {
+            config.Remove(keyToRemove);
+        }
+
+        // Add the enabled value using a temporary JSON document
+        using var doc = JsonDocument.Parse(enabled ? "true" : "false");
+        config["enabled"] = doc.RootElement.Clone();
+
+        return JsonSerializer.Serialize(config, _jsonOptions);
     }
 
     /// <inheritdoc />
@@ -322,19 +388,61 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         return true;
     }
 
+    /// <inheritdoc />
+    public async Task<Dictionary<string, object?>?> GetEffectiveConfigurationAsync(
+        string connectorName,
+        CancellationToken ct = default)
+    {
+        if (!ConnectorServiceNames.TryGetValue(connectorName, out var serviceName))
+        {
+            _logger.LogWarning("Unknown connector {ConnectorName} for effective config", connectorName);
+            return null;
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient(ConnectorHealthService.HttpClientName);
+            var url = $"http://{serviceName}/config/effective";
+
+            _logger.LogDebug("Fetching effective config for {Connector} at {Url}", connectorName, url);
+
+            var response = await client.GetAsync(url, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Failed to get effective config for {Connector}: {StatusCode}",
+                    connectorName,
+                    response.StatusCode);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var result = JsonSerializer.Deserialize<Dictionary<string, object?>>(json, _jsonOptions);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch effective config for {Connector}", connectorName);
+            return null;
+        }
+    }
+
     /// <summary>
     /// Finds the configuration class Type for a given connector name.
     /// </summary>
     private static Type? FindConfigurationType(string connectorName)
     {
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true);
+            .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
+            .ToList();
 
         foreach (var assembly in assemblies)
         {
             try
             {
-                foreach (var type in assembly.GetTypes())
+                var types = assembly.GetTypes();
+                foreach (var type in types)
                 {
                     var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
                     if (attr != null && attr.ConnectorName.Equals(connectorName, StringComparison.OrdinalIgnoreCase))
@@ -355,28 +463,83 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <summary>
     /// Generates a JSON Schema from a configuration type based on attributes.
     /// Only includes properties marked with [RuntimeConfigurable].
+    /// Includes default values and environment variable names for UI display.
     /// </summary>
     private static JsonDocument GenerateSchemaFromType(Type configType)
     {
         var properties = new Dictionary<string, object>();
         var required = new List<string>();
+        var secrets = new List<string>();
 
-        foreach (var property in configType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        // Create an instance to get default values
+        object? defaultInstance = null;
+        try
         {
+            defaultInstance = Activator.CreateInstance(configType);
+        }
+        catch
+        {
+            // Could not create default instance - continue without defaults
+        }
+
+        var allProps = configType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var property in allProps)
+        {
+            var secretAttr = property.GetCustomAttribute<SecretAttribute>();
             var runtimeAttr = property.GetCustomAttribute<RuntimeConfigurableAttribute>();
+
+            // Handle secret fields - include in schema and mark as secret
+            if (secretAttr != null)
+            {
+                var envVarAttr = property.GetCustomAttribute<EnvironmentVariableAttribute>();
+                var propName = ToCamelCase(property.Name);
+                secrets.Add(propName);
+
+                // Add secret property schema with title and description
+                var secretSchema = new Dictionary<string, object>
+                {
+                    ["type"] = "string",
+                    ["title"] = FormatPropertyNameForDisplay(property.Name)
+                };
+
+                if (envVarAttr != null && !string.IsNullOrEmpty(envVarAttr.Name))
+                {
+                    secretSchema["x-envVar"] = envVarAttr.Name;
+                    secretSchema["description"] = $"Configure via environment variable: {envVarAttr.Name}";
+                }
+                else
+                {
+                    secretSchema["description"] = "Sensitive credential (stored encrypted)";
+                }
+
+                properties[propName] = secretSchema;
+                continue;
+            }
+
             if (runtimeAttr == null)
             {
                 continue; // Only include runtime-configurable properties
             }
 
-            var secretAttr = property.GetCustomAttribute<SecretAttribute>();
-            if (secretAttr != null)
+            var schemaAttr = property.GetCustomAttribute<ConfigSchemaAttribute>();
+            var envVarAttr2 = property.GetCustomAttribute<EnvironmentVariableAttribute>();
+
+            // Get default value from instance
+            object? defaultValue = null;
+            if (defaultInstance != null)
             {
-                continue; // Don't include secrets in schema
+                try
+                {
+                    defaultValue = property.GetValue(defaultInstance);
+                }
+                catch
+                {
+                    // Ignore errors getting default value
+                }
             }
 
-            var schemaAttr = property.GetCustomAttribute<ConfigSchemaAttribute>();
-            var propertySchema = GeneratePropertySchema(property.PropertyType, runtimeAttr, schemaAttr);
+            var propertySchema = GeneratePropertySchema(property.PropertyType, runtimeAttr, schemaAttr, envVarAttr2, defaultValue);
 
             properties[ToCamelCase(property.Name)] = propertySchema;
 
@@ -400,17 +563,32 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             schema["required"] = required;
         }
 
+        if (secrets.Count > 0)
+        {
+            schema["secrets"] = secrets;
+        }
+
         var json = JsonSerializer.Serialize(schema, _jsonOptions);
         return JsonDocument.Parse(json);
     }
 
+    private static string FormatPropertyNameForDisplay(string name)
+    {
+        // Convert camelCase/PascalCase to Title Case with spaces
+        var result = System.Text.RegularExpressions.Regex.Replace(name, "([A-Z])", " $1").Trim();
+        return char.ToUpperInvariant(result[0]) + result.Substring(1);
+    }
+
     /// <summary>
     /// Generates a JSON Schema property definition for a property.
+    /// Includes default value and environment variable name for UI display.
     /// </summary>
     private static Dictionary<string, object> GeneratePropertySchema(
         Type propertyType,
         RuntimeConfigurableAttribute runtimeAttr,
-        ConfigSchemaAttribute? schemaAttr)
+        ConfigSchemaAttribute? schemaAttr,
+        EnvironmentVariableAttribute? envVarAttr,
+        object? defaultValue)
     {
         var schema = new Dictionary<string, object>();
 
@@ -450,6 +628,32 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         if (!string.IsNullOrEmpty(runtimeAttr.Description))
         {
             schema["description"] = runtimeAttr.Description;
+        }
+
+        // Add category for UI grouping
+        if (!string.IsNullOrEmpty(runtimeAttr.Category))
+        {
+            schema["x-category"] = runtimeAttr.Category;
+        }
+
+        // Add default value if available
+        if (defaultValue != null)
+        {
+            // Handle enums specially - convert to string
+            if (underlyingType.IsEnum)
+            {
+                schema["default"] = defaultValue.ToString();
+            }
+            else if (!IsDefaultOrEmpty(defaultValue))
+            {
+                schema["default"] = defaultValue;
+            }
+        }
+
+        // Add environment variable name for UI display
+        if (envVarAttr != null && !string.IsNullOrEmpty(envVarAttr.Name))
+        {
+            schema["x-envVar"] = envVarAttr.Name;
         }
 
         // Add constraints from ConfigSchema
@@ -492,6 +696,28 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         return schema;
+    }
+
+    /// <summary>
+    /// Checks if a value is the default/empty value for its type.
+    /// </summary>
+    private static bool IsDefaultOrEmpty(object value)
+    {
+        if (value == null) return true;
+
+        var type = value.GetType();
+
+        // Empty strings
+        if (value is string s && string.IsNullOrEmpty(s)) return true;
+
+        // Default numerics (0)
+        if (type == typeof(int) && (int)value == 0) return false; // 0 is a valid default
+        if (type == typeof(double) && (double)value == 0.0) return false;
+        if (type == typeof(float) && (float)value == 0.0f) return false;
+        if (type == typeof(long) && (long)value == 0) return false;
+        if (type == typeof(decimal) && (decimal)value == 0) return false;
+
+        return false;
     }
 
     private static string ToCamelCase(string name)
