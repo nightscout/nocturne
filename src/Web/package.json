@@ -15,7 +15,8 @@
     "transform-api-client": "node --experimental-transform-types utils/transformApiClient/index.ts",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node --experimental-transform-types utils/generateZodSchemas/index.ts",
-    "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas"
+    "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas",
+    "translations:stage": "git add -f locales/*.po"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
