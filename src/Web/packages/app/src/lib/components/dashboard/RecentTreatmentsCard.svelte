@@ -65,7 +65,7 @@
   }
 </script>
 
-<Card>
+<Card class="@container">
   <svelte:boundary>
     {#snippet pending()}
       <div class="flex items-center justify-center h-full">
@@ -77,16 +77,16 @@
     {#snippet failed()}
       <p class="text-red-500 text-center">Error loading recent treatments.</p>
     {/snippet}
-    <CardHeader>
+    <CardHeader class="px-3 @md:px-6">
       <CardTitle>{title}</CardTitle>
       <p class="text-sm text-muted-foreground">{subtitle}</p>
     </CardHeader>
-    <CardContent>
+    <CardContent class="px-3 @md:px-6">
       {#if displayTreatments.length > 0}
-        <div class="space-y-3">
+        <div class="space-y-2 @md:space-y-3">
           {#each displayTreatments as treatment (treatment._id || treatment.mills)}
             <div
-              class="flex items-center justify-between p-3 bg-muted rounded-lg cursor-pointer hover:bg-muted/80 transition-colors"
+              class="flex items-center justify-between p-2 @md:p-3 bg-muted rounded-lg cursor-pointer hover:bg-muted/80 transition-colors"
               onclick={() => handleTreatmentClick(treatment)}
               role="button"
               tabindex="0"
@@ -97,8 +97,8 @@
                 }
               }}
             >
-              <div class="flex items-center gap-3">
-                <Badge variant="outline">{treatment.eventType}</Badge>
+              <div class="flex items-center gap-2 @md:gap-3">
+                <Badge variant="outline" class="text-xs @md:text-sm">{treatment.eventType}</Badge>
                 <div>
                   <div class="font-medium">
                     {#if treatment.carbs}

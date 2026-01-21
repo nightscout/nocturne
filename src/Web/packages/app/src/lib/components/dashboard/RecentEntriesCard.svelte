@@ -30,18 +30,18 @@
   const unitLabel = $derived(getUnitLabel(units));
 </script>
 
-<Card>
-  <CardHeader>Recent Entries</CardHeader>
-  <CardContent>
+<Card class="@container">
+  <CardHeader class="px-3 @md:px-6">Recent Entries</CardHeader>
+  <CardContent class="px-3 @md:px-6">
     {#if recentEntries.length > 0}
-      <div class="space-y-3">
+      <div class="space-y-2 @md:space-y-3">
         {#each recentEntries as entry (entry._id || entry.mills)}
           {@const directionInfo = getDirectionInfo(entry.direction)}
           {@const Icon = directionInfo.icon}
           <div
-            class="flex items-center justify-between p-3 bg-muted rounded-lg"
+            class="flex items-center justify-between p-2 @md:p-3 bg-muted rounded-lg"
           >
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 @md:gap-3">
               <div>
                 <div class="font-medium">
                   {#if entry.sgv}

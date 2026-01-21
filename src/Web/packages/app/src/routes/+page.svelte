@@ -41,7 +41,7 @@
   );
 </script>
 
-<div class="p-6 space-y-6">
+<div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">
   <CurrentBGDisplay />
 
   {#if isMainEnabled(WidgetId.Statistics)}

@@ -1254,8 +1254,8 @@
   </div>
 {/snippet}
 
-<Card class="bg-card border-border">
-  <CardHeader class="pb-2">
+<Card class="@container bg-card border-border">
+  <CardHeader class="pb-2 px-3 @md:px-6">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <CardTitle class="flex items-center gap-2 text-card-foreground">
         Blood Glucose
@@ -1280,7 +1280,7 @@
     </div>
   </CardHeader>
 
-  <CardContent class="p-2">
+  <CardContent class="p-1 @md:p-2">
     <!-- Zoom indicator and reset button -->
     {#if isZoomed}
       <div
@@ -1312,7 +1312,7 @@
     {/if}
 
     <!-- Single compound chart with remapped scales for basal, glucose, and IOB -->
-    <div class="h-[450px] p-4">
+    <div class="h-80 @md:h-[450px] p-2 @md:p-4">
       <Chart
         data={glucoseData}
         x={(d) => d.time}

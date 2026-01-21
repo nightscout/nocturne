@@ -190,61 +190,64 @@
   }
 </script>
 
-<div class="flex items-center justify-between">
-  <div class="flex items-center gap-4">
-    <h1 class="text-3xl font-bold">Nocturne</h1>
-    {#if displayDemoMode}
-      <Badge variant="secondary" class="flex items-center gap-1">
-        <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-        Demo Mode
-      </Badge>
-    {/if}
-  </div>
-  <div class="flex items-center gap-6">
-    <!-- Current Time Display -->
-    <div class="text-right">
-      <div class="flex items-center gap-2 text-lg font-medium tabular-nums">
-        <Clock class="h-4 w-4 text-muted-foreground" />
-        {formattedLocalTime}
-      </div>
-      {#if profileTimeInfo}
-        <div class="text-xs text-muted-foreground flex items-center gap-1">
-          <span class="font-medium">{profileTimeInfo.timezone}:</span>
-          <span class="tabular-nums">{profileTimeInfo.time}</span>
-          <Badge variant="outline" class="text-[10px] px-1 py-0">
-            {profileTimeInfo.offset}
-          </Badge>
-        </div>
+<!-- Header section - hidden on mobile since MobileHeader handles BG display -->
+<div class="@container">
+  <div class="hidden @md:flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <h1 class="text-3xl font-bold">Nocturne</h1>
+      {#if displayDemoMode}
+        <Badge variant="secondary" class="flex items-center gap-1">
+          <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          Demo Mode
+        </Badge>
       {/if}
     </div>
-
-    <!-- BG Display with connection/stale status -->
-    <div class="flex items-center gap-2">
-      <GlucoseValueIndicator
-        displayValue={displayCurrentBG}
-        rawBgMgdl={rawCurrentBG}
-        {isLoading}
-        {isStale}
-        {isDisconnected}
-        {statusText}
-        statusTooltip="Last reading: {timeSince}"
-        size="lg"
-      />
-      <div class="text-center">
-        <div class="text-2xl">
-          <!-- Direction display placeholder -->
+    <div class="flex items-center gap-6">
+      <!-- Current Time Display -->
+      <div class="text-right">
+        <div class="flex items-center gap-2 text-lg font-medium tabular-nums">
+          <Clock class="h-4 w-4 text-muted-foreground" />
+          {formattedLocalTime}
         </div>
-        <div class="text-sm text-muted-foreground">
-          {displayBgDelta}
+        {#if profileTimeInfo}
+          <div class="text-xs text-muted-foreground flex items-center gap-1">
+            <span class="font-medium">{profileTimeInfo.timezone}:</span>
+            <span class="tabular-nums">{profileTimeInfo.time}</span>
+            <Badge variant="outline" class="text-[10px] px-1 py-0">
+              {profileTimeInfo.offset}
+            </Badge>
+          </div>
+        {/if}
+      </div>
+
+      <!-- BG Display with connection/stale status -->
+      <div class="flex items-center gap-2">
+        <GlucoseValueIndicator
+          displayValue={displayCurrentBG}
+          rawBgMgdl={rawCurrentBG}
+          {isLoading}
+          {isStale}
+          {isDisconnected}
+          {statusText}
+          statusTooltip="Last reading: {timeSince}"
+          size="lg"
+        />
+        <div class="text-center">
+          <div class="text-2xl">
+            <!-- Direction display placeholder -->
+          </div>
+          <div class="text-sm text-muted-foreground">
+            {displayBgDelta}
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Status Pills Bar -->
+<!-- Status Pills Bar - visible on all sizes -->
 {#if showPills}
-  <div class="mt-4">
+  <div class="mt-2 @md:mt-4">
     <StatusPillBar
       iob={realtimeStore.pillsData.iob}
       cob={realtimeStore.pillsData.cob}

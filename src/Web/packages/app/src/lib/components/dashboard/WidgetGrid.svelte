@@ -34,7 +34,7 @@
   };
 </script>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="@container grid grid-cols-1 @md:grid-cols-3 gap-2 @md:gap-4">
   {#each displayWidgets as widgetId (widgetId)}
     {@const WidgetComponent = widgetComponents[widgetId]}
     {#if WidgetComponent}
