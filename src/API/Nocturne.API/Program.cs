@@ -34,6 +34,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
 using NSwag;
@@ -364,11 +365,15 @@ builder.Services.AddSignalR();
 // Register SignalR broadcast service
 builder.Services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
 
-// Register tracker seed service for creating default definitions
-builder.Services.AddScoped<ITrackerSeedService, TrackerSeedService>();
+// Register tracker trigger service for auto-starting trackers from treatments
+builder.Services.AddScoped<ITrackerTriggerService, TrackerTriggerService>();
 
 // Register tracker alert service for evaluating tracker thresholds and generating alerts
 builder.Services.AddScoped<ITrackerAlertService, TrackerAlertService>();
+
+// Register in-app notification repository and service
+builder.Services.AddScoped<InAppNotificationRepository>();
+builder.Services.AddScoped<IInAppNotificationService, InAppNotificationService>();
 
 // Register legacy device age service (bridges Tracker system to legacy deviceage endpoints)
 builder.Services.AddScoped<ILegacyDeviceAgeService, LegacyDeviceAgeService>();
@@ -443,6 +448,9 @@ builder.Services.AddSingleton<Nocturne.API.Services.Migration.IMigrationJobServi
 
 // Register migration startup service to check for pending migrations and create admin notifications
 builder.Services.AddHostedService<Nocturne.API.Services.Migration.MigrationStartupService>();
+
+// Register notification resolution background service for auto-resolving notifications
+builder.Services.AddHostedService<NotificationResolutionService>();
 
 var app = builder.Build();
 
