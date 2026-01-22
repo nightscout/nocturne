@@ -32,6 +32,7 @@ public class DeviceStatusController : ControllerBase
     /// <summary>
     /// Get device status entries with optional filtering and pagination
     /// </summary>
+    /// <param name="find">MongoDB-style find query filters (JSON format) - for unit tests</param>
     /// <param name="count">Maximum number of device status entries to return (default: 10)</param>
     /// <param name="skip">Number of device status entries to skip for pagination (default: 0)</param>
     /// <param name="format">Output format: json (default), csv, tsv, or txt</param>
@@ -43,16 +44,42 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     public async Task<ActionResult> GetDeviceStatus(
+        [FromQuery] string? find = null,
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
         [FromQuery] string format = "json",
         CancellationToken cancellationToken = default
     )
     {
+        // Get the full query string to handle multiple find parameters correctly
+        var queryString = HttpContext?.Request?.QueryString.ToString() ?? string.Empty;
+
+        // Strip the leading '?' if present
+        if (queryString.StartsWith("?"))
+        {
+            queryString = queryString.Substring(1);
+        }
+
+        // Extract find query from the query string (handles multiple find parameters)
+        // Use query string if it contains find parameters, otherwise use the find parameter for unit tests
+        string? findQuery = null;
+        if (
+            !string.IsNullOrEmpty(queryString)
+            && (queryString.Contains("find[") || queryString.Contains("find%5B"))
+        )
+        {
+            findQuery = queryString;
+        }
+        else if (!string.IsNullOrEmpty(find))
+        {
+            findQuery = find;
+        }
+
         _logger.LogDebug(
-            "Device status endpoint requested with count: {Count}, skip: {Skip} from {RemoteIpAddress}",
+            "Device status endpoint requested with count: {Count}, skip: {Skip}, findQuery: {FindQuery} from {RemoteIpAddress}",
             count,
             skip,
+            findQuery,
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
@@ -74,6 +101,7 @@ public class DeviceStatusController : ControllerBase
                 return BadRequest($"Skip must be >= 0, got {skip}");
             }
             var deviceStatusEntries = await _deviceStatusService.GetDeviceStatusAsync(
+                find: findQuery,
                 count: count,
                 skip: skip,
                 cancellationToken: cancellationToken
@@ -292,6 +320,7 @@ public class DeviceStatusController : ControllerBase
     /// <summary>
     /// Alternative endpoint for device status - supports .json extension
     /// </summary>
+    /// <param name="find">MongoDB-style find query filters (JSON format) - for unit tests</param>
     /// <param name="count">Maximum number of device status entries to return (default: 10)</param>
     /// <param name="skip">Number of device status entries to skip for pagination (default: 0)</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -302,12 +331,13 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DeviceStatus[]>> GetDeviceStatusJson(
+        [FromQuery] string? find = null,
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
         CancellationToken cancellationToken = default
     )
     {
         // Delegate to the main endpoint
-        return await GetDeviceStatus(count, skip, "json", cancellationToken);
+        return await GetDeviceStatus(find, count, skip, "json", cancellationToken);
     }
 }
