@@ -1,7 +1,6 @@
 {
-  "servers": {
+  "mcpServers": {
     "aspire": {
-      "type": "stdio",
       "command": "aspire",
       "args": [
         "mcp",
@@ -9,7 +8,6 @@
       ]
     },
     "playwright": {
-      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
