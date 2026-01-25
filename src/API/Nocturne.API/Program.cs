@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.API.Services.Alerts.Webhooks;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
 using OidcOptions = Nocturne.Core.Models.Configuration.OidcOptions;
 using LocalIdentityOptions = Nocturne.Core.Models.Configuration.LocalIdentityOptions;
@@ -16,8 +17,13 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services;
+using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Notifiers;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.Alerts;
 
 using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
@@ -418,10 +424,29 @@ builder.Services.AddScoped<IDeviceRegistryService, DeviceRegistryService>();
 builder.Services.Configure<AlertMonitoringOptions>(
     builder.Configuration.GetSection(AlertMonitoringOptions.SectionName)
 );
+builder.Services.AddScoped<WebhookRequestSender>();
 
 // Register alert engines
 builder.Services.AddScoped<IAlertRulesEngine, AlertRulesEngine>();
+builder.Services.AddScoped<IAlertProcessingService, AlertProcessingService>();
+builder.Services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
 builder.Services.AddScoped<IDeviceAlertEngine, DeviceAlertEngine>();
+builder.Services.AddScoped<INotifierDispatcher, NotifierDispatcher>();
+builder.Services.AddScoped<INotifier, SignalRNotifier>();
+builder.Services.AddScoped<INotifier, WebhookNotifier>();
+
+var pushoverApiToken =
+    builder.Configuration[ServiceNames.ConfigKeys.PushoverApiToken]
+    ?? builder.Configuration[ServiceNames.ConfigKeys.PushoverApiTokenEnv];
+var pushoverUserKey =
+    builder.Configuration[ServiceNames.ConfigKeys.PushoverUserKey]
+    ?? builder.Configuration[ServiceNames.ConfigKeys.PushoverUserKeyEnv];
+
+if (!string.IsNullOrWhiteSpace(pushoverApiToken) && !string.IsNullOrWhiteSpace(pushoverUserKey))
+{
+    builder.Services.AddHttpClient<IPushoverService, PushoverService>();
+    builder.Services.AddScoped<INotifier, PushoverNotifier>();
+}
 
 // Register device health monitoring background service
 builder.Services.AddHostedService<DeviceHealthMonitoringService>();

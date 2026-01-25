@@ -37,6 +37,7 @@
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import BrowserCapabilities from "$lib/components/settings/BrowserCapabilities.svelte";
   import AlarmProfileDialog from "$lib/components/settings/AlarmProfileDialog.svelte";
+  import WebhookChannelRow from "$lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte";
   import {
     previewAlarmSound,
     stopPreview,
@@ -107,12 +108,16 @@
     // Save to backend
     saveError = null;
     saveSuccess = false;
-    const success = await store.saveAlarmConfiguration();
-    if (success) {
-      saveSuccess = true;
-      setTimeout(() => (saveSuccess = false), 3000);
-    } else {
-      saveError = store.error;
+    try {
+      const success = await store.saveAlarmConfiguration();
+      if (success) {
+        saveSuccess = true;
+        setTimeout(() => (saveSuccess = false), 3000);
+      } else {
+        saveError = store.error ?? "Failed to save alarm configuration";
+      }
+    } catch (err) {
+      saveError = err instanceof Error ? err.message : "Failed to save alarm configuration";
     }
   }
 
@@ -727,6 +732,8 @@
             }}
           />
         </div>
+
+        <WebhookChannelRow />
       </CardContent>
     </Card>
 

@@ -308,6 +308,76 @@ export const PRIORITY_LABELS: Record<AlarmPriority, string> = {
   Critical: "Critical",
 };
 
+const ALARM_TYPE_ALIASES: Record<string, AlarmTriggerType> = {
+  "urgent high": "UrgentHigh",
+  "urgent low": "UrgentLow",
+  "rising fast": "RisingFast",
+  "falling fast": "FallingFast",
+  "stale data": "StaleData",
+  "forecast low": "ForecastLow",
+  "custom range": "Custom",
+  "custom": "Custom",
+  "high": "High",
+  "low": "Low",
+  "élevé": "High",
+  "eleve": "High",
+  "haut": "High",
+  "haute": "High",
+  "bas": "Low",
+  "basse": "Low",
+  "faible": "Low",
+  "urgent élevé": "UrgentHigh",
+  "urgent eleve": "UrgentHigh",
+  "urgent haut": "UrgentHigh",
+  "urgent bas": "UrgentLow",
+  "hausse rapide": "RisingFast",
+  "baisse rapide": "FallingFast",
+  "données obsolètes": "StaleData",
+  "donnees obsoletes": "StaleData",
+  "prévision basse": "ForecastLow",
+  "prevision basse": "ForecastLow",
+  "personnalisé": "Custom",
+  "personnalise": "Custom",
+};
+
+export function normalizeAlarmType(value: string | null | undefined): AlarmTriggerType {
+  if (!value) {
+    return "High";
+  }
+
+  if ((value as AlarmTriggerType) in ALARM_TYPE_LABELS) {
+    return value as AlarmTriggerType;
+  }
+
+  const lowered = value.trim().toLowerCase();
+  if (ALARM_TYPE_ALIASES[lowered]) {
+    return ALARM_TYPE_ALIASES[lowered];
+  }
+
+  const labelMatch = (Object.keys(ALARM_TYPE_LABELS) as AlarmTriggerType[]).find(
+    (key) => ALARM_TYPE_LABELS[key].toLowerCase() === lowered
+  );
+  return labelMatch ?? "High";
+}
+
+export function normalizeAlarmPriority(
+  value: string | null | undefined
+): AlarmPriority {
+  if (!value) {
+    return "Normal";
+  }
+
+  if ((value as AlarmPriority) in PRIORITY_LABELS) {
+    return value as AlarmPriority;
+  }
+
+  const lowered = value.trim().toLowerCase();
+  const labelMatch = (Object.keys(PRIORITY_LABELS) as AlarmPriority[]).find(
+    (key) => PRIORITY_LABELS[key].toLowerCase() === lowered
+  );
+  return labelMatch ?? "Normal";
+}
+
 /** Colors for alarm types in UI */
 export const ALARM_TYPE_COLORS: Record<AlarmTriggerType, { bg: string; border: string; text: string }> = {
   UrgentHigh: { bg: "bg-red-50 dark:bg-red-950/20", border: "border-red-200 dark:border-red-900", text: "text-red-600" },
@@ -504,6 +574,17 @@ function getDefaultsForType(type: AlarmTriggerType): {
         threshold: 100,
         soundId: "alarm-default",
         flashColor: "#8b5cf6",
+        snoozeDefault: 30,
+        reraiseMinutes: 15,
+        priority: "Normal",
+      };
+    default:
+      return {
+        name: "High",
+        description: "Above target range",
+        threshold: 180,
+        soundId: "alarm-high",
+        flashColor: "#f97316",
         snoozeDefault: 30,
         reraiseMinutes: 15,
         priority: "Normal",

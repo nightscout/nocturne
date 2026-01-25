@@ -16,7 +16,10 @@ export async function setupBridge(
     // Build complete configuration
     const config = buildConfig(userConfig);
 
-    logger.info(`SignalR Hub URL: ${config.signalr.hubUrl}`);
+    logger.info(`SignalR DataHub URL: ${config.signalr.hubUrl}`);
+    if (config.signalr.alarmHubUrl) {
+      logger.info(`SignalR AlarmHub URL: ${config.signalr.alarmHubUrl}`);
+    }
 
     // Create Socket.IO server attached to HTTP server
     const socketIOServer = new SocketIOServer(httpServer, config.socketio);
@@ -27,6 +30,7 @@ export async function setupBridge(
     // Create SignalR client
     const signalRClient = new SignalRClient(messageTranslator, {
       hubUrl: config.signalr.hubUrl,
+      alarmHubUrl: config.signalr.alarmHubUrl,
       reconnectAttempts: config.signalr.reconnectAttempts,
       reconnectDelay: config.signalr.reconnectDelay,
       maxReconnectDelay: config.signalr.maxReconnectDelay,

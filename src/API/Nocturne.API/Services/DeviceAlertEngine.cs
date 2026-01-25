@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -15,7 +16,7 @@ public class DeviceAlertEngine : IDeviceAlertEngine
 {
     private readonly NocturneDbContext _dbContext;
     private readonly NotificationPreferencesRepository _notificationPreferencesRepository;
-    private readonly ISignalRBroadcastService _signalRBroadcastService;
+    private readonly INotifierDispatcher _notifierDispatcher;
     private readonly ILogger<DeviceAlertEngine> _logger;
     private readonly DeviceHealthOptions _options;
 
@@ -25,14 +26,14 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     /// </summary>
     /// <param name="dbContext">Database context</param>
     /// <param name="notificationPreferencesRepository">Notification preferences repository</param>
-    /// <param name="signalRBroadcastService">SignalR broadcast service</param>
+    /// <param name="notifierDispatcher">Notification dispatcher</param>
     /// <param name="logger">Logger</param>
     /// <param name="options">Device health options</param>
 
     public DeviceAlertEngine(
         NocturneDbContext dbContext,
         NotificationPreferencesRepository notificationPreferencesRepository,
-        ISignalRBroadcastService signalRBroadcastService,
+        INotifierDispatcher notifierDispatcher,
         ILogger<DeviceAlertEngine> logger,
         IOptions<DeviceHealthOptions> options
 
@@ -40,7 +41,7 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     {
         _dbContext = dbContext;
         _notificationPreferencesRepository = notificationPreferencesRepository;
-        _signalRBroadcastService = signalRBroadcastService;
+        _notifierDispatcher = notifierDispatcher;
         _logger = logger;
         _options = options.Value;
 
@@ -214,7 +215,11 @@ public class DeviceAlertEngine : IDeviceAlertEngine
         {
             // Create alert rule event
             var notification = CreateNotificationFromDeviceAlert(deviceAlert);
-            await DispatchNotificationAsync(notification, deviceAlert.Severity);
+            await DispatchNotificationAsync(
+                notification,
+                deviceAlert.Severity,
+                deviceAlert.UserId
+            );
 
             // Update the device's last maintenance alert time
             var deviceEntity = await _dbContext.DeviceHealth.FirstOrDefaultAsync(
@@ -267,7 +272,11 @@ public class DeviceAlertEngine : IDeviceAlertEngine
             Clear = true,
         };
 
-        await _signalRBroadcastService.BroadcastClearAlarmAsync(clearNotification);
+        await _notifierDispatcher.DispatchAsync(
+            clearNotification,
+            "system",
+            cancellationToken
+        );
 
         _logger.LogInformation("Device alert {AlertId} acknowledged", alertId);
     }
@@ -639,26 +648,23 @@ public class DeviceAlertEngine : IDeviceAlertEngine
     }
 
     /// <summary>
-    /// Dispatch notification through SignalR using severity mapping
+    /// Dispatch notification through configured notifiers using severity mapping
     /// </summary>
-    private async Task DispatchNotificationAsync(
+    private Task DispatchNotificationAsync(
         NotificationBase notification,
-        DeviceIssueSeverity severity
+        DeviceIssueSeverity severity,
+        string userId
     )
     {
-        switch (severity)
+        notification.Level = severity switch
         {
-            case DeviceIssueSeverity.Critical:
-                await _signalRBroadcastService.BroadcastUrgentAlarmAsync(notification);
-                break;
-            case DeviceIssueSeverity.High:
-            case DeviceIssueSeverity.Medium:
-                await _signalRBroadcastService.BroadcastAlarmAsync(notification);
-                break;
-            default:
-                await _signalRBroadcastService.BroadcastNotificationAsync(notification);
-                break;
-        }
+            DeviceIssueSeverity.Critical => 2,
+            DeviceIssueSeverity.High => 1,
+            DeviceIssueSeverity.Medium => 1,
+            _ => 0,
+        };
+
+        return _notifierDispatcher.DispatchAsync(notification, userId);
     }
 
     #endregion

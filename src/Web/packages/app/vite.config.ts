@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           const API_URL = env.PUBLIC_API_URL || "https://localhost:1613";
           const SIGNALR_HUB_URL = `${API_URL}/hubs/data`;
+          const SIGNALR_ALARM_HUB_URL = `${API_URL}/hubs/alarms`;
           const API_SECRET = env.API_SECRET || "";
 
           // Ensure the HTTP server is available before initializing the bridge
@@ -43,6 +44,7 @@ export default defineConfig(({ mode }) => {
           setupBridge(server.httpServer, {
             signalr: {
               hubUrl: SIGNALR_HUB_URL,
+              alarmHubUrl: SIGNALR_ALARM_HUB_URL,
             },
             socketio: {
               cors: {

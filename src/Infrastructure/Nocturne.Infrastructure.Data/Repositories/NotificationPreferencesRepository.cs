@@ -56,8 +56,11 @@ public class NotificationPreferencesRepository
             existing.PushoverDevices = preferences.PushoverDevices;
             existing.SmsEnabled = preferences.SmsEnabled;
             existing.SmsPhoneNumber = preferences.SmsPhoneNumber;
-            existing.WebhookEnabled = preferences.WebhookEnabled;
-            existing.WebhookUrls = preferences.WebhookUrls;
+            if (preferences.WebhookUrls != null)
+            {
+                existing.WebhookEnabled = preferences.WebhookEnabled;
+                existing.WebhookUrls = preferences.WebhookUrls;
+            }
             existing.QuietHoursStart = preferences.QuietHoursStart;
             existing.QuietHoursEnd = preferences.QuietHoursEnd;
             existing.QuietHoursEnabled = preferences.QuietHoursEnabled;
@@ -114,6 +117,7 @@ public class NotificationPreferencesRepository
         bool enableQuietHours,
         TimeOnly? quietHoursStart = null,
         TimeOnly? quietHoursEnd = null,
+        bool? emergencyOverride = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -130,6 +134,8 @@ public class NotificationPreferencesRepository
             preferences.QuietHoursStart = quietHoursStart.Value;
         if (quietHoursEnd.HasValue)
             preferences.QuietHoursEnd = quietHoursEnd.Value;
+        if (emergencyOverride.HasValue)
+            preferences.EmergencyOverrideQuietHours = emergencyOverride.Value;
         preferences.UpdatedAt = DateTime.UtcNow;
 
         var result = await _context.SaveChangesAsync(cancellationToken);

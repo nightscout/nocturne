@@ -341,23 +341,40 @@ public class UISettingsController : ControllerBase
             // Sync Quiet Hours
             if (config.QuietHours != null)
             {
-                var pref = new NotificationPreferencesEntity
-                {
-                    UserId = userId,
-                    QuietHoursEnabled = config.QuietHours.Enabled,
-                    EmergencyOverrideQuietHours = config.QuietHours.AllowCritical,
-                };
+                TimeOnly? start = null;
+                TimeOnly? end = null;
 
-                if (TimeOnly.TryParse(config.QuietHours.StartTime, out var start))
-                    pref.QuietHoursStart = start;
+                if (TimeOnly.TryParse(config.QuietHours.StartTime, out var parsedStart))
+                    start = parsedStart;
 
-                if (TimeOnly.TryParse(config.QuietHours.EndTime, out var end))
-                    pref.QuietHoursEnd = end;
+                if (TimeOnly.TryParse(config.QuietHours.EndTime, out var parsedEnd))
+                    end = parsedEnd;
 
-                await _notificationPreferencesRepository.UpsertPreferencesAsync(
-                    pref,
+                var updated = await _notificationPreferencesRepository.UpdateQuietHoursAsync(
+                    userId,
+                    config.QuietHours.Enabled,
+                    start,
+                    end,
+                    config.QuietHours.AllowCritical,
                     cancellationToken
                 );
+
+                if (!updated)
+                {
+                    var pref = new NotificationPreferencesEntity
+                    {
+                        UserId = userId,
+                        QuietHoursEnabled = config.QuietHours.Enabled,
+                        EmergencyOverrideQuietHours = config.QuietHours.AllowCritical,
+                        QuietHoursStart = start,
+                        QuietHoursEnd = end,
+                    };
+
+                    await _notificationPreferencesRepository.UpsertPreferencesAsync(
+                        pref,
+                        cancellationToken
+                    );
+                }
             }
 
             // Sync Profiles
@@ -432,12 +449,16 @@ public class UISettingsController : ControllerBase
                     }
                 }
 
-                // Delete rules not present in the update
+                // Disable rules not present in the update to avoid FK violations in alert_history.
                 foreach (var inputRule in existingRules)
                 {
                     if (!validRuleIds.Contains(inputRule.Id))
                     {
-                        await _alertRuleRepository.DeleteRuleAsync(inputRule.Id, cancellationToken);
+                        await _alertRuleRepository.SetRuleEnabledAsync(
+                            inputRule.Id,
+                            false,
+                            cancellationToken
+                        );
                     }
                 }
 
