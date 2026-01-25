@@ -156,12 +156,7 @@
           title: "Test Endpoint Compatibility",
           href: "/compatibility/test",
           icon: TestTube,
-        },
-        {
-          title: "Alerts Debug",
-          href: "/settings/dev",
-          icon: Bug,
-        },
+        }
       ],
     },
     {

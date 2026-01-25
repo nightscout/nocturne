@@ -14034,7 +14034,6 @@ msgstr ""
 msgid "Validation error"
 msgstr "Validation error"
 
-#: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/dev/+page.svelte
 msgid "Alerts Debug"
 msgstr "Alerts Debug"
