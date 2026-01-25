@@ -17,7 +17,11 @@ import type {
   ServicesSettings,
 } from "$lib/api/api-client";
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
-import { createDefaultUserAlarmConfiguration } from "$lib/types/alarm-profile";
+import {
+  createDefaultUserAlarmConfiguration,
+  normalizeAlarmPriority,
+  normalizeAlarmType,
+} from "$lib/types/alarm-profile";
 
 const SETTINGS_STORE_KEY = Symbol("settings-store");
 
@@ -207,8 +211,22 @@ export class SettingsStore {
     try {
       const apiClient = getApiClient();
 
+      const profiles = Array.isArray(this.alarmConfiguration?.profiles)
+        ? this.alarmConfiguration.profiles
+        : [];
+      const normalizedProfiles = profiles.map((profile) => ({
+        ...profile,
+        alarmType: normalizeAlarmType(profile.alarmType),
+        priority: normalizeAlarmPriority(profile.priority),
+      }));
+
+      const normalizedConfig = {
+        ...(this.alarmConfiguration ?? createDefaultUserAlarmConfiguration()),
+        profiles: normalizedProfiles,
+      };
+
       // Convert to API format (the types are compatible, just use any for the API call)
-      const savedConfig = await apiClient.uiSettings.saveAlarmConfiguration(this.alarmConfiguration as any);
+      const savedConfig = await apiClient.uiSettings.saveAlarmConfiguration(normalizedConfig as any);
 
       // Update local state with response
       this.alarmConfiguration = savedConfig as unknown as UserAlarmConfiguration;
@@ -225,7 +243,15 @@ export class SettingsStore {
       this._hasChanges = false;
       return true;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : "Failed to save alarm configuration";
+      if (e && typeof e === "object" && "errors" in e) {
+        const errors = (e as { errors?: Record<string, string[]> }).errors ?? {};
+        const messages = Object.entries(errors)
+          .flatMap(([key, values]) => values.map((value) => `${key}: ${value}`))
+          .filter(Boolean);
+        this.error = messages.length > 0 ? messages.join(" | ") : "Validation error";
+      } else {
+        this.error = e instanceof Error ? e.message : "Failed to save alarm configuration";
+      }
       return false;
     } finally {
       this._isSaving = false;

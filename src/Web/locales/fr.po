@@ -185,6 +185,7 @@ msgstr "Raison de ce traitement"
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -215,6 +216,8 @@ msgstr "Annuler"
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -407,6 +410,7 @@ msgstr "Valeur basale"
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/profile/+page.svelte
+#: src/routes/settings/dev/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Profile"
@@ -561,6 +565,8 @@ msgid "Failed to save settings"
 msgstr "Impossible d'enregistrer les paramètres"
 
 #: src/lib/stores/settings-store.svelte.ts
+#: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/alarms/+page.svelte
 msgid "Failed to save alarm configuration"
 msgstr "Impossible d'enregistrer la configuration de l'alarme"
 
@@ -1883,6 +1889,7 @@ msgid "Show hidden <0/>"
 msgstr "Afficher les <0/> masqués"
 
 #: src/lib/components/entries/EntryEditDialog.svelte
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/routes/food/QuickPicksList.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -2705,6 +2712,7 @@ msgstr "{0} g/heure"
 msgid "Default"
 msgstr "Par défaut"
 
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "<0/> Edit"
@@ -4982,6 +4990,7 @@ msgid "Activity"
 msgstr "Activité"
 
 #: src/lib/components/status-pills/IOBPill.svelte
+#: src/routes/settings/dev/+page.svelte
 msgid "Device"
 msgstr "Appareil"
 
@@ -13770,4 +13779,223 @@ msgid ""
 "This will permanently delete all configuration and credentials for this\n"
 "connector. The connector will stop syncing data. This action cannot be\n"
 "undone."
+msgstr ""
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/settings/dev/+page.svelte
+msgid "Alerts Debug"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Quick snapshot of alert configuration and latest glucose entry"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Refresh"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Snapshot"
+msgstr ""
+
+#. placeholder {0}: fetchedAt
+#: src/routes/settings/dev/+page.svelte
+msgid "Server time: {0}"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Latest Entry"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "No entry found"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Alarm Configuration"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "No alarm configuration found"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Fake entry created"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+#: src/routes/settings/dev/+page.svelte
+msgid "Failed to create fake entry"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Select a profile first"
+msgstr ""
+
+#. placeholder {0}: result.alarmType
+#. placeholder {1}: result.usedSgv
+#: src/routes/settings/dev/+page.svelte
+msgid "Triggered {0} with SGV {1}"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Selected alarm type is not supported by the backend rules"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+#: src/routes/settings/dev/+page.svelte
+msgid "Failed to trigger alarm"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Quick Actions"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Manually trigger alerts and create test entries"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Trigger Alarm Profile"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "No profiles found"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Trigger Profile"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Supports High, Low, UrgentHigh, UrgentLow, ForecastLow."
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Create Fake Entry"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "SGV (mg/dL)"
+msgstr ""
+
+#: src/routes/settings/dev/+page.svelte
+msgid "Create Entry"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Webhook settings saved."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Failed to save webhook settings."
+msgstr ""
+
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "<0/> Webhook Notifications"
+msgstr ""
+
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Notify external services when alarms fire"
+msgstr ""
+
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Enable Webhooks"
+msgstr ""
+
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Send alerts to your own endpoints"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Webhook URLs"
+msgstr ""
+
+#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
+msgid "Save Webhooks"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
+msgid "Signature Secret"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
+msgid "Secret already configured"
+msgstr ""
+
+#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
+msgid "Optional secret"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
+msgid "The API signs each webhook with HMAC-SHA256 using this secret."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+#: src/lib/components/settings/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+#: src/lib/components/settings/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhooks"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Send alert events to external services"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Webhook Settings"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Configure URLs and signature secrets for alarm notifications."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecretReveal.svelte
+msgid "Generated Secret"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecretReveal.svelte
+msgid "Copy this value now. It is only shown after saving."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret will be generated on save"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test sent to all webhooks."
+msgstr ""
+
+#. placeholder {0}: response.failedUrls.join(", ")
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed: {0}"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test failed."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to test webhook settings."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Send Test"
 msgstr ""

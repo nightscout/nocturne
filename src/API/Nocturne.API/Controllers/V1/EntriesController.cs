@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V1;
@@ -18,6 +20,7 @@ public class EntriesController : ControllerBase
     private readonly IDataFormatService _dataFormatService;
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly IProcessingStatusService _processingStatusService;
+    private readonly IAlertOrchestrator _alertOrchestrator;
     private readonly ILogger<EntriesController> _logger;
 
     public EntriesController(
@@ -25,6 +28,7 @@ public class EntriesController : ControllerBase
         IDataFormatService dataFormatService,
         IDocumentProcessingService documentProcessingService,
         IProcessingStatusService processingStatusService,
+        IAlertOrchestrator alertOrchestrator,
         ILogger<EntriesController> logger
     )
     {
@@ -32,6 +36,7 @@ public class EntriesController : ControllerBase
         _dataFormatService = dataFormatService;
         _documentProcessingService = documentProcessingService;
         _processingStatusService = processingStatusService;
+        _alertOrchestrator = alertOrchestrator;
         _logger = logger;
     }
 
@@ -708,6 +713,20 @@ public class EntriesController : ControllerBase
 
             _logger.LogDebug("Created {Count} entries", createdArray.Length);
 
+            try
+            {
+                var userId = GetUserId();
+                await _alertOrchestrator.EvaluateAndProcessEntriesAsync(
+                    createdArray,
+                    userId,
+                    cancellationToken
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to process alerts for created entries");
+            }
+
             return StatusCode(201, createdArray);
         }
         catch (JsonException ex)
@@ -1270,6 +1289,20 @@ public class EntriesController : ControllerBase
                 createdEntries.Count()
             );
 
+            try
+            {
+                var userId = GetUserId();
+                await _alertOrchestrator.EvaluateAndProcessEntriesAsync(
+                    createdEntries,
+                    userId,
+                    cancellationToken
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to process alerts for async entries");
+            }
+
             return Accepted(response);
         }
         catch (Exception ex)
@@ -1306,5 +1339,11 @@ public class EntriesController : ControllerBase
                 }
             );
         }
+    }
+
+    private string GetUserId()
+    {
+        return HttpContext.GetSubjectIdString()
+            ?? "00000000-0000-0000-0000-000000000001";
     }
 }

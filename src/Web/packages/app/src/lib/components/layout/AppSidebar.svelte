@@ -39,6 +39,7 @@
     Palette,
     Timer,
     Layers,
+    Bug,
   } from "lucide-svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -155,6 +156,11 @@
           title: "Test Endpoint Compatibility",
           href: "/compatibility/test",
           icon: TestTube,
+        },
+        {
+          title: "Alerts Debug",
+          href: "/settings/dev",
+          icon: Bug,
         },
       ],
     },

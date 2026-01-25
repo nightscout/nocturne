@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -14,7 +15,7 @@ public class AlertProcessingService : IAlertProcessingService
     private readonly AlertHistoryRepository _alertHistoryRepository;
     private readonly AlertRuleRepository _alertRuleRepository;
     private readonly NotificationPreferencesRepository _notificationPreferencesRepository;
-    private readonly ISignalRBroadcastService _signalRBroadcastService;
+    private readonly INotifierDispatcher _notifierDispatcher;
     private readonly AlertMonitoringOptions _options;
     private readonly ILogger<AlertProcessingService> _logger;
 
@@ -22,7 +23,7 @@ public class AlertProcessingService : IAlertProcessingService
         AlertHistoryRepository alertHistoryRepository,
         AlertRuleRepository alertRuleRepository,
         NotificationPreferencesRepository notificationPreferencesRepository,
-        ISignalRBroadcastService signalRBroadcastService,
+        INotifierDispatcher notifierDispatcher,
         IOptions<AlertMonitoringOptions> options,
         ILogger<AlertProcessingService> logger
     )
@@ -30,7 +31,7 @@ public class AlertProcessingService : IAlertProcessingService
         _alertHistoryRepository = alertHistoryRepository;
         _alertRuleRepository = alertRuleRepository;
         _notificationPreferencesRepository = notificationPreferencesRepository;
-        _signalRBroadcastService = signalRBroadcastService;
+        _notifierDispatcher = notifierDispatcher;
         _options = options.Value;
         _logger = logger;
     }
@@ -51,7 +52,7 @@ public class AlertProcessingService : IAlertProcessingService
             var alertHistory = await CreateAlertHistoryEntry(alertEvent, cancellationToken);
 
             // Send real-time notification via SignalR
-            await SendSignalRNotification(alertEvent, alertHistory, cancellationToken);
+            await SendNotificationAsync(alertEvent, alertHistory, cancellationToken);
 
             // Resolve conflicting alerts if this is a resolution alert
             await ResolveConflictingAlerts(alertEvent, cancellationToken);
@@ -275,7 +276,7 @@ public class AlertProcessingService : IAlertProcessingService
                 var alertEvent = CreateAlertEventFromHistory(alert);
                 if (alertEvent != null)
                 {
-                    await SendSignalRNotification(alertEvent, alert, cancellationToken);
+                    await SendNotificationAsync(alertEvent, alert, cancellationToken);
                 }
 
                 // Record escalation attempt
@@ -361,7 +362,7 @@ public class AlertProcessingService : IAlertProcessingService
         return await _alertHistoryRepository.CreateAlertAsync(alertHistory, cancellationToken);
     }
 
-    private async Task SendSignalRNotification(
+    private async Task SendNotificationAsync(
         AlertEvent alertEvent,
         AlertHistoryEntity alertHistory,
         CancellationToken cancellationToken
@@ -370,23 +371,11 @@ public class AlertProcessingService : IAlertProcessingService
         try
         {
             var notification = CreateNotificationFromAlert(alertEvent, alertHistory);
-
-            switch (alertEvent.AlertType)
-            {
-                case AlertType.UrgentLow:
-                case AlertType.UrgentHigh:
-                    await _signalRBroadcastService.BroadcastUrgentAlarmAsync(notification);
-                    break;
-
-                case AlertType.Low:
-                case AlertType.High:
-                    await _signalRBroadcastService.BroadcastAlarmAsync(notification);
-                    break;
-
-                case AlertType.DeviceWarning:
-                    await _signalRBroadcastService.BroadcastNotificationAsync(notification);
-                    break;
-            }
+            await _notifierDispatcher.DispatchAsync(
+                notification,
+                alertEvent.UserId,
+                cancellationToken
+            );
 
             _logger.LogDebug(
                 "Sent SignalR notification for {AlertType} alert to user {UserId}",
@@ -421,8 +410,11 @@ public class AlertProcessingService : IAlertProcessingService
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 Clear = true,
             };
-
-            await _signalRBroadcastService.BroadcastClearAlarmAsync(clearNotification);
+            await _notifierDispatcher.DispatchAsync(
+                clearNotification,
+                alert.UserId,
+                cancellationToken
+            );
 
             _logger.LogDebug("Sent clear alarm notification for alert {AlertId}", alert.Id);
         }
