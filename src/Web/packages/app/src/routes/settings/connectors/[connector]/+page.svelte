@@ -17,6 +17,7 @@
   import type {
     AvailableConnector,
     ConnectorConfigurationResponse,
+    ConnectorStatusInfo,
     ServicesOverview,
   } from "$lib/api/generated/nocturne-api-client";
   import {
@@ -52,7 +53,7 @@
   let effectiveConfig = $state<Record<string, unknown> | null>(null);
   let configuration = $state<Record<string, unknown>>({});
   let secrets = $state<Record<string, string>>({});
-  let hasSecrets = $state(false);
+  let connectorStatus = $state<ConnectorStatusInfo | null>(null);
 
   let isLoading = $state(true);
   let isSaving = $state(false);
@@ -97,16 +98,16 @@
       existingConfig = configResult;
       effectiveConfig = effectiveResult;
 
-      // Get hasSecrets from connector status
+      // Get connector status (includes hasSecrets, hasDatabaseConfig, isEnabled)
       try {
         const statuses = await getAllConnectorStatus();
-        const status = statuses?.find(
-          (s) =>
-            s.connectorName?.toLowerCase() === connectorInfo.id?.toLowerCase()
-        );
-        hasSecrets = status?.hasSecrets ?? false;
+        const connectorId = connectorInfo.id;
+        connectorStatus =
+          statuses?.find(
+            (s) => s.connectorName?.toLowerCase() === connectorId?.toLowerCase()
+          ) ?? null;
       } catch {
-        hasSecrets = false;
+        connectorStatus = null;
       }
 
       // Initialize configuration with existing values or defaults
@@ -256,7 +257,13 @@
   }
 
   const displayName = $derived(connectorInfo?.name || connectorName);
-  const hasExistingConfig = $derived(!!existingConfig?.configuration);
+  const hasExistingConfig = $derived(
+    !!existingConfig || !!connectorStatus?.hasDatabaseConfig
+  );
+  const isActive = $derived(
+    existingConfig?.isActive ?? connectorStatus?.isEnabled ?? false
+  );
+  const hasSecrets = $derived(connectorStatus?.hasSecrets ?? false);
   const hasRuntimeConfig = $derived(
     schema && schema.properties && Object.keys(schema.properties).length > 0
   );
@@ -272,11 +279,11 @@
     <Button
       variant="ghost"
       size="sm"
-      href="/settings/services"
+      href="/settings/connectors"
       class="gap-1 -ml-2 mb-4"
     >
       <ChevronLeft class="h-4 w-4" />
-      Back to Services
+      Back to connectors
     </Button>
   </div>
 
@@ -301,11 +308,9 @@
           <p class="text-muted-foreground">{connectorInfo.description}</p>
         {/if}
       </div>
-      {#if hasExistingConfig}
-        <Badge variant={existingConfig?.isActive ? "default" : "secondary"}>
-          {existingConfig?.isActive ? "Active" : "Inactive"}
-        </Badge>
-      {/if}
+      <Badge variant={isActive ? "default" : "secondary"}>
+        {isActive ? "Active" : "Inactive"}
+      </Badge>
     </div>
 
     <!-- Save Message -->
@@ -343,23 +348,21 @@
     {/if}
 
     <!-- Enable/Disable Toggle -->
-    {#if hasExistingConfig}
-      <Card>
-        <CardContent class="flex items-center justify-between py-4">
-          <div class="space-y-0.5">
-            <Label class="text-base">Enable Connector</Label>
-            <p class="text-sm text-muted-foreground">
-              When enabled, the connector will actively sync data
-            </p>
-          </div>
-          <Switch
-            checked={existingConfig?.isActive ?? false}
-            onCheckedChange={(checked) => handleToggleActive(checked)}
-            disabled={isSaving}
-          />
-        </CardContent>
-      </Card>
-    {/if}
+    <Card>
+      <CardContent class="flex items-center justify-between py-4">
+        <div class="space-y-0.5">
+          <Label class="text-base">Enable Connector</Label>
+          <p class="text-sm text-muted-foreground">
+            When enabled, the connector will actively sync data
+          </p>
+        </div>
+        <Switch
+          checked={isActive}
+          onCheckedChange={(checked) => handleToggleActive(checked)}
+          disabled={isSaving}
+        />
+      </CardContent>
+    </Card>
 
     <!-- Configuration Form -->
     {#if hasRuntimeConfig}

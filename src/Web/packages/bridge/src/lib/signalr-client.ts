@@ -155,6 +155,22 @@ class SignalRClient {
       logger.debug("Received delete from SignalR:", data);
       this.messageHandler.handleStorageDelete(data);
     });
+
+    // Handle in-app notification events
+    this.connection.on("notificationCreated", (data: any) => {
+      logger.debug("Received notificationCreated from SignalR:", data);
+      this.messageHandler.handleNotificationCreated(data);
+    });
+
+    this.connection.on("notificationArchived", (data: any) => {
+      logger.debug("Received notificationArchived from SignalR:", data);
+      this.messageHandler.handleNotificationArchived(data);
+    });
+
+    this.connection.on("notificationUpdated", (data: any) => {
+      logger.debug("Received notificationUpdated from SignalR:", data);
+      this.messageHandler.handleNotificationUpdated(data);
+    });
   }
 
   private async authenticateWithHub(): Promise<void> {

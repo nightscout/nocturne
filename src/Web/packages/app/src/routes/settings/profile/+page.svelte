@@ -60,7 +60,7 @@
     type Icon,
   } from "lucide-svelte";
   import type { Profile, TimeValue } from "$lib/api";
-  import { formatDateDetailed } from "$lib/utils/formatting";
+  import { formatDateDetailed, bgLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     getProfiles,
@@ -182,6 +182,7 @@
   let showDeleteDialog = $state(false);
   let profileToDelete = $state<Profile | null>(null);
   let editStoreName = $state<string | null>(null);
+  let editInitialTab = $state<"general" | "basal" | "carbratio" | "sens" | "targets">("general");
   let isLoading = $state(false);
 
   function selectProfile(profileId: string | null) {
@@ -216,6 +217,13 @@
 
   function openEditDialog(storeName?: string) {
     editStoreName = storeName ?? defaultStoreName;
+    editInitialTab = "general";
+    showEditDialog = true;
+  }
+
+  function openEditDialogWithTab(tab: "general" | "basal" | "carbratio" | "sens" | "targets") {
+    editStoreName = defaultStoreName;
+    editInitialTab = tab;
     showEditDialog = true;
   }
 
@@ -515,29 +523,19 @@
         <!-- Profile Stores -->
         {#if profileStoreNames.length > 0}
           <Tabs.Root value={defaultStoreName || profileStoreNames[0]}>
-            <div class="flex items-center justify-between">
-              <Tabs.List class="justify-start">
-                {#each profileStoreNames as storeName}
-                  <Tabs.Trigger value={storeName} class="gap-2">
-                    <User class="h-4 w-4" />
-                    {storeName}
-                    {#if storeName === defaultStoreName}
-                      <Badge variant="secondary" class="text-xs ml-1">
-                        Default
-                      </Badge>
-                    {/if}
-                  </Tabs.Trigger>
-                {/each}
-              </Tabs.List>
-              <Button
-                variant="outline"
-                size="sm"
-                onclick={() => openEditDialog()}
-              >
-                <Edit class="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-            </div>
+            <Tabs.List class="justify-start">
+              {#each profileStoreNames as storeName}
+                <Tabs.Trigger value={storeName} class="gap-2">
+                  <User class="h-4 w-4" />
+                  {storeName}
+                  {#if storeName === defaultStoreName}
+                    <Badge variant="secondary" class="text-xs ml-1">
+                      Default
+                    </Badge>
+                  {/if}
+                </Tabs.Trigger>
+              {/each}
+            </Tabs.List>
 
             {#each profileStoreNames as storeName}
               {@const store = selectedProfile.store?.[storeName]}
@@ -554,6 +552,7 @@
                         icon: Activity,
                         values: store.basal,
                         colorClass: "text-blue-600",
+                        editTab: "basal",
                       })}
                     {/if}
 
@@ -566,6 +565,7 @@
                         icon: Droplet,
                         values: store.carbratio,
                         colorClass: "text-green-600",
+                        editTab: "carbratio",
                       })}
                     {/if}
 
@@ -574,10 +574,7 @@
                       {@render ProfileTimeValueCard({
                         title: "Insulin Sensitivity (ISF)",
                         description: "BG drop per unit of insulin",
-                        unit:
-                          glucoseUnits.current === "mmol"
-                            ? "mmol/L/U"
-                            : "mg/dL/U",
+                        unit: `${bgLabel()}/U`,
                         icon: TrendingUp,
                         values: store.sens.map((v) => ({
                           ...v,
@@ -588,6 +585,7 @@
                           ),
                         })),
                         colorClass: "text-purple-600",
+                        editTab: "sens",
                       })}
                     {/if}
 
@@ -595,20 +593,30 @@
                     {#if (store.target_low && store.target_low.length > 0) || (store.target_high && store.target_high.length > 0)}
                       <Card>
                         <CardHeader class="pb-3">
-                          <div class="flex items-center gap-3">
-                            <div
-                              class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
+                          <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                              <div
+                                class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
+                              >
+                                <Target class="h-5 w-5 text-amber-600" />
+                              </div>
+                              <div>
+                                <CardTitle class="text-base">
+                                  Target Range
+                                </CardTitle>
+                                <CardDescription class="text-xs">
+                                  Desired blood glucose range
+                                </CardDescription>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onclick={() => openEditDialogWithTab("targets")}
                             >
-                              <Target class="h-5 w-5 text-amber-600" />
-                            </div>
-                            <div>
-                              <CardTitle class="text-base">
-                                Target Range
-                              </CardTitle>
-                              <CardDescription class="text-xs">
-                                Desired blood glucose range
-                              </CardDescription>
-                            </div>
+                              <Edit class="h-4 w-4" />
+                            </Button>
                           </div>
                         </CardHeader>
                         <CardContent>
@@ -616,8 +624,8 @@
                             <Table.Header>
                               <Table.Row>
                                 <Table.Head>Time</Table.Head>
-                                <Table.Head class="text-right">Low</Table.Head>
-                                <Table.Head class="text-right">High</Table.Head>
+                                <Table.Head class="text-right">Low ({bgLabel()})</Table.Head>
+                                <Table.Head class="text-right">High ({bgLabel()})</Table.Head>
                               </Table.Row>
                             </Table.Header>
                             <Table.Body>
@@ -750,10 +758,12 @@
   bind:open={showEditDialog}
   profile={selectedProfile ?? null}
   storeName={editStoreName}
+  initialTab={editInitialTab}
   {isLoading}
   onClose={() => {
     showEditDialog = false;
     editStoreName = null;
+    editInitialTab = "general";
   }}
   onSave={handleSaveProfile}
 />
@@ -777,6 +787,7 @@
   icon: Icon,
   values,
   colorClass,
+  editTab,
 }: {
   title: string;
   description: string;
@@ -784,19 +795,32 @@
   icon: typeof Activity;
   values: TimeValue[];
   colorClass: string;
+  editTab?: "basal" | "carbratio" | "sens" | "targets";
 })}
   <Card>
     <CardHeader class="pb-3">
-      <div class="flex items-center gap-3">
-        <div
-          class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
-        >
-          <Icon class="h-5 w-5 {colorClass}" />
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
+          >
+            <Icon class="h-5 w-5 {colorClass}" />
+          </div>
+          <div>
+            <CardTitle class="text-base">{title}</CardTitle>
+            <CardDescription class="text-xs">{description}</CardDescription>
+          </div>
         </div>
-        <div>
-          <CardTitle class="text-base">{title}</CardTitle>
-          <CardDescription class="text-xs">{description}</CardDescription>
-        </div>
+        {#if editTab}
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onclick={() => openEditDialogWithTab(editTab)}
+          >
+            <Edit class="h-4 w-4" />
+          </Button>
+        {/if}
       </div>
     </CardHeader>
     <CardContent>

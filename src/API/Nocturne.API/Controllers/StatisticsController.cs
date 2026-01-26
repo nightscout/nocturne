@@ -18,16 +18,19 @@ public class StatisticsController : ControllerBase
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
     private readonly IPostgreSqlService _postgreSqlService;
+    private readonly IProfileService _profileService;
 
     public StatisticsController(
         IStatisticsService statisticsService,
         ICacheService cacheService,
-        IPostgreSqlService postgreSqlService
+        IPostgreSqlService postgreSqlService,
+        IProfileService profileService
     )
     {
         _statisticsService = statisticsService;
         _cacheService = cacheService;
         _postgreSqlService = postgreSqlService;
+        _profileService = profileService;
     }
 
     /// <summary>
@@ -510,6 +513,18 @@ public class StatisticsController : ControllerBase
                 return Ok(cachedResult);
             }
 
+            // Load profile data for scheduled basal calculation
+            var profiles = await _postgreSqlService.GetProfilesAsync(
+                count: 10,
+                skip: 0,
+                cancellationToken: cancellationToken
+            );
+            var profileList = profiles.ToList();
+            if (profileList.Any())
+            {
+                _profileService.LoadData(profileList);
+            }
+
             // Calculate statistics for each period
             var periods = new[] { 1, 3, 7, 30, 90 };
             var now = DateTime.UtcNow;
@@ -543,20 +558,21 @@ public class StatisticsController : ControllerBase
                     cancellationToken: cancellationToken
                 );
 
-                // Filter treatments to the specific period
+                // Filter treatments to the specific period using Mills (the canonical timestamp)
                 var startTimestamp = ((DateTimeOffset)startDate).ToUnixTimeMilliseconds();
                 var endTimestamp = ((DateTimeOffset)endDate).ToUnixTimeMilliseconds();
                 var filteredTreatments = treatments
                     .Where(t =>
-                        t.Date.HasValue
-                        && t.Date.Value >= startTimestamp
-                        && t.Date.Value <= endTimestamp
+                        t.Mills > 0
+                        && t.Mills >= startTimestamp
+                        && t.Mills <= endTimestamp
                     )
                     .ToList();
 
                 // Calculate analytics if we have sufficient data
                 GlucoseAnalytics? analytics = null;
                 TreatmentSummary? treatmentSummary = null;
+                InsulinDeliveryStatistics? insulinDelivery = null;
                 bool hasSufficientData = filteredEntries.Count >= 10; // Minimum 10 readings
 
                 if (hasSufficientData)
@@ -566,12 +582,28 @@ public class StatisticsController : ControllerBase
                         filteredTreatments
                     );
 
-                    if (filteredTreatments.Any())
+                    // Calculate treatment summary with scheduled basal from profile
+                    treatmentSummary = _statisticsService.CalculateTreatmentSummary(
+                        filteredTreatments
+                    );
+
+                    // Add scheduled basal from profile if we have profile data
+                    if (_profileService.HasData())
                     {
-                        treatmentSummary = _statisticsService.CalculateTreatmentSummary(
+                        var scheduledBasal = CalculateScheduledBasalForPeriod(
+                            startTimestamp,
+                            endTimestamp,
                             filteredTreatments
                         );
+                        treatmentSummary.Totals.Insulin.Basal += scheduledBasal;
                     }
+
+                    // Calculate comprehensive insulin delivery statistics
+                    insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
+                        filteredTreatments,
+                        startDate,
+                        endDate
+                    );
                 }
 
                 periodResults.Add(
@@ -584,6 +616,7 @@ public class StatisticsController : ControllerBase
                             EndDate = endDate,
                             Analytics = analytics,
                             TreatmentSummary = treatmentSummary,
+                            InsulinDelivery = insulinDelivery,
                             HasSufficientData = hasSufficientData,
                             EntryCount = filteredEntries.Count,
                             TreatmentCount = filteredTreatments.Count,
@@ -628,6 +661,88 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Calculate total scheduled basal delivery for a time period based on profile basal schedule,
+    /// accounting for any temporary basal treatments that override the scheduled rate.
+    /// </summary>
+    /// <param name="startTimestamp">Start time in Unix milliseconds</param>
+    /// <param name="endTimestamp">End time in Unix milliseconds</param>
+    /// <param name="treatments">Treatments in the period (for temp basal adjustments)</param>
+    /// <returns>Total scheduled basal insulin in units</returns>
+    private double CalculateScheduledBasalForPeriod(
+        long startTimestamp,
+        long endTimestamp,
+        List<Treatment> treatments
+    )
+    {
+        double totalBasal = 0.0;
+
+        // Get temp basal treatments sorted by time
+        var tempBasalTreatments = treatments
+            .Where(t =>
+                !string.IsNullOrEmpty(t.EventType) &&
+                (t.EventType.Equals("Temp Basal", StringComparison.OrdinalIgnoreCase) ||
+                 t.EventType.Equals("TempBasal", StringComparison.OrdinalIgnoreCase) ||
+                 t.EventType.Equals("Temporary Basal", StringComparison.OrdinalIgnoreCase))
+            )
+            .OrderBy(t => t.Mills)
+            .ToList();
+
+        // Sample at 5-minute intervals (same as CGM readings)
+        const long intervalMs = 5 * 60 * 1000; // 5 minutes in milliseconds
+        var currentTime = startTimestamp;
+
+        while (currentTime < endTimestamp)
+        {
+            // Get scheduled basal rate at this time (units per hour)
+            var scheduledRate = _profileService.GetBasalRate(currentTime);
+
+            // Check if there's an active temp basal at this time
+            var activeTempBasal = tempBasalTreatments.FirstOrDefault(t =>
+            {
+                var tempStart = t.Mills;
+                var durationMs = (t.Duration ?? 0) * 60 * 1000; // Duration is in minutes
+                var tempEnd = tempStart + durationMs;
+                return currentTime >= tempStart && currentTime < tempEnd;
+            });
+
+            double effectiveRate;
+            if (activeTempBasal != null)
+            {
+                // Use temp basal rate instead of scheduled
+                if (activeTempBasal.Absolute.HasValue)
+                {
+                    effectiveRate = activeTempBasal.Absolute.Value;
+                }
+                else if (activeTempBasal.Rate.HasValue)
+                {
+                    effectiveRate = activeTempBasal.Rate.Value;
+                }
+                else if (activeTempBasal.Percent.HasValue)
+                {
+                    // Percent is relative to scheduled rate
+                    effectiveRate = scheduledRate * (100 + activeTempBasal.Percent.Value) / 100.0;
+                }
+                else
+                {
+                    effectiveRate = scheduledRate;
+                }
+            }
+            else
+            {
+                effectiveRate = scheduledRate;
+            }
+
+            // Convert rate (units/hour) to insulin delivered in this 5-minute interval
+            var insulinDelivered = effectiveRate * (5.0 / 60.0); // 5 minutes = 5/60 hours
+            totalBasal += insulinDelivered;
+
+            currentTime += intervalMs;
+        }
+
+        return Math.Round(totalBasal * 100) / 100; // Round to 2 decimal places
+    }
+
+    /// <summary>
     /// Analyze glucose patterns around site changes to identify impact of site age on control
     /// </summary>
     /// <param name="request">Request containing entries, treatments, and analysis parameters</param>
@@ -646,6 +761,128 @@ public class StatisticsController : ControllerBase
                 request.HoursBeforeChange,
                 request.HoursAfterChange,
                 request.BucketSizeMinutes
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Calculate daily basal/bolus ratio statistics for a date range
+    /// </summary>
+    /// <param name="startDate">Start date of the analysis period</param>
+    /// <param name="endDate">End date of the analysis period</param>
+    /// <returns>Daily basal/bolus ratio breakdown with averages</returns>
+    [HttpGet("daily-basal-bolus-ratios")]
+    public async Task<ActionResult<DailyBasalBolusRatioResponse>> GetDailyBasalBolusRatios(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
+    )
+    {
+        try
+        {
+            // Convert to ISO date strings for the MongoDB-style query
+            var startIso = startDate.ToString("O");
+            var endIso = endDate.ToString("O");
+
+            // Build a MongoDB-style find query for the date range
+            var findQuery = $"{{\"created_at\":{{\"$gte\":\"{startIso}\",\"$lte\":\"{endIso}\"}}}}";
+
+            // Fetch treatments from the database for the specified date range
+            var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
+                count: 10000, // Large limit to get all treatments in range
+                skip: 0,
+                findQuery: findQuery,
+                reverseResults: false
+            );
+
+            var result = _statisticsService.CalculateDailyBasalBolusRatios(treatments);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Calculate comprehensive insulin delivery statistics for a date range
+    /// </summary>
+    /// <param name="startDate">Start date of the analysis period</param>
+    /// <param name="endDate">End date of the analysis period</param>
+    /// <returns>Comprehensive insulin delivery statistics</returns>
+    [HttpGet("insulin-delivery-stats")]
+    public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
+    )
+    {
+        try
+        {
+            // Convert to ISO date strings for the MongoDB-style query
+            var startIso = startDate.ToString("O");
+            var endIso = endDate.ToString("O");
+
+            // Build a MongoDB-style find query for the date range
+            var findQuery = $"{{\"created_at\":{{\"$gte\":\"{startIso}\",\"$lte\":\"{endIso}\"}}}}";
+
+            // Fetch treatments from the database for the specified date range
+            var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
+                count: 10000, // Large limit to get all treatments in range
+                skip: 0,
+                findQuery: findQuery,
+                reverseResults: false
+            );
+
+            var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+                treatments,
+                startDate,
+                endDate
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Calculate comprehensive basal analysis statistics for a date range
+    /// </summary>
+    /// <param name="startDate">Start date of the analysis period</param>
+    /// <param name="endDate">End date of the analysis period</param>
+    /// <returns>Comprehensive basal analysis with stats, temp basal info, and hourly percentiles</returns>
+    [HttpGet("basal-analysis")]
+    public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate
+    )
+    {
+        try
+        {
+            // Convert to ISO date strings for the MongoDB-style query
+            var startIso = startDate.ToString("O");
+            var endIso = endDate.ToString("O");
+
+            // Build a MongoDB-style find query for the date range
+            var findQuery = $"{{\"created_at\":{{\"$gte\":\"{startIso}\",\"$lte\":\"{endIso}\"}}}}";
+
+            // Fetch treatments from the database for the specified date range
+            var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
+                count: 10000, // Large limit to get all treatments in range
+                skip: 0,
+                findQuery: findQuery,
+                reverseResults: false
+            );
+
+            var result = _statisticsService.CalculateBasalAnalysis(
+                treatments,
+                startDate,
+                endDate
             );
             return Ok(result);
         }
@@ -818,3 +1055,4 @@ public class SiteChangeImpactRequest
     /// </summary>
     public int BucketSizeMinutes { get; set; } = 30;
 }
+

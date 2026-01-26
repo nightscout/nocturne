@@ -2450,6 +2450,49 @@
         }
       }
     },
+    "/api/v1/Statistics/insulin-delivery-stats": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Calculate comprehensive insulin delivery statistics for a date range",
+        "operationId": "Statistics_GetInsulinDeliveryStatistics",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comprehensive insulin delivery statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsulinDeliveryStatistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Versions": {
       "get": {
         "tags": [
@@ -3393,6 +3436,70 @@
           },
           "500": {
             "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v4/debug/test/inappnotification": {
+      "post": {
+        "tags": [
+          "V4 Debug"
+        ],
+        "summary": "Test endpoint for creating in-app notifications (development only)\nCreates a test notification for the current user to verify the notification system",
+        "operationId": "Debug_CreateTestNotification",
+        "requestBody": {
+          "x-name": "request",
+          "description": "The test notification parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestNotificationRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "Notification created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InAppNotificationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "User not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Endpoint only available in development",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -15410,6 +15517,8 @@
           "Trackers",
           "TirChart",
           "DailySummary",
+          "Clock",
+          "Tdd",
           "GlucoseChart",
           "Statistics",
           "Treatments",
@@ -15426,6 +15535,8 @@
           "Trackers",
           "TirChart",
           "DailySummary",
+          "Clock",
+          "Tdd",
           "GlucoseChart",
           "Statistics",
           "Treatments",
@@ -17995,6 +18106,14 @@
               }
             ]
           },
+          "insulinDelivery": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InsulinDeliveryStatistics"
+              }
+            ]
+          },
           "hasSufficientData": {
             "type": "boolean"
           },
@@ -18003,6 +18122,86 @@
             "format": "int32"
           },
           "treatmentCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "InsulinDeliveryStatistics": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "totalBolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalBasal": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalInsulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalCarbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "basalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "basalPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "tdd": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgBolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "mealBoluses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "correctionBoluses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "icRatio": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusesPerDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "dayCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string"
+          },
+          "carbCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "carbBolusCount": {
             "type": "integer",
             "format": "int32"
           }
@@ -19608,6 +19807,213 @@
           }
         }
       },
+      "InAppNotificationDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/InAppNotificationType"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/NotificationUrgency"
+          },
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationActionDto"
+            }
+          }
+        }
+      },
+      "InAppNotificationType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PasswordResetRequest",
+          "UnconfiguredTracker",
+          "TrackerAlert",
+          "StatisticsSummary",
+          "HelpResponse",
+          "AnonymousLoginRequest",
+          "PredictedLow",
+          "SuggestedMealMatch"
+        ],
+        "enum": [
+          "PasswordResetRequest",
+          "UnconfiguredTracker",
+          "TrackerAlert",
+          "StatisticsSummary",
+          "HelpResponse",
+          "AnonymousLoginRequest",
+          "PredictedLow",
+          "SuggestedMealMatch"
+        ]
+      },
+      "NotificationUrgency": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Info",
+          "Warn",
+          "Hazard",
+          "Urgent"
+        ],
+        "enum": [
+          "Info",
+          "Warn",
+          "Hazard",
+          "Urgent"
+        ]
+      },
+      "NotificationActionDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "variant": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "TestNotificationRequest": {
+        "type": "object",
+        "description": "Request model for creating test notifications",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "description": "Type of notification to create",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InAppNotificationType"
+              }
+            ]
+          },
+          "urgency": {
+            "description": "Urgency level for the notification",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotificationUrgency"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional title (defaults to \"Test {Type} Notification\")",
+            "nullable": true
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Optional subtitle",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Optional source ID for grouping",
+            "nullable": true
+          },
+          "actions": {
+            "type": "array",
+            "description": "Optional actions for the notification",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/NotificationActionDto"
+            }
+          },
+          "resolutionConditions": {
+            "description": "Optional resolution conditions",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ResolutionConditions"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional metadata",
+            "nullable": true,
+            "additionalProperties": {}
+          }
+        }
+      },
+      "ResolutionConditions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sourceDeletedType": {
+            "type": "string",
+            "nullable": true
+          },
+          "glucose": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseCondition"
+              }
+            ]
+          }
+        }
+      },
+      "GlucoseCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "aboveMgDl": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "belowMgDl": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "sustainedMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
       "DeduplicationJobResponse": {
         "type": "object",
         "description": "Response for starting a deduplication job",
@@ -20840,108 +21246,6 @@
           },
           "enableMatchNotifications": {
             "type": "boolean"
-          }
-        }
-      },
-      "InAppNotificationDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "type": {
-            "$ref": "#/components/schemas/InAppNotificationType"
-          },
-          "urgency": {
-            "$ref": "#/components/schemas/NotificationUrgency"
-          },
-          "title": {
-            "type": "string"
-          },
-          "subtitle": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "sourceId": {
-            "type": "string",
-            "nullable": true
-          },
-          "metadata": {
-            "type": "object",
-            "nullable": true,
-            "additionalProperties": {}
-          },
-          "actions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/NotificationActionDto"
-            }
-          }
-        }
-      },
-      "InAppNotificationType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "PasswordResetRequest",
-          "UnconfiguredTracker",
-          "TrackerAlert",
-          "StatisticsSummary",
-          "HelpResponse",
-          "AnonymousLoginRequest",
-          "PredictedLow",
-          "SuggestedMealMatch"
-        ],
-        "enum": [
-          "PasswordResetRequest",
-          "UnconfiguredTracker",
-          "TrackerAlert",
-          "StatisticsSummary",
-          "HelpResponse",
-          "AnonymousLoginRequest",
-          "PredictedLow",
-          "SuggestedMealMatch"
-        ]
-      },
-      "NotificationUrgency": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Info",
-          "Warn",
-          "Hazard",
-          "Urgent"
-        ],
-        "enum": [
-          "Info",
-          "Warn",
-          "Hazard",
-          "Urgent"
-        ]
-      },
-      "NotificationActionDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "actionId": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "icon": {
-            "type": "string",
-            "nullable": true
-          },
-          "variant": {
-            "type": "string",
-            "nullable": true
           }
         }
       },

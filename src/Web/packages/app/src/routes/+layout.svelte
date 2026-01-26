@@ -81,6 +81,7 @@
   });
 
   onDestroy(() => {
+    realtimeStore.destroy();
     titleFaviconService.destroy();
     if (browser) {
       window.removeEventListener("storage", handleStorageChange);

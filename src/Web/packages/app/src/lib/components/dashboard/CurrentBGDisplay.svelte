@@ -2,7 +2,13 @@
   import type { Entry, Treatment } from "$lib/api";
   import { TrackerCategory } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
-  import { StatusPillBar, TrackerPillBar } from "$lib/components/status-pills";
+  import {
+    COBPill,
+    BasalPill,
+    IOBPill,
+    LoopPill,
+    TrackerPillBar,
+  } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import { TrackerCompletionDialog } from "$lib/components/trackers";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -192,36 +198,38 @@
 
 <!-- Header section - hidden on mobile since MobileHeader handles BG display -->
 <div class="@container">
-  <div class="hidden @md:flex items-center justify-between">
-    <div class="flex items-center gap-4">
-      <h1 class="text-3xl font-bold">Nocturne</h1>
+  <h1 class="sr-only">Nocturne</h1>
+  <div class="hidden @md:flex items-center justify-between gap-6">
+    <!-- Left side: Demo badge + COB/Basal pills + Tracker Pills -->
+    <div class="flex items-center gap-2 order-1">
       {#if displayDemoMode}
         <Badge variant="secondary" class="flex items-center gap-1">
           <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
           Demo Mode
         </Badge>
       {/if}
+      <!-- All status pills in a single line -->
+      {#if showPills}
+        <COBPill data={realtimeStore.pillsData.cob} />
+        <BasalPill data={realtimeStore.pillsData.basal} />
+        <IOBPill data={realtimeStore.pillsData.iob} />
+        <LoopPill data={realtimeStore.pillsData.loop} />
+      {/if}
+      <!-- Tracker Pills -->
+      {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
+        <TrackerPillBar
+          instances={realtimeStore.trackerInstances}
+          definitions={realtimeStore.trackerDefinitions}
+          onComplete={handleTrackerComplete}
+          class="flex-nowrap"
+        />
+      {/if}
     </div>
-    <div class="flex items-center gap-6">
-      <!-- Current Time Display -->
-      <div class="text-right">
-        <div class="flex items-center gap-2 text-lg font-medium tabular-nums">
-          <Clock class="h-4 w-4 text-muted-foreground" />
-          {formattedLocalTime}
-        </div>
-        {#if profileTimeInfo}
-          <div class="text-xs text-muted-foreground flex items-center gap-1">
-            <span class="font-medium">{profileTimeInfo.timezone}:</span>
-            <span class="tabular-nums">{profileTimeInfo.time}</span>
-            <Badge variant="outline" class="text-[10px] px-1 py-0">
-              {profileTimeInfo.offset}
-            </Badge>
-          </div>
-        {/if}
-      </div>
 
-      <!-- BG Display with connection/stale status -->
-      <div class="flex items-center gap-2">
+    <!-- Right side: Clock, BG, Delta (semantic order: BG first for accessibility) -->
+    <div class="flex items-center gap-4 order-2">
+      <!-- BG Display with connection/stale status - semantically first -->
+      <div class="flex items-center gap-2 order-2">
         <GlucoseValueIndicator
           displayValue={displayCurrentBG}
           rawBgMgdl={rawCurrentBG}
@@ -241,28 +249,35 @@
           </div>
         </div>
       </div>
+      <!-- Current Time Display - visually first -->
+      <div
+        class="flex items-center gap-2 text-lg font-medium tabular-nums order-1"
+      >
+        <Clock class="h-4 w-4 text-muted-foreground" />
+        {formattedLocalTime}
+        {#if profileTimeInfo}
+          <div
+            class="text-xs text-muted-foreground flex items-center gap-1 ml-1"
+          >
+            <span class="font-medium">{profileTimeInfo.timezone}:</span>
+            <span class="tabular-nums">{profileTimeInfo.time}</span>
+            <Badge variant="outline" class="text-[10px] px-1 py-0">
+              {profileTimeInfo.offset}
+            </Badge>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Status Pills Bar - visible on all sizes -->
+<!-- Status Pills Bar - visible only on mobile (all pills in header on desktop) -->
 {#if showPills}
-  <div class="mt-2 @md:mt-4">
-    <StatusPillBar
-      iob={realtimeStore.pillsData.iob}
-      cob={realtimeStore.pillsData.cob}
-      basal={realtimeStore.pillsData.basal}
-      loop={realtimeStore.pillsData.loop}
-      units={unitLabel}
-    />
-    {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
-      <TrackerPillBar
-        instances={realtimeStore.trackerInstances}
-        definitions={realtimeStore.trackerDefinitions}
-        onComplete={handleTrackerComplete}
-        class="mt-2"
-      />
-    {/if}
+  <div class="mt-2 flex flex-wrap items-center gap-2 @md:hidden">
+    <COBPill data={realtimeStore.pillsData.cob} />
+    <BasalPill data={realtimeStore.pillsData.basal} />
+    <IOBPill data={realtimeStore.pillsData.iob} />
+    <LoopPill data={realtimeStore.pillsData.loop} />
   </div>
 {/if}
 

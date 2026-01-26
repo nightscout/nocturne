@@ -15,6 +15,7 @@ import { browser } from "$app/environment";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
+import { WidgetId } from "$lib/api/generated/nocturne-api-client";
 
 // ==========================================
 // Type Definitions
@@ -72,6 +73,16 @@ export const timeFormat = new PersistedState<TimeFormat>(
 export const nightModeSchedule = new PersistedState<boolean>(
   "nocturne-night-mode-schedule",
   false
+);
+
+/**
+ * Dashboard top widgets configuration
+ * Stores the ordered list of widget IDs displayed in the top widget grid
+ * Default: BgDelta (includes connection + last updated), TirChart, Tdd
+ */
+export const dashboardTopWidgets = new PersistedState<WidgetId[]>(
+  "nocturne-dashboard-top-widgets",
+  [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd]
 );
 
 // ==========================================

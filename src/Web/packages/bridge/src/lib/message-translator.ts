@@ -154,6 +154,33 @@ class MessageTranslator {
     }
   }
 
+  // Handle in-app notification created events
+  handleNotificationCreated(data: any): void {
+    try {
+      this.socketIOServer.broadcastInAppNotification('notificationCreated', data);
+    } catch (error) {
+      logger.error('Error handling notification created:', error);
+    }
+  }
+
+  // Handle in-app notification archived events
+  handleNotificationArchived(data: any): void {
+    try {
+      this.socketIOServer.broadcastInAppNotification('notificationArchived', data);
+    } catch (error) {
+      logger.error('Error handling notification archived:', error);
+    }
+  }
+
+  // Handle in-app notification updated events
+  handleNotificationUpdated(data: any): void {
+    try {
+      this.socketIOServer.broadcastInAppNotification('notificationUpdated', data);
+    } catch (error) {
+      logger.error('Error handling notification updated:', error);
+    }
+  }
+
   // Translation methods - these ensure compatibility with legacy Nightscout client expectations
 
   private translateDataUpdate(data: DataPoint[]): any {

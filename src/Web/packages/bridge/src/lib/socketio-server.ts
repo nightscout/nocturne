@@ -156,11 +156,18 @@ class SocketIOServer {
 
     const clientCount = this.clients.size;
     logger.info(`Broadcasting storage ${eventType} event to ${clientCount} connected clients`);
-    
+
     if (clientCount === 0) {
       logger.warn('No Socket.IO clients connected - events will not be delivered to frontend');
     }
-    
+
+    this.io.emit(eventType, data);
+  }
+
+  broadcastInAppNotification(eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated', data: any): void {
+    if (!this.io) return;
+
+    logger.debug(`Broadcasting ${eventType} to all clients`);
     this.io.emit(eventType, data);
   }
 

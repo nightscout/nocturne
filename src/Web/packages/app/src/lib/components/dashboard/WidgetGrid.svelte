@@ -8,6 +8,8 @@
   import TrackersWidget from "./widgets/TrackersWidget.svelte";
   import TirChartWidget from "./widgets/TirChartWidget.svelte";
   import DailySummaryWidget from "./widgets/DailySummaryWidget.svelte";
+  import ClockWidget from "./widgets/ClockWidget.svelte";
+  import TddWidget from "./widgets/TddWidget.svelte";
 
   interface Props {
     /** Ordered list of widget IDs to display */
@@ -31,6 +33,8 @@
     [WidgetId.Trackers]: TrackersWidget,
     [WidgetId.TirChart]: TirChartWidget,
     [WidgetId.DailySummary]: DailySummaryWidget,
+    [WidgetId.Clock]: ClockWidget,
+    [WidgetId.Tdd]: TddWidget,
   };
 </script>
 

@@ -3173,6 +3173,54 @@ export class StatisticsClient {
         }
         return Promise.resolve<SiteChangeImpactAnalysis>(null as any);
     }
+
+    /**
+     * Calculate comprehensive insulin delivery statistics for a date range
+     * @param startDate (optional) Start date of the analysis period
+     * @param endDate (optional) End date of the analysis period
+     * @return Comprehensive insulin delivery statistics
+     */
+    getInsulinDeliveryStatistics(startDate?: Date | undefined, endDate?: Date | undefined, signal?: AbortSignal): Promise<InsulinDeliveryStatistics> {
+        let url_ = this.baseUrl + "/api/v1/Statistics/insulin-delivery-stats?";
+        if (startDate === null)
+            throw new globalThis.Error("The parameter 'startDate' cannot be null.");
+        else if (startDate !== undefined)
+            url_ += "startDate=" + encodeURIComponent(startDate ? "" + startDate.toISOString() : "") + "&";
+        if (endDate === null)
+            throw new globalThis.Error("The parameter 'endDate' cannot be null.");
+        else if (endDate !== undefined)
+            url_ += "endDate=" + encodeURIComponent(endDate ? "" + endDate.toISOString() : "") + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetInsulinDeliveryStatistics(_response);
+        });
+    }
+
+    protected processGetInsulinDeliveryStatistics(response: Response): Promise<InsulinDeliveryStatistics> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InsulinDeliveryStatistics;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InsulinDeliveryStatistics>(null as any);
+    }
 }
 
 export class VersionsClient {
@@ -4254,6 +4302,68 @@ export class DebugClient {
             });
         }
         return Promise.resolve<any>(null as any);
+    }
+
+    /**
+     * Test endpoint for creating in-app notifications (development only)
+    Creates a test notification for the current user to verify the notification system
+     * @param request The test notification parameters
+     * @return Notification created successfully
+     */
+    createTestNotification(request: TestNotificationRequest, signal?: AbortSignal): Promise<InAppNotificationDto> {
+        let url_ = this.baseUrl + "/api/v4/debug/test/inappnotification";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTestNotification(_response);
+        });
+    }
+
+    protected processCreateTestNotification(response: Response): Promise<InAppNotificationDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InAppNotificationDto;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Invalid request parameters", status, _responseText, _headers, result400);
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("User not authenticated", status, _responseText, _headers, result401);
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Endpoint only available in development", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InAppNotificationDto>(null as any);
     }
 
     testPostgreSqlConnection(signal?: AbortSignal): Promise<FileResponse> {
@@ -17186,6 +17296,8 @@ export enum WidgetId {
     Trackers = "Trackers",
     TirChart = "TirChart",
     DailySummary = "DailySummary",
+    Clock = "Clock",
+    Tdd = "Tdd",
     GlucoseChart = "GlucoseChart",
     Statistics = "Statistics",
     Treatments = "Treatments",
@@ -17980,9 +18092,32 @@ export interface PeriodStatistics {
     endDate?: Date;
     analytics?: GlucoseAnalytics | undefined;
     treatmentSummary?: TreatmentSummary | undefined;
+    insulinDelivery?: InsulinDeliveryStatistics | undefined;
     hasSufficientData?: boolean;
     entryCount?: number;
     treatmentCount?: number;
+}
+
+export interface InsulinDeliveryStatistics {
+    totalBolus?: number;
+    totalBasal?: number;
+    totalInsulin?: number;
+    totalCarbs?: number;
+    bolusCount?: number;
+    basalCount?: number;
+    basalPercent?: number;
+    bolusPercent?: number;
+    tdd?: number;
+    avgBolus?: number;
+    mealBoluses?: number;
+    correctionBoluses?: number;
+    icRatio?: number;
+    bolusesPerDay?: number;
+    dayCount?: number;
+    startDate?: string;
+    endDate?: string;
+    carbCount?: number;
+    carbBolusCount?: number;
 }
 
 export interface SiteChangeImpactAnalysis {
@@ -18482,6 +18617,75 @@ export interface ConnectorFoodImport {
     unit?: string | undefined;
 }
 
+export interface InAppNotificationDto {
+    id?: string;
+    type?: InAppNotificationType;
+    urgency?: NotificationUrgency;
+    title?: string;
+    subtitle?: string | undefined;
+    createdAt?: Date;
+    sourceId?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    actions?: NotificationActionDto[];
+}
+
+export enum InAppNotificationType {
+    PasswordResetRequest = "PasswordResetRequest",
+    UnconfiguredTracker = "UnconfiguredTracker",
+    TrackerAlert = "TrackerAlert",
+    StatisticsSummary = "StatisticsSummary",
+    HelpResponse = "HelpResponse",
+    AnonymousLoginRequest = "AnonymousLoginRequest",
+    PredictedLow = "PredictedLow",
+    SuggestedMealMatch = "SuggestedMealMatch",
+}
+
+export enum NotificationUrgency {
+    Info = "Info",
+    Warn = "Warn",
+    Hazard = "Hazard",
+    Urgent = "Urgent",
+}
+
+export interface NotificationActionDto {
+    actionId?: string;
+    label?: string;
+    icon?: string | undefined;
+    variant?: string | undefined;
+}
+
+/** Request model for creating test notifications */
+export interface TestNotificationRequest {
+    /** Type of notification to create */
+    type?: InAppNotificationType;
+    /** Urgency level for the notification */
+    urgency?: NotificationUrgency;
+    /** Optional title (defaults to "Test {Type} Notification") */
+    title?: string | undefined;
+    /** Optional subtitle */
+    subtitle?: string | undefined;
+    /** Optional source ID for grouping */
+    sourceId?: string | undefined;
+    /** Optional actions for the notification */
+    actions?: NotificationActionDto[] | undefined;
+    /** Optional resolution conditions */
+    resolutionConditions?: ResolutionConditions | undefined;
+    /** Optional metadata */
+    metadata?: { [key: string]: any; } | undefined;
+}
+
+export interface ResolutionConditions {
+    expiresAt?: Date | undefined;
+    sourceDeletedType?: string | undefined;
+    glucose?: GlucoseCondition | undefined;
+}
+
+export interface GlucoseCondition {
+    aboveMgDl?: number | undefined;
+    belowMgDl?: number | undefined;
+    sustainedMinutes?: number | undefined;
+}
+
 /** Response for starting a deduplication job */
 export interface DeduplicationJobResponse {
     jobId?: string;
@@ -18897,43 +19101,6 @@ export interface MyFitnessPalMatchingSettings {
     matchCarbTolerancePercent?: number;
     matchCarbToleranceGrams?: number;
     enableMatchNotifications?: boolean;
-}
-
-export interface InAppNotificationDto {
-    id?: string;
-    type?: InAppNotificationType;
-    urgency?: NotificationUrgency;
-    title?: string;
-    subtitle?: string | undefined;
-    createdAt?: Date;
-    sourceId?: string | undefined;
-    metadata?: { [key: string]: any; } | undefined;
-    actions?: NotificationActionDto[];
-}
-
-export enum InAppNotificationType {
-    PasswordResetRequest = "PasswordResetRequest",
-    UnconfiguredTracker = "UnconfiguredTracker",
-    TrackerAlert = "TrackerAlert",
-    StatisticsSummary = "StatisticsSummary",
-    HelpResponse = "HelpResponse",
-    AnonymousLoginRequest = "AnonymousLoginRequest",
-    PredictedLow = "PredictedLow",
-    SuggestedMealMatch = "SuggestedMealMatch",
-}
-
-export enum NotificationUrgency {
-    Info = "Info",
-    Warn = "Warn",
-    Hazard = "Hazard",
-    Urgent = "Urgent",
-}
-
-export interface NotificationActionDto {
-    actionId?: string;
-    label?: string;
-    icon?: string | undefined;
-    variant?: string | undefined;
 }
 
 /** Response containing glucose predictions. */

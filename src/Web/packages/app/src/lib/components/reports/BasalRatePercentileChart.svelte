@@ -1,112 +1,17 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
-  import type { Treatment } from "$lib/api";
-  import { Layers } from "lucide-svelte";
-
-  interface HourlyBasalData {
-    hour: number;
-    p10: number;
-    p25: number;
-    median: number;
-    p75: number;
-    p90: number;
-    count: number;
-  }
+  import type { HourlyBasalPercentileData } from "$lib/api";
+  import { Layers, Loader2 } from "lucide-svelte";
 
   interface Props {
-    treatments: Treatment[];
+    data: HourlyBasalPercentileData[];
+    loading?: boolean;
   }
 
-  let { treatments }: Props = $props();
+  let { data, loading = false }: Props = $props();
 
-  // Calculate percentiles from an array of numbers
-  function percentile(arr: number[], p: number): number {
-    if (arr.length === 0) return 0;
-    const sorted = [...arr].sort((a, b) => a - b);
-    const index = (p / 100) * (sorted.length - 1);
-    const lower = Math.floor(index);
-    const upper = Math.ceil(index);
-    if (lower === upper) return sorted[lower];
-    return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
-  }
-
-  // Process treatments to get hourly basal rate percentiles
-  function processBasalData(treatments: Treatment[]): HourlyBasalData[] {
-    // Group basal treatments by hour
-    const hourlyRates: Map<number, number[]> = new Map();
-
-    // Initialize all hours
-    for (let h = 0; h < 24; h++) {
-      hourlyRates.set(h, []);
-    }
-
-    // Filter to only basal-related treatments
-    const basalTreatments = treatments.filter((t) => {
-      const eventType = t.eventType?.toLowerCase() || "";
-      return (
-        eventType.includes("basal") ||
-        eventType.includes("temp basal") ||
-        eventType === "tempbasal" ||
-        t.rate !== undefined ||
-        t.absolute !== undefined
-      );
-    });
-
-    // Process each basal treatment
-    for (const treatment of basalTreatments) {
-      const date = new Date(
-        treatment.created_at ??
-          treatment.eventTime ??
-          treatment.mills ??
-          Date.now()
-      );
-      if (isNaN(date.getTime())) continue;
-
-      const hour = date.getHours();
-      const rate = treatment.rate ?? treatment.absolute ?? 0;
-
-      if (rate > 0) {
-        hourlyRates.get(hour)?.push(rate);
-      }
-    }
-
-    // Calculate percentiles for each hour
-    const data: HourlyBasalData[] = [];
-
-    for (let hour = 0; hour < 24; hour++) {
-      const rates = hourlyRates.get(hour) || [];
-
-      if (rates.length > 0) {
-        data.push({
-          hour,
-          p10: percentile(rates, 10),
-          p25: percentile(rates, 25),
-          median: percentile(rates, 50),
-          p75: percentile(rates, 75),
-          p90: percentile(rates, 90),
-          count: rates.length,
-        });
-      } else {
-        // No data for this hour, use zeros or interpolate
-        data.push({
-          hour,
-          p10: 0,
-          p25: 0,
-          median: 0,
-          p75: 0,
-          p90: 0,
-          count: 0,
-        });
-      }
-    }
-
-    return data;
-  }
-
-  // Use derived values instead of effect to avoid infinite loops
-  const chartData = $derived(
-    treatments && treatments.length > 0 ? processBasalData(treatments) : []
-  );
+  // Map backend data to chart format
+  const chartData = $derived(data ?? []);
 
   const maxRate = $derived.by(() => {
     if (chartData.length === 0) return 3;
@@ -124,7 +29,16 @@
 </script>
 
 <div class="w-full">
-  {#if chartData.length > 0 && chartData.some((d) => d.count > 0)}
+  {#if loading}
+    <div
+      class="flex h-[400px] w-full items-center justify-center text-muted-foreground"
+    >
+      <div class="text-center">
+        <Loader2 class="mx-auto h-10 w-10 animate-spin opacity-50" />
+        <p class="mt-2 font-medium">Loading basal data...</p>
+      </div>
+    </div>
+  {:else if chartData.length > 0 && chartData.some((d) => d.count > 0)}
     <div class="h-[400px] w-full">
       <AreaChart
         data={chartData}
@@ -136,8 +50,8 @@
           {
             key: "p10",
             value: [
-              (d: HourlyBasalData) => d.p25,
-              (d: HourlyBasalData) => d.p10,
+              (d: HourlyBasalPercentileData) => d.p25,
+              (d: HourlyBasalPercentileData) => d.p10,
             ],
             color: "var(--chart-1)",
             label: "P10-P25",
@@ -145,8 +59,8 @@
           {
             key: "p25",
             value: [
-              (d: HourlyBasalData) => d.median,
-              (d: HourlyBasalData) => d.p25,
+              (d: HourlyBasalPercentileData) => d.median,
+              (d: HourlyBasalPercentileData) => d.p25,
             ],
             color: "var(--chart-2)",
             label: "P25-Median",
@@ -154,8 +68,8 @@
           {
             key: "median",
             value: [
-              (d: HourlyBasalData) => d.median,
-              (d: HourlyBasalData) => d.median,
+              (d: HourlyBasalPercentileData) => d.median,
+              (d: HourlyBasalPercentileData) => d.median,
             ],
             color: "hsl(var(--primary))",
             props: {
@@ -166,8 +80,8 @@
           {
             key: "p75",
             value: [
-              (d: HourlyBasalData) => d.median,
-              (d: HourlyBasalData) => d.p75,
+              (d: HourlyBasalPercentileData) => d.median,
+              (d: HourlyBasalPercentileData) => d.p75,
             ],
             color: "var(--chart-3)",
             label: "Median-P75",
@@ -175,8 +89,8 @@
           {
             key: "p90",
             value: [
-              (d: HourlyBasalData) => d.p75,
-              (d: HourlyBasalData) => d.p90,
+              (d: HourlyBasalPercentileData) => d.p75,
+              (d: HourlyBasalPercentileData) => d.p90,
             ],
             color: "var(--chart-1)",
             label: "P75-P90",

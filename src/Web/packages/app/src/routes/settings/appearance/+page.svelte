@@ -11,6 +11,7 @@
     nightModeSchedule,
     setColorScheme,
     userPrefersMode,
+    dashboardTopWidgets,
     type ColorScheme,
   } from "$lib/stores/appearance-store.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -48,40 +49,15 @@
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
-  import {
-    WidgetId,
-    WidgetPlacement,
-    type WidgetConfig,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getEnabledWidgetsByPlacement } from "$lib/types/dashboard-widgets";
+  import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
 
   const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
 
-  // Dashboard widgets - get enabled top widgets for configurator
-  const dashboardWidgets = $derived(
-    getEnabledWidgetsByPlacement(store.features?.widgets, WidgetPlacement.Top)
-  );
-
+  // Dashboard widgets - use persisted state for immediate localStorage persistence
   function handleWidgetsChange(widgets: WidgetId[]) {
-    if (!store.features) return;
-    if (!store.features.widgets) {
-      store.features.widgets = [];
-    }
-
-    // Update the widgets array: update top widgets, preserve main widgets
-    const mainWidgets = (store.features.widgets ?? []).filter(
-      (w) => w.placement === WidgetPlacement.Main
-    );
-    const newTopWidgets: WidgetConfig[] = widgets.map((id) => ({
-      id,
-      enabled: true,
-      placement: WidgetPlacement.Top,
-    }));
-
-    store.features.widgets = [...newTopWidgets, ...mainWidgets];
-    store.markChanged();
+    dashboardTopWidgets.current = widgets;
   }
 
   // Theme state - reactive wrapper around store (color theme: nocturne/trio)
@@ -388,7 +364,7 @@
 
     <!-- Dashboard Widgets -->
     <DashboardWidgetConfigurator
-      value={dashboardWidgets}
+      value={dashboardTopWidgets.current}
       onchange={handleWidgetsChange}
       maxWidgets={3}
     />

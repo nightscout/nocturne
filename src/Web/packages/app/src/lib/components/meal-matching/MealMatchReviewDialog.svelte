@@ -55,6 +55,11 @@
   );
   const foodEntryId = $derived(match?.foodEntryId ?? notification?.sourceId ?? "");
 
+  // Get food name from match (immediately) or foodEntry (after load)
+  const foodName = $derived(
+    foodEntry?.food?.name ?? foodEntry?.mealName ?? match?.foodName ?? match?.mealName ?? "Food"
+  );
+
   // Format time as HH:mm for time input
   function formatTimeInput(mills: number): string {
     if (!mills) return "";
@@ -213,9 +218,9 @@
 <Dialog.Root bind:open onOpenChange={(value) => !value && resetAndClose()}>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Review Meal Match</Dialog.Title>
+      <Dialog.Title>Confirm "{foodName}"</Dialog.Title>
       <Dialog.Description>
-        Confirm when you ate this food and adjust the carbs if needed.
+        When did you eat this, and how much?
       </Dialog.Description>
     </Dialog.Header>
 

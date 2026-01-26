@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     getServicesOverview,
     getUploaderSetup,
@@ -155,6 +155,11 @@
     await Promise.all([loadServices(), loadConnectorStatuses()]);
   });
 
+  onDestroy(() => {
+    // Clean up deduplication polling interval to prevent memory leaks
+    stopDeduplicationPolling();
+  });
+
   async function refreshAll() {
     await Promise.all([loadServices(), loadConnectorStatuses()]);
   }
@@ -204,7 +209,8 @@
         error: result.error ?? undefined,
       };
       if (result.success) {
-        await loadConnectorStatuses();
+        // Refresh both connector statuses and services overview
+        await Promise.all([loadConnectorStatuses(), loadServices()]);
       }
     } catch (e) {
       connectorDeleteResult = {

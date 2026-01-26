@@ -23,10 +23,10 @@
   } from "lucide-svelte";
   import BasalBolusRatioChart from "$lib/components/reports/BasalBolusRatioChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import type { Treatment, TreatmentSummary } from "$lib/api";
+  import type { Treatment, InsulinDeliveryStatistics } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
+  import { getMultiPeriodStatistics } from "$lib/data/statistics.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { countTreatmentsByCategory } from "$lib/constants/treatment-categories";
   import { resource } from "runed";
 
   // Get shared date params from context (set by reports layout)
@@ -51,88 +51,52 @@
     }
   );
 
-  const treatmentSummary = $derived(
-    reportsResource.current?.analysis?.treatmentSummary ??
-      ({
-        totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
-        treatmentCount: 0,
-      } as TreatmentSummary)
+  // Fetch multi-period statistics from the backend (includes insulin delivery stats)
+  const multiPeriodStatsResource = resource(
+    () => ({}),
+    async () => {
+      return await getMultiPeriodStatistics({});
+    },
+    { debounce: 100 }
   );
 
-  // Count treatments by category for UI display
-  const counts = $derived(countTreatmentsByCategory(treatments));
+  // Default statistics when loading or no data
+  const defaultStats: InsulinDeliveryStatistics = {
+    totalBolus: 0,
+    totalBasal: 0,
+    totalInsulin: 0,
+    totalCarbs: 0,
+    bolusCount: 0,
+    basalCount: 0,
+    basalPercent: 0,
+    bolusPercent: 0,
+    tdd: 0,
+    avgBolus: 0,
+    mealBoluses: 0,
+    correctionBoluses: 0,
+    icRatio: 0,
+    bolusesPerDay: 0,
+    dayCount: 1,
+    startDate: new Date().toISOString(),
+    endDate: new Date().toISOString(),
+    carbCount: 0,
+    carbBolusCount: 0,
+  };
 
-  // Helper dates
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.max(
-      1,
-      Math.round(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-      )
-    )
+  // Get insulin stats from the appropriate period based on date range
+  // Default to 30-day stats which is most commonly used for reports
+  const insulinStats = $derived(
+    multiPeriodStatsResource.current?.lastMonth?.insulinDelivery ?? defaultStats
   );
 
-  const insulinStats = $derived.by(() => {
-    const totalBolus = treatmentSummary.totals?.insulin?.bolus ?? 0;
-    const totalBasal = treatmentSummary.totals?.insulin?.basal ?? 0;
-    const totalInsulin = totalBolus + totalBasal;
-    const totalCarbs = treatmentSummary.totals?.food?.carbs ?? 0;
-
-    // Use category counts for bolus count
-    const bolusCount = counts.byCategoryCount.bolus;
-    const basalCount = counts.byCategoryCount.basal;
-
-    // Calculate percentages from backend totals
-    const basalPercent =
-      totalInsulin > 0 ? (totalBasal / totalInsulin) * 100 : 0;
-    const bolusPercent =
-      totalInsulin > 0 ? (totalBolus / totalInsulin) * 100 : 0;
-    const tdd = totalInsulin / Math.max(1, dayCount);
-    const avgBolus = bolusCount > 0 ? totalBolus / bolusCount : 0;
-
-    // Count meal vs correction boluses from event types
-    let mealBoluses = 0;
-    let correctionBoluses = 0;
-    for (const treatment of treatments) {
-      const eventType = treatment.eventType?.toLowerCase() || "";
-      if (eventType.includes("meal") || eventType.includes("snack")) {
-        mealBoluses++;
-      } else if (
-        eventType.includes("correction") &&
-        !eventType.includes("smb")
-      ) {
-        correctionBoluses++;
-      }
-    }
-
-    // Calculate I:C ratio - use total carbs and bolus insulin
-    const icRatio =
-      totalCarbs > 0 && totalBolus > 0 ? totalCarbs / totalBolus : 0;
-
-    return {
-      totalBolus,
-      totalBasal,
-      totalInsulin,
-      bolusCount,
-      basalCount,
-      basalPercent,
-      bolusPercent,
-      tdd,
-      avgBolus,
-      mealBoluses,
-      correctionBoluses,
-      totalCarbs,
-      carbCount: counts.byCategoryCount.carbs + counts.byCategoryCount.bolus,
-      icRatio,
-      bolusesPerDay: bolusCount / Math.max(1, dayCount),
-    };
-  });
+  // Helper dates derived from backend stats
+  const startDate = $derived(new Date(insulinStats.startDate || dateRange.from));
+  const endDate = $derived(new Date(insulinStats.endDate || dateRange.to));
+  const dayCount = $derived(insulinStats.dayCount || 1);
 
   // Determine if ratio is in typical range
   const ratioAssessment = $derived.by(() => {
-    const { basalPercent } = insulinStats;
+    const basalPercent = insulinStats.basalPercent ?? 0;
 
     if (basalPercent >= 40 && basalPercent <= 60) {
       return {
@@ -216,7 +180,7 @@
       <span>{dayCount} days</span>
       <span class="text-muted-foreground/50">•</span>
       <span>
-        {insulinStats.bolusCount + insulinStats.basalCount} insulin events
+        {(insulinStats.bolusCount ?? 0) + (insulinStats.basalCount ?? 0)} insulin events
       </span>
     </div>
   </div>
@@ -259,7 +223,7 @@
     <Card class="border md:col-span-1">
       <CardContent class="pt-6 text-center">
         <div class="text-3xl font-bold tabular-nums text-primary">
-          {insulinStats.tdd.toFixed(1)}
+          {(insulinStats.tdd ?? 0).toFixed(1)}
         </div>
         <div class="text-xs font-medium text-muted-foreground">Avg TDD</div>
         <div class="text-[10px] text-muted-foreground/60">units/day</div>
@@ -268,46 +232,46 @@
     <Card class="border">
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums text-amber-600">
-          {insulinStats.basalPercent.toFixed(0)}%
+          {(insulinStats.basalPercent ?? 0).toFixed(0)}%
         </div>
         <div class="text-xs font-medium text-muted-foreground">Basal</div>
         <div class="text-[10px] text-muted-foreground/60">
-          {insulinStats.totalBasal.toFixed(1)}U total
+          {(insulinStats.totalBasal ?? 0).toFixed(1)}U total
         </div>
       </CardContent>
     </Card>
     <Card class="border">
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums text-blue-600">
-          {insulinStats.bolusPercent.toFixed(0)}%
+          {(insulinStats.bolusPercent ?? 0).toFixed(0)}%
         </div>
         <div class="text-xs font-medium text-muted-foreground">Bolus</div>
         <div class="text-[10px] text-muted-foreground/60">
-          {insulinStats.totalBolus.toFixed(1)}U total
+          {(insulinStats.totalBolus ?? 0).toFixed(1)}U total
         </div>
       </CardContent>
     </Card>
     <Card class="border">
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums">
-          {insulinStats.bolusesPerDay.toFixed(1)}
+          {(insulinStats.bolusesPerDay ?? 0).toFixed(1)}
         </div>
         <div class="text-xs font-medium text-muted-foreground">Boluses/Day</div>
         <div class="text-[10px] text-muted-foreground/60">
-          avg {insulinStats.avgBolus.toFixed(1)}U each
+          avg {(insulinStats.avgBolus ?? 0).toFixed(1)}U each
         </div>
       </CardContent>
     </Card>
     <Card class="border">
       <CardContent class="pt-6 text-center">
         <div class="text-2xl font-bold tabular-nums">
-          {insulinStats.icRatio > 0
-            ? `1:${insulinStats.icRatio.toFixed(0)}`
+          {(insulinStats.icRatio ?? 0) > 0
+            ? `1:${(insulinStats.icRatio ?? 0).toFixed(0)}`
             : "–"}
         </div>
         <div class="text-xs font-medium text-muted-foreground">Avg I:C</div>
         <div class="text-[10px] text-muted-foreground/60">
-          {insulinStats.totalCarbs.toFixed(0)}g carbs
+          {(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs
         </div>
       </CardContent>
     </Card>
@@ -323,7 +287,7 @@
       </div>
       <div>
         <h3 class={`font-semibold ${ratioAssessment.color}`}>
-          Basal/Bolus Ratio: {insulinStats.basalPercent.toFixed(0)}% / {insulinStats.bolusPercent.toFixed(
+          Basal/Bolus Ratio: {(insulinStats.basalPercent ?? 0).toFixed(0)}% / {(insulinStats.bolusPercent ?? 0).toFixed(
             0
           )}%
         </h3>
@@ -342,7 +306,7 @@
       <CardDescription>See how your insulin was split each day</CardDescription>
     </CardHeader>
     <CardContent>
-      <BasalBolusRatioChart {treatments} />
+      <BasalBolusRatioChart startDate={dateRange.from} endDate={dateRange.to} navigateOnClick />
     </CardContent>
   </Card>
 
@@ -363,7 +327,7 @@
   </Card>
 
   <!-- Bolus Breakdown -->
-  {#if insulinStats.bolusCount > 0}
+  {#if (insulinStats.bolusCount ?? 0) > 0}
     <Card class="border">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -378,7 +342,7 @@
         <div class="grid gap-4 md:grid-cols-3">
           <div class="rounded-lg border bg-card p-4 text-center">
             <div class="text-3xl font-bold text-blue-600">
-              {insulinStats.bolusCount}
+              {insulinStats.bolusCount ?? 0}
             </div>
             <div class="text-sm font-medium text-muted-foreground">
               Total Boluses
@@ -390,15 +354,15 @@
 
           <div class="rounded-lg border bg-card p-4 text-center">
             <div class="text-3xl font-bold text-green-600">
-              {insulinStats.mealBoluses}
+              {insulinStats.mealBoluses ?? 0}
             </div>
             <div class="text-sm font-medium text-muted-foreground">
               Meal Boluses
             </div>
             <div class="mt-1 text-xs text-muted-foreground/60">
-              {insulinStats.bolusCount > 0
+              {(insulinStats.bolusCount ?? 0) > 0
                 ? (
-                    (insulinStats.mealBoluses / insulinStats.bolusCount) *
+                    ((insulinStats.mealBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
                     100
                   ).toFixed(0)
                 : 0}% of boluses
@@ -407,15 +371,15 @@
 
           <div class="rounded-lg border bg-card p-4 text-center">
             <div class="text-3xl font-bold text-amber-600">
-              {insulinStats.correctionBoluses}
+              {insulinStats.correctionBoluses ?? 0}
             </div>
             <div class="text-sm font-medium text-muted-foreground">
               Correction Boluses
             </div>
             <div class="mt-1 text-xs text-muted-foreground/60">
-              {insulinStats.bolusCount > 0
+              {(insulinStats.bolusCount ?? 0) > 0
                 ? (
-                    (insulinStats.correctionBoluses / insulinStats.bolusCount) *
+                    ((insulinStats.correctionBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
                     100
                   ).toFixed(0)
                 : 0}% of boluses
@@ -427,7 +391,7 @@
         <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-4">
           <h4 class="font-medium">Bolus Pattern Insights</h4>
           <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
-            {#if insulinStats.correctionBoluses > insulinStats.mealBoluses}
+            {#if (insulinStats.correctionBoluses ?? 0) > (insulinStats.mealBoluses ?? 0)}
               <li class="flex items-start gap-2">
                 <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <span>
@@ -436,7 +400,7 @@
                 </span>
               </li>
             {/if}
-            {#if insulinStats.bolusesPerDay < 3}
+            {#if (insulinStats.bolusesPerDay ?? 0) < 3}
               <li class="flex items-start gap-2">
                 <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <span>
@@ -444,7 +408,7 @@
                   significant basal coverage.
                 </span>
               </li>
-            {:else if insulinStats.bolusesPerDay > 8}
+            {:else if (insulinStats.bolusesPerDay ?? 0) > 8}
               <li class="flex items-start gap-2">
                 <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <span>
@@ -454,15 +418,15 @@
                 </span>
               </li>
             {/if}
-            {#if insulinStats.avgBolus > 0}
+            {#if (insulinStats.avgBolus ?? 0) > 0}
               <li class="flex items-start gap-2">
                 <TrendingUp class="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
                 <span>
-                  Average bolus size of {insulinStats.avgBolus.toFixed(1)}U —
-                  {#if insulinStats.avgBolus < 2}
+                  Average bolus size of {(insulinStats.avgBolus ?? 0).toFixed(1)}U —
+                  {#if (insulinStats.avgBolus ?? 0) < 2}
                     smaller boluses may indicate frequent snacking or active
                     lifestyle.
-                  {:else if insulinStats.avgBolus > 8}
+                  {:else if (insulinStats.avgBolus ?? 0) > 8}
                     larger boluses typical for higher carb meals.
                   {:else}
                     moderate bolus sizes.
@@ -489,22 +453,22 @@
         <strong>Total Daily Dose (TDD):</strong>
         Typically ranges from 0.4-1.0 units/kg body weight for Type 1 diabetes. Your
         TDD of
-        <strong>{insulinStats.tdd.toFixed(1)}U/day</strong>
+        <strong>{(insulinStats.tdd ?? 0).toFixed(1)}U/day</strong>
         can be compared to this reference.
       </p>
       <p>
         <strong>Basal Rate Estimation:</strong>
         If your TDD is accurate, your hourly basal rate should be approximately
-        <strong>{((insulinStats.tdd * 0.5) / 24).toFixed(2)} U/hr</strong>
+        <strong>{(((insulinStats.tdd ?? 0) * 0.5) / 24).toFixed(2)} U/hr</strong>
         (using 50% basal assumption).
       </p>
       <p>
         <strong>I:C Ratio Check:</strong>
-        Your average insulin-to-carb ratio of 1:{insulinStats.icRatio.toFixed(
+        Your average insulin-to-carb ratio of 1:{(insulinStats.icRatio ?? 0).toFixed(
           0
         )}
-        {#if insulinStats.icRatio > 0}
-          means you use about 1 unit of insulin for every {insulinStats.icRatio.toFixed(
+        {#if (insulinStats.icRatio ?? 0) > 0}
+          means you use about 1 unit of insulin for every {(insulinStats.icRatio ?? 0).toFixed(
             0
           )} grams of carbs.
         {/if}

@@ -792,6 +792,7 @@ msgstr "Décembre"
 msgid "Calendar"
 msgstr "Calendrier"
 
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/layout/ReportsFilterSidebar.svelte
 #: src/lib/components/ui/date-range-picker.svelte
 #: src/routes/calendar/+page.svelte
@@ -833,7 +834,6 @@ msgstr "Dans la plage"
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "Low"
 msgstr "Bas"
 
@@ -855,7 +855,6 @@ msgstr "Bas"
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "High"
 msgstr "Élevé"
 
@@ -992,7 +991,7 @@ msgid "Insulin:"
 msgstr "Insuline :"
 
 #. placeholder {0}: marker.insulin.toFixed(1)
-#. placeholder {0}: ( chartData.reduce((sum, d) => sum + d.total, 0) / chartData.length ).toFixed(1)
+#. placeholder {0}: averageTdd.toFixed(1)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.basal)
 #. placeholder {0}: formatInsulinDisplay((treatmentSummary?.totals?.insulin?.bolus ?? 0) + (treatmentSummary?.totals?.insulin?.basal ?? 0))
@@ -1188,6 +1187,7 @@ msgstr "Erreur de comparaison"
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/dashboard/widgets/BgDeltaWidget.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
@@ -1851,6 +1851,7 @@ msgid "Total: {0}g carbs"
 msgstr "Total : {0} g de glucides"
 
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/QuickPickItem.svelte
@@ -2438,7 +2439,7 @@ msgid "Try again"
 msgstr "Réessayer"
 
 #. placeholder {0}: dailyStats.readings
-#. placeholder {0}: tirData.total
+#. placeholder {0}: totalReadings.toLocaleString()
 #. placeholder {0}: entries.length.toLocaleString()
 #. placeholder {0}: readings.length
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
@@ -2697,7 +2698,6 @@ msgid "Default"
 msgstr "Par défaut"
 
 #: src/routes/profile/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "<0/> Edit"
 msgstr "<0/> Modifier"
 
@@ -3159,7 +3159,7 @@ msgstr "Erreur lors du chargement des traitements récents."
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: foodCarbs
-#. placeholder {0}: insulinStats.totalCarbs.toFixed(0)
+#. placeholder {0}: (insulinStats.totalCarbs ?? 0).toFixed(0)
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -3182,6 +3182,7 @@ msgstr "Aucun traitement récent"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
@@ -3286,6 +3287,7 @@ msgstr "Glycémie"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -3453,12 +3455,16 @@ msgid "No unit found."
 msgstr "Aucune unité trouvée."
 
 #. placeholder {0}: thresholds.high
+#. placeholder {0}: bgLabel()
 #: src/lib/components/glucose-chart/GlucoseChart.svelte
+#: src/routes/settings/profile/+page.svelte
 msgid "High ({0})"
 msgstr "Élevé ({0})"
 
 #. placeholder {0}: thresholds.low
+#. placeholder {0}: bgLabel()
 #: src/lib/components/glucose-chart/GlucoseChart.svelte
+#: src/routes/settings/profile/+page.svelte
 msgid "Low ({0})"
 msgstr "Bas ({0})"
 
@@ -3506,6 +3512,7 @@ msgstr "Analyse basale"
 msgid "Day in Review"
 msgstr "Résumé du jour"
 
+#: src/lib/components/dashboard/widgets/ClockWidget.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "Clock"
 msgstr "Horloge"
@@ -8508,7 +8515,7 @@ msgstr "Analyse complète de vos schémas d'insuline basale et bolus"
 msgid "Basal Analysis <0/>"
 msgstr "Analyse basale <0/>"
 
-#. placeholder {0}: insulinStats.bolusCount + insulinStats.basalCount
+#. placeholder {0}: (insulinStats.bolusCount ?? 0) + (insulinStats.basalCount ?? 0)
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "{0} insulin events"
 msgstr "{0} événements d'insuline"
@@ -8541,8 +8548,8 @@ msgstr "Un partage typique est d'environ 50/50, mais cela peut varier selon l'al
 msgid "units/day"
 msgstr "unités/jour"
 
-#. placeholder {0}: insulinStats.totalBasal.toFixed(1)
-#. placeholder {0}: insulinStats.totalBolus.toFixed(1)
+#. placeholder {0}: (insulinStats.totalBasal ?? 0).toFixed(1)
+#. placeholder {0}: (insulinStats.totalBolus ?? 0).toFixed(1)
 #: src/routes/reports/insulin-delivery/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "{0}U total"
@@ -8552,7 +8559,7 @@ msgstr "{0} U au total"
 msgid "Boluses/Day"
 msgstr "Bolus/jour"
 
-#. placeholder {0}: insulinStats.avgBolus.toFixed(1)
+#. placeholder {0}: (insulinStats.avgBolus ?? 0).toFixed(1)
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "avg {0}U each"
 msgstr "en moyenne {0} U chacun"
@@ -8561,8 +8568,8 @@ msgstr "en moyenne {0} U chacun"
 msgid "Avg I:C"
 msgstr "Ratio glucides/insuline moyen"
 
-#. placeholder {0}: insulinStats.basalPercent.toFixed(0)
-#. placeholder {1}: insulinStats.bolusPercent.toFixed( 0 )
+#. placeholder {0}: (insulinStats.basalPercent ?? 0).toFixed(0)
+#. placeholder {1}: (insulinStats.bolusPercent ?? 0).toFixed( 0 )
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "Basal/Bolus Ratio: {0}% / {1}%"
 msgstr "Ratio basal/bolus : {0}% / {1}%"
@@ -8604,8 +8611,8 @@ msgstr "Sur {0} jours"
 msgid "Meal Boluses"
 msgstr "Bolus repas"
 
-#. placeholder {0}: insulinStats.bolusCount > 0 ? ( (insulinStats.mealBoluses / insulinStats.bolusCount) * 100 ).toFixed(0) : 0
-#. placeholder {0}: insulinStats.bolusCount > 0 ? ( (insulinStats.correctionBoluses / insulinStats.bolusCount) * 100 ).toFixed(0) : 0
+#. placeholder {0}: (insulinStats.bolusCount ?? 0) > 0 ? ( ((insulinStats.mealBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) * 100 ).toFixed(0) : 0
+#. placeholder {0}: (insulinStats.bolusCount ?? 0) > 0 ? ( ((insulinStats.correctionBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) * 100 ).toFixed(0) : 0
 #: src/routes/reports/insulin-delivery/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "{0}% of boluses"
@@ -8652,7 +8659,7 @@ msgstr "Des bolus plus importants typiques des repas riches en glucides."
 msgid "moderate bolus sizes."
 msgstr "Tailles de bolus modérées."
 
-#. placeholder {0}: insulinStats.avgBolus.toFixed(1)
+#. placeholder {0}: (insulinStats.avgBolus ?? 0).toFixed(1)
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "Average bolus size of {0}U — <0/>"
 msgstr "Taille moyenne de bolus de {0} U — <0/>"
@@ -8673,12 +8680,12 @@ msgstr "<0>Dose quotidienne totale (DDT) :</0> En général entre 0,4 et 1,0 uni
 msgid "<0>Basal Rate Estimation:</0> If your TDD is accurate, your hourly basal rate should be approximately <1>{0} U/hr</1> (using 50% basal assumption)."
 msgstr "<0>Estimation du débit basal :</0> Si votre DDT est exact, votre débit basal horaire devrait être d'environ <1>{0} U/h</1> (en supposant 50 % de basal)."
 
-#. placeholder {0}: insulinStats.icRatio.toFixed( 0 )
+#. placeholder {0}: (insulinStats.icRatio ?? 0).toFixed( 0 )
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "means you use about 1 unit of insulin for every {0} grams of carbs."
 msgstr "signifie que vous utilisez environ 1 unité d'insuline pour {0} grammes de glucides."
 
-#. placeholder {0}: insulinStats.icRatio.toFixed( 0 )
+#. placeholder {0}: (insulinStats.icRatio ?? 0).toFixed( 0 )
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "<0>I:C Ratio Check:</0> Your average insulin-to-carb ratio of 1:{0} <1/>"
 msgstr "<0>Vérification du ratio I:C :</0> Votre ratio moyen insuline/glucides est de 1 : {0} <1/>"
@@ -11136,6 +11143,7 @@ msgid "<0/> {0} ({1}% CV)"
 msgstr "<0/> {0} ({1}% CV)"
 
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 msgid "No data today"
 msgstr "Pas de données aujourd'hui"
 
@@ -11453,30 +11461,20 @@ msgstr "Pas de repas récents"
 msgid "Last 24h"
 msgstr "Dernières 24 heures"
 
-#. placeholder {0}: tirData.severeLow.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "Severe Low: {0}%"
-msgstr "Hypo sévère : {0}%"
+#~ msgid "Severe Low: {0}%"
+#~ msgstr "Hypo sévère : {0}%"
 
-#. placeholder {0}: tirData.low.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "Low: {0}%"
-msgstr "Hypo : {0}%"
+#~ msgid "Low: {0}%"
+#~ msgstr "Hypo : {0}%"
 
-#. placeholder {0}: tirData.inRange.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "In Range: {0}%"
-msgstr "Dans la cible : {0}%"
+#~ msgid "In Range: {0}%"
+#~ msgstr "Dans la cible : {0}%"
 
-#. placeholder {0}: tirData.high.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "High: {0}%"
-msgstr "Hyper : {0}%"
+#~ msgid "High: {0}%"
+#~ msgstr "Hyper : {0}%"
 
-#. placeholder {0}: tirData.severeHigh.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "Severe High: {0}%"
-msgstr "Hyper sévère : {0}%"
+#~ msgid "Severe High: {0}%"
+#~ msgstr "Hyper sévère : {0}%"
 
 #. placeholder {0}: profile.name
 #: src/lib/components/settings/alarm-preview/AlarmActiveView.svelte
@@ -12980,6 +12978,7 @@ msgid "Failed to generate configuration"
 msgstr ""
 
 #: src/routes/download/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "<0/> Back to connectors"
 msgstr ""
 
@@ -13666,9 +13665,8 @@ msgstr ""
 msgid "<0/> Update Credentials"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Back to Services"
-msgstr ""
+#~ msgid "<0/> Back to Services"
+#~ msgstr ""
 
 #: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "No Runtime Configuration Available"
@@ -13794,13 +13792,11 @@ msgstr ""
 msgid "Failed to dismiss meal match"
 msgstr ""
 
-#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
-msgid "Review Meal Match"
-msgstr ""
+#~ msgid "Review Meal Match"
+#~ msgstr ""
 
-#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
-msgid "Confirm when you ate this food and adjust the carbs if needed."
-msgstr ""
+#~ msgid "Confirm when you ate this food and adjust the carbs if needed."
+#~ msgstr ""
 
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/routes/meals/+page.svelte
@@ -13938,4 +13934,83 @@ msgstr ""
 #. placeholder {0}: bolusDateDisplay
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 msgid "Bolus time ({0})"
+msgstr ""
+
+#. placeholder {0}: foodName
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Confirm \"{0}\""
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "When did you eat this, and how much?"
+msgstr ""
+
+#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+msgid "<0/> vs 90d"
+msgstr ""
+
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "Total Daily Dose"
+msgstr ""
+
+#~ msgid "<0/> Bolus"
+#~ msgstr ""
+
+#~ msgid "{0}U <0/>"
+#~ msgstr ""
+
+#~ msgid "<0/> Basal"
+#~ msgstr ""
+
+#~ msgid "No insulin data today"
+#~ msgstr ""
+
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+msgid "Failed to load data"
+msgstr ""
+
+#~ msgid "Bolus: {0}U ({1}%)"
+#~ msgstr ""
+
+#~ msgid "Basal: {0}U ({1}%)"
+#~ msgstr ""
+
+#. placeholder {0}: bolus.toFixed(1)
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "<0/> Bolus {0}U"
+msgstr ""
+
+#. placeholder {0}: basal.toFixed(1)
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "<0/> Basal {0}U"
+msgstr ""
+
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "No insulin"
+msgstr ""
+
+#. placeholder {0}: carbs.toFixed(0)
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "<0/> Carbs {0}g"
+msgstr ""
+
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "No data for 90-day average"
+msgstr ""
+
+#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+msgid "No 90-day data available"
+msgstr ""
+
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+msgid "Click on a bar to view the day in detail"
+msgstr ""
+
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+msgid "Loading data..."
+msgstr ""
+
+#: src/lib/components/reports/BasalRatePercentileChart.svelte
+msgid "Loading basal data..."
 msgstr ""

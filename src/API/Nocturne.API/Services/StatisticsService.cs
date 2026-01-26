@@ -1675,6 +1675,411 @@ public class StatisticsService : IStatisticsService
         return BolusTreatmentTypes.Contains(treatment.EventType, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Calculate comprehensive insulin delivery statistics for a date range
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze</param>
+    /// <param name="startDate">Start of the analysis period</param>
+    /// <param name="endDate">End of the analysis period</param>
+    /// <returns>Comprehensive insulin delivery statistics</returns>
+    public InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
+        IEnumerable<Treatment> treatments,
+        DateTime startDate,
+        DateTime endDate
+    )
+    {
+        var treatmentsList = treatments.ToList();
+
+        // Calculate day count (minimum 1 to avoid division by zero)
+        var dayCount = Math.Max(1, (int)Math.Round((endDate - startDate).TotalDays));
+
+        // Initialize counters
+        double totalBolus = 0;
+        double totalBasal = 0;
+        double totalCarbs = 0;
+        int bolusCount = 0;
+        int basalCount = 0;
+        int mealBoluses = 0;
+        int correctionBoluses = 0;
+        int carbCount = 0;
+        int carbBolusCount = 0;
+
+        foreach (var treatment in treatmentsList)
+        {
+            var eventType = treatment.EventType?.ToLower() ?? "";
+            var isBolus = IsBolusTreatment(treatment);
+
+            // Count and sum insulin
+            if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0)
+            {
+                if (isBolus)
+                {
+                    totalBolus += treatment.Insulin.Value;
+                    bolusCount++;
+
+                    // Categorize bolus type
+                    if (eventType.Contains("meal") || eventType.Contains("snack"))
+                    {
+                        mealBoluses++;
+                    }
+                    else if (eventType.Contains("correction") && !eventType.Contains("smb"))
+                    {
+                        correctionBoluses++;
+                    }
+                }
+                else
+                {
+                    totalBasal += treatment.Insulin.Value;
+                    basalCount++;
+                }
+            }
+            // Fallback: Calculate basal from rate × duration for legacy data
+            else if (
+                treatment.Rate.HasValue
+                && treatment.Duration.HasValue
+                && !isBolus
+            )
+            {
+                var basalInsulin = (treatment.Rate.Value * treatment.Duration.Value) / 60.0;
+                if (basalInsulin > 0)
+                {
+                    totalBasal += basalInsulin;
+                    basalCount++;
+                }
+            }
+
+            // Count carbs
+            if (treatment.Carbs.HasValue && treatment.Carbs.Value > 0)
+            {
+                totalCarbs += treatment.Carbs.Value;
+                carbCount++;
+
+                // Check if this treatment also has a bolus
+                if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0 && isBolus)
+                {
+                    carbBolusCount++;
+                }
+            }
+        }
+
+        var totalInsulin = totalBolus + totalBasal;
+
+        // Calculate percentages
+        var basalPercent = totalInsulin > 0 ? (totalBasal / totalInsulin) * 100 : 0;
+        var bolusPercent = totalInsulin > 0 ? (totalBolus / totalInsulin) * 100 : 0;
+
+        // Calculate daily averages
+        var tdd = totalInsulin / dayCount;
+        var avgBolus = bolusCount > 0 ? totalBolus / bolusCount : 0;
+        var bolusesPerDay = (double)bolusCount / dayCount;
+
+        // Calculate I:C ratio (grams of carbs per unit of bolus insulin)
+        var icRatio = totalBolus > 0 ? totalCarbs / totalBolus : 0;
+
+        return new InsulinDeliveryStatistics
+        {
+            TotalBolus = Math.Round(totalBolus * 100) / 100,
+            TotalBasal = Math.Round(totalBasal * 100) / 100,
+            TotalInsulin = Math.Round(totalInsulin * 100) / 100,
+            TotalCarbs = Math.Round(totalCarbs * 10) / 10,
+            BolusCount = bolusCount,
+            BasalCount = basalCount,
+            BasalPercent = Math.Round(basalPercent * 10) / 10,
+            BolusPercent = Math.Round(bolusPercent * 10) / 10,
+            Tdd = Math.Round(tdd * 10) / 10,
+            AvgBolus = Math.Round(avgBolus * 100) / 100,
+            MealBoluses = mealBoluses,
+            CorrectionBoluses = correctionBoluses,
+            IcRatio = Math.Round(icRatio * 10) / 10,
+            BolusesPerDay = Math.Round(bolusesPerDay * 10) / 10,
+            DayCount = dayCount,
+            StartDate = startDate.ToString("yyyy-MM-dd"),
+            EndDate = endDate.ToString("yyyy-MM-dd"),
+            CarbCount = carbCount,
+            CarbBolusCount = carbBolusCount,
+        };
+    }
+
+    /// <summary>
+    /// Calculate daily basal/bolus ratio breakdown for chart rendering
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze</param>
+    /// <returns>Daily breakdown with averages and summary statistics</returns>
+    public DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(IEnumerable<Treatment> treatments)
+    {
+        var treatmentsList = treatments.ToList();
+        var dailyData = new Dictionary<string, (double Basal, double Bolus)>();
+
+        foreach (var treatment in treatmentsList)
+        {
+            // Get the date from the treatment
+            DateTime date;
+            if (treatment.Mills > 0)
+            {
+                date = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).DateTime;
+            }
+            else if (treatment.Date.HasValue)
+            {
+                date = treatment.Date.Value;
+            }
+            else if (treatment.Created_at.HasValue)
+            {
+                date = treatment.Created_at.Value;
+            }
+            else if (!string.IsNullOrEmpty(treatment.EventTime))
+            {
+                if (!DateTime.TryParse(treatment.EventTime, out date))
+                    continue;
+            }
+            else
+            {
+                continue;
+            }
+
+            var dateKey = date.ToString("yyyy-MM-dd");
+
+            if (!dailyData.ContainsKey(dateKey))
+            {
+                dailyData[dateKey] = (0, 0);
+            }
+
+            var (currentBasal, currentBolus) = dailyData[dateKey];
+
+            if (IsBolusTreatment(treatment))
+            {
+                // Bolus treatment - add insulin amount
+                if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0)
+                {
+                    dailyData[dateKey] = (currentBasal, currentBolus + treatment.Insulin.Value);
+                }
+            }
+            else
+            {
+                // Basal treatment - calculate from rate × duration or use insulin value
+                double basalInsulin = 0;
+
+                if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0)
+                {
+                    basalInsulin = treatment.Insulin.Value;
+                }
+                else if (treatment.Rate.HasValue && treatment.Duration.HasValue)
+                {
+                    // Rate is U/hr, Duration is in minutes
+                    basalInsulin = (treatment.Rate.Value * treatment.Duration.Value) / 60.0;
+                }
+                else if (treatment.Absolute.HasValue && treatment.Duration.HasValue)
+                {
+                    // Absolute rate is U/hr, Duration is in minutes
+                    basalInsulin = (treatment.Absolute.Value * treatment.Duration.Value) / 60.0;
+                }
+
+                if (basalInsulin > 0)
+                {
+                    dailyData[dateKey] = (currentBasal + basalInsulin, currentBolus);
+                }
+            }
+        }
+
+        // Convert to sorted list of DailyBasalBolusRatioData
+        var sortedDates = dailyData.Keys.OrderBy(d => d).ToList();
+        var result = new DailyBasalBolusRatioResponse
+        {
+            DailyData = new List<DailyBasalBolusRatioData>(),
+            DayCount = sortedDates.Count,
+        };
+
+        double totalBasal = 0;
+        double totalBolus = 0;
+
+        foreach (var dateKey in sortedDates)
+        {
+            var (basal, bolus) = dailyData[dateKey];
+            var total = basal + bolus;
+            var basalPercent = total > 0 ? (basal / total) * 100 : 0;
+            var bolusPercent = total > 0 ? (bolus / total) * 100 : 0;
+
+            // Format display date (e.g., "Jan 15")
+            var dateParsed = DateTime.Parse(dateKey);
+            var displayDate = dateParsed.ToString("MMM d");
+
+            result.DailyData.Add(new DailyBasalBolusRatioData
+            {
+                Date = dateKey,
+                DisplayDate = displayDate,
+                Basal = Math.Round(basal * 100) / 100,
+                Bolus = Math.Round(bolus * 100) / 100,
+                Total = Math.Round(total * 100) / 100,
+                BasalPercent = Math.Round(basalPercent * 10) / 10,
+                BolusPercent = Math.Round(bolusPercent * 10) / 10,
+            });
+
+            totalBasal += basal;
+            totalBolus += bolus;
+        }
+
+        // Calculate averages
+        var grandTotal = totalBasal + totalBolus;
+        result.AverageBasalPercent = grandTotal > 0
+            ? Math.Round((totalBasal / grandTotal) * 100 * 10) / 10
+            : 0;
+        result.AverageBolusPercent = grandTotal > 0
+            ? Math.Round((totalBolus / grandTotal) * 100 * 10) / 10
+            : 0;
+        result.AverageTdd = result.DayCount > 0
+            ? Math.Round((grandTotal / result.DayCount) * 10) / 10
+            : 0;
+
+        return result;
+    }
+
+    /// <summary>
+    /// Calculate comprehensive basal analysis statistics including percentiles
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze</param>
+    /// <param name="startDate">Start date of the analysis period</param>
+    /// <param name="endDate">End date of the analysis period</param>
+    /// <returns>Comprehensive basal analysis with stats, temp basal info, and hourly percentiles</returns>
+    public BasalAnalysisResponse CalculateBasalAnalysis(IEnumerable<Treatment> treatments, DateTime startDate, DateTime endDate)
+    {
+        var treatmentsList = treatments.ToList();
+        var dayCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalDays));
+
+        // Filter to basal-related treatments
+        var basalTreatments = treatmentsList.Where(t =>
+        {
+            var eventType = t.EventType?.ToLowerInvariant() ?? string.Empty;
+            return eventType.Contains("basal") ||
+                   eventType == "tempbasal" ||
+                   eventType == "temp basal" ||
+                   t.Rate.HasValue ||
+                   t.Absolute.HasValue;
+        }).ToList();
+
+        // Calculate basic basal stats
+        var rates = basalTreatments
+            .Select(t => t.Rate ?? t.Absolute ?? 0)
+            .Where(r => r > 0)
+            .ToList();
+
+        var basalStats = new BasalStats
+        {
+            Count = basalTreatments.Count,
+            AvgRate = rates.Count > 0 ? Math.Round(rates.Average() * 100) / 100 : 0,
+            MinRate = rates.Count > 0 ? Math.Round(rates.Min() * 100) / 100 : 0,
+            MaxRate = rates.Count > 0 ? Math.Round(rates.Max() * 100) / 100 : 0,
+            TotalDelivered = Math.Round(basalTreatments.Sum(t =>
+            {
+                var rate = t.Rate ?? t.Absolute ?? 0;
+                var duration = t.Duration ?? 0;
+                return (rate * duration) / 60.0;
+            }) * 100) / 100
+        };
+
+        // Calculate temp basal info
+        var tempBasals = treatmentsList.Where(t =>
+        {
+            var eventType = t.EventType?.ToLowerInvariant() ?? string.Empty;
+            return eventType.Contains("temp") || eventType == "tempbasal";
+        }).ToList();
+
+        var highTemps = tempBasals.Count(t => (t.Percent ?? 100) > 100);
+        var lowTemps = tempBasals.Count(t => (t.Percent ?? 100) < 100);
+        var zeroTemps = tempBasals.Count(t =>
+            (t.Rate ?? t.Absolute ?? 0) == 0 || (t.Percent ?? 100) == 0);
+
+        var tempBasalInfo = new TempBasalInfo
+        {
+            Total = tempBasals.Count,
+            PerDay = Math.Round((double)tempBasals.Count / dayCount * 10) / 10,
+            HighTemps = highTemps,
+            LowTemps = lowTemps,
+            ZeroTemps = zeroTemps
+        };
+
+        // Calculate hourly percentiles
+        var hourlyRates = new Dictionary<int, List<double>>();
+        for (var h = 0; h < 24; h++)
+        {
+            hourlyRates[h] = new List<double>();
+        }
+
+        foreach (var treatment in basalTreatments)
+        {
+            DateTime date;
+            if (treatment.Mills > 0)
+            {
+                date = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).DateTime;
+            }
+            else if (treatment.Date.HasValue)
+            {
+                date = treatment.Date.Value;
+            }
+            else if (treatment.Created_at.HasValue)
+            {
+                date = treatment.Created_at.Value;
+            }
+            else if (!string.IsNullOrEmpty(treatment.EventTime))
+            {
+                if (!DateTime.TryParse(treatment.EventTime, out date))
+                    continue;
+            }
+            else
+            {
+                continue;
+            }
+
+            var hour = date.Hour;
+            var rate = treatment.Rate ?? treatment.Absolute ?? 0;
+
+            if (rate > 0)
+            {
+                hourlyRates[hour].Add(rate);
+            }
+        }
+
+        var hourlyPercentiles = new List<HourlyBasalPercentileData>();
+        for (var hour = 0; hour < 24; hour++)
+        {
+            var hourRates = hourlyRates[hour];
+            if (hourRates.Count > 0)
+            {
+                hourlyPercentiles.Add(new HourlyBasalPercentileData
+                {
+                    Hour = hour,
+                    P10 = Math.Round(CalculatePercentile(hourRates, 10) * 100) / 100,
+                    P25 = Math.Round(CalculatePercentile(hourRates, 25) * 100) / 100,
+                    Median = Math.Round(CalculatePercentile(hourRates, 50) * 100) / 100,
+                    P75 = Math.Round(CalculatePercentile(hourRates, 75) * 100) / 100,
+                    P90 = Math.Round(CalculatePercentile(hourRates, 90) * 100) / 100,
+                    Count = hourRates.Count
+                });
+            }
+            else
+            {
+                hourlyPercentiles.Add(new HourlyBasalPercentileData
+                {
+                    Hour = hour,
+                    P10 = 0,
+                    P25 = 0,
+                    Median = 0,
+                    P75 = 0,
+                    P90 = 0,
+                    Count = 0
+                });
+            }
+        }
+
+        return new BasalAnalysisResponse
+        {
+            Stats = basalStats,
+            TempBasalInfo = tempBasalInfo,
+            HourlyPercentiles = hourlyPercentiles,
+            DayCount = dayCount,
+            StartDate = startDate.ToString("yyyy-MM-dd"),
+            EndDate = endDate.ToString("yyyy-MM-dd")
+        };
+    }
+
     #endregion
 
     #region Formatting Utilities

@@ -1,145 +1,65 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { BarChart } from "layerchart";
-  import type { Treatment } from "$lib/api";
+  import type { DailyBasalBolusRatioResponse, DailyBasalBolusRatioData } from "$lib/api";
+  import { getDailyBasalBolusRatios } from "$lib/data/statistics.remote";
   import { PieChart } from "lucide-svelte";
-
-  interface DailyRatioData {
-    date: string;
-    displayDate: string;
-    basal: number;
-    bolus: number;
-    total: number;
-    basalPercent: number;
-    bolusPercent: number;
-  }
+  import { resource } from "runed";
 
   interface Props {
-    treatments: Treatment[];
+    /** Start date for fetching data (ISO string or Date) */
+    startDate: string | Date;
+    /** End date for fetching data (ISO string or Date) */
+    endDate: string | Date;
+    /** When true, clicking a bar navigates to the day-in-review page for that date */
+    navigateOnClick?: boolean;
   }
 
-  let { treatments }: Props = $props();
+  let { startDate, endDate, navigateOnClick = false }: Props = $props();
 
-  // Check if a treatment is a bolus type
-  function isBolusTreatment(treatment: Treatment): boolean {
-    // Primary check: has insulin and not a basal type
-    if (treatment.insulin !== undefined && treatment.insulin > 0) {
-      const eventType = treatment.eventType?.toLowerCase() || "";
-      // Only exclude if explicitly basal
-      if (!eventType.includes("basal") && !eventType.includes("temp")) {
-        return true;
-      }
-    }
-    // Secondary check: eventType indicates bolus
-    const eventType = treatment.eventType?.toLowerCase() || "";
-    return (
-      eventType.includes("bolus") ||
-      eventType.includes("correction") ||
-      eventType.includes("smb")
-    );
-  }
-
-  // Check if a treatment is a basal type
-  function isBasalTreatment(treatment: Treatment): boolean {
-    const eventType = treatment.eventType?.toLowerCase() || "";
-    return (
-      eventType.includes("basal") ||
-      eventType === "tempbasal" ||
-      eventType === "temp basal" ||
-      treatment.rate !== undefined ||
-      treatment.absolute !== undefined
-    );
-  }
-
-  // Calculate basal insulin delivered from a temp basal treatment
-  function getBasalInsulin(treatment: Treatment): number {
-    // For temp basals, calculate insulin based on rate and duration
-    const rate = treatment.rate ?? treatment.absolute ?? 0;
-    const duration = treatment.duration ?? 0;
-    if (rate > 0 && duration > 0) {
-      return (rate * duration) / 60; // Convert rate (U/hr) * duration (min) to units
-    }
-    return 0;
-  }
-
-  // Process treatments to get daily basal/bolus ratios
-  function processTreatments(treatments: Treatment[]): DailyRatioData[] {
-    const dailyData: Map<string, { basal: number; bolus: number }> = new Map();
-
-    for (const treatment of treatments) {
-      const date = new Date(
-        treatment.created_at ??
-          treatment.eventTime ??
-          treatment.mills ??
-          Date.now()
-      );
-      if (isNaN(date.getTime())) continue;
-
-      const dateKey = date.toISOString().split("T")[0];
-
-      if (!dailyData.has(dateKey)) {
-        dailyData.set(dateKey, { basal: 0, bolus: 0 });
-      }
-
-      const dayData = dailyData.get(dateKey)!;
-
-      if (isBolusTreatment(treatment)) {
-        dayData.bolus += treatment.insulin ?? 0;
-      } else if (isBasalTreatment(treatment)) {
-        dayData.basal += getBasalInsulin(treatment);
-      }
-    }
-
-    // Convert to array and sort by date
-    const result: DailyRatioData[] = [];
-    const sortedDates = Array.from(dailyData.keys()).sort();
-
-    for (const dateKey of sortedDates) {
-      const dayData = dailyData.get(dateKey)!;
-      const total = dayData.basal + dayData.bolus;
-      const basalPercent = total > 0 ? (dayData.basal / total) * 100 : 0;
-      const bolusPercent = total > 0 ? (dayData.bolus / total) * 100 : 0;
-
-      result.push({
-        date: dateKey,
-        displayDate: new Date(dateKey).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        }),
-        basal: dayData.basal,
-        bolus: dayData.bolus,
-        total,
-        basalPercent,
-        bolusPercent,
-      });
-    }
-
-    return result;
-  }
-
-  // Use derived values instead of effect to avoid infinite loops
-  const chartData = $derived(
-    treatments && treatments.length > 0 ? processTreatments(treatments) : []
+  // Normalize dates to ISO strings
+  const startDateString = $derived(
+    typeof startDate === "string" ? startDate : startDate.toISOString()
+  );
+  const endDateString = $derived(
+    typeof endDate === "string" ? endDate : endDate.toISOString()
   );
 
-  const averageBasalPercent = $derived.by(() => {
-    if (chartData.length === 0) return 0;
-    const totalBasal = chartData.reduce((sum, d) => sum + d.basal, 0);
-    const totalBolus = chartData.reduce((sum, d) => sum + d.bolus, 0);
-    const grandTotal = totalBasal + totalBolus;
-    return grandTotal > 0 ? (totalBasal / grandTotal) * 100 : 0;
-  });
+  // Fetch data from backend
+  const ratioResource = resource(
+    () => ({ startDate: startDateString, endDate: endDateString }),
+    async ({ startDate, endDate }) => {
+      return await getDailyBasalBolusRatios({ startDate, endDate });
+    },
+    { debounce: 100 }
+  );
 
-  const averageBolusPercent = $derived.by(() => {
-    if (chartData.length === 0) return 0;
-    const totalBasal = chartData.reduce((sum, d) => sum + d.basal, 0);
-    const totalBolus = chartData.reduce((sum, d) => sum + d.bolus, 0);
-    const grandTotal = totalBasal + totalBolus;
-    return grandTotal > 0 ? (totalBolus / grandTotal) * 100 : 0;
-  });
+  // Extract data from resource
+  const ratioData = $derived(ratioResource.current as DailyBasalBolusRatioResponse | null);
+  const chartData = $derived(ratioData?.dailyData ?? []);
+  const averageBasalPercent = $derived(ratioData?.averageBasalPercent ?? 0);
+  const averageBolusPercent = $derived(ratioData?.averageBolusPercent ?? 0);
+  const averageTdd = $derived(ratioData?.averageTdd ?? 0);
+  const dayCount = $derived(ratioData?.dayCount ?? 0);
+
+  function handleBarClick(data: DailyBasalBolusRatioData) {
+    if (navigateOnClick && data.date) {
+      goto(`/reports/day-in-review?date=${data.date}`);
+    }
+  }
 </script>
 
 <div class="w-full">
-  {#if chartData.length > 0 && chartData.some((d) => d.total > 0)}
+  {#if ratioResource.loading}
+    <div
+      class="flex h-[350px] w-full items-center justify-center text-muted-foreground"
+    >
+      <div class="text-center">
+        <div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+        <p class="mt-2 font-medium">Loading data...</p>
+      </div>
+    </div>
+  {:else if chartData.length > 0 && chartData.some((d) => d.total > 0)}
     <!-- Summary Cards -->
     <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
       <div class="rounded-lg border bg-card p-4 text-center">
@@ -156,20 +76,18 @@
       </div>
       <div class="rounded-lg border bg-card p-4 text-center">
         <div class="text-2xl font-bold">
-          {(
-            chartData.reduce((sum, d) => sum + d.total, 0) / chartData.length
-          ).toFixed(1)}U
+          {averageTdd.toFixed(1)}U
         </div>
         <div class="text-xs font-medium text-muted-foreground">Avg TDD</div>
       </div>
       <div class="rounded-lg border bg-card p-4 text-center">
-        <div class="text-2xl font-bold">{chartData.length}</div>
+        <div class="text-2xl font-bold">{dayCount}</div>
         <div class="text-xs font-medium text-muted-foreground">Days</div>
       </div>
     </div>
 
     <!-- Stacked Bar Chart -->
-    <div class="h-[300px] w-full">
+    <div class="h-[300px] w-full" class:cursor-pointer={navigateOnClick}>
       <BarChart
         data={chartData}
         x="displayDate"
@@ -199,8 +117,17 @@
           },
         }}
         padding={{ top: 20, right: 20, bottom: 50, left: 50 }}
+        onbarclick={navigateOnClick
+          ? (e, { data }) => handleBarClick(data as DailyBasalBolusRatioData)
+          : undefined}
       />
     </div>
+
+    {#if navigateOnClick}
+      <p class="mt-2 text-center text-xs text-muted-foreground">
+        Click on a bar to view the day in detail
+      </p>
+    {/if}
 
     <!-- Ideal ratio guidance -->
     <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-3">

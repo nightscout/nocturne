@@ -103,7 +103,7 @@ public class MetadataController : ControllerBase
         {
             Id = WidgetId.BgDelta,
             Name = "BG Delta",
-            Description = "Blood glucose change since last reading",
+            Description = "Blood glucose change with connection status and last updated time",
             DefaultEnabled = true,
             Icon = "TrendingUp",
             UICategory = WidgetUICategory.Glucose,
@@ -166,6 +166,26 @@ public class MetadataController : ControllerBase
             Description = "Today's glucose statistics overview",
             DefaultEnabled = false,
             Icon = "CalendarDays",
+            UICategory = WidgetUICategory.Glucose,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.Clock,
+            Name = "Clock",
+            Description = "Current time and date display",
+            DefaultEnabled = false,
+            Icon = "Clock",
+            UICategory = WidgetUICategory.Status,
+            Placement = WidgetPlacement.Top,
+        },
+        new()
+        {
+            Id = WidgetId.Tdd,
+            Name = "Total Daily Dose",
+            Description = "Today's insulin with basal/bolus breakdown",
+            DefaultEnabled = true,
+            Icon = "PieChart",
             UICategory = WidgetUICategory.Glucose,
             Placement = WidgetPlacement.Top,
         },

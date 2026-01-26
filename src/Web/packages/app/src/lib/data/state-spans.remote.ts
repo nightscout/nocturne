@@ -249,23 +249,6 @@ export const getChartStateData = query(stateDataSchema, async ({ startTime, endT
 			color: getSystemEventColor(event.eventType ?? SystemEventType.Info),
 		}));
 
-		// ============================================================
-		// TODO: DELETE THIS TEST DATA BLOCK AFTER TESTING
-		// ============================================================
-		const testData = generateTestStateSpans(startTime, endTime);
-
-		return {
-			pumpModeSpans: [...processedPumpModes, ...testData.pumpModeSpans],
-			connectivitySpans: processedConnectivity,
-			tempBasalSpans: [...processedTempBasals, ...testData.tempBasalSpans],
-			overrideSpans: [...processedOverrides, ...testData.overrideSpans],
-			profileSpans: [...processedProfiles, ...testData.profileSpans],
-			activitySpans: [...processedActivities, ...testData.activitySpans],
-			systemEvents: processedEvents,
-		} satisfies ChartStateData;
-		// ============================================================
-		// END TEST DATA BLOCK
-		// ============================================================
 	} catch (err) {
 		console.error('Error loading state data:', err);
 		throw error(500, 'Failed to load state data');

@@ -903,14 +903,15 @@ public class DataSourceService : IDataSourceService
                 deviceId
             );
 
-            // Delete directly using the connector's device ID
+            // Delete using the connector's data source ID
             // This avoids the 30-day lookback window limitation in GetActiveDataSourcesAsync
+            // Use DataSource field which is what connectors use to identify their data
             var entriesDeleted = await _context
-                .Entries.Where(e => e.Device == deviceId)
+                .Entries.Where(e => e.DataSource == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var treatmentsDeleted = await _context
-                .Treatments.Where(t => t.EnteredBy == deviceId)
+                .Treatments.Where(t => t.DataSource == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deviceStatusDeleted = await _context

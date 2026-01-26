@@ -226,6 +226,22 @@ export class WebSocketClient {
       };
       this.eventHandlers.status?.(event);
     });
+
+    // In-app notification events
+    this.socket.on("notificationCreated", (data: any) => {
+      this.updateMessageStats();
+      this.eventHandlers.notificationCreated?.(data);
+    });
+
+    this.socket.on("notificationArchived", (data: any) => {
+      this.updateMessageStats();
+      this.eventHandlers.notificationArchived?.(data);
+    });
+
+    this.socket.on("notificationUpdated", (data: any) => {
+      this.updateMessageStats();
+      this.eventHandlers.notificationUpdated?.(data);
+    });
   }
 
   /** Register event handlers */

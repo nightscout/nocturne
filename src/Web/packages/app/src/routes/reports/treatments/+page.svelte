@@ -26,7 +26,6 @@
     Filter,
     X,
     ChevronDown,
-    AlertTriangle,
   } from "lucide-svelte";
   import {
     formatInsulinDisplay,
@@ -44,8 +43,7 @@
     updateTreatment,
     bulkDeleteTreatments,
   } from "./data.remote";
-  import { invalidateAll } from "$app/navigation";
-
+  
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext();
 
@@ -226,7 +224,7 @@
       showEditDialog = false;
       treatmentToEdit = null;
       // Trigger data reload
-      invalidateAll();
+      reportsResource.refetch();
     } catch (error) {
       console.error("Update error:", error);
       toast.error("Failed to update treatment");
@@ -502,7 +500,7 @@
                 toast.success("Treatment deleted successfully");
                 showDeleteConfirm = false;
                 treatmentToDelete = null;
-                invalidateAll();
+                reportsResource.refetch();
               } catch (error) {
                 console.error("Delete error:", error);
                 toast.error("Failed to delete treatment");
@@ -615,7 +613,7 @@
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;
                 treatmentsToDelete = [];
-                invalidateAll();
+                reportsResource.refetch();
               } else {
                 toast.error(result.message);
               }

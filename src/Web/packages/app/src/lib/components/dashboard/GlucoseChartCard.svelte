@@ -41,10 +41,8 @@
     AnnotationLine,
     Rule,
     AnnotationPoint,
-    BrushContext,
     Rect,
   } from "layerchart";
-  import type { BrushContextValue } from "layerchart";
   import MiniOverviewChart from "./MiniOverviewChart.svelte";
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
   import { chartConfig, getMealNameForTime } from "$lib/constants";
@@ -195,9 +193,6 @@
   // Brush/zoom state for the chart (X-axis only)
   // When null, uses the default sliding window (lookbackHours ending at now)
   let brushXDomain = $state<[Date, Date] | null>(null);
-  let brushContext = $state<BrushContextValue | undefined>(undefined);
-  // Track brush start position to detect clicks vs drags
-  let brushStartDomain = $state<[number, number] | null>(null);
 
   // Whether chart is currently showing a custom time range (not the default sliding window)
   const isZoomed = $derived(brushXDomain !== null);
@@ -205,12 +200,6 @@
   // Reset zoom to the default sliding window
   function resetZoom() {
     brushXDomain = null;
-    brushContext?.reset();
-  }
-
-  // Handle main chart brush - temporarily zooms without saving span
-  function handleMainChartBrush(domain: [Date, Date] | null) {
-    brushXDomain = domain;
   }
 
   // Handle mini chart brush - saves span for future sessions
@@ -2274,100 +2263,6 @@
               />
             {/snippet}
           </Tooltip.Root>
-
-          <!--
-            BrushContext for X-axis zoom selection with click-vs-drag detection.
-
-            Problem: By default, BrushContext triggers on any mouse interaction, including
-            single clicks. This caused the chart to enter "zoomed view" mode when users
-            simply clicked on the chart without intending to select a time range.
-
-            Solution: We track the brush start position (brushStartDomain) and compare it
-            to the end position. Only if the selection moved by more than 1 minute (60000ms)
-            do we consider it a real drag selection. This prevents:
-            1. Single clicks from triggering zoom mode
-            2. Accidental tiny selections from activating zoom
-
-            Visual feedback is also gated on this movement check - the brush rectangle,
-            handles, and time labels only appear once there's meaningful drag movement.
-            This prevents confusing visual feedback during clicks.
-          -->
-          {@const brushHasMovement = brushStartDomain && brushContext?.xDomain && (
-            Math.abs((brushContext.xDomain[0] as number) - brushStartDomain[0]) > 60000 ||
-            Math.abs((brushContext.xDomain[1] as number) - brushStartDomain[1]) > 60000
-          )}
-          <BrushContext
-            bind:brushContext
-            axis="x"
-            xDomain={brushXDomain ?? [chartXDomain.from, chartXDomain.to]}
-            classes={{
-              range: brushHasMovement ? "bg-primary/15 border border-primary/30 rounded" : "opacity-0 pointer-events-none",
-              handle: brushHasMovement ? "bg-primary/50 hover:bg-primary/70 rounded-sm" : "opacity-0 cursor-default! pointer-events-none",
-            }}
-            onBrushStart={(e) => {
-              // Capture the starting domain to detect clicks vs drags
-              if (e.xDomain && Array.isArray(e.xDomain)) {
-                brushStartDomain = [e.xDomain[0] as number, e.xDomain[1] as number];
-              }
-            }}
-            onBrushEnd={(e) => {
-              if (e.xDomain && Array.isArray(e.xDomain) && brushStartDomain) {
-                const start = e.xDomain[0] as number;
-                const end = e.xDomain[1] as number;
-                const TOLERANCE_MS = 60 * 1000; // 1 minute tolerance
-                // Check if the selection changed from when the brush started
-                const startChanged = Math.abs(start - brushStartDomain[0]) > TOLERANCE_MS;
-                const endChanged = Math.abs(end - brushStartDomain[1]) > TOLERANCE_MS;
-                // Clear the start tracking
-                brushStartDomain = null;
-                // If neither edge moved significantly, it's a click - ignore it
-                if (!startChanged && !endChanged) {
-                  return;
-                }
-                // Ignore tiny selections (less than 1 minute span)
-                if (end - start < TOLERANCE_MS) {
-                  return;
-                }
-                // Temporarily zoom without saving span (use mini chart to save)
-                handleMainChartBrush([new Date(start), new Date(end)]);
-              } else {
-                brushStartDomain = null;
-              }
-            }}
-            onReset={resetZoom}
-          >
-            {#snippet children({ brushContext: bc })}
-              {@const hasMovement = brushStartDomain && bc.xDomain && (
-                Math.abs((bc.xDomain[0] as number) - brushStartDomain[0]) > 60000 ||
-                Math.abs((bc.xDomain[1] as number) - brushStartDomain[1]) > 60000
-              )}
-              {#if bc.isActive && bc.xDomain && hasMovement}
-                <!-- Left handle label -->
-                <div
-                  class="absolute text-[10px] font-medium text-primary bg-background/95 px-1.5 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-30"
-                  style="left: {bc.range.x}px; top: {bc.range.y -
-                    20}px; transform: translateX(-50%)"
-                >
-                  {new Date(bc.xDomain[0] as number).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </div>
-
-                <!-- Right handle label -->
-                <div
-                  class="absolute text-[10px] font-medium text-primary bg-background/95 px-1.5 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-30"
-                  style="left: {bc.range.x + bc.range.width}px; top: {bc.range
-                    .y - 20}px; transform: translateX(-50%)"
-                >
-                  {new Date(bc.xDomain[1] as number).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </div>
-              {/if}
-            {/snippet}
-          </BrushContext>
         {/snippet}
       </Chart>
     </div>

@@ -271,6 +271,8 @@ public enum WidgetId
     Trackers,
     TirChart,
     DailySummary,
+    Clock,
+    Tdd,
 
     // Main sections
     GlucoseChart,
