@@ -72,16 +72,18 @@ public class DeviceStatusService : IDeviceStatusService
             return deviceStatus ?? new List<DeviceStatus>();
         }
 
-        // For non-default parameters, go directly to database
+        // For non-default parameters, go directly to database with advanced filtering
         _logger.LogDebug(
             "Bypassing cache for device status with custom parameters (find: {Find}, count: {Count}, skip: {Skip})",
             find,
             count,
             skip
         );
-        return await _postgreSqlService.GetDeviceStatusAsync(
+        return await _postgreSqlService.GetDeviceStatusWithAdvancedFilterAsync(
             count ?? 10,
             skip ?? 0,
+            findQuery: find,
+            reverseResults: false,
             cancellationToken
         );
     }
