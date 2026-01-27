@@ -43,7 +43,10 @@ import {
   MigrationClient,
   DeduplicationClient,
   ConfigurationClient,
-  MealMatchingClient
+  MealMatchingClient,
+  InjectableMedicationsClient,
+  InjectableDosesClient,
+  PenVialsClient
 } from "./generated/nocturne-api-client";
 
 /**
@@ -100,6 +103,9 @@ export class ApiClient {
   public readonly deduplication: DeduplicationClient;
   public readonly configuration: ConfigurationClient;
   public readonly mealMatching: MealMatchingClient;
+  public readonly injectableMedications: InjectableMedicationsClient;
+  public readonly injectableDoses: InjectableDosesClient;
+  public readonly penVials: PenVialsClient;
 
   constructor(
     baseUrl: string,
@@ -155,6 +161,9 @@ export class ApiClient {
     this.deduplication = new DeduplicationClient(apiBaseUrl, http);
     this.configuration = new ConfigurationClient(apiBaseUrl, http);
     this.mealMatching = new MealMatchingClient(apiBaseUrl, http);
+    this.injectableMedications = new InjectableMedicationsClient(apiBaseUrl, http);
+    this.injectableDoses = new InjectableDosesClient(apiBaseUrl, http);
+    this.penVials = new PenVialsClient(apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */

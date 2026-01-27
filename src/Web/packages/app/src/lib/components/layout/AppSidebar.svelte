@@ -39,6 +39,7 @@
     Palette,
     Timer,
     Layers,
+    Pill,
   } from "lucide-svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -165,6 +166,7 @@
         { title: "Account", href: "/settings/account", icon: User },
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
+        { title: "Medications", href: "/settings/medications", icon: Pill },
         { title: "Features", href: "/settings/features", icon: Sparkles },
         { title: "Alarms", href: "/settings/alarms", icon: Bell },
         {
