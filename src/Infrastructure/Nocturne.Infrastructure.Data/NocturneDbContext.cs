@@ -218,6 +218,23 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<InAppNotificationEntity> InAppNotifications { get; set; }
 
+    // Injectable Medication entities
+
+    /// <summary>
+    /// Gets or sets the InjectableMedications table for injectable medication definitions
+    /// </summary>
+    public DbSet<InjectableMedicationEntity> InjectableMedications { get; set; }
+
+    /// <summary>
+    /// Gets or sets the InjectableDoses table for dose administration records
+    /// </summary>
+    public DbSet<InjectableDoseEntity> InjectableDoses { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PenVials table for pen/vial inventory tracking
+    /// </summary>
+    public DbSet<PenVialEntity> PenVials { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1050,6 +1067,105 @@ public class NocturneDbContext : DbContext
             .HasIndex(n => n.SourceId)
             .HasDatabaseName("ix_in_app_notifications_source_id")
             .HasFilter("source_id IS NOT NULL");
+
+        // InjectableMedication indexes - optimized for medication lookups
+        modelBuilder
+            .Entity<InjectableMedicationEntity>()
+            .HasIndex(m => m.Name)
+            .HasDatabaseName("ix_injectable_medications_name");
+
+        modelBuilder
+            .Entity<InjectableMedicationEntity>()
+            .HasIndex(m => m.Category)
+            .HasDatabaseName("ix_injectable_medications_category");
+
+        modelBuilder
+            .Entity<InjectableMedicationEntity>()
+            .HasIndex(m => m.IsArchived)
+            .HasDatabaseName("ix_injectable_medications_is_archived");
+
+        modelBuilder
+            .Entity<InjectableMedicationEntity>()
+            .HasIndex(m => m.SortOrder)
+            .HasDatabaseName("ix_injectable_medications_sort_order");
+
+        modelBuilder
+            .Entity<InjectableMedicationEntity>()
+            .HasIndex(m => m.SysCreatedAt)
+            .HasDatabaseName("ix_injectable_medications_sys_created_at");
+
+        // InjectableDose indexes - optimized for dose history queries
+        modelBuilder
+            .Entity<InjectableDoseEntity>()
+            .HasIndex(d => d.Timestamp)
+            .HasDatabaseName("ix_injectable_doses_timestamp")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<InjectableDoseEntity>()
+            .HasIndex(d => d.InjectableMedicationId)
+            .HasDatabaseName("ix_injectable_doses_injectable_medication_id");
+
+        modelBuilder
+            .Entity<InjectableDoseEntity>()
+            .HasIndex(d => new { d.InjectableMedicationId, d.Timestamp })
+            .HasDatabaseName("ix_injectable_doses_medication_timestamp")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<InjectableDoseEntity>()
+            .HasIndex(d => d.PenVialId)
+            .HasDatabaseName("ix_injectable_doses_pen_vial_id")
+            .HasFilter("pen_vial_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<InjectableDoseEntity>()
+            .HasIndex(d => d.SysCreatedAt)
+            .HasDatabaseName("ix_injectable_doses_sys_created_at");
+
+        // PenVial indexes - optimized for inventory management
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => p.InjectableMedicationId)
+            .HasDatabaseName("ix_pen_vials_injectable_medication_id");
+
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => p.Status)
+            .HasDatabaseName("ix_pen_vials_status");
+
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => new { p.InjectableMedicationId, p.Status })
+            .HasDatabaseName("ix_pen_vials_medication_status");
+
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => p.OpenedAt)
+            .HasDatabaseName("ix_pen_vials_opened_at")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => p.ExpiresAt)
+            .HasDatabaseName("ix_pen_vials_expires_at");
+
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => p.IsArchived)
+            .HasDatabaseName("ix_pen_vials_is_archived");
+
+        modelBuilder
+            .Entity<PenVialEntity>()
+            .HasIndex(p => p.SysCreatedAt)
+            .HasDatabaseName("ix_pen_vials_sys_created_at");
+
+        // Treatment to InjectableDose relationship index
+        modelBuilder
+            .Entity<TreatmentEntity>()
+            .HasIndex(t => t.InjectableDoseId)
+            .HasDatabaseName("ix_treatments_injectable_dose_id")
+            .HasFilter("injectable_dose_id IS NOT NULL");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1679,6 +1795,73 @@ public class NocturneDbContext : DbContext
             entity.Property(e => e.ArchiveReason).HasConversion<string>();
         });
 
+        // Configure InjectableMedication entity
+        modelBuilder.Entity<InjectableMedicationEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.IsArchived).HasDefaultValue(false);
+            entity.Property(e => e.SortOrder).HasDefaultValue(0);
+            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.SysUpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+        });
+
+        // Configure InjectableDose entity
+        modelBuilder.Entity<InjectableDoseEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.SysUpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+
+            // Configure relationships
+            entity
+                .HasOne(e => e.InjectableMedication)
+                .WithMany(m => m.Doses)
+                .HasForeignKey(e => e.InjectableMedicationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.PenVial)
+                .WithMany(p => p.Doses)
+                .HasForeignKey(e => e.PenVialId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Configure PenVial entity
+        modelBuilder.Entity<PenVialEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Status).HasDefaultValue("Active");
+            entity.Property(e => e.IsArchived).HasDefaultValue(false);
+            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.SysUpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+
+            // Configure relationship to medication
+            entity
+                .HasOne(e => e.InjectableMedication)
+                .WithMany(m => m.PenVials)
+                .HasForeignKey(e => e.InjectableMedicationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Configure Treatment to InjectableDose relationship
+        modelBuilder.Entity<TreatmentEntity>(entity =>
+        {
+            entity
+                .HasOne(e => e.InjectableDose)
+                .WithMany()
+                .HasForeignKey(e => e.InjectableDoseId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
     }
 
     /// <summary>
@@ -1885,6 +2068,34 @@ public class NocturneDbContext : DbContext
                     connectorConfigEntity.LastModified = DateTimeOffset.UtcNow;
                 }
                 connectorConfigEntity.SysUpdatedAt = utcNow;
+            }
+            // Injectable medication entities use DateTimeOffset
+            else if (entry.Entity is InjectableMedicationEntity injectableMedicationEntity)
+            {
+                var utcNowOffset = DateTimeOffset.UtcNow;
+                if (entry.State == EntityState.Added)
+                {
+                    injectableMedicationEntity.SysCreatedAt = utcNowOffset;
+                }
+                injectableMedicationEntity.SysUpdatedAt = utcNowOffset;
+            }
+            else if (entry.Entity is InjectableDoseEntity injectableDoseEntity)
+            {
+                var utcNowOffset = DateTimeOffset.UtcNow;
+                if (entry.State == EntityState.Added)
+                {
+                    injectableDoseEntity.SysCreatedAt = utcNowOffset;
+                }
+                injectableDoseEntity.SysUpdatedAt = utcNowOffset;
+            }
+            else if (entry.Entity is PenVialEntity penVialEntity)
+            {
+                var utcNowOffset = DateTimeOffset.UtcNow;
+                if (entry.State == EntityState.Added)
+                {
+                    penVialEntity.SysCreatedAt = utcNowOffset;
+                }
+                penVialEntity.SysUpdatedAt = utcNowOffset;
             }
         }
     }

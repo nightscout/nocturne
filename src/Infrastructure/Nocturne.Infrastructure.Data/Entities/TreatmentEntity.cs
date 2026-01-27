@@ -467,4 +467,17 @@ public class TreatmentEntity
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
+
+    // === Injectable Dose Link ===
+
+    /// <summary>
+    /// Foreign key to link this treatment to an injectable dose record
+    /// </summary>
+    [Column("injectable_dose_id")]
+    public Guid? InjectableDoseId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the linked injectable dose
+    /// </summary>
+    public virtual InjectableDoseEntity? InjectableDose { get; set; }
 }
