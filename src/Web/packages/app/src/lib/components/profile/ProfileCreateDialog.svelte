@@ -21,7 +21,6 @@
     units: string;
     icon: string;
     timezone: string;
-    dia: number;
     carbs_hr: number;
   }
 
@@ -38,7 +37,6 @@
     units: "mg/dL",
     icon: DEFAULT_PROFILE_ICON,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    dia: 4,
     carbs_hr: 20,
   });
 
@@ -50,10 +48,6 @@
 
     if (!formState.defaultProfile.trim()) {
       newErrors.defaultProfile = "Profile name is required";
-    }
-
-    if (formState.dia <= 0 || formState.dia > 10) {
-      newErrors.dia = "DIA must be between 0 and 10 hours";
     }
 
     if (formState.carbs_hr <= 0 || formState.carbs_hr > 100) {
@@ -76,7 +70,6 @@
       units: "mg/dL",
       icon: DEFAULT_PROFILE_ICON,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      dia: 4,
       carbs_hr: 20,
     };
     errors = {};
@@ -91,7 +84,6 @@
         units: "mg/dL",
         icon: DEFAULT_PROFILE_ICON,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        dia: 4,
         carbs_hr: 20,
       };
       errors = {};
@@ -174,39 +166,21 @@
         </Select.Root>
       </div>
 
-      <!-- DIA and Carbs/hr in a grid -->
-      <div class="grid grid-cols-2 gap-4">
-        <div class="space-y-2">
-          <Label for="dia">DIA (hours)</Label>
-          <Input
-            id="dia"
-            type="number"
-            step="0.5"
-            min="0"
-            max="10"
-            bind:value={formState.dia}
-            class={cn(errors.dia && "border-destructive")}
-          />
-          {#if errors.dia}
-            <p class="text-xs text-destructive">{errors.dia}</p>
-          {/if}
-        </div>
-
-        <div class="space-y-2">
-          <Label for="carbs-hr">Carbs/hr (g/hr)</Label>
-          <Input
-            id="carbs-hr"
-            type="number"
-            step="1"
-            min="0"
-            max="100"
-            bind:value={formState.carbs_hr}
-            class={cn(errors.carbs_hr && "border-destructive")}
-          />
-          {#if errors.carbs_hr}
-            <p class="text-xs text-destructive">{errors.carbs_hr}</p>
-          {/if}
-        </div>
+      <!-- Carbs/hr -->
+      <div class="space-y-2">
+        <Label for="carbs-hr">Carbs/hr (g/hr)</Label>
+        <Input
+          id="carbs-hr"
+          type="number"
+          step="1"
+          min="0"
+          max="100"
+          bind:value={formState.carbs_hr}
+          class={cn(errors.carbs_hr && "border-destructive")}
+        />
+        {#if errors.carbs_hr}
+          <p class="text-xs text-destructive">{errors.carbs_hr}</p>
+        {/if}
       </div>
 
       <Dialog.Footer class="pt-4">

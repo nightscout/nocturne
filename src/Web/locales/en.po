@@ -127,6 +127,7 @@ msgid "Event Type"
 msgstr "Event Type"
 
 #: src/lib/components/TreatmentEditModal.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Date & Time"
 msgstr "Date & Time"
@@ -175,6 +176,7 @@ msgstr "Reason for this treatment"
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileDeleteDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -194,6 +196,8 @@ msgstr "Reason for this treatment"
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -212,6 +216,7 @@ msgstr "Cancel"
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 msgid "Saving..."
 msgstr "Saving..."
 
@@ -219,6 +224,7 @@ msgstr "Saving..."
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/food/FoodEditor.svelte
+#: src/routes/settings/medications/+page.svelte
 msgid "Save Changes"
 msgstr "Save Changes"
 
@@ -895,6 +901,7 @@ msgstr "Failed to load calendar data"
 #: src/routes/auth/register/+page.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/compatibility/test/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "An error occurred"
 msgstr "An error occurred"
@@ -1028,6 +1035,7 @@ msgstr "Comparison Error"
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/widgets/BgDeltaWidget.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1540,7 +1548,6 @@ msgstr "Nightscout"
 msgid "NS: {0}"
 msgstr "NS: {0}"
 
-#: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1634,6 +1641,8 @@ msgstr "ID: {0}"
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Name"
 msgstr "Name"
@@ -1675,6 +1684,8 @@ msgstr "Unit"
 
 #: src/routes/food/FoodEditor.svelte
 #: src/routes/food/FoodList.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Category"
 msgstr "Category"
@@ -1896,6 +1907,10 @@ msgstr "Failed to delete treatment"
 msgid "No foods attributed"
 msgstr "No foods attributed"
 
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
@@ -1906,6 +1921,12 @@ msgstr "No foods attributed"
 #: src/routes/meals/+page.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Other"
 msgstr "Other"
@@ -2528,6 +2549,7 @@ msgstr "Something went wrong"
 #: src/routes/reports/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Try again"
 msgstr "Try again"
@@ -2942,7 +2964,6 @@ msgstr "Tracker"
 msgid "Treatment"
 msgstr "Treatment"
 
-#: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/layout/SidebarGlucoseWidget.svelte
 msgid "Demo"
@@ -3283,9 +3304,8 @@ msgstr "When did you eat?"
 msgid "Profile name is required"
 msgstr "Profile name is required"
 
-#: src/lib/components/profile/ProfileCreateDialog.svelte
-msgid "DIA must be between 0 and 10 hours"
-msgstr "DIA must be between 0 and 10 hours"
+#~ msgid "DIA must be between 0 and 10 hours"
+#~ msgstr "DIA must be between 0 and 10 hours"
 
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 msgid "Carbs/hr must be between 0 and 100"
@@ -3324,7 +3344,8 @@ msgstr "Select units"
 msgid "Timezone"
 msgstr "Timezone"
 
-#: src/lib/components/profile/ProfileCreateDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 msgid "DIA (hours)"
 msgstr "DIA (hours)"
 
@@ -3333,6 +3354,9 @@ msgid "Carbs/hr (g/hr)"
 msgstr "Carbs/hr (g/hr)"
 
 #: src/lib/components/profile/ProfileCreateDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+#: src/routes/settings/profile/+page.svelte
 msgid "Creating..."
 msgstr "Creating..."
 
@@ -3345,6 +3369,9 @@ msgid "Select an icon"
 msgstr "Select an icon"
 
 #: src/lib/components/layout/MobileHeader.svelte
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/routes/settings/profile/+page.svelte
+#: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/support/+page.svelte
 #: src/routes/settings/support/+page.svelte
 #: src/routes/settings/support/+page.svelte
@@ -3561,9 +3588,8 @@ msgstr "Icon"
 msgid "Select timezone"
 msgstr "Select timezone"
 
-#: src/lib/components/profile/ProfileEditDialog.svelte
-msgid "Duration of Insulin Action (hours)"
-msgstr "Duration of Insulin Action (hours)"
+#~ msgid "Duration of Insulin Action (hours)"
+#~ msgstr "Duration of Insulin Action (hours)"
 
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "Carbs Absorption Rate (g/hr)"
@@ -3749,6 +3775,7 @@ msgid "Bolus (U)"
 msgstr "Bolus (U)"
 
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Insulin (U)"
 msgstr "Insulin (U)"
 
@@ -5529,6 +5556,7 @@ msgstr "Completed At"
 msgid "Completion Reason"
 msgstr "Completion Reason"
 
+#: src/lib/components/medications/DoseLogDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -5583,7 +5611,6 @@ msgid "Triggering in"
 msgstr "Triggering in"
 
 #: src/lib/components/trackers/TrackerStartDialog.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "<0/> Start"
 msgstr "<0/> Start"
@@ -5748,6 +5775,7 @@ msgid "Invalid JSON"
 msgstr "Invalid JSON"
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/routes/+page.svelte
 msgid "New Treatment"
 msgstr "New Treatment"
 
@@ -5768,9 +5796,8 @@ msgstr "{0} Changes will be saved to the database."
 msgid "Select or enter event type..."
 msgstr "Select or enter event type..."
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "<0/> Insulin (U)"
-msgstr "<0/> Insulin (U)"
+#~ msgid "<0/> Insulin (U)"
+#~ msgstr "<0/> Insulin (U)"
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Duration (min)"
@@ -5916,6 +5943,7 @@ msgstr "What did you eat?"
 msgid "Add a note..."
 msgstr "Add a note..."
 
+#: src/lib/components/medications/DoseLogDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 msgid "Logging..."
 msgstr "Logging..."
@@ -9034,7 +9062,9 @@ msgid "No permissions"
 msgstr "No permissions"
 
 #. placeholder {0}: role.permissions.length - 3
+#. placeholder {0}: rapidActing.length - 1
 #: src/routes/settings/admin/+page.svelte
+#: src/routes/settings/profile/+page.svelte
 msgid "+{0} more"
 msgstr "+{0} more"
 
@@ -9300,7 +9330,6 @@ msgstr "Choose between Nocturne's custom theme or match the Trio iOS app"
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/profile/+page.svelte
@@ -9673,33 +9702,29 @@ msgstr "Created {0}"
 msgid "<0/> Edit Profile"
 msgstr "<0/> Edit Profile"
 
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Units"
 msgstr "Units"
 
-#: src/routes/settings/profile/+page.svelte
-#: src/routes/settings/profile/+page.svelte
-msgid "DIA"
-msgstr "DIA"
+#~ msgid "DIA"
+#~ msgstr "DIA"
 
 #. placeholder {0}: store.features.display?.focusHours ?? 3
-#. placeholder {0}: defaultStore?.dia ?? "–"
-#. placeholder {0}: store.dia ?? "–"
 #: src/routes/settings/features/+page.svelte
-#: src/routes/settings/profile/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "{0} hours"
 msgstr "{0} hours"
 
 #: src/routes/settings/profile/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "Carbs/hr"
 msgstr "Carbs/hr"
 
-#. placeholder {0}: defaultStore?.carbs_hr ?? "–"
 #. placeholder {0}: store.carbs_hr ?? "–"
-#: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "{0} g/hr"
 msgstr "{0} g/hr"
@@ -9814,8 +9839,6 @@ msgstr "Pending"
 msgid "Validating"
 msgstr "Validating"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Running"
@@ -10728,7 +10751,6 @@ msgstr "<0/> Manual Sync"
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Disabled"
 msgstr "Disabled"
 
@@ -11815,71 +11837,527 @@ msgstr "Loading data..."
 msgid "Loading basal data..."
 msgstr "Loading basal data..."
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Connector started successfully"
-msgstr "Connector started successfully"
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Medications"
+msgstr "Medications"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Failed to start connector"
-msgstr "Failed to start connector"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Rapid-Acting"
+msgstr "Rapid-Acting"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Connector stopped successfully"
-msgstr "Connector stopped successfully"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Ultra-Rapid"
+msgstr "Ultra-Rapid"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Failed to stop connector"
-msgstr "Failed to stop connector"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Short-Acting"
+msgstr "Short-Acting"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Available"
-msgstr "Available"
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Intermediate"
+msgstr "Intermediate"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Stopped"
-msgstr "Stopped"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Long-Acting"
+msgstr "Long-Acting"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Healthy"
-msgstr "Healthy"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Ultra-Long"
+msgstr "Ultra-Long"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Unhealthy"
-msgstr "Unhealthy"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "GLP-1 Daily"
+msgstr "GLP-1 Daily"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Idle"
-msgstr "Idle"
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "GLP-1 Weekly"
+msgstr "GLP-1 Weekly"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Container Control"
-msgstr "Container Control"
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+msgid "RapidActing"
+msgstr "RapidActing"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "This connector is disabled via environment configuration and cannot be started from the UI."
-msgstr "This connector is disabled via environment configuration and cannot be started from the UI."
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+msgid "UltraRapid"
+msgstr "UltraRapid"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Start the connector container to begin syncing data."
-msgstr "Start the connector container to begin syncing data."
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+msgid "ShortActing"
+msgstr "ShortActing"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Stop the connector container to pause syncing."
-msgstr "Stop the connector container to pause syncing."
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "LongActing"
+msgstr "LongActing"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Manage the connector container lifecycle."
-msgstr "Manage the connector container lifecycle."
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "UltraLong"
+msgstr "UltraLong"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Starting..."
-msgstr "<0/> Starting..."
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "GLP1Daily"
+msgstr "GLP1Daily"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Stopping..."
-msgstr "<0/> Stopping..."
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "GLP1Weekly"
+msgstr "GLP1Weekly"
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Stop"
-msgstr "<0/> Stop"
+#: src/routes/settings/medications/+page.svelte
+msgid "Units (U)"
+msgstr "Units (U)"
+
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Milligrams"
+msgstr "Milligrams"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Milligrams (mg)"
+msgstr "Milligrams (mg)"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Medications - Nocturne"
+msgstr "Medications - Nocturne"
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Manage your injectable medications catalog"
+msgstr "Manage your injectable medications catalog"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Show archived"
+msgstr "Show archived"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "<0/> Add Medication"
+msgstr "<0/> Add Medication"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "No Medications Found"
+msgstr "No Medications Found"
+
+#: src/routes/settings/medications/+page.svelte
+msgid ""
+"Add your injectable medications to track doses and manage your\n"
+"insulin therapy."
+msgstr ""
+"Add your injectable medications to track doses and manage your\n"
+"insulin therapy."
+
+#: src/routes/settings/medications/+page.svelte
+msgid "<0/> Add Your First Medication"
+msgstr "<0/> Add Your First Medication"
+
+#. placeholder {0}: grouped[category].length
+#. placeholder {1}: grouped[category] .length !== 1 ? "s" : ""
+#: src/routes/settings/medications/+page.svelte
+msgid "{0} medication{1}"
+msgstr "{0} medication{1}"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Unnamed"
+msgstr "Unnamed"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Archived"
+msgstr "Archived"
+
+#. placeholder {0}: med.concentration
+#. placeholder {1}: med.unitType === "Milligrams" ? "mg" : "U"
+#: src/routes/settings/medications/+page.svelte
+msgid "<0/> {0} {1}/mL"
+msgstr "<0/> {0} {1}/mL"
+
+#. placeholder {0}: formatDuration(med.dia)
+#: src/routes/settings/medications/+page.svelte
+msgid "<0/> DIA {0}"
+msgstr "<0/> DIA {0}"
+
+#. placeholder {0}: formatDuration(med.duration)
+#: src/routes/settings/medications/+page.svelte
+msgid "<0/> Duration {0}"
+msgstr "<0/> Duration {0}"
+
+#. placeholder {0}: med.defaultDose
+#. placeholder {1}: med.unitType === "Milligrams" ? "mg" : "U"
+#: src/routes/settings/medications/+page.svelte
+msgid "Default: {0}{1}"
+msgstr "Default: {0}{1}"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Loading medications..."
+msgstr "Loading medications..."
+
+#: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Failed to load medications"
+msgstr "Failed to load medications"
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Add Medication"
+msgstr "Add Medication"
+
+#~ msgid "Add a new injectable medication to your catalog."
+#~ msgstr "Add a new injectable medication to your catalog."
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Unit Type"
+msgstr "Unit Type"
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Concentration (U/mL)"
+msgstr "Concentration (U/mL)"
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Default Dose"
+msgstr "Default Dose"
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/medications/+page.svelte
+msgid "Duration (hours)"
+msgstr "Duration (hours)"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Onset (hours)"
+msgstr "Onset (hours)"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Peak (hours)"
+msgstr "Peak (hours)"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Edit Medication"
+msgstr "Edit Medication"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Update the settings for this medication."
+msgstr "Update the settings for this medication."
+
+#~ msgid "<0/> From Preset"
+#~ msgstr "<0/> From Preset"
+
+#~ msgid "Add from Preset"
+#~ msgstr "Add from Preset"
+
+#~ msgid ""
+#~ "Choose a medication to add. You can customize its settings after\n"
+#~ "selecting."
+#~ msgstr ""
+#~ "Choose a medication to add. You can customize its settings after\n"
+#~ "selecting."
+
+#. placeholder {0}: formatDuration(preset.dia)
+#: src/routes/settings/medications/+page.svelte
+msgid "DIA {0}"
+msgstr "DIA {0}"
+
+#~ msgid "Loading presets..."
+#~ msgstr "Loading presets..."
+
+#~ msgid "Failed to load presets"
+#~ msgstr "Failed to load presets"
+
+#~ msgid "Create Custom Instead"
+#~ msgstr "Create Custom Instead"
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/trackers/+page.svelte
+msgid "Search for a preset or type a custom name."
+msgstr "Search for a preset or type a custom name."
+
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/trackers/+page.svelte
+msgid "Search presets or enter a name..."
+msgstr "Search presets or enter a name..."
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Search medications..."
+msgstr "Search medications..."
+
+#. placeholder {0}: presetSearchValue.trim()
+#. placeholder {0}: templateSearchValue.trim()
+#: src/routes/settings/medications/+page.svelte
+#: src/routes/settings/trackers/+page.svelte
+msgid "Use \"{0}\" as custom name"
+msgstr "Use \"{0}\" as custom name"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "No presets found."
+msgstr "No presets found."
+
+#: src/routes/settings/trackers/+page.svelte
+msgid "Search sensors..."
+msgstr "Search sensors..."
+
+#: src/routes/settings/trackers/+page.svelte
+msgid "No templates found."
+msgstr "No templates found."
+
+#: src/routes/settings/trackers/+page.svelte
+msgid "CGM Sensors"
+msgstr "CGM Sensors"
+
+#. placeholder {0}: Math.floor(template.lifespanHours / 24)
+#: src/routes/settings/trackers/+page.svelte
+msgid "{0}d"
+msgstr "{0}d"
+
+#: src/routes/+page.svelte
+msgid "Treatment created"
+msgstr "Treatment created"
+
+#: src/routes/+page.svelte
+msgid "Failed to create treatment"
+msgstr "Failed to create treatment"
+
+#: src/routes/settings/profile/+page.svelte
+msgid "Insulin Type"
+msgstr "Insulin Type"
+
+#: src/routes/settings/profile/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+msgid "Configure medications"
+msgstr "Configure medications"
+
+#. placeholder {0}: med.dia
+#. placeholder {0}: med.dia
+#. placeholder {0}: rapidActing[0].dia
+#: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/routes/settings/profile/+page.svelte
+msgid "({0}h DIA)"
+msgstr "({0}h DIA)"
+
+#: src/routes/settings/profile/+page.svelte
+msgid "Active Medications"
+msgstr "Active Medications"
+
+#. placeholder {0}: med.dia
+#: src/routes/settings/profile/+page.svelte
+msgid "({0}h)"
+msgstr "({0}h)"
+
+#: src/routes/settings/profile/+page.svelte
+msgid "My Insulin"
+msgstr "My Insulin"
+
+#: src/routes/settings/profile/+page.svelte
+msgid "Medication created from profile DIA"
+msgstr "Medication created from profile DIA"
+
+#: src/routes/settings/profile/+page.svelte
+msgid "Failed to create medication"
+msgstr "Failed to create medication"
+
+#. placeholder {0}: defaultStore.dia
+#: src/routes/settings/profile/+page.svelte
+msgid "{0}h DIA (from profile)"
+msgstr "{0}h DIA (from profile)"
+
+#: src/routes/settings/profile/+page.svelte
+#: src/routes/settings/profile/+page.svelte
+msgid "Save as medication"
+msgstr "Save as medication"
+
+#. placeholder {0}: defaultStore.dia
+#: src/routes/settings/profile/+page.svelte
+msgid "<0/> {0}h DIA (from profile)"
+msgstr "<0/> {0}h DIA (from profile)"
+
+#: src/lib/components/profile/ProfileEditDialog.svelte
+msgid "<0/> Default Insulin"
+msgstr "<0/> Default Insulin"
+
+#: src/lib/components/profile/ProfileEditDialog.svelte
+msgid "Used for IOB calculations when a treatment doesn't specify which insulin was used."
+msgstr "Used for IOB calculations when a treatment doesn't specify which insulin was used."
+
+#: src/lib/components/profile/ProfileEditDialog.svelte
+msgid "No medications configured. <0>Add one</0>"
+msgstr "No medications configured. <0>Add one</0>"
+
+#: src/lib/components/profile/ProfileEditDialog.svelte
+msgid "Select default insulin"
+msgstr "Select default insulin"
+
+#~ msgid "<0/> Insulin Type"
+#~ msgstr "<0/> Insulin Type"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Default (from profile)"
+msgstr "Default (from profile)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Not specified"
+msgstr "Not specified"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Abdomen"
+msgstr "Abdomen"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "AbdomenLeft"
+msgstr "AbdomenLeft"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Abdomen (Left)"
+msgstr "Abdomen (Left)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "AbdomenRight"
+msgstr "AbdomenRight"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Abdomen (Right)"
+msgstr "Abdomen (Right)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "ThighLeft"
+msgstr "ThighLeft"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Thigh (Left)"
+msgstr "Thigh (Left)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "ThighRight"
+msgstr "ThighRight"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Thigh (Right)"
+msgstr "Thigh (Right)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "ArmLeft"
+msgstr "ArmLeft"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Arm (Left)"
+msgstr "Arm (Left)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "ArmRight"
+msgstr "ArmRight"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Arm (Right)"
+msgstr "Arm (Right)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Buttock"
+msgstr "Buttock"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "<0/> Log Injection"
+msgstr "<0/> Log Injection"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Record a new injectable medication dose."
+msgstr "Record a new injectable medication dose."
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Medication"
+msgstr "Medication"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Select medication"
+msgstr "Select medication"
+
+#. placeholder {0}: selectedMedication?.unitType === "Milligrams" ? "mg" : "units"
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Amount ({0})"
+msgstr "Amount ({0})"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Injection Site (optional)"
+msgstr "Injection Site (optional)"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Any additional notes"
+msgstr "Any additional notes"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Log Dose"
+msgstr "Log Dose"
+
+#: src/lib/components/medications/DoseLogDialog.svelte
+msgid "Failed to load medications. Please try again."
+msgstr "Failed to load medications. Please try again."
+
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+msgid "No doses recorded"
+msgstr "No doses recorded"
+
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+#: src/lib/components/medications/ActiveMedicationsPanel.svelte
+msgid "<0/> Active Medications"
+msgstr "<0/> Active Medications"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Onset (minutes)"
+msgstr "Onset (minutes)"
+
+#: src/routes/settings/medications/+page.svelte
+msgid "Peak (minutes)"
+msgstr "Peak (minutes)"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "<0/> Medication Type"
+msgstr "<0/> Medication Type"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Dose (mg)"
+msgstr "Dose (mg)"

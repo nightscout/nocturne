@@ -719,4 +719,13 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("sources")]
     [NocturneOnly]
     public string[]? Sources { get; set; }
+
+    /// <summary>
+    /// Gets or sets the injectable medication ID associated with this treatment.
+    /// Used to determine which insulin's pharmacokinetics (DIA, onset, peak) to use
+    /// for IOB calculations. When null, the profile's default insulin is used.
+    /// </summary>
+    [JsonPropertyName("injectableMedicationId")]
+    [NocturneOnly]
+    public Guid? InjectableMedicationId { get; set; }
 }

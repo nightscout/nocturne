@@ -26,6 +26,16 @@ public class InjectableMedicationsController : ControllerBase
     }
 
     /// <summary>
+    /// Get preset medication templates for common insulins and GLP-1 agonists.
+    /// Returns static reference data — no database call.
+    /// </summary>
+    [HttpGet("presets")]
+    public ActionResult<IEnumerable<InjectableMedicationPreset>> GetPresets()
+    {
+        return Ok(InjectableMedicationPreset.GetAll());
+    }
+
+    /// <summary>
     /// Get all injectable medications in the catalog.
     /// </summary>
     /// <param name="includeArchived">Whether to include archived medications. Defaults to false.</param>
@@ -86,6 +96,7 @@ public class InjectableMedicationsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The created medication with assigned ID.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(InjectableMedication), 201)]
     public async Task<ActionResult<InjectableMedication>> Create(
         [FromBody] InjectableMedication medication,
         CancellationToken cancellationToken = default

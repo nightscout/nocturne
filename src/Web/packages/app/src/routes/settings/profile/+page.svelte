@@ -68,6 +68,9 @@
     updateProfile,
     deleteProfile,
   } from "./data.remote";
+  import { getActiveMedications } from "$lib/data/medications.remote";
+  import { createMedication } from "../medications/data.remote";
+  import { toast } from "svelte-sonner";
 
   const MGDL_TO_MMOL = 18.01559;
 
@@ -101,6 +104,9 @@
 
   // Query for profiles data - passes selectedProfileId as argument
   const profilesQuery = $derived(getProfiles(urlProfileId ?? undefined));
+
+  // Query for active (non-archived) medications
+  const medicationsQuery = $derived(getActiveMedications());
 
   // Icon component map
   const iconComponents: Record<string, typeof Icon> = {
@@ -182,7 +188,9 @@
   let showDeleteDialog = $state(false);
   let profileToDelete = $state<Profile | null>(null);
   let editStoreName = $state<string | null>(null);
-  let editInitialTab = $state<"general" | "basal" | "carbratio" | "sens" | "targets">("general");
+  let editInitialTab = $state<
+    "general" | "basal" | "carbratio" | "sens" | "targets"
+  >("general");
   let isLoading = $state(false);
 
   function selectProfile(profileId: string | null) {
@@ -221,7 +229,9 @@
     showEditDialog = true;
   }
 
-  function openEditDialogWithTab(tab: "general" | "basal" | "carbratio" | "sens" | "targets") {
+  function openEditDialogWithTab(
+    tab: "general" | "basal" | "carbratio" | "sens" | "targets"
+  ) {
     editStoreName = defaultStoreName;
     editInitialTab = tab;
     showEditDialog = true;
@@ -238,7 +248,6 @@
     try {
       const result = await createProfile({
         defaultProfile: profileData.defaultProfile,
-        dia: profileData.dia,
         carbs_hr: profileData.carbs_hr,
         timezone: profileData.timezone,
         units: profileData.units,
@@ -298,6 +307,28 @@
       console.error("Error deleting profile:", error);
     } finally {
       isLoading = false;
+    }
+  }
+
+  let isCreatingMedication = $state(false);
+
+  async function handleCreateMedicationFromProfile() {
+    const dia = defaultStore?.dia;
+    if (!dia) return;
+
+    isCreatingMedication = true;
+    try {
+      await createMedication({
+        name: "My Insulin",
+        category: "RapidActing",
+        dia,
+      });
+      toast.success("Medication created from profile DIA");
+    } catch (error) {
+      console.error("Error creating medication from profile:", error);
+      toast.error("Failed to create medication");
+    } finally {
+      isCreatingMedication = false;
     }
   }
 </script>
@@ -504,17 +535,62 @@
                   {defaultStore?.timezone ?? "Not set"}
                 </p>
               </div>
-              <div class="space-y-1">
-                <span class="text-xs text-muted-foreground">DIA</span>
-                <p class="font-medium">
-                  {defaultStore?.dia ?? "–"} hours
-                </p>
-              </div>
-              <div class="space-y-1">
-                <span class="text-xs text-muted-foreground">Carbs/hr</span>
-                <p class="font-medium">
-                  {defaultStore?.carbs_hr ?? "–"} g/hr
-                </p>
+              <div class="space-y-1 col-span-2">
+                <span class="text-xs text-muted-foreground">Insulin Type</span>
+                {#await medicationsQuery}
+                  <p class="font-medium text-muted-foreground">Loading...</p>
+                {:then medications}
+                  {#if medications.length === 0}
+                    {#if defaultStore?.dia}
+                      <div class="flex items-center gap-2">
+                        <p class="font-medium text-muted-foreground">
+                          {defaultStore.dia}h DIA (from profile)
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onclick={handleCreateMedicationFromProfile}
+                          disabled={isCreatingMedication}
+                        >
+                          <Syringe class="h-3 w-3 mr-1" />
+                          {isCreatingMedication ? "Creating..." : "Save as medication"}
+                        </Button>
+                      </div>
+                    {:else}
+                      <a
+                        href="/settings/medications"
+                        class="text-sm text-primary hover:underline"
+                      >
+                        Configure medications
+                      </a>
+                    {/if}
+                  {:else}
+                    {@const rapidActing = medications.filter((m) =>
+                      ["RapidActing", "UltraRapid", "ShortActing"].includes(
+                        m.category ?? ""
+                      )
+                    )}
+                    {#if rapidActing.length > 0}
+                      <p class="font-medium">
+                        {rapidActing[0].name}
+                        {#if rapidActing[0].dia}
+                          <span class="text-muted-foreground text-xs">
+                            ({rapidActing[0].dia}h DIA)
+                          </span>
+                        {/if}
+                        {#if rapidActing.length > 1}
+                          <span class="text-muted-foreground text-xs ml-1">
+                            +{rapidActing.length - 1} more
+                          </span>
+                        {/if}
+                      </p>
+                    {:else}
+                      <p class="font-medium">{medications[0].name}</p>
+                    {/if}
+                  {/if}
+                {:catch}
+                  <p class="font-medium text-muted-foreground">–</p>
+                {/await}
               </div>
             </div>
           </CardContent>
@@ -624,8 +700,12 @@
                             <Table.Header>
                               <Table.Row>
                                 <Table.Head>Time</Table.Head>
-                                <Table.Head class="text-right">Low ({bgLabel()})</Table.Head>
-                                <Table.Head class="text-right">High ({bgLabel()})</Table.Head>
+                                <Table.Head class="text-right">
+                                  Low ({bgLabel()})
+                                </Table.Head>
+                                <Table.Head class="text-right">
+                                  High ({bgLabel()})
+                                </Table.Head>
                               </Table.Row>
                             </Table.Header>
                             <Table.Body>
@@ -677,10 +757,6 @@
                         class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm"
                       >
                         <div>
-                          <span class="text-muted-foreground">DIA</span>
-                          <p class="font-medium">{store.dia ?? "–"} hours</p>
-                        </div>
-                        <div>
                           <span class="text-muted-foreground">Carbs/hr</span>
                           <p class="font-medium">
                             {store.carbs_hr ?? "–"} g/hr
@@ -694,6 +770,61 @@
                           <span class="text-muted-foreground">Units</span>
                           <p class="font-medium">{store.units ?? "–"}</p>
                         </div>
+                      </div>
+                      <!-- Active Medications -->
+                      <div class="mt-4 pt-4 border-t">
+                        <span class="text-muted-foreground text-sm">
+                          Active Medications
+                        </span>
+                        {#await medicationsQuery}
+                          <p class="text-sm text-muted-foreground mt-1">
+                            Loading...
+                          </p>
+                        {:then medications}
+                          {#if medications.length === 0}
+                            {#if defaultStore?.dia}
+                              <div class="flex items-center gap-2 mt-1">
+                                <Badge variant="outline" class="gap-1">
+                                  <Syringe class="h-3 w-3" />
+                                  {defaultStore.dia}h DIA (from profile)
+                                </Badge>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onclick={handleCreateMedicationFromProfile}
+                                  disabled={isCreatingMedication}
+                                >
+                                  {isCreatingMedication ? "Creating..." : "Save as medication"}
+                                </Button>
+                              </div>
+                            {:else}
+                              <p class="mt-1">
+                                <a
+                                  href="/settings/medications"
+                                  class="text-sm text-primary hover:underline"
+                                >
+                                  Configure medications
+                                </a>
+                              </p>
+                            {/if}
+                          {:else}
+                            <div class="flex flex-wrap gap-2 mt-2">
+                              {#each medications as med}
+                                <Badge variant="secondary" class="gap-1">
+                                  <Pill class="h-3 w-3" />
+                                  {med.name}
+                                  {#if med.dia}
+                                    <span class="text-muted-foreground">
+                                      ({med.dia}h)
+                                    </span>
+                                  {/if}
+                                </Badge>
+                              {/each}
+                            </div>
+                          {/if}
+                        {:catch}
+                          <p class="text-sm text-muted-foreground mt-1">–</p>
+                        {/await}
                       </div>
                     </CardContent>
                   </Card>

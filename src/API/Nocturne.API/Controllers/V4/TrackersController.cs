@@ -62,6 +62,16 @@ public class TrackersController : ControllerBase
     #region Definitions
 
     /// <summary>
+    /// Get preset templates for common tracker definitions (e.g., CGM sensors).
+    /// Returns static reference data — no database call.
+    /// </summary>
+    [HttpGet("definitions/templates")]
+    public ActionResult<IEnumerable<TrackerDefinitionPreset>> GetDefinitionTemplates()
+    {
+        return Ok(TrackerDefinitionPreset.GetAll());
+    }
+
+    /// <summary>
     /// Get all tracker definitions. Returns public trackers for unauthenticated users,
     /// or all visible trackers for authenticated users.
     /// </summary>

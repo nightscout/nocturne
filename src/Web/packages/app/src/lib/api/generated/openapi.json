@@ -1024,6 +1024,30 @@
         }
       }
     },
+    "/api/v4/injectable-medications/presets": {
+      "get": {
+        "tags": [
+          "InjectableMedications"
+        ],
+        "summary": "Get preset medication templates for common insulins and GLP-1 agonists.\nReturns static reference data — no database call.",
+        "operationId": "InjectableMedications_GetPresets",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InjectableMedicationPreset"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/injectable-medications": {
       "get": {
         "tags": [
@@ -1079,7 +1103,7 @@
           "x-position": 1
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "The created medication with assigned ID.",
             "content": {
               "application/json": {
@@ -7947,6 +7971,30 @@
                   "type": "array",
                   "items": {
                     "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/trackers/definitions/templates": {
+      "get": {
+        "tags": [
+          "V4 Trackers"
+        ],
+        "summary": "Get preset templates for common tracker definitions (e.g., CGM sensors).\nReturns static reference data — no database call.",
+        "operationId": "Trackers_GetDefinitionTemplates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackerDefinitionPreset"
                   }
                 }
               }
@@ -15558,6 +15606,83 @@
           "Other"
         ]
       },
+      "InjectableMedicationPreset": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/InjectableCategory"
+          },
+          "concentration": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unitType": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "dia": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "onset": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "peak": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "duration": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "InjectableCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "RapidActing",
+          "UltraRapid",
+          "ShortActing",
+          "Intermediate",
+          "LongActing",
+          "UltraLong",
+          "GLP1Daily",
+          "GLP1Weekly",
+          "Other"
+        ],
+        "enum": [
+          "RapidActing",
+          "UltraRapid",
+          "ShortActing",
+          "Intermediate",
+          "LongActing",
+          "UltraLong",
+          "GLP1Daily",
+          "GLP1Weekly",
+          "Other"
+        ]
+      },
+      "UnitType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Units",
+          "Milligrams"
+        ],
+        "enum": [
+          "Units",
+          "Milligrams"
+        ]
+      },
       "InjectableMedication": {
         "type": "object",
         "additionalProperties": false,
@@ -15612,44 +15737,6 @@
             "type": "boolean"
           }
         }
-      },
-      "InjectableCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "RapidActing",
-          "UltraRapid",
-          "ShortActing",
-          "Intermediate",
-          "LongActing",
-          "UltraLong",
-          "GLP1Daily",
-          "GLP1Weekly",
-          "Other"
-        ],
-        "enum": [
-          "RapidActing",
-          "UltraRapid",
-          "ShortActing",
-          "Intermediate",
-          "LongActing",
-          "UltraLong",
-          "GLP1Daily",
-          "GLP1Weekly",
-          "Other"
-        ]
-      },
-      "UnitType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Units",
-          "Milligrams"
-        ],
-        "enum": [
-          "Units",
-          "Milligrams"
-        ]
       },
       "LocalAuthConfigResponse": {
         "type": "object",
@@ -18228,6 +18315,11 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "injectableMedicationId": {
+                "type": "string",
+                "format": "guid",
+                "nullable": true
               }
             }
           }
@@ -23776,6 +23868,54 @@
           }
         }
       },
+      "TrackerDefinitionPreset": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "lifespanHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "TrackerCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ],
+        "enum": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ]
+      },
       "TrackerDefinitionDto": {
         "type": "object",
         "additionalProperties": false,
@@ -23857,30 +23997,6 @@
             "nullable": true
           }
         }
-      },
-      "TrackerCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ],
-        "enum": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ]
       },
       "NotificationThresholdDto": {
         "type": "object",
@@ -26513,6 +26629,11 @@
           },
           "isExternallyManaged": {
             "type": "boolean"
+          },
+          "defaultInsulinMedicationId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
           }
         }
       },

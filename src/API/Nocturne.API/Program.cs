@@ -410,9 +410,6 @@ builder.Services.AddScoped<IInjectableMedicationService, InjectableMedicationSer
 builder.Services.AddScoped<IInjectableDoseService, InjectableDoseService>();
 builder.Services.AddScoped<IPenVialService, PenVialService>();
 
-// Seed default injectable medication catalog on startup
-builder.Services.AddHostedService<InjectableMedicationSeeder>();
-
 // Note: Processing status service is registered by AddNocturneMemoryCache
 
 // Register demo service health monitor

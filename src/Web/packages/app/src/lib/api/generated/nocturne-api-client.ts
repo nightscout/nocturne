@@ -1345,6 +1345,44 @@ export class InjectableMedicationsClient {
     }
 
     /**
+     * Get preset medication templates for common insulins and GLP-1 agonists.
+    Returns static reference data — no database call.
+     */
+    getPresets(signal?: AbortSignal): Promise<InjectableMedicationPreset[]> {
+        let url_ = this.baseUrl + "/api/v4/injectable-medications/presets";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPresets(_response);
+        });
+    }
+
+    protected processGetPresets(response: Response): Promise<InjectableMedicationPreset[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InjectableMedicationPreset[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InjectableMedicationPreset[]>(null as any);
+    }
+
+    /**
      * Get all injectable medications in the catalog.
      * @param includeArchived (optional) Whether to include archived medications. Defaults to false.
      * @return Collection of injectable medications.
@@ -1416,11 +1454,11 @@ export class InjectableMedicationsClient {
     protected processCreate(response: Response): Promise<InjectableMedication> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
+        if (status === 201) {
             return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InjectableMedication;
-            return result200;
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InjectableMedication;
+            return result201;
             });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
@@ -10314,6 +10352,44 @@ export class TrackersClient {
     }
 
     /**
+     * Get preset templates for common tracker definitions (e.g., CGM sensors).
+    Returns static reference data — no database call.
+     */
+    getDefinitionTemplates(signal?: AbortSignal): Promise<TrackerDefinitionPreset[]> {
+        let url_ = this.baseUrl + "/api/v4/trackers/definitions/templates";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDefinitionTemplates(_response);
+        });
+    }
+
+    protected processGetDefinitionTemplates(response: Response): Promise<TrackerDefinitionPreset[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerDefinitionPreset[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TrackerDefinitionPreset[]>(null as any);
+    }
+
+    /**
      * Get all tracker definitions. Returns public trackers for unauthenticated users,
     or all visible trackers for authenticated users.
      * @param category (optional) 
@@ -17908,8 +17984,7 @@ export enum InjectionSite {
     Other = "Other",
 }
 
-export interface InjectableMedication {
-    id?: string;
+export interface InjectableMedicationPreset {
     name?: string;
     category?: InjectableCategory;
     concentration?: number;
@@ -17918,9 +17993,6 @@ export interface InjectableMedication {
     onset?: number | undefined;
     peak?: number | undefined;
     duration?: number | undefined;
-    defaultDose?: number | undefined;
-    sortOrder?: number;
-    isArchived?: boolean;
 }
 
 export enum InjectableCategory {
@@ -17938,6 +18010,21 @@ export enum InjectableCategory {
 export enum UnitType {
     Units = "Units",
     Milligrams = "Milligrams",
+}
+
+export interface InjectableMedication {
+    id?: string;
+    name?: string;
+    category?: InjectableCategory;
+    concentration?: number;
+    unitType?: UnitType;
+    dia?: number | undefined;
+    onset?: number | undefined;
+    peak?: number | undefined;
+    duration?: number | undefined;
+    defaultDose?: number | undefined;
+    sortOrder?: number;
+    isArchived?: boolean;
 }
 
 /** Local auth configuration response */
@@ -18797,6 +18884,7 @@ export interface Treatment extends ProcessableDocumentBase {
     canonicalId?: string | undefined;
     dbId?: string | undefined;
     sources?: string[] | undefined;
+    injectableMedicationId?: string | undefined;
 }
 
 export function isTreatment(object: any): object is Treatment {
@@ -20578,6 +20666,25 @@ export interface TrackerAlertDto {
     vibrateEnabled?: boolean;
 }
 
+export interface TrackerDefinitionPreset {
+    name?: string;
+    description?: string | undefined;
+    category?: TrackerCategory;
+    icon?: string;
+    lifespanHours?: number | undefined;
+}
+
+export enum TrackerCategory {
+    Consumable = "Consumable",
+    Reservoir = "Reservoir",
+    Appointment = "Appointment",
+    Reminder = "Reminder",
+    Custom = "Custom",
+    Sensor = "Sensor",
+    Cannula = "Cannula",
+    Battery = "Battery",
+}
+
 export interface TrackerDefinitionDto {
     id?: string;
     name?: string;
@@ -20599,17 +20706,6 @@ export interface TrackerDefinitionDto {
     completionEventType?: string | undefined;
     createdAt?: Date;
     updatedAt?: Date | undefined;
-}
-
-export enum TrackerCategory {
-    Consumable = "Consumable",
-    Reservoir = "Reservoir",
-    Appointment = "Appointment",
-    Reminder = "Reminder",
-    Custom = "Custom",
-    Sensor = "Sensor",
-    Cannula = "Cannula",
-    Battery = "Battery",
 }
 
 export interface NotificationThresholdDto {
@@ -21398,6 +21494,7 @@ export interface Profile {
     enteredBy?: string | undefined;
     loopSettings?: LoopProfileSettings | undefined;
     isExternallyManaged?: boolean;
+    defaultInsulinMedicationId?: string | undefined;
 }
 
 export interface ProfileData {

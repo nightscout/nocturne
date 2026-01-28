@@ -11,8 +11,25 @@ import {
 	type UpdateTrackerDefinitionRequest,
 	type CompleteTrackerInstanceRequest,
 	type AckTrackerRequest,
+	type TrackerDefinitionPreset,
 } from '$api';
 import { CreateTrackerDefinitionRequestSchema, UpdateTrackerDefinitionRequestSchema } from '$lib/api/generated/schemas';
+
+/**
+ * Get preset templates for common tracker definitions (e.g., CGM sensors)
+ */
+export const getDefinitionTemplates = query(z.void(), async () => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		const templates = await apiClient.trackers.getDefinitionTemplates();
+		return (templates ?? []) as TrackerDefinitionPreset[];
+	} catch (err) {
+		console.error('Error loading tracker definition templates:', err);
+		throw error(500, 'Failed to load tracker definition templates');
+	}
+});
 
 /**
  * Get all tracker definitions

@@ -19,7 +19,9 @@
     Droplet,
     TrendingUp,
     Target,
+    Syringe,
   } from "lucide-svelte";
+  import { getActiveMedications } from "$lib/data/medications.remote";
 
   interface Props {
     open: boolean;
@@ -40,6 +42,9 @@
     onClose,
     onSave,
   }: Props = $props();
+
+  // Query active medications for the default insulin selector
+  const medicationsQuery = $derived(getActiveMedications());
 
   // Deep clone the profile for editing
   let editedProfile = $state<Profile | null>(null);
@@ -246,21 +251,6 @@
                 </Select.Root>
               </div>
 
-              <!-- DIA -->
-              <div class="space-y-2">
-                <Label for="dia">Duration of Insulin Action (hours)</Label>
-                <Input
-                  id="dia"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="10"
-                  value={storeData.dia ?? 4}
-                  onchange={(e) =>
-                    updateStoreField("dia", Number(e.currentTarget.value))}
-                />
-              </div>
-
               <!-- Carbs/hr -->
               <div class="space-y-2">
                 <Label for="carbs-hr">Carbs Absorption Rate (g/hr)</Label>
@@ -274,6 +264,61 @@
                   onchange={(e) =>
                     updateStoreField("carbs_hr", Number(e.currentTarget.value))}
                 />
+              </div>
+
+              <!-- Default Insulin -->
+              <div class="space-y-2 col-span-2">
+                <Label class="flex items-center gap-1.5">
+                  <Syringe class="h-3.5 w-3.5" />
+                  Default Insulin
+                </Label>
+                <p class="text-xs text-muted-foreground">
+                  Used for IOB calculations when a treatment doesn't specify which insulin was used.
+                </p>
+                {#await medicationsQuery}
+                  <Select.Root type="single" disabled>
+                    <Select.Trigger class="w-full">Loading medications...</Select.Trigger>
+                    <Select.Content />
+                  </Select.Root>
+                {:then medications}
+                  {#if medications.length === 0}
+                    <p class="text-sm text-muted-foreground">
+                      No medications configured.
+                      <a href="/settings/medications" class="text-primary hover:underline">Add one</a>
+                    </p>
+                  {:else}
+                    <Select.Root
+                      type="single"
+                      value={(editedProfile as any)?.defaultInsulinMedicationId ?? ""}
+                      onValueChange={(v) => {
+                        if (editedProfile) {
+                          (editedProfile as any).defaultInsulinMedicationId = v || null;
+                          editedProfile = { ...editedProfile };
+                        }
+                      }}
+                    >
+                      <Select.Trigger class="w-full">
+                        {(() => {
+                          const id = (editedProfile as any)?.defaultInsulinMedicationId;
+                          const med = id ? medications.find((m) => m.id === id) : null;
+                          return med ? `${med.name}${med.dia ? ` (${med.dia}h DIA)` : ""}` : "Select default insulin";
+                        })()}
+                      </Select.Trigger>
+                      <Select.Content>
+                        {#each medications as med}
+                          <Select.Item value={med.id ?? ""}>
+                            {med.name}
+                            {#if med.dia}
+                              <span class="text-muted-foreground text-xs ml-1">({med.dia}h DIA)</span>
+                            {/if}
+                          </Select.Item>
+                        {/each}
+                      </Select.Content>
+                    </Select.Root>
+                  {/if}
+                {:catch}
+                  <p class="text-sm text-muted-foreground">Failed to load medications</p>
+                {/await}
               </div>
             </div>
           </Tabs.Content>

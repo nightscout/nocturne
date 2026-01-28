@@ -4,7 +4,24 @@
 import { z } from 'zod';
 import { getRequestEvent, query, command } from '$app/server';
 import { error } from '@sveltejs/kit';
-import type { InjectableMedication, InjectableDose } from '$lib/api';
+import type { InjectableMedication, InjectableDose, InjectableMedicationPreset } from '$lib/api';
+import { getActiveMedications, getRecentDoses } from '$lib/data/medications.remote';
+
+/**
+ * Get preset medication templates (static reference data)
+ */
+export const getPresets = query(z.void(), async () => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		const presets = await apiClient.injectableMedications.getPresets();
+		return (presets ?? []) as InjectableMedicationPreset[];
+	} catch (err) {
+		console.error('Error loading medication presets:', err);
+		throw error(500, 'Failed to load medication presets');
+	}
+});
 
 /**
  * Get all injectable medications with optional archived filter
@@ -87,6 +104,7 @@ export const createMedication = command(
 
 		await getMedications(undefined).refresh();
 		await getMedications(true).refresh();
+		await getActiveMedications().refresh();
 
 		return {
 			message: 'Medication created successfully',
@@ -111,6 +129,7 @@ export const updateMedication = command(
 
 		await getMedications(undefined).refresh();
 		await getMedications(true).refresh();
+		await getActiveMedications().refresh();
 
 		return {
 			message: 'Medication updated successfully',
@@ -130,6 +149,7 @@ export const archiveMedication = command(z.string(), async (id) => {
 
 	await getMedications(undefined).refresh();
 	await getMedications(true).refresh();
+	await getActiveMedications().refresh();
 
 	return {
 		message: 'Medication archived successfully',
@@ -163,6 +183,7 @@ export const logDose = command(
 		const result = await apiClient.injectableDoses.create(dose);
 
 		await getMedicationDoses({}).refresh();
+		await getRecentDoses().refresh();
 
 		return {
 			message: 'Dose logged successfully',
@@ -186,6 +207,7 @@ export const updateDose = command(
 		const result = await apiClient.injectableDoses.update(id, dose);
 
 		await getMedicationDoses({}).refresh();
+		await getRecentDoses().refresh();
 
 		return {
 			message: 'Dose updated successfully',
@@ -204,6 +226,7 @@ export const deleteDose = command(z.string(), async (id) => {
 	await apiClient.injectableDoses.delete(id);
 
 	await getMedicationDoses({}).refresh();
+	await getRecentDoses().refresh();
 
 	return {
 		message: 'Dose deleted successfully',

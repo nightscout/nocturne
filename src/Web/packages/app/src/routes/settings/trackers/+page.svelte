@@ -11,6 +11,8 @@
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as Command from "$lib/components/ui/command";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
@@ -29,6 +31,7 @@
     Plus,
     Play,
     Check,
+    ChevronsUpDown,
     AlertTriangle,
     History,
     Settings2,
@@ -52,6 +55,7 @@
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
+    type TrackerDefinitionPreset,
   } from "$api";
 
   // Auth state
@@ -67,6 +71,11 @@
   let activeInstances = $state<TrackerInstanceDto[]>([]);
   let historyInstances = $state<TrackerInstanceDto[]>([]);
   let presets = $state<TrackerPresetDto[]>([]);
+
+  // Template combobox state
+  let templatePopoverOpen = $state(false);
+  let templateSearchValue = $state("");
+  let definitionTemplates = $state<TrackerDefinitionPreset[]>([]);
 
   // Dialog state
   let isDefinitionDialogOpen = $state(false);
@@ -209,16 +218,18 @@
     loading = true;
     error = null;
     try {
-      const [defs, active, history, prsts] = await Promise.all([
+      const [defs, active, history, prsts, templates] = await Promise.all([
         trackersRemote.getDefinitions(undefined),
         trackersRemote.getActiveInstances(),
         trackersRemote.getInstanceHistory(undefined),
         trackersRemote.getPresets(),
+        trackersRemote.getDefinitionTemplates(),
       ]);
       definitions = defs || [];
       activeInstances = active || [];
       historyInstances = history || [];
       presets = prsts || [];
+      definitionTemplates = templates || [];
     } catch (err) {
       console.error("Failed to load tracker data:", err);
       error = "Failed to load tracker data";
@@ -317,6 +328,25 @@
     return true;
   }
 
+  // Filtered templates for combobox search
+  let filteredTemplates = $derived.by(() => {
+    if (!templateSearchValue.trim()) return definitionTemplates;
+    const search = templateSearchValue.toLowerCase();
+    return definitionTemplates.filter((t) =>
+      (t.name ?? "").toLowerCase().includes(search),
+    );
+  });
+
+  function applyTemplate(template: TrackerDefinitionPreset) {
+    formName = template.name ?? "";
+    formDescription = template.description ?? "";
+    formCategory = template.category ?? TrackerCategory.Sensor;
+    formLifespanHours = template.lifespanHours ?? undefined;
+    formIcon = template.icon ?? "activity";
+    templatePopoverOpen = false;
+    templateSearchValue = "";
+  }
+
   // Open definition dialog
   function openNewDefinition() {
     if (!requireAuth()) return;
@@ -334,6 +364,7 @@
     formVisibility = TrackerVisibility.Public;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
+    templateSearchValue = "";
     isDefinitionDialogOpen = true;
   }
 
@@ -882,16 +913,106 @@
       <Dialog.Title>
         {isNewDefinition ? "New Tracker Definition" : "Edit Definition"}
       </Dialog.Title>
+      {#if isNewDefinition}
+        <Dialog.Description>
+          Search for a preset or type a custom name.
+        </Dialog.Description>
+      {/if}
     </Dialog.Header>
     <div class="space-y-6 py-4">
       <div class="grid grid-cols-2 gap-4">
         <div class="space-y-2">
           <Label for="name">Name</Label>
-          <Input
-            id="name"
-            bind:value={formName}
-            placeholder="e.g., G7 Sensor"
-          />
+          {#if isNewDefinition}
+            <Popover.Root bind:open={templatePopoverOpen}>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={templatePopoverOpen}
+                    class="w-full justify-between font-normal"
+                    {...props}
+                  >
+                    {#if formName}
+                      <span class="truncate">{formName}</span>
+                    {:else}
+                      <span class="text-muted-foreground"
+                        >Search presets or enter a name...</span
+                      >
+                    {/if}
+                    <ChevronsUpDown
+                      class="ml-2 h-4 w-4 shrink-0 opacity-50"
+                    />
+                  </Button>
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content
+                class="w-[--bits-popover-trigger-width] p-0"
+                align="start"
+              >
+                <Command.Root shouldFilter={false}>
+                  <Command.Input
+                    placeholder="Search sensors..."
+                    bind:value={templateSearchValue}
+                  />
+                  <Command.List>
+                    <Command.Empty>
+                      {#if templateSearchValue.trim()}
+                        <button
+                          type="button"
+                          class="w-full p-2 text-left text-sm hover:bg-accent rounded"
+                          onclick={() => {
+                            formName = templateSearchValue.trim();
+                            templatePopoverOpen = false;
+                            templateSearchValue = "";
+                          }}
+                        >
+                          Use "{templateSearchValue.trim()}" as custom name
+                        </button>
+                      {:else}
+                        No templates found.
+                      {/if}
+                    </Command.Empty>
+                    <Command.Group heading="CGM Sensors">
+                      {#each filteredTemplates as template}
+                        <Command.Item
+                          value={template.name ?? ""}
+                          onSelect={() => applyTemplate(template)}
+                          class="cursor-pointer"
+                        >
+                          <Check
+                            class={cn(
+                              "mr-2 h-4 w-4",
+                              formName === template.name
+                                ? "opacity-100"
+                                : "opacity-0",
+                            )}
+                          />
+                          <div class="flex-1 min-w-0">
+                            <span class="text-sm">{template.name}</span>
+                            {#if template.lifespanHours}
+                              <span
+                                class="text-xs text-muted-foreground ml-2"
+                              >
+                                {Math.floor(template.lifespanHours / 24)}d
+                              </span>
+                            {/if}
+                          </div>
+                        </Command.Item>
+                      {/each}
+                    </Command.Group>
+                  </Command.List>
+                </Command.Root>
+              </Popover.Content>
+            </Popover.Root>
+          {:else}
+            <Input
+              id="name"
+              bind:value={formName}
+              placeholder="e.g., G7 Sensor"
+            />
+          {/if}
         </div>
         <div class="space-y-2">
           <Label for="category">Category</Label>

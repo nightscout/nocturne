@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { Treatment } from "$lib/api";
+  import {
+    type Treatment,
+    type InjectableMedication,
+    InjectableCategory,
+  } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -8,6 +12,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import EventTypeCombobox from "./EventTypeCombobox.svelte";
   import TreatmentFoodBreakdown from "./TreatmentFoodBreakdown.svelte";
+  import * as Select from "$lib/components/ui/select";
   import {
     Syringe,
     Apple,
@@ -21,6 +26,7 @@
   } from "lucide-svelte";
   import { getEventTypeStyle } from "$lib/constants/treatment-categories";
   import { formatDateTime, formatDateForInput } from "$lib/utils/formatting";
+  import { getActiveMedications } from "$lib/data/medications.remote";
 
   interface Props {
     open: boolean;
@@ -42,6 +48,9 @@
     onDelete,
   }: Props = $props();
 
+  // Query active medications for insulin selector
+  const medicationsQuery = $derived(getActiveMedications());
+
   // Editable form state
   let formState = $state<{
     created_at: string;
@@ -53,6 +62,7 @@
     notes: string;
     profile: string;
     additionalPropertiesJson: string;
+    injectableMedicationId: string;
   }>({
     created_at: new Date().toISOString(),
     eventType: "",
@@ -63,6 +73,7 @@
     notes: "",
     profile: "",
     additionalPropertiesJson: "",
+    injectableMedicationId: "",
   });
 
   // Reset form when treatment changes
@@ -80,6 +91,7 @@
         additionalPropertiesJson: treatment.additional_properties
           ? JSON.stringify(treatment.additional_properties, null, 2)
           : "",
+        injectableMedicationId: (treatment as any).injectableMedicationId || "",
       };
     } else {
       // Reset to defaults for creation
@@ -94,6 +106,7 @@
         notes: "",
         profile: "",
         additionalPropertiesJson: "",
+        injectableMedicationId: "",
       };
     }
   });
@@ -133,6 +146,11 @@
       profile: formState.profile || undefined,
       additional_properties: additionalProps,
     };
+    // Add injectable medication ID if selected (NocturneOnly field)
+    if (formState.injectableMedicationId) {
+      (updated as any).injectableMedicationId =
+        formState.injectableMedicationId;
+    }
 
     onSave(updated);
   }
@@ -148,6 +166,29 @@
     }
     return formState.insulin / (formState.duration / 60);
   });
+
+  // We track resolved medications separately since medicationsQuery is a promise
+  let resolvedMedications = $state<InjectableMedication[]>([]);
+  $effect(() => {
+    medicationsQuery.then((meds) => {
+      resolvedMedications = meds;
+    });
+  });
+
+  let isGlp = $derived.by(() => {
+    if (!formState.injectableMedicationId || resolvedMedications.length === 0)
+      return false;
+    const med = resolvedMedications.find(
+      (m) => m.id === formState.injectableMedicationId
+    );
+    return (
+      med?.category === InjectableCategory.GLP1Daily ||
+      med?.category === InjectableCategory.GLP1Weekly
+    );
+  });
+
+  let doseLabel = $derived(isGlp ? "Dose (mg)" : "Insulin (U)");
+  let doseStep = $derived(isGlp ? "0.25" : "0.05");
 </script>
 
 <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
@@ -226,49 +267,93 @@
           />
         </div>
 
-        <!-- Insulin, Duration & Rate Row -->
-        <div class="grid grid-cols-3 gap-4">
+        <!-- Medication Type Selector -->
+        {#await medicationsQuery then medications}
+          {#if medications.length > 0}
+            <div class="space-y-2">
+              <Label class="flex items-center gap-1.5">
+                <Syringe class="h-3.5 w-3.5" />
+                Medication Type
+              </Label>
+              <Select.Root
+                type="single"
+                value={formState.injectableMedicationId}
+                onValueChange={(v) =>
+                  (formState.injectableMedicationId = v ?? "")}
+              >
+                <Select.Trigger class="w-full">
+                  {(() => {
+                    const med = formState.injectableMedicationId
+                      ? medications.find(
+                          (m) => m.id === formState.injectableMedicationId
+                        )
+                      : null;
+                    return med ? med.name : "Default (from profile)";
+                  })()}
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="">Default (from profile)</Select.Item>
+                  {#each medications as med}
+                    <Select.Item value={med.id ?? ""}>
+                      {med.name}
+                      {#if med.dia}
+                        <span class="text-muted-foreground text-xs ml-1">
+                          ({med.dia}h DIA)
+                        </span>
+                      {/if}
+                    </Select.Item>
+                  {/each}
+                </Select.Content>
+              </Select.Root>
+            </div>
+          {/if}
+        {/await}
+
+        <!-- Insulin/Dose, Duration & Rate Row -->
+        <div class="grid {isGlp ? 'grid-cols-1' : 'grid-cols-3'} gap-4">
           <div class="space-y-2">
             <Label for="insulin" class="flex items-center gap-1.5">
               <Syringe class="h-3.5 w-3.5 text-blue-500" />
-              Insulin (U)
+              {doseLabel}
             </Label>
             <Input
               id="insulin"
               type="number"
-              step="0.05"
+              step={doseStep}
               min="0"
               bind:value={formState.insulin}
               placeholder="0.0"
             />
           </div>
 
-          <div class="space-y-2">
-            <Label for="duration">Duration (min)</Label>
-            <Input
-              id="duration"
-              type="number"
-              step="1"
-              min="0"
-              bind:value={formState.duration}
-              placeholder="0"
-            />
-          </div>
+          {#if !isGlp}
+            <div class="space-y-2">
+              <Label for="duration">Duration (min)</Label>
+              <Input
+                id="duration"
+                type="number"
+                step="1"
+                min="0"
+                bind:value={formState.duration}
+                placeholder="0"
+              />
+            </div>
 
-          <div class="space-y-2">
-            <Label for="rate" class="flex items-center gap-1.5">
-              <Activity class="h-3.5 w-3.5" />
-              Rate (U/hr)
-            </Label>
-            <Input
-              id="rate"
-              type="text"
-              readonly
-              disabled
-              value={calculatedRate > 0 ? calculatedRate.toFixed(3) : "-"}
-              class="bg-muted text-muted-foreground"
-            />
-          </div>
+            <div class="space-y-2">
+              <Label for="rate" class="flex items-center gap-1.5">
+                <Activity class="h-3.5 w-3.5" />
+                Rate (U/hr)
+              </Label>
+              <Input
+                id="rate"
+                type="text"
+                readonly
+                disabled
+                value={calculatedRate > 0 ? calculatedRate.toFixed(3) : "-"}
+                class="bg-muted text-muted-foreground"
+              />
+            </div>
+          {/if}
         </div>
 
         <!-- Carbs & Glucose Row -->

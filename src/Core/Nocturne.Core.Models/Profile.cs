@@ -76,6 +76,14 @@ public class Profile
     public bool IsExternallyManaged { get; set; }
 
     /// <summary>
+    /// Gets or sets the default injectable medication ID used for IOB calculations
+    /// when a treatment does not specify which insulin was used.
+    /// </summary>
+    [JsonPropertyName("defaultInsulinMedicationId")]
+    [NocturneOnly]
+    public Guid? DefaultInsulinMedicationId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether this profile was converted on the fly from legacy format
     /// </summary>
     [JsonIgnore]

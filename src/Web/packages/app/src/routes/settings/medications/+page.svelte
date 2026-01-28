@@ -12,11 +12,15 @@
   import { Label } from "$lib/components/ui/label";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as Command from "$lib/components/ui/command";
   import { Switch } from "$lib/components/ui/switch";
+  import { cn } from "$lib/utils";
   import type {
     InjectableMedication,
     InjectableCategory,
     UnitType,
+    InjectableMedicationPreset,
   } from "$lib/api";
   import {
     Pill,
@@ -27,9 +31,12 @@
     Droplets,
     Syringe,
     AlertCircle,
+    ChevronsUpDown,
+    Check,
   } from "lucide-svelte";
   import {
     getMedications,
+    getPresets,
     createMedication,
     updateMedication,
     archiveMedication,
@@ -42,8 +49,23 @@
   let editingMedication = $state<InjectableMedication | null>(null);
   let isLoading = $state(false);
 
-  // Query for medications
+  // Preset combobox state
+  let presetPopoverOpen = $state(false);
+  let presetSearchValue = $state("");
+  let presets = $state<InjectableMedicationPreset[]>([]);
+  let presetsLoaded = $state(false);
+
+  // Query for medications and presets
   const medicationsQuery = $derived(getMedications(showArchived));
+  const presetsQuery = $derived(getPresets());
+
+  // Load presets when available
+  $effect(() => {
+    presetsQuery.then((result) => {
+      presets = result;
+      presetsLoaded = true;
+    });
+  });
 
   // Category display names
   const categoryLabels: Record<string, string> = {
@@ -151,6 +173,7 @@
     formPeak = undefined;
     formDuration = undefined;
     formDefaultDose = undefined;
+    presetSearchValue = "";
   }
 
   function populateForm(med: InjectableMedication) {
@@ -168,6 +191,39 @@
   function openCreateDialog() {
     resetForm();
     showCreateDialog = true;
+  }
+
+  function applyPreset(preset: InjectableMedicationPreset) {
+    formName = preset.name ?? "";
+    formCategory = preset.category ?? "RapidActing";
+    formConcentration = preset.concentration;
+    formUnitType = preset.unitType ?? "Units";
+    formDia = preset.dia ?? undefined;
+    formOnset = preset.onset ?? undefined;
+    formPeak = preset.peak ?? undefined;
+    formDuration = preset.duration ?? undefined;
+    presetPopoverOpen = false;
+    presetSearchValue = "";
+  }
+
+  // Filtered presets for combobox search
+  let filteredPresets = $derived.by(() => {
+    if (!presetSearchValue.trim()) return presets;
+    const search = presetSearchValue.toLowerCase();
+    return presets.filter((p) => (p.name ?? "").toLowerCase().includes(search));
+  });
+
+  // Group filtered presets by category for display
+  function groupPresetsByCategory(
+    items: InjectableMedicationPreset[]
+  ): Record<string, InjectableMedicationPreset[]> {
+    const groups: Record<string, InjectableMedicationPreset[]> = {};
+    for (const preset of items) {
+      const cat = preset.category ?? "Other";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(preset);
+    }
+    return groups;
   }
 
   function openEditDialog(med: InjectableMedication) {
@@ -436,9 +492,7 @@
       <CardContent class="py-8">
         <div class="text-center space-y-2">
           <AlertCircle class="h-8 w-8 text-destructive mx-auto" />
-          <p class="text-destructive font-medium">
-            Failed to load medications
-          </p>
+          <p class="text-destructive font-medium">Failed to load medications</p>
           <p class="text-sm text-muted-foreground">
             {err instanceof Error ? err.message : "An error occurred"}
           </p>
@@ -457,17 +511,100 @@
     <Dialog.Header>
       <Dialog.Title>Add Medication</Dialog.Title>
       <Dialog.Description>
-        Add a new injectable medication to your catalog.
+        Search for a preset or type a custom name.
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
       <div class="space-y-2">
-        <Label for="create-name">Name</Label>
-        <Input
-          id="create-name"
-          placeholder="e.g. Humalog, Tresiba, Ozempic"
-          bind:value={formName}
-        />
+        <Label>Name</Label>
+        <Popover.Root bind:open={presetPopoverOpen}>
+          <Popover.Trigger>
+            {#snippet child({ props })}
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={presetPopoverOpen}
+                class="w-full justify-between font-normal"
+                {...props}
+              >
+                {#if formName}
+                  <span class="truncate">{formName}</span>
+                {:else}
+                  <span class="text-muted-foreground">
+                    Search presets or enter a name...
+                  </span>
+                {/if}
+                <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            {/snippet}
+          </Popover.Trigger>
+          <Popover.Content
+            class="w-[--bits-popover-trigger-width] p-0"
+            align="start"
+          >
+            <Command.Root shouldFilter={false}>
+              <Command.Input
+                placeholder="Search medications..."
+                bind:value={presetSearchValue}
+              />
+              <Command.List>
+                <Command.Empty>
+                  {#if presetSearchValue.trim()}
+                    <button
+                      type="button"
+                      class="w-full p-2 text-left text-sm hover:bg-accent rounded"
+                      onclick={() => {
+                        formName = presetSearchValue.trim();
+                        presetPopoverOpen = false;
+                        presetSearchValue = "";
+                      }}
+                    >
+                      Use "{presetSearchValue.trim()}" as custom name
+                    </button>
+                  {:else}
+                    No presets found.
+                  {/if}
+                </Command.Empty>
+                {@const grouped = groupPresetsByCategory(filteredPresets)}
+                {#each categoryOrder as category}
+                  {#if grouped[category] && grouped[category].length > 0}
+                    <Command.Group
+                      heading={categoryLabels[category] ?? category}
+                    >
+                      {#each grouped[category] as preset}
+                        <Command.Item
+                          value={preset.name ?? ""}
+                          onSelect={() => applyPreset(preset)}
+                          class="cursor-pointer"
+                        >
+                          <Check
+                            class={cn(
+                              "mr-2 h-4 w-4",
+                              formName === preset.name
+                                ? "opacity-100"
+                                : "opacity-0"
+                            )}
+                          />
+                          <div class="flex-1 min-w-0">
+                            <span class="text-sm">{preset.name}</span>
+                            <span class="text-xs text-muted-foreground ml-2">
+                              {#if preset.dia !== undefined && preset.dia !== null}
+                                DIA {formatDuration(preset.dia)}
+                              {/if}
+                              {#if preset.duration !== undefined && preset.duration !== null}
+                                {formatDuration(preset.duration)}
+                              {/if}
+                            </span>
+                          </div>
+                        </Command.Item>
+                      {/each}
+                    </Command.Group>
+                  {/if}
+                {/each}
+              </Command.List>
+            </Command.Root>
+          </Popover.Content>
+        </Popover.Root>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
@@ -558,22 +695,22 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div class="space-y-2">
-          <Label for="create-onset">Onset (hours)</Label>
+          <Label for="create-onset">Onset (minutes)</Label>
           <Input
             id="create-onset"
             type="number"
-            step="0.25"
-            placeholder="e.g. 0.25"
+            step="5"
+            placeholder="e.g. 15"
             bind:value={formOnset}
           />
         </div>
         <div class="space-y-2">
-          <Label for="create-peak">Peak (hours)</Label>
+          <Label for="create-peak">Peak (minutes)</Label>
           <Input
             id="create-peak"
             type="number"
-            step="0.25"
-            placeholder="e.g. 1.5"
+            step="5"
+            placeholder="e.g. 15"
             bind:value={formPeak}
           />
         </div>
@@ -669,12 +806,7 @@
       <div class="grid grid-cols-2 gap-4">
         <div class="space-y-2">
           <Label for="edit-dia">DIA (hours)</Label>
-          <Input
-            id="edit-dia"
-            type="number"
-            step="0.5"
-            bind:value={formDia}
-          />
+          <Input id="edit-dia" type="number" step="0.5" bind:value={formDia} />
         </div>
         <div class="space-y-2">
           <Label for="edit-duration">Duration (hours)</Label>
