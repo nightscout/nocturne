@@ -81,7 +81,7 @@
       name: "Discord Community",
       description: "Chat with developers and other users",
       icon: MessageCircle,
-      href: "https://discord.gg/nightscout",
+      href: "https://discord.gg/xWYz9fFWrj",
       badge: "Active",
     },
     {
