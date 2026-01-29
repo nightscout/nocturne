@@ -11,7 +11,8 @@
     "./stores/*.svelte": "./src/lib/stores/*.svelte.ts",
     "./stores/*": "./src/lib/stores/*",
     "./components/*.svelte": "./src/lib/components/*.svelte",
-    "./components/*": "./src/lib/components/*"
+    "./components/*": "./src/lib/components/*",
+    "./api/*": "./src/lib/api/generated/*"
   },
   "directories": {
     "lib": "lib"

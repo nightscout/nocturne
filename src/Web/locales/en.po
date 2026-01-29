@@ -170,6 +170,7 @@ msgstr "Reason"
 msgid "Reason for this treatment"
 msgstr "Reason for this treatment"
 
+#: src/lib/components/ConnectorConfigDialog.svelte
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
@@ -215,6 +216,7 @@ msgstr "Cancel"
 msgid "Saving..."
 msgstr "Saving..."
 
+#: src/lib/components/ConnectorConfigDialog.svelte
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -266,7 +268,6 @@ msgstr "Using cached data"
 #: src/lib/components/dashboard/PredictionVisualizations.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
-#: src/routes/+layout.svelte
 #: src/routes/auth/forgot-password/+page.svelte
 #: src/routes/auth/login/+page.svelte
 #: src/routes/auth/register/+page.svelte
@@ -1025,6 +1026,7 @@ msgstr "Comparison Error"
 #: src/routes/dashboard/analyses/[id]/+page.svelte
 #: src/routes/dashboard/analyses/[id]/+page.svelte
 #: src/routes/dashboard/analyses/[id]/+page.svelte
+#: src/routes/download/+page.svelte
 #: src/routes/reports/battery/+page.svelte
 #: src/routes/reports/battery/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
@@ -1372,14 +1374,17 @@ msgstr "Polling Active"
 msgid "Polling Paused"
 msgstr "Polling Paused"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/routes/compatibility/+page.svelte
 msgid "Configuration"
 msgstr "Configuration"
 
 #: src/routes/compatibility/+page.svelte
 #: src/routes/compatibility/test/+page.svelte
+#: src/routes/download/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "Nightscout URL"
 msgstr "Nightscout URL"
 
@@ -1527,6 +1532,7 @@ msgstr "Nightscout"
 msgid "NS: {0}"
 msgstr "NS: {0}"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/layout/AppSidebar.svelte
@@ -3408,6 +3414,8 @@ msgstr "Appearance"
 msgid "Therapy"
 msgstr "Therapy"
 
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/features/+page.svelte
 msgid "Features"
@@ -3423,7 +3431,9 @@ msgstr "Alarms"
 msgid "Notifications & Trackers"
 msgstr "Notifications & Trackers"
 
+#: src/lib/components/StepIndicator.svelte
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/download/+page.svelte
 msgid "Connectors"
 msgstr "Connectors"
 
@@ -6608,6 +6618,7 @@ msgstr "Demo Mode"
 
 #: src/lib/components/ui/connector-toggle-group/connector-toggle-group-item.svelte
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/download/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 msgid "<0/> Configure"
 msgstr "<0/> Configure"
@@ -7140,6 +7151,7 @@ msgid "Show side-by-side view"
 msgstr "Show side-by-side view"
 
 #: src/routes/compatibility/test/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "<0/> Testing..."
 msgstr "<0/> Testing..."
 
@@ -9760,16 +9772,22 @@ msgstr "Failed to load profiles"
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
-#: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "Api"
 msgstr "Api"
 
+#: src/routes/download/+page.svelte
+#: src/routes/download/+page.svelte
+#: src/routes/download/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "MongoDb"
 msgstr "MongoDb"
 
@@ -9870,20 +9888,27 @@ msgstr "<0/> Nightscout API"
 msgid "<0/> MongoDB (Advanced)"
 msgstr "<0/> MongoDB (Advanced)"
 
+#: src/routes/download/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "API Secret"
 msgstr "API Secret"
 
+#: src/routes/download/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "Your API secret"
 msgstr "Your API secret"
 
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "MongoDB Connection String"
 msgstr "MongoDB Connection String"
 
+#: src/routes/download/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "Database Name"
 msgstr "Database Name"
 
@@ -9908,14 +9933,17 @@ msgid "End Date"
 msgstr "End Date"
 
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "Connection Successful"
 msgstr "Connection Successful"
 
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "Connection Failed"
 msgstr "Connection Failed"
 
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/setup/+page.svelte
 msgid "<0/> Test Connection"
 msgstr "<0/> Test Connection"
 
@@ -10087,6 +10115,7 @@ msgstr "Discord Community"
 msgid "Chat with developers and other users"
 msgstr "Chat with developers and other users"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/routes/settings/support/+page.svelte
 msgid "Documentation"
 msgstr "Documentation"
@@ -11718,6 +11747,7 @@ msgstr ""
 msgid "Bolus time ({0})"
 msgstr "Bolus time ({0})"
 
+#: src/routes/download/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "<0/> Back to connectors"
 msgstr "<0/> Back to connectors"
@@ -11890,3 +11920,706 @@ msgstr "Avg Daily Insulin"
 #: src/routes/calendar/+page.svelte
 msgid "Green band = target range"
 msgstr "Green band = target range"
+
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+#: src/routes/+layout.svelte
+msgid "N"
+msgstr "N"
+
+#: src/routes/+layout.svelte
+msgid "Nocturne Portal"
+msgstr "Nocturne Portal"
+
+#. placeholder {0}: new Date().getFullYear()
+#: src/routes/+layout.svelte
+msgid "Nocturne © {0} - Open source diabetes management"
+msgstr "Nocturne © {0} - Open source diabetes management"
+
+#: src/routes/+page.svelte
+msgid "Your Diabetes Data, <0>Your Way</0>"
+msgstr "Your Diabetes Data, <0>Your Way</0>"
+
+#: src/routes/+page.svelte
+msgid ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+msgstr ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+
+#: src/routes/+page.svelte
+msgid "Get Started <0/>"
+msgstr "Get Started <0/>"
+
+#: src/routes/+page.svelte
+msgid "<0/> See it in Action"
+msgstr "<0/> See it in Action"
+
+#: src/routes/+page.svelte
+msgid "Explore Features"
+msgstr "Explore Features"
+
+#: src/routes/+page.svelte
+msgid "Why Choose Nocturne?"
+msgstr "Why Choose Nocturne?"
+
+#: src/routes/+page.svelte
+msgid ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+msgstr ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+
+#: src/routes/+page.svelte
+msgid "Nightscout Compatible"
+msgstr "Nightscout Compatible"
+
+#: src/routes/+page.svelte
+msgid ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+msgstr ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+
+#: src/routes/+page.svelte
+msgid "Modern Performance"
+msgstr "Modern Performance"
+
+#: src/routes/+page.svelte
+msgid ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+msgstr ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+
+#: src/routes/+page.svelte
+msgid "Self-Hosted Security"
+msgstr "Self-Hosted Security"
+
+#: src/routes/+page.svelte
+msgid ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+msgstr ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+
+#: src/routes/+page.svelte
+msgid "Multiple Data Sources"
+msgstr "Multiple Data Sources"
+
+#: src/routes/+page.svelte
+msgid ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+msgstr ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+
+#: src/routes/+page.svelte
+msgid "Real-Time Monitoring"
+msgstr "Real-Time Monitoring"
+
+#: src/routes/+page.svelte
+msgid ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+msgstr ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+
+#: src/routes/+page.svelte
+msgid "Easy Migration"
+msgstr "Easy Migration"
+
+#: src/routes/+page.svelte
+msgid ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+msgstr ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+
+#: src/routes/+page.svelte
+msgid "Get Started in Minutes"
+msgstr "Get Started in Minutes"
+
+#: src/routes/+page.svelte
+msgid ""
+"Our configuration wizard generates everything you need for a\n"
+"production-ready deployment."
+msgstr ""
+"Our configuration wizard generates everything you need for a\n"
+"production-ready deployment."
+
+#: src/routes/+page.svelte
+msgid "Step 1"
+msgstr "Step 1"
+
+#: src/routes/+page.svelte
+msgid "Configure"
+msgstr "Configure"
+
+#: src/routes/+page.svelte
+msgid ""
+"Choose your setup type and configure your data sources through our\n"
+"friendly wizard."
+msgstr ""
+"Choose your setup type and configure your data sources through our\n"
+"friendly wizard."
+
+#: src/routes/+page.svelte
+msgid "Step 2"
+msgstr "Step 2"
+
+#: src/routes/+page.svelte
+msgid "Deploy"
+msgstr "Deploy"
+
+#: src/routes/+page.svelte
+msgid ""
+"Download your configuration files and deploy with Docker in one\n"
+"command."
+msgstr ""
+"Download your configuration files and deploy with Docker in one\n"
+"command."
+
+#: src/routes/+page.svelte
+msgid "Step 3"
+msgstr "Step 3"
+
+#: src/routes/+page.svelte
+msgid "Monitor"
+msgstr "Monitor"
+
+#: src/routes/+page.svelte
+msgid ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+msgstr ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+
+#: src/routes/+page.svelte
+msgid "Ready to Take Control?"
+msgstr "Ready to Take Control?"
+
+#: src/routes/+page.svelte
+msgid ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+msgstr ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+
+#: src/routes/+page.svelte
+msgid "Start Configuration <0/>"
+msgstr "Start Configuration <0/>"
+
+#: src/routes/+page.svelte
+msgid "Read the Docs"
+msgstr "Read the Docs"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Setup"
+msgstr "Setup"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Download"
+msgstr "Download"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Setup progress"
+msgstr "Setup progress"
+
+#: src/lib/components/SiteHeader.svelte
+msgid "Docs"
+msgstr "Docs"
+
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+#: src/lib/components/SiteHeader.svelte
+msgid "Get Started"
+msgstr "Get Started"
+
+#: src/lib/components/SiteHeader.svelte
+msgid "Toggle menu"
+msgstr "Toggle menu"
+
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"Open source diabetes data management with full Nightscout\n"
+"compatibility."
+msgstr ""
+"Open source diabetes data management with full Nightscout\n"
+"compatibility."
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Product"
+msgstr "Product"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "FAQ"
+msgstr "FAQ"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Getting Started"
+msgstr "Getting Started"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Installation"
+msgstr "Installation"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Community"
+msgstr "Community"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "<0/> GitHub"
+msgstr "<0/> GitHub"
+
+#. placeholder {0}: new Date().getFullYear()
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"© {0} Nocturne. Open source under MIT\n"
+"license."
+msgstr ""
+"© {0} Nocturne. Open source under MIT\n"
+"license."
+
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"Made with <0/> by the\n"
+"diabetes community"
+msgstr ""
+"Made with <0/> by the\n"
+"diabetes community"
+
+#: src/routes/demo/+page.svelte
+msgid "Demo - Nocturne"
+msgstr "Demo - Nocturne"
+
+#: src/routes/demo/+page.svelte
+msgid "Try Nocturne"
+msgstr "Try Nocturne"
+
+#: src/routes/demo/+page.svelte
+msgid ""
+"Experience Nocturne with realistic demo data. Explore the interface,\n"
+"check out the charts, and browse the API documentation."
+msgstr ""
+"Experience Nocturne with realistic demo data. Explore the interface,\n"
+"check out the charts, and browse the API documentation."
+
+#: src/routes/demo/+page.svelte
+msgid "Real-time glucose monitoring"
+msgstr "Real-time glucose monitoring"
+
+#: src/routes/demo/+page.svelte
+msgid "See live glucose values update every 5 minutes with realistic patterns"
+msgstr "See live glucose values update every 5 minutes with realistic patterns"
+
+#: src/routes/demo/+page.svelte
+msgid "90 days of historical data"
+msgstr "90 days of historical data"
+
+#: src/routes/demo/+page.svelte
+msgid "Explore trends, patterns, and analytics with a full data history"
+msgstr "Explore trends, patterns, and analytics with a full data history"
+
+#: src/routes/demo/+page.svelte
+msgid "Treatments and device data"
+msgstr "Treatments and device data"
+
+#: src/routes/demo/+page.svelte
+msgid "Sample insulin doses, carbs, and device status entries included"
+msgstr "Sample insulin doses, carbs, and device status entries included"
+
+#: src/routes/demo/+page.svelte
+msgid "<0/> Launch Demo App <1/>"
+msgstr "<0/> Launch Demo App <1/>"
+
+#: src/routes/demo/+page.svelte
+msgid "<0/> Explore API Docs <1/>"
+msgstr "<0/> Explore API Docs <1/>"
+
+#: src/routes/demo/+page.svelte
+msgid ""
+"<0>Note:</0> This is a demo instance with synthetic data. Data resets periodically.\n"
+"For your own instance with real data, use the <1>setup wizard</1>."
+msgstr ""
+"<0>Note:</0> This is a demo instance with synthetic data. Data resets periodically.\n"
+"For your own instance with real data, use the <1>setup wizard</1>."
+
+#: src/routes/demo/+page.svelte
+msgid "Demo Not Available"
+msgstr "Demo Not Available"
+
+#: src/routes/demo/+page.svelte
+msgid "The demo instance is not currently enabled."
+msgstr "The demo instance is not currently enabled."
+
+#: src/routes/demo/+page.svelte
+msgid "Back to Home"
+msgstr "Back to Home"
+
+#: src/routes/setup/+page.svelte
+msgid "Please enter a Nightscout URL"
+msgstr "Please enter a Nightscout URL"
+
+#: src/routes/setup/+page.svelte
+msgid "Failed to connect to Nightscout"
+msgstr "Failed to connect to Nightscout"
+
+#~ msgid "Fresh Install Setup"
+#~ msgstr "Fresh Install Setup"
+
+#: src/routes/setup/+page.svelte
+msgid "Migrate from Nightscout"
+msgstr "Migrate from Nightscout"
+
+#~ msgid "Compatibility Proxy Setup"
+#~ msgstr "Compatibility Proxy Setup"
+
+#~ msgid "Set up a new Nocturne instance from scratch"
+#~ msgstr "Set up a new Nocturne instance from scratch"
+
+#~ msgid "Import your existing Nightscout data into Nocturne"
+#~ msgstr "Import your existing Nightscout data into Nocturne"
+
+#~ msgid "Run Nocturne alongside your existing Nightscout"
+#~ msgstr "Run Nocturne alongside your existing Nightscout"
+
+#: src/routes/setup/+page.svelte
+msgid "Configure Your Nocturne Instance"
+msgstr "Configure Your Nocturne Instance"
+
+#: src/routes/setup/+page.svelte
+msgid "Choose how you'd like to set up Nocturne"
+msgstr "Choose how you'd like to set up Nocturne"
+
+#: src/routes/setup/+page.svelte
+msgid "Fresh Install"
+msgstr "Fresh Install"
+
+#: src/routes/setup/+page.svelte
+msgid "New Nocturne instance with no existing data"
+msgstr "New Nocturne instance with no existing data"
+
+#: src/routes/setup/+page.svelte
+msgid "Import existing data from your Nightscout instance"
+msgstr "Import existing data from your Nightscout instance"
+
+#: src/routes/setup/+page.svelte
+msgid "Compatibility Proxy"
+msgstr "Compatibility Proxy"
+
+#: src/routes/setup/+page.svelte
+msgid ""
+"Try Nocturne alongside your existing Nightscout -\n"
+"\"try before you buy\""
+msgstr ""
+"Try Nocturne alongside your existing Nightscout -\n"
+"\"try before you buy\""
+
+#: src/routes/setup/+page.svelte
+msgid "<0/> Back to setup types"
+msgstr "<0/> Back to setup types"
+
+#: src/routes/setup/+page.svelte
+msgid "Source Nightscout Instance"
+msgstr "Source Nightscout Instance"
+
+#: src/routes/setup/+page.svelte
+msgid "Target Nightscout Instance"
+msgstr "Target Nightscout Instance"
+
+#: src/routes/setup/+page.svelte
+msgid "Your existing Nightscout instance to import data from"
+msgstr "Your existing Nightscout instance to import data from"
+
+#: src/routes/setup/+page.svelte
+msgid "Your production Nightscout instance"
+msgstr "Your production Nightscout instance"
+
+#: src/routes/setup/+page.svelte
+msgid "Migration Method"
+msgstr "Migration Method"
+
+#: src/routes/setup/+page.svelte
+msgid "API Migration"
+msgstr "API Migration"
+
+#: src/routes/setup/+page.svelte
+msgid "Connect via Nightscout API"
+msgstr "Connect via Nightscout API"
+
+#: src/routes/setup/+page.svelte
+msgid "Direct MongoDB"
+msgstr "Direct MongoDB"
+
+#: src/routes/setup/+page.svelte
+msgid "Connect directly to MongoDB"
+msgstr "Connect directly to MongoDB"
+
+#: src/routes/setup/+page.svelte
+msgid "Site:"
+msgstr "Site:"
+
+#: src/routes/setup/+page.svelte
+msgid "Version:"
+msgstr "Version:"
+
+#: src/routes/setup/+page.svelte
+msgid "Units:"
+msgstr "Units:"
+
+#: src/routes/setup/+page.svelte
+msgid "Latest reading:"
+msgstr "Latest reading:"
+
+#: src/routes/setup/+page.svelte
+msgid ""
+"Your MongoDB Atlas or self-hosted connection\n"
+"string"
+msgstr ""
+"Your MongoDB Atlas or self-hosted connection\n"
+"string"
+
+#: src/routes/setup/+page.svelte
+msgid "Usually \"nightscout\" or your site name"
+msgstr "Usually \"nightscout\" or your site name"
+
+#: src/routes/setup/+page.svelte
+msgid "Database Configuration"
+msgstr "Database Configuration"
+
+#: src/routes/setup/+page.svelte
+msgid "Choose how to store your data"
+msgstr "Choose how to store your data"
+
+#: src/routes/setup/+page.svelte
+msgid "Included PostgreSQL Container"
+msgstr "Included PostgreSQL Container"
+
+#: src/routes/setup/+page.svelte
+msgid "Recommended"
+msgstr "Recommended"
+
+#: src/routes/setup/+page.svelte
+msgid ""
+"We'll set up and manage everything for you\n"
+"automatically"
+msgstr ""
+"We'll set up and manage everything for you\n"
+"automatically"
+
+#: src/routes/setup/+page.svelte
+msgid "External PostgreSQL Database"
+msgstr "External PostgreSQL Database"
+
+#: src/routes/setup/+page.svelte
+msgid ""
+"Connect to your own managed database\n"
+"instance"
+msgstr ""
+"Connect to your own managed database\n"
+"instance"
+
+#: src/routes/download/+page.svelte
+#: src/routes/setup/+page.svelte
+msgid "Connection String"
+msgstr "Connection String"
+
+#: src/routes/setup/+page.svelte
+msgid "Host=...;Port=5432;Database=..."
+msgstr "Host=...;Port=5432;Database=..."
+
+#: src/routes/setup/+page.svelte
+msgid "PostgreSQL connection string in key=value format"
+msgstr "PostgreSQL connection string in key=value format"
+
+#: src/routes/setup/+page.svelte
+msgid "Detailed Logging"
+msgstr "Detailed Logging"
+
+#: src/routes/setup/+page.svelte
+msgid ""
+"Log detailed request/response\n"
+"comparisons for debugging"
+msgstr ""
+"Log detailed request/response\n"
+"comparisons for debugging"
+
+#: src/routes/download/+page.svelte
+#: src/routes/setup/+page.svelte
+msgid "Optional Services"
+msgstr "Optional Services"
+
+#: src/routes/setup/+page.svelte
+msgid "Additional features to enhance your setup"
+msgstr "Additional features to enhance your setup"
+
+#: src/routes/setup/+page.svelte
+msgid "Watchtower Auto-Updates"
+msgstr "Watchtower Auto-Updates"
+
+#: src/routes/setup/+page.svelte
+msgid "Automatically keep containers up to date"
+msgstr "Automatically keep containers up to date"
+
+#: src/routes/setup/+page.svelte
+msgid "Aspire Dashboard"
+msgstr "Aspire Dashboard"
+
+#: src/routes/setup/+page.svelte
+msgid "Telemetry visualization and monitoring UI"
+msgstr "Telemetry visualization and monitoring UI"
+
+#: src/routes/setup/+page.svelte
+msgid "Scalar API Documentation"
+msgstr "Scalar API Documentation"
+
+#: src/routes/setup/+page.svelte
+msgid "Interactive API reference documentation"
+msgstr "Interactive API reference documentation"
+
+#: src/routes/setup/+page.svelte
+msgid "Continue to Connectors <0/>"
+msgstr "Continue to Connectors <0/>"
+
+#: src/routes/setup/+page.svelte
+msgid "<0/> Back to configuration"
+msgstr "<0/> Back to configuration"
+
+#: src/routes/setup/+page.svelte
+msgid "Select Connectors"
+msgstr "Select Connectors"
+
+#: src/routes/setup/+page.svelte
+msgid "Choose which data sources to enable"
+msgstr "Choose which data sources to enable"
+
+#. placeholder {0}: selectedConnectors.length
+#. placeholder {1}: selectedConnectors.length !== 1 ? "s" : ""
+#: src/routes/setup/+page.svelte
+msgid "{0} connector{1} selected"
+msgstr "{0} connector{1} selected"
+
+#: src/routes/setup/+page.svelte
+msgid "Review & Download <0/>"
+msgstr "Review & Download <0/>"
+
+#: src/routes/setup/+page.svelte
+msgid "Could not load connectors"
+msgstr "Could not load connectors"
+
+#. placeholder {0}: connector.displayName
+#: src/lib/components/ConnectorConfigDialog.svelte
+msgid "Configure {0}"
+msgstr "Configure {0}"
+
+#: src/lib/components/ConnectorConfigDialog.svelte
+msgid "Select an option"
+msgstr "Select an option"
+
+#: src/lib/components/ConnectorConfigDialog.svelte
+msgid "No configuration required for this connector."
+msgstr "No configuration required for this connector."
+
+#: src/routes/download/+page.svelte
+msgid "Failed to generate configuration"
+msgstr "Failed to generate configuration"
+
+#: src/routes/download/+page.svelte
+msgid "Review Configuration"
+msgstr "Review Configuration"
+
+#: src/routes/download/+page.svelte
+msgid "Verify your settings and download deployment files"
+msgstr "Verify your settings and download deployment files"
+
+#: src/routes/download/+page.svelte
+msgid "Setup Type"
+msgstr "Setup Type"
+
+#~ msgid "Nightscout Instance"
+#~ msgstr "Nightscout Instance"
+
+#: src/routes/download/+page.svelte
+msgid "Database"
+msgstr "Database"
+
+#: src/routes/download/+page.svelte
+msgid "No connectors selected"
+msgstr "No connectors selected"
+
+#. placeholder {0}: params.watchtower ? "✓" : "○"
+#: src/routes/download/+page.svelte
+msgid "{0} Watchtower auto-updates"
+msgstr "{0} Watchtower auto-updates"
+
+#. placeholder {0}: params.includeDashboard ? "✓" : "○"
+#: src/routes/download/+page.svelte
+msgid "{0} Aspire Dashboard"
+msgstr "{0} Aspire Dashboard"
+
+#. placeholder {0}: params.includeScalar ? "✓" : "○"
+#: src/routes/download/+page.svelte
+msgid "{0} Scalar API docs"
+msgstr "{0} Scalar API docs"
+
+#: src/routes/download/+page.svelte
+msgid "Generation failed"
+msgstr "Generation failed"
+
+#: src/routes/download/+page.svelte
+msgid "<0/> Generating..."
+msgstr "<0/> Generating..."
+
+#: src/routes/download/+page.svelte
+msgid "<0/> Download Configuration"
+msgstr "<0/> Download Configuration"
+
+#: src/routes/download/+page.svelte
+msgid "After downloading:"
+msgstr "After downloading:"
+
+#: src/routes/download/+page.svelte
+msgid "Extract the ZIP file to your server"
+msgstr "Extract the ZIP file to your server"
+
+#: src/routes/download/+page.svelte
+msgid "Fill in any empty values in <0/>"
+msgstr "Fill in any empty values in <0/>"
+
+#: src/routes/download/+page.svelte
+msgid "Run <0/>"
+msgstr "Run <0/>"
+
+#: src/routes/download/+page.svelte
+msgid "Access Nocturne at <0/>"
+msgstr "Access Nocturne at <0/>"
+
+#: src/routes/download/+page.svelte
+msgid "<0/> Nightscout Instance"
+msgstr "<0/> Nightscout Instance"
+
+#: src/routes/download/+page.svelte
+#: src/routes/download/+page.svelte
+msgid "You'll need to add your configuration to the .env file"
+msgstr "You'll need to add your configuration to the .env file"
+
+#: src/routes/download/+page.svelte
+msgid "MongoDB Connection"
+msgstr "MongoDB Connection"
+
+#: src/routes/download/+page.svelte
+msgid "(needs config)"
+msgstr "(needs config)"

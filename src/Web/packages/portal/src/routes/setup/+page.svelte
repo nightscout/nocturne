@@ -5,8 +5,6 @@
     import { Label } from "@nocturne/app/ui/label";
     import { Switch } from "@nocturne/app/ui/switch";
     import * as Card from "@nocturne/app/ui/card";
-    import * as Dialog from "../../../../app/src/lib/components/ui/dialog";
-    import * as Select from "../../../../app/src/lib/components/ui/select";
     import * as ConnectorToggleGroup from "@nocturne/app/ui/connector-toggle-group";
     import {
         ChevronLeft,
@@ -26,35 +24,22 @@
         BookOpen,
     } from "@lucide/svelte";
     import { useSearchParams } from "runed/kit";
-    import { z } from "zod";
     import {
         testNightscoutConnection,
         getConnectors,
         type ConnectorMetadata,
     } from "$lib/data/portal.remote";
-
-    // Unified schema for all setup state in URL
-    const SetupParamsSchema = z.object({
-        step: z.coerce.number().default(0),
-        type: z.enum(["fresh", "migrate", "compatibility-proxy"]).optional(),
-        // Database config
-        useContainer: z.coerce.boolean().default(true),
-        connectionString: z.string().optional(),
-        // Optional services
-        watchtower: z.coerce.boolean().default(true),
-        includeDashboard: z.coerce.boolean().default(true),
-        includeScalar: z.coerce.boolean().default(true),
-        // Nightscout config (for migrate/proxy)
-        nightscoutUrl: z.string().optional(),
-        nightscoutApiSecret: z.string().optional(),
-        enableDetailedLogging: z.coerce.boolean().default(false),
-        // Migration-specific: MongoDB connection
-        migrationMode: z.enum(["Api", "MongoDb"]).default("Api"),
-        mongoConnectionString: z.string().optional(),
-        mongoDatabaseName: z.string().optional(),
-        // Connectors (comma-separated list)
-        connectors: z.string().optional(),
-    });
+    import {
+        SetupParamsSchema,
+        setupTypeLabels,
+        setupTypeDescriptions,
+    } from "$lib/schemas/setup-params";
+    import ConnectorConfigDialog from "$lib/components/ConnectorConfigDialog.svelte";
+    import {
+        getConnectorConfigs,
+        setConnectorConfigs,
+        removeConnectorConfig,
+    } from "$lib/stores/wizard-store.svelte";
 
     const params = useSearchParams(SetupParamsSchema, {
         pushHistory: false,
@@ -65,7 +50,7 @@
     // Derived state from URL params
     const currentStep = $derived(params.step);
     const setupType = $derived(params.type);
-    const hasSelectedType = $derived(setupType !== undefined);
+    const hasSelectedType = $derived(setupType !== null);
 
     // Connection test state
     type ConnectionTestState =
@@ -88,9 +73,14 @@
     // Connector configuration dialog state
     let configuringConnector = $state<ConnectorMetadata | null>(null);
     let isConfigDialogOpen = $state(false);
-    let configValues = $state<Record<string, string>>({});
-    // Store connector configs in memory (complex nested objects don't serialize well to URL)
-    let connectorConfigs = $state<Record<string, Record<string, string>>>({});
+
+    // Use shared store for connector configs (sensitive data, not in URL)
+    let connectorConfigs = $state<Record<string, Record<string, string>>>(getConnectorConfigs());
+
+    // Sync local state to shared store when it changes
+    $effect(() => {
+        setConnectorConfigs(connectorConfigs);
+    });
 
     // Load connectors
     const connectorsQuery = getConnectors({});
@@ -104,7 +94,7 @@
     function handleConnectorChange(newValue: string[]) {
         selectedConnectors = newValue;
         params.connectors =
-            newValue.length > 0 ? newValue.join(",") : undefined;
+            newValue.length > 0 ? newValue.join(",") : null;
 
         // Update configs for newly added connectors
         newValue.forEach((type) => {
@@ -122,26 +112,6 @@
         });
     }
 
-    // Reset config values when dialog opens with new connector
-    $effect(() => {
-        if (isConfigDialogOpen && configuringConnector) {
-            const initial: Record<string, string> =
-                connectorConfigs[configuringConnector.type] || {};
-
-            // Apply defaults
-            configuringConnector.fields.forEach((field) => {
-                if (
-                    initial[field.envVar] === undefined ||
-                    initial[field.envVar] === ""
-                ) {
-                    if (field.default) {
-                        initial[field.envVar] = field.default;
-                    }
-                }
-            });
-            configValues = { ...initial };
-        }
-    });
 
     async function testConnection() {
         const url = params.nightscoutUrl;
@@ -201,7 +171,7 @@
 
     function goBackToTypeSelection() {
         params.step = 0;
-        params.type = undefined;
+        params.type = null;
     }
 
     function goToDownload() {
@@ -219,32 +189,15 @@
         isConfigDialogOpen = true;
     }
 
-    function handleSaveConfig() {
-        if (configuringConnector) {
-            connectorConfigs = {
-                ...connectorConfigs,
-                [configuringConnector.type]: configValues,
-            };
-            isConfigDialogOpen = false;
-            configuringConnector = null;
-        }
+    function handleSaveConfig(connector: ConnectorMetadata, values: Record<string, string>) {
+        connectorConfigs = {
+            ...connectorConfigs,
+            [connector.type]: values,
+        };
     }
 
-    const pageTitle = $derived(
-        setupType === "fresh"
-            ? "Fresh Install Setup"
-            : setupType === "migrate"
-              ? "Migrate from Nightscout"
-              : "Compatibility Proxy Setup",
-    );
-
-    const pageDescription = $derived(
-        setupType === "fresh"
-            ? "Set up a new Nocturne instance from scratch"
-            : setupType === "migrate"
-              ? "Import your existing Nightscout data into Nocturne"
-              : "Run Nocturne alongside your existing Nightscout",
-    );
+    const pageTitle = $derived(setupTypeLabels[setupType!]);
+    const pageDescription = $derived(setupTypeDescriptions[setupType!]);
 
     function formatGlucose(sgv: number, units?: string): string {
         if (units === "mmol") {
@@ -336,7 +289,7 @@
                 </div>
             </Button>
         </div>
-    {:else if currentStep === 1}
+    {:else if currentStep === 1 && setupType}
         <!-- Step 1: Configuration Screen -->
         <Button
             onclick={goBackToTypeSelection}
@@ -969,116 +922,13 @@
     {/if}
 </div>
 
-<!-- Connector Configuration Dialog -->
-<Dialog.Root bind:open={isConfigDialogOpen}>
-    <Dialog.Content class="sm:max-w-[425px]">
-        {#if configuringConnector}
-            <Dialog.Header>
-                <Dialog.Title
-                    >Configure {configuringConnector.displayName}</Dialog.Title
-                >
-                <Dialog.Description>
-                    {configuringConnector.description}
-                </Dialog.Description>
-            </Dialog.Header>
-
-            <div class="grid gap-6 py-4">
-                {#each configuringConnector.fields as field}
-                    <div class="grid gap-2">
-                        <Label for={field.envVar} class="text-sm font-medium">
-                            {field.name}
-                            {#if field.required}
-                                <span class="text-destructive">*</span>
-                            {/if}
-                        </Label>
-
-                        {#if field.type === "boolean"}
-                            <div class="flex items-center space-x-2">
-                                <Switch
-                                    id={field.envVar}
-                                    checked={configValues[field.envVar] ===
-                                        "true"}
-                                    onCheckedChange={(v) =>
-                                        (configValues[field.envVar] =
-                                            v.toString())}
-                                />
-                                <Label
-                                    for={field.envVar}
-                                    class="font-normal text-muted-foreground"
-                                >
-                                    {field.description}
-                                </Label>
-                            </div>
-                        {:else if field.type === "select" && field.options}
-                            <Select.Root
-                                type="single"
-                                value={configValues[field.envVar]}
-                                onValueChange={(v) =>
-                                    (configValues[field.envVar] = v)}
-                            >
-                                <Select.Trigger id={field.envVar}>
-                                    {#if configValues[field.envVar]}
-                                        {configValues[field.envVar]}
-                                    {:else}
-                                        <span class="text-muted-foreground"
-                                            >Select an option</span
-                                        >
-                                    {/if}
-                                </Select.Trigger>
-                                <Select.Content>
-                                    {#each field.options as option}
-                                        <Select.Item
-                                            value={option}
-                                            label={option}
-                                        />
-                                    {/each}
-                                </Select.Content>
-                            </Select.Root>
-                            <p class="text-[0.8rem] text-muted-foreground">
-                                {field.description}
-                            </p>
-                        {:else}
-                            <Input
-                                id={field.envVar}
-                                type={field.type === "password"
-                                    ? "password"
-                                    : field.type === "number"
-                                      ? "number"
-                                      : "text"}
-                                value={configValues[field.envVar] || ""}
-                                oninput={(e) =>
-                                    (configValues[field.envVar] =
-                                        e.currentTarget.value)}
-                                placeholder={field.default || ""}
-                                required={field.required}
-                            />
-                            <p class="text-[0.8rem] text-muted-foreground">
-                                {field.description}
-                            </p>
-                        {/if}
-                    </div>
-                {/each}
-
-                {#if configuringConnector.fields.length === 0}
-                    <p class="text-sm text-muted-foreground italic">
-                        No configuration required for this connector.
-                    </p>
-                {/if}
-            </div>
-
-            <Dialog.Footer>
-                <Button
-                    variant="outline"
-                    onclick={() => (isConfigDialogOpen = false)}>Cancel</Button
-                >
-                <Button onclick={handleSaveConfig}>Save Changes</Button>
-            </Dialog.Footer>
-        {:else}
-            <div class="p-4 flex justify-center py-8">
-                <div
-                    class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full"
-                ></div>
-            </div>
-        {/if}
-    </Dialog.Content>
-</Dialog.Root>
+<ConnectorConfigDialog
+    open={isConfigDialogOpen}
+    connector={configuringConnector}
+    initialValues={configuringConnector ? connectorConfigs[configuringConnector.type] ?? {} : {}}
+    onOpenChange={(open) => {
+        isConfigDialogOpen = open;
+        if (!open) configuringConnector = null;
+    }}
+    onSave={handleSaveConfig}
+/>

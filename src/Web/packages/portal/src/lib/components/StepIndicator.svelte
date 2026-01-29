@@ -1,10 +1,12 @@
 <script lang="ts">
     import { Check } from "@lucide/svelte";
+    import { page } from "$app/state";
 
     interface Step {
         id: number;
         label: string;
-        path: string;
+        /** Internal step number for the setup page URL param */
+        setupStep?: number;
     }
 
     interface Props {
@@ -14,10 +16,23 @@
     let { currentStep }: Props = $props();
 
     const steps: Step[] = [
-        { id: 1, label: "Setup", path: "/setup" },
-        { id: 2, label: "Connectors", path: "/connectors" },
-        { id: 3, label: "Download", path: "/download" },
+        { id: 1, label: "Setup", setupStep: 1 },
+        { id: 2, label: "Connectors", setupStep: 2 },
+        { id: 3, label: "Download" },
     ];
+
+    function getStepHref(step: Step): string {
+        const searchParams = new URLSearchParams(page.url.searchParams);
+
+        if (step.id === 3) {
+            // Download page - preserve all params
+            return `/download?${searchParams.toString()}`;
+        }
+
+        // Setup page - update step param
+        searchParams.set("step", String(step.setupStep ?? 0));
+        return `/setup?${searchParams.toString()}`;
+    }
 </script>
 
 <nav aria-label="Setup progress" class="w-full">
@@ -42,7 +57,7 @@
                 <!-- Step circle -->
                 {#if isCompleted}
                     <a
-                        href={step.path}
+                        href={getStepHref(step)}
                         class="relative z-10 w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground transition-all hover:scale-110 hover:shadow-lg hover:shadow-primary/30"
                     >
                         <Check class="w-5 h-5" strokeWidth={3} />

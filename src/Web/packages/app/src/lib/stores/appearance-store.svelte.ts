@@ -15,7 +15,7 @@ import { browser } from "$app/environment";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+import { WidgetId } from "../api/generated/nocturne-api-client";
 
 // ==========================================
 // Type Definitions
