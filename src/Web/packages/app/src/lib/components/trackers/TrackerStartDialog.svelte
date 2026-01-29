@@ -6,7 +6,6 @@
   import { TextareaAutosize } from "$lib/components/ui/textarea";
   import { Play } from "lucide-svelte";
   import { cn } from "$lib/utils";
-  import moment from "moment-timezone";
 
   import {
     type TrackerDefinitionDto,
@@ -79,14 +78,33 @@
   });
 
   function formatLastCompletion(date: Date | string): string {
-    const d = moment(date);
-    const now = moment();
-    if (d.isSame(now, "day")) {
-      return `today at ${d.format("h:mm a")}`;
-    } else if (d.isSame(moment().subtract(1, "day"), "day")) {
-      return `yesterday at ${d.format("h:mm a")}`;
+    const d = new Date(date);
+    const now = new Date();
+
+    const isSameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const timeStr = d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    if (isSameDay(d, now)) {
+      return `today at ${timeStr}`;
+    } else if (isSameDay(d, yesterday)) {
+      return `yesterday at ${timeStr}`;
     } else {
-      return `on ${d.format("MMM D")} at ${d.format("h:mm a")}`;
+      const dateStr = d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+      return `on ${dateStr} at ${timeStr}`;
     }
   }
 
