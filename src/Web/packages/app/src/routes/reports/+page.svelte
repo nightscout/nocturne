@@ -92,7 +92,8 @@
   import { cubicOut, elasticOut } from "svelte/easing";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 14 days is standard for reports overview
+  const reportsParams = requireDateParamsContext(14);
 
   // Use resource for controlled reactivity
   const reportsResource = resource(

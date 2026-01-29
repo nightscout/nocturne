@@ -45,7 +45,8 @@
   } from "./data.remote";
   
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 7 days for treatment log view
+  const reportsParams = requireDateParamsContext(7);
 
   // Use resource for controlled reactivity - prevents excessive re-fetches
   const reportsResource = resource(
@@ -79,6 +80,7 @@
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
   const initialEventTypes = page.url.searchParams.get("eventTypes");
+  const initialNoSource = page.url.searchParams.get("noSource") === "true";
 
   // State - initialized from URL params
   let activeCategory = $state<TreatmentCategoryId | "all">(
@@ -88,6 +90,7 @@
   let selectedEventTypes = $state<string[]>(
     initialEventTypes ? initialEventTypes.split(",") : []
   );
+  let filterNoSource = $state(initialNoSource);
 
   // Modal states
   let showDeleteConfirm = $state(false);
@@ -141,6 +144,11 @@
       );
     }
 
+    // Apply no source filter
+    if (filterNoSource) {
+      filtered = filtered.filter((t) => !t.enteredBy && !t.data_source);
+    }
+
     return filtered;
   });
 
@@ -189,6 +197,7 @@
     searchQuery = "";
     selectedEventTypes = [];
     activeCategory = "all";
+    filterNoSource = false;
   }
 
   function confirmDelete(treatment: Treatment) {
@@ -237,7 +246,8 @@
   let hasActiveFilters = $derived(
     searchQuery.trim() !== "" ||
       selectedEventTypes.length > 0 ||
-      activeCategory !== "all"
+      activeCategory !== "all" ||
+      filterNoSource
   );
 </script>
 
@@ -335,6 +345,16 @@
               </div>
             </Popover.Content>
           </Popover.Root>
+
+          <!-- No Source Filter -->
+          <Button
+            variant={filterNoSource ? "default" : "outline"}
+            class="gap-2"
+            onclick={() => (filterNoSource = !filterNoSource)}
+          >
+            <Filter class="h-4 w-4" />
+            No Source
+          </Button>
         </div>
 
         <!-- Right side: Clear filters -->
@@ -387,6 +407,18 @@
               "{searchQuery}"
               <button
                 onclick={() => (searchQuery = "")}
+                class="ml-1 hover:text-foreground"
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </Badge>
+          {/if}
+
+          {#if filterNoSource}
+            <Badge variant="secondary" class="gap-1">
+              No Source
+              <button
+                onclick={() => (filterNoSource = false)}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />

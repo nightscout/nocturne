@@ -9,12 +9,14 @@ import { error } from '@sveltejs/kit';
 import { DiabetesPopulation } from '$lib/api';
 
 /**
- * Input schema for date range queries
+ * Input schema for date range queries.
+ * Uses nullish() to accept both null and undefined, matching the date-params hook
+ * which uses nullable defaults for runed compatibility.
  */
 const DateRangeSchema = z.object({
-	days: z.number().optional(),
-	from: z.string().optional(),
-	to: z.string().optional(),
+	days: z.number().nullish(),
+	from: z.string().nullish(),
+	to: z.string().nullish(),
 });
 
 export type DateRangeInput = z.infer<typeof DateRangeSchema>;
@@ -239,12 +241,13 @@ export const getReportsData = query(
 );
 
 /**
- * Input schema for site change impact analysis
+ * Input schema for site change impact analysis.
+ * Uses nullish() for date fields to match date-params hook.
  */
 const SiteChangeImpactSchema = z.object({
-	days: z.number().optional(),
-	from: z.string().optional(),
-	to: z.string().optional(),
+	days: z.number().nullish(),
+	from: z.string().nullish(),
+	to: z.string().nullish(),
 	hoursBeforeChange: z.number().optional().default(12),
 	hoursAfterChange: z.number().optional().default(24),
 	bucketSizeMinutes: z.number().optional().default(30),

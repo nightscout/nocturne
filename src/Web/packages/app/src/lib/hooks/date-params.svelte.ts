@@ -21,23 +21,29 @@ import { getContext, setContext, untrack } from "svelte";
  * - `days`: Number of days for relative range (e.g., "last 7 days")
  * - `from`/`to`: Explicit date range in YYYY-MM-DD format
  * - `isDefault`: Whether this is a report-set default (can be auto-adjusted on navigation)
+ *
+ * IMPORTANT: All fields must use `.nullable().default(null)` to ensure runed
+ * can detect all schema keys. Without explicit defaults, Zod omits undefined
+ * fields from validation results, causing runed's `has()` check to fail and
+ * preventing URL updates when setting values.
  */
 export const ReportsParamsSchema = z.object({
-  days: z.coerce.number().optional(),
-  from: z.string().optional(),
-  to: z.string().optional(),
-  isDefault: z.coerce.boolean().optional().default(true),
+  days: z.coerce.number().nullable().default(null),
+  from: z.string().nullable().default(null),
+  to: z.string().nullable().default(null),
+  isDefault: z.coerce.boolean().nullable().default(true),
 });
 
 export type ReportsParams = z.infer<typeof ReportsParamsSchema>;
 
 /**
  * Input type for remote functions - just the date range fields without isDefault.
+ * Uses null | undefined to match both the schema (nullable) and common JS patterns.
  */
 export type DateRangeInput = {
-  days?: number;
-  from?: string;
-  to?: string;
+  days?: number | null;
+  from?: string | null;
+  to?: string | null;
 };
 
 /**
@@ -151,7 +157,8 @@ export function useDateParams(defaultDays = 7) {
 
   /**
    * Set a relative day range (e.g., "last 7 days").
-   * Marks as default so it can be auto-adjusted when navigating to other reports.
+   * Marks as NOT default since this is an explicit user selection that should
+   * be preserved when navigating between reports.
    */
   function setDayRange(daysCount: number) {
     const endDate = today(getLocalTimeZone());
@@ -161,7 +168,7 @@ export function useDateParams(defaultDays = 7) {
     params.days = daysCount;
     params.from = startDate.toString();
     params.to = endDate.toString();
-    params.isDefault = true;
+    params.isDefault = false;
   }
 
   /**
@@ -171,7 +178,7 @@ export function useDateParams(defaultDays = 7) {
   function setCustomRange(from: string, to: string) {
     // Clear days first by setting directly, then update with full values
     // This ensures the URL properly reflects the custom range without the days param
-    params.days = undefined;
+    params.days = null;
     params.from = from;
     params.to = to;
     params.isDefault = false;
@@ -179,9 +186,16 @@ export function useDateParams(defaultDays = 7) {
 
   /**
    * Reset to this report's default day range.
+   * This marks as default again so it can be auto-adjusted when navigating to other reports.
    */
   function reset() {
-    setDayRange(defaultDays);
+    const endDate = today(getLocalTimeZone());
+    const startDate = endDate.subtract({ days: defaultDays - 1 });
+
+    params.days = defaultDays;
+    params.from = startDate.toString();
+    params.to = endDate.toString();
+    params.isDefault = true;
   }
 
   /**
@@ -240,6 +254,19 @@ export function useDateParams(defaultDays = 7) {
     getDateRange,
 
     /**
+     * Internal method: Set day range while keeping isDefault=true.
+     * Used when auto-adjusting to a report's preferred default.
+     */
+    _setDefaultDayRange(daysCount: number) {
+      const endDate = today(getLocalTimeZone());
+      const startDate = endDate.subtract({ days: daysCount - 1 });
+      params.days = daysCount;
+      params.from = startDate.toString();
+      params.to = endDate.toString();
+      params.isDefault = true;
+    },
+
+    /**
      * Get the date range input for remote functions.
      * Returns the memoized state for stability (prevents infinite update loops).
      * @deprecated Use the `dateRangeInput` getter property instead for cleaner syntax
@@ -285,15 +312,31 @@ export function getDateParamsContext(): ReportsParamsReturn | undefined {
  * Get the shared date params from context, throwing if not available.
  * Use this when you're certain the context has been set (e.g., in report pages).
  *
+ * If `reportDefaultDays` is provided and the current params are in default mode
+ * (isDefault=true), this will automatically adjust the date range to match
+ * the report's preferred default. This allows different reports to have
+ * different sensible defaults while preserving user selections.
+ *
+ * @param reportDefaultDays - Optional: The ideal default day range for this specific report.
+ *                            If provided and params are in default mode, will adjust to this range.
  * @returns The shared useDateParams instance
  * @throws Error if context is not set
  */
-export function requireDateParamsContext(): ReportsParamsReturn {
+export function requireDateParamsContext(reportDefaultDays?: number): ReportsParamsReturn {
   const params = getDateParamsContext();
   if (!params) {
     throw new Error(
       "Date params context not found. Ensure setDateParamsContext is called in a parent component."
     );
   }
+
+  // Auto-adjust if this report has a different default and we're in default mode
+  if (reportDefaultDays !== undefined && params.isDefault && params.days !== reportDefaultDays) {
+    // The user hasn't made a custom selection (isDefault=true), so we can adjust
+    // to this report's preferred default range using direct property assignment
+    // (which triggers runed's reactive proxy correctly)
+    params._setDefaultDayRange(reportDefaultDays);
+  }
+
   return params;
 }

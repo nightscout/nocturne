@@ -797,7 +797,6 @@ msgstr ""
 #: src/routes/calendar/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/+layout.svelte
-#: src/routes/reports/week-to-week/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Today"
 msgstr ""
@@ -2699,9 +2698,8 @@ msgstr ""
 #~ msgid "<0/> Clinical"
 #~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Available"
-msgstr ""
+#~ msgid "Available"
+#~ msgstr ""
 
 #~ msgid "Coming Soon"
 #~ msgstr ""
@@ -2832,7 +2830,6 @@ msgstr ""
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/devices/+page.svelte
 #: src/routes/settings/migration/+page.svelte
@@ -5108,7 +5105,6 @@ msgid "Triggering in"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerStartDialog.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "<0/> Start"
 msgstr ""
@@ -10525,8 +10521,6 @@ msgstr ""
 msgid "Validating"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Running"
@@ -13949,67 +13943,62 @@ msgstr ""
 msgid "Loading basal data..."
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Connector started successfully"
+#~ msgid "Connector started successfully"
+#~ msgstr ""
+
+#~ msgid "Failed to start connector"
+#~ msgstr ""
+
+#~ msgid "Connector stopped successfully"
+#~ msgstr ""
+
+#~ msgid "Failed to stop connector"
+#~ msgstr ""
+
+#~ msgid "Stopped"
+#~ msgstr ""
+
+#~ msgid "Healthy"
+#~ msgstr ""
+
+#~ msgid "Unhealthy"
+#~ msgstr ""
+
+#~ msgid "Idle"
+#~ msgstr ""
+
+#~ msgid "Container Control"
+#~ msgstr ""
+
+#~ msgid "This connector is disabled via environment configuration and cannot be started from the UI."
+#~ msgstr ""
+
+#~ msgid "Start the connector container to begin syncing data."
+#~ msgstr ""
+
+#~ msgid "Stop the connector container to pause syncing."
+#~ msgstr ""
+
+#~ msgid "Manage the connector container lifecycle."
+#~ msgstr ""
+
+#~ msgid "<0/> Starting..."
+#~ msgstr ""
+
+#~ msgid "<0/> Stopping..."
+#~ msgstr ""
+
+#~ msgid "<0/> Stop"
+#~ msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "<0/> No Source"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Failed to start connector"
+#: src/routes/reports/treatments/+page.svelte
+msgid "No Source <0/>"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Connector stopped successfully"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Failed to stop connector"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Stopped"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Healthy"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Unhealthy"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Idle"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Container Control"
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "This connector is disabled via environment configuration and cannot be started from the UI."
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Start the connector container to begin syncing data."
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Stop the connector container to pause syncing."
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Manage the connector container lifecycle."
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Starting..."
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Stopping..."
-msgstr ""
-
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Stop"
+#: src/routes/reports/week-to-week/+page.svelte
+msgid "Reset"
 msgstr ""

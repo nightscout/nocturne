@@ -22,52 +22,59 @@
     AlertTriangle,
     RefreshCw,
   } from "lucide-svelte";
-  import {
-    type BatteryStatistics,
-    type ChargeCycle,
-    type BatteryReading,
-  } from "$lib/api";
   import { getBatteryReportData } from "$lib/data/battery.remote";
-  import { onMount } from "svelte";
+  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { resource } from "runed";
 
-  // State
-  let statistics = $state<BatteryStatistics[]>([]);
-  let cycles = $state<ChargeCycle[]>([]);
-  let readings = $state<BatteryReading[]>([]);
-  let loading = $state(true);
-  let error = $state<string | null>(null);
+  // Get shared date params from context (set by reports layout)
+  // Default: 7 days is good for battery analysis (typical charge cycle period)
+  const reportsParams = requireDateParamsContext(7);
+
+  // State for device selection
   let selectedDevice = $state<string | null>(null);
-  let dateRange = $state({
-    from: Date.now() - 7 * 24 * 60 * 60 * 1000, // 7 days ago
-    to: Date.now(),
+
+  // Calculate date range in milliseconds from the params
+  const dateRangeMillis = $derived({
+    from: new Date(reportsParams.dateRangeInput.from ?? new Date().toISOString()).getTime(),
+    to: new Date(reportsParams.dateRangeInput.to ?? new Date().toISOString()).getTime(),
   });
 
-  async function fetchData() {
-    loading = true;
-    error = null;
+  // Use resource for controlled reactivity
+  const batteryResource = resource(
+    () => ({
+      device: selectedDevice,
+      from: dateRangeMillis.from,
+      to: dateRangeMillis.to,
+      cycleLimit: 50,
+    }),
+    async (params) => {
+      return await getBatteryReportData(params);
+    },
+    { debounce: 100 }
+  );
 
-    try {
-      const result = await getBatteryReportData({
-        device: selectedDevice,
-        from: dateRange.from,
-        to: dateRange.to,
-        cycleLimit: 50,
-      });
+  // Derived state from resource
+  const statistics = $derived(batteryResource.current?.statistics ?? []);
+  const cycles = $derived(batteryResource.current?.cycles ?? []);
+  const readings = $derived(batteryResource.current?.readings ?? []);
+  const loading = $derived(batteryResource.loading);
+  const error = $derived(
+    batteryResource.error
+      ? batteryResource.error instanceof Error
+        ? batteryResource.error.message
+        : "Failed to load battery report data"
+      : null
+  );
 
-      statistics = result.statistics;
-      cycles = result.cycles;
-      readings = result.readings;
-    } catch (e) {
-      console.error("Failed to fetch battery data:", e);
-      error = "Failed to load battery report data";
-    } finally {
-      loading = false;
-    }
+  // Helper for date range display
+  const dateRange = $derived({
+    from: dateRangeMillis.from,
+    to: dateRangeMillis.to,
+  });
+
+  function fetchData() {
+    batteryResource.refetch();
   }
-
-  onMount(() => {
-    fetchData();
-  });
 
   // Helper functions
   function formatDuration(minutes?: number | null): string {

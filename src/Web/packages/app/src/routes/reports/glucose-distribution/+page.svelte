@@ -11,7 +11,8 @@
   import { resource } from "runed";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 14 days is standard for glucose distribution analysis
+  const reportsParams = requireDateParamsContext(14);
 
   // Use resource for controlled reactivity - prevents excessive re-fetches
   const reportsResource = resource(

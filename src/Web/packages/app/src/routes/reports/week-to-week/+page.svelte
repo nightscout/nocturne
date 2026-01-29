@@ -1,11 +1,10 @@
 <script lang="ts">
   import { LineChart } from "layerchart";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import Button from "$lib/components/ui/button/button.svelte";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
   import { getReportsData } from "$lib/data/reports.remote";
+  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { bg } from "$lib/utils/formatting";
   import { resource } from "runed";
 
@@ -20,63 +19,41 @@
     { key: "sat", label: "Sat", color: "#d55e00" },
   ] as const;
 
-  // Week navigation from URL
-  let weekOffset = $state(
-    (() => {
-      const weekParam = page.url.searchParams.get("week");
-      return weekParam ? parseInt(weekParam) : 0;
-    })()
-  );
-
-  // Calculate week date range
-  const currentWeekRange = $derived.by(() => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + weekOffset * 7);
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    endOfWeek.setHours(23, 59, 59, 999);
-
-    return { start: startOfWeek, end: endOfWeek };
-  });
-
-  const dateRangeInput = $derived({
-    from: currentWeekRange.start.toISOString(),
-    to: currentWeekRange.end.toISOString(),
-  });
+  // Get shared date params from context (set by reports layout)
+  // Default: 14 days is ideal for week-to-week comparison (2 full weeks)
+  const reportsParams = requireDateParamsContext(14);
 
   // Use resource for controlled reactivity - prevents excessive re-fetches
   const reportsResource = resource(
-    () => dateRangeInput,
-    async (input) => {
-      return await getReportsData(input);
+    () => reportsParams.dateRangeInput,
+    async (dateRangeInput) => {
+      return await getReportsData(dateRangeInput);
     },
     { debounce: 100 }
   );
 
-  const weekRangeDisplay = $derived.by(() => {
-    const { start, end } = currentWeekRange;
+  // Calculate start and end dates from the date params
+  const startDate = $derived(new Date(reportsParams.dateRangeInput.from ?? new Date().toISOString()));
+  const endDate = $derived(new Date(reportsParams.dateRangeInput.to ?? new Date().toISOString()));
+
+  const dateRangeDisplay = $derived.by(() => {
     const opts: Intl.DateTimeFormatOptions = {
       month: "short",
       day: "numeric",
       year: "numeric",
     };
-    return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
+    return `${startDate.toLocaleDateString(undefined, opts)} – ${endDate.toLocaleDateString(undefined, opts)}`;
   });
 
   // Transform entries into chart data: each row = { time, sun?, mon?, tue?, ... }
   const chartData = $derived.by(() => {
     const entries = reportsResource.current?.entries ?? [];
-    const { start, end } = currentWeekRange;
 
-    // Filter to current week and group by normalized time
+    // Group by normalized time across all days in the range
     const timeMap = new Map<number, Record<string, number | Date>>();
 
     for (const entry of entries) {
       const mills = entry.mills ?? new Date(entry.dateString ?? "").getTime();
-      if (mills < start.getTime() || mills > end.getTime()) continue;
 
       const entryDate = new Date(mills);
       const dayOfWeek = entryDate.getDay();
@@ -94,7 +71,12 @@
       }
 
       const row = timeMap.get(bucket)!;
-      row[dayKey] = bg(entry.sgv ?? 0);
+      // Average values if we already have data for this day/time slot
+      if (row[dayKey] !== undefined) {
+        row[dayKey] = ((row[dayKey] as number) + bg(entry.sgv ?? 0)) / 2;
+      } else {
+        row[dayKey] = bg(entry.sgv ?? 0);
+      }
     }
 
     // Sort by time
@@ -103,30 +85,31 @@
     );
   });
 
-  // Navigation
-  function updateUrl(newOffset: number) {
-    const url = new URL(page.url);
-    if (newOffset === 0) {
-      url.searchParams.delete("week");
-    } else {
-      url.searchParams.set("week", String(newOffset));
-    }
-    goto(url.toString(), { replaceState: true, keepFocus: true });
-  }
-
+  // Navigation helpers
   function previousWeek() {
-    weekOffset--;
-    updateUrl(weekOffset);
+    const newEnd = new Date(startDate);
+    newEnd.setDate(newEnd.getDate() - 1);
+    const newStart = new Date(newEnd);
+    newStart.setDate(newStart.getDate() - 6);
+    reportsParams.setCustomRange(
+      newStart.toISOString().split("T")[0],
+      newEnd.toISOString().split("T")[0]
+    );
   }
 
   function nextWeek() {
-    weekOffset++;
-    updateUrl(weekOffset);
+    const newStart = new Date(endDate);
+    newStart.setDate(newStart.getDate() + 1);
+    const newEnd = new Date(newStart);
+    newEnd.setDate(newEnd.getDate() + 6);
+    reportsParams.setCustomRange(
+      newStart.toISOString().split("T")[0],
+      newEnd.toISOString().split("T")[0]
+    );
   }
 
   function goToCurrentWeek() {
-    weekOffset = 0;
-    updateUrl(0);
+    reportsParams.reset();
   }
 </script>
 
@@ -140,14 +123,14 @@
         </Button>
         <div class="flex items-center gap-2 min-w-[200px] justify-center">
           <Calendar class="h-4 w-4 text-muted-foreground" />
-          <span class="text-sm font-medium">{weekRangeDisplay}</span>
+          <span class="text-sm font-medium">{dateRangeDisplay}</span>
         </div>
         <Button variant="outline" size="icon" onclick={nextWeek}>
           <ChevronRight class="h-4 w-4" />
         </Button>
-        {#if weekOffset !== 0}
+        {#if !reportsParams.isDefault}
           <Button variant="ghost" size="sm" onclick={goToCurrentWeek}>
-            Today
+            Reset
           </Button>
         {/if}
       </div>

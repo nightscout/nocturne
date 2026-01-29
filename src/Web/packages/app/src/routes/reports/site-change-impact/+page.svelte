@@ -26,7 +26,8 @@
   import { resource } from "runed";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 30 days to capture multiple site changes for meaningful analysis
+  const reportsParams = requireDateParamsContext(30);
 
   // Use resource for controlled reactivity - prevents flickering by avoiding query recreation
   const siteChangeResource = resource(
