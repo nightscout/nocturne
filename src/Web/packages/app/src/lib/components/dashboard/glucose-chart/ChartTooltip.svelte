@@ -2,17 +2,29 @@
   import { Tooltip } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin, type BasalPoint } from "$lib/api";
+  import { BasalDeliveryOrigin, type BasalPoint, type Treatment } from "$lib/api";
   import type { TimeSeriesPoint } from "$lib/data/chart-data.remote";
+  import type {
+    StateSpanChartData,
+    BasalDeliveryChartData,
+    SystemEventChartData,
+  } from "$lib/data/state-spans.remote";
+
+  // Extended types for chart-specific data
+  type DisplaySpan<T> = T & { displayStart: Date; displayEnd: Date };
 
   interface BolusMarker {
     time: Date;
     insulin: number;
+    treatment: Treatment;
   }
 
   interface CarbMarker {
     time: Date;
     carbs: number;
+    treatment: Treatment;
+    label: string | null;
+    isOffset?: boolean;
   }
 
   interface DeviceEventMarker {
@@ -22,51 +34,14 @@
     config: { color: string };
   }
 
-  interface PumpModeSpan {
-    startTime: Date;
-    endTime?: Date | null;
-    state: string;
-    color: string;
-  }
+  // Profile span extends StateSpanChartData with profileName
+  type ProfileSpan = DisplaySpan<StateSpanChartData> & { profileName: string };
 
-  interface OverrideSpan {
-    startTime: Date;
-    endTime?: Date | null;
-    state: string;
-    color: string;
-  }
-
-  interface ProfileSpan {
-    startTime: Date;
-    endTime?: Date | null;
-    profileName: string;
-    color: string;
-  }
-
-  interface ActivitySpan {
-    id: string;
-    startTime: Date;
-    endTime?: Date | null;
-    category: string;
-    state: string;
-    color: string;
-  }
-
-  interface TempBasalSpan {
-    startTime: Date;
-    endTime?: Date | null;
+  // Temp basal span extends StateSpanChartData with rate/percent
+  type TempBasalSpan = DisplaySpan<StateSpanChartData> & {
     rate: number | null;
     percent: number | null;
-    color: string;
-  }
-
-  interface SystemEvent {
-    time: Date;
-    eventType: string;
-    description?: string;
-    code?: string;
-    color: string;
-  }
+  };
 
   interface Props {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,12 +53,13 @@
     findNearbyBolus: (time: Date) => BolusMarker | undefined;
     findNearbyCarbs: (time: Date) => CarbMarker | undefined;
     findNearbyDeviceEvent: (time: Date) => DeviceEventMarker | undefined;
-    findActivePumpMode: (time: Date) => PumpModeSpan | undefined;
-    findActiveOverride: (time: Date) => OverrideSpan | undefined;
+    findActivePumpMode: (time: Date) => DisplaySpan<StateSpanChartData> | undefined;
+    findActiveOverride: (time: Date) => DisplaySpan<StateSpanChartData> | undefined;
     findActiveProfile: (time: Date) => ProfileSpan | undefined;
-    findActiveActivities: (time: Date) => ActivitySpan[];
+    findActiveActivities: (time: Date) => DisplaySpan<StateSpanChartData>[];
     findActiveTempBasal: (time: Date) => TempBasalSpan | undefined;
-    findNearbySystemEvent: (time: Date) => SystemEvent | undefined;
+    findActiveBasalDelivery: (time: Date) => DisplaySpan<BasalDeliveryChartData> | undefined;
+    findNearbySystemEvent: (time: Date) => SystemEventChartData | undefined;
     // Visibility toggles
     showBolus: boolean;
     showCarbs: boolean;
@@ -113,6 +89,7 @@
     findActiveProfile,
     findActiveActivities,
     findActiveTempBasal,
+    findActiveBasalDelivery,
     findNearbySystemEvent,
     showBolus,
     showCarbs,
@@ -142,6 +119,7 @@
     {@const activeProfile = findActiveProfile(data.time)}
     {@const activeActivities = findActiveActivities(data.time)}
     {@const activeTempBasal = findActiveTempBasal(data.time)}
+    {@const activeBasalDelivery = findActiveBasalDelivery(data.time)}
     {@const nearbyBolus = findNearbyBolus(data.time)}
     {@const nearbyCarbs = findNearbyCarbs(data.time)}
     {@const nearbyDeviceEvent = findNearbyDeviceEvent(data.time)}
@@ -201,8 +179,35 @@
           color="var(--carbs)"
         />
       {/if}
-      {#if showBasal && (activeBasal || activeTempBasal)}
-        {#if activeBasal}
+      {#if showBasal && (activeBasalDelivery || activeBasal || activeTempBasal)}
+        {#if activeBasalDelivery}
+          <!-- Prefer state spans (basalDeliverySpans) as they have accurate span-based rates -->
+          {@const isAdjusted =
+            activeBasalDelivery.origin === BasalDeliveryOrigin.Algorithm ||
+            activeBasalDelivery.origin === BasalDeliveryOrigin.Manual}
+          {@const basalLabel =
+            activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
+              ? "Suspended"
+              : activeBasalDelivery.origin === BasalDeliveryOrigin.Algorithm
+                ? "Auto Basal"
+                : activeBasalDelivery.origin === BasalDeliveryOrigin.Manual
+                  ? "Temp Basal"
+                  : "Basal"}
+          <Tooltip.Item
+            label={basalLabel}
+            value={activeBasalDelivery.rate}
+            format={"decimal"}
+            color={isAdjusted || activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
+              ? "var(--insulin-temp-basal)"
+              : "var(--insulin-basal)"}
+            class={cn(
+              staleBasalData && data.time >= staleBasalData.start
+                ? "text-yellow-500 font-bold"
+                : ""
+            )}
+          />
+        {:else if activeBasal}
+          <!-- Fallback to chart data series -->
           {@const isAdjusted =
             (activeBasal.origin === BasalDeliveryOrigin.Algorithm ||
               activeBasal.origin === BasalDeliveryOrigin.Manual) &&

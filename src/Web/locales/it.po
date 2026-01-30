@@ -3188,6 +3188,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 msgid "Temp Basal"
@@ -3244,6 +3245,7 @@ msgstr ""
 msgid "Manual"
 msgstr ""
 
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Suspended"
@@ -3582,6 +3584,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
@@ -14081,6 +14084,7 @@ msgstr ""
 msgid "Green band = target range"
 msgstr ""
 
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Auto Basal"
 msgstr ""
