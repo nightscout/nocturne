@@ -5,7 +5,7 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod';
 import { error } from '@sveltejs/kit';
-import { StateSpanCategory, SystemEventType, SystemEventCategory } from '$lib/api';
+import { StateSpanCategory, SystemEventType, SystemEventCategory, BasalDeliveryOrigin } from '$lib/api';
 
 /**
  * Input schema for state data queries
@@ -44,6 +44,19 @@ export interface SystemEventChartData {
 }
 
 /**
+ * Processed basal delivery span for chart rendering
+ */
+export interface BasalDeliveryChartData {
+	id: string;
+	startTime: Date;
+	endTime: Date | null;
+	rate: number;
+	origin: BasalDeliveryOrigin;
+	source?: string;
+	color: string;
+}
+
+/**
  * Combined state data response for charts
  */
 export interface ChartStateData {
@@ -53,6 +66,7 @@ export interface ChartStateData {
 	overrideSpans: StateSpanChartData[];
 	profileSpans: StateSpanChartData[];
 	activitySpans: StateSpanChartData[];
+	basalDeliverySpans: BasalDeliveryChartData[];
 	systemEvents: SystemEventChartData[];
 }
 
@@ -138,6 +152,19 @@ function getActivityColor(category: StateSpanCategory, _state: string): string {
 		[StateSpanCategory.Travel]: 'var(--chart-3)',
 	};
 	return categoryColors[category] ?? 'var(--muted-foreground)';
+}
+
+/**
+ * Map basal delivery origin to CSS color variable
+ */
+function getBasalDeliveryColor(origin: BasalDeliveryOrigin): string {
+	const originColors: Record<BasalDeliveryOrigin, string> = {
+		[BasalDeliveryOrigin.Algorithm]: 'var(--insulin-basal)',
+		[BasalDeliveryOrigin.Scheduled]: 'var(--insulin-basal)',
+		[BasalDeliveryOrigin.Manual]: 'var(--insulin-temp-basal)',
+		[BasalDeliveryOrigin.Suspended]: 'var(--pump-mode-suspended)',
+	};
+	return originColors[origin] ?? 'var(--insulin-basal)';
 }
 
 /**
@@ -290,6 +317,7 @@ function generateTestStateSpans(startTime: number, endTime: number): ChartStateD
 			overrideSpans: [],
 			profileSpans: [],
 			activitySpans: [],
+			basalDeliverySpans: [],
 			systemEvents: [],
 		};
 	}
@@ -504,6 +532,7 @@ function generateTestStateSpans(startTime: number, endTime: number): ChartStateD
 		overrideSpans,
 		profileSpans,
 		activitySpans,
+		basalDeliverySpans: [],
 		systemEvents: [],
 	};
 }
