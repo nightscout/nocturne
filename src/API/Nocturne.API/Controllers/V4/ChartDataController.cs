@@ -350,7 +350,7 @@ public class ChartDataController : ControllerBase
                     Timestamp = t,
                     Rate = rate,
                     ScheduledRate = rate,
-                    Origin = BasalDeliveryOrigin.Scheduled,
+                    Origin = BasalDeliveryOrigin.Inferred,
                 });
                 prevRate = rate;
             }
@@ -364,7 +364,7 @@ public class ChartDataController : ControllerBase
                 Timestamp = startTime,
                 Rate = defaultBasalRate,
                 ScheduledRate = defaultBasalRate,
-                Origin = BasalDeliveryOrigin.Scheduled,
+                Origin = BasalDeliveryOrigin.Inferred,
             });
         }
 

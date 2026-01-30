@@ -98,6 +98,8 @@
         return "var(--insulin-temp-basal)";
       case BasalDeliveryOrigin.Suspended:
         return "var(--pump-mode-suspended)";
+      case BasalDeliveryOrigin.Inferred:
+        return "var(--insulin-basal)";
       case BasalDeliveryOrigin.Scheduled:
       default:
         return "var(--insulin-basal)";
@@ -113,10 +115,37 @@
         return "var(--insulin-bolus)";
       case BasalDeliveryOrigin.Suspended:
         return "var(--pump-mode-suspended)";
+      case BasalDeliveryOrigin.Inferred:
+        return "var(--insulin-basal)";
       case BasalDeliveryOrigin.Scheduled:
       default:
         return "var(--insulin-basal)";
     }
+  }
+
+  // Get opacity based on basal delivery origin
+  function getBasalOpacity(origin: BasalDeliveryOrigin): number {
+    switch (origin) {
+      case BasalDeliveryOrigin.Algorithm:
+        return 0.8;
+      case BasalDeliveryOrigin.Manual:
+        return 0.9;
+      case BasalDeliveryOrigin.Suspended:
+        return 0.5;
+      case BasalDeliveryOrigin.Inferred:
+        return 0.4;
+      case BasalDeliveryOrigin.Scheduled:
+      default:
+        return 0.6;
+    }
+  }
+
+  // Get pattern for basal delivery origin (only Inferred uses hatching)
+  function getBasalPattern(origin: BasalDeliveryOrigin): { size: number; lines: { rotate: number; opacity: number } } | undefined {
+    if (origin === BasalDeliveryOrigin.Inferred) {
+      return { size: 8, lines: { rotate: -45, opacity: 0.3 } };
+    }
+    return undefined;
   }
 </script>
 
@@ -217,16 +246,36 @@
   <!-- Basal area - render each segment by origin with actual delivered rate -->
   {#if basalData.length > 0}
     {#each basalSegmentsByOrigin as segment, i (i)}
-      <Area
-        data={segment.points}
-        x={(d) => new Date(d.timestamp ?? 0)}
-        y0={() => basalZero}
-        y1={(d) => basalScale(d.rate ?? 0)}
-        curve={curveStepAfter}
-        fill={getBasalFillColor(segment.origin)}
-        stroke={getBasalStrokeColor(segment.origin)}
-        class="stroke-1"
-      />
+      {@const pattern = getBasalPattern(segment.origin)}
+      {@const opacity = getBasalOpacity(segment.origin)}
+      {#if pattern}
+        <!-- Use AnnotationRange for segments with patterns (Inferred) -->
+        {#each segment.points as point, pointIdx}
+          {#if pointIdx < segment.points.length - 1}
+            {@const nextPoint = segment.points[pointIdx + 1]}
+            <AnnotationRange
+              x={[point.timestamp ?? 0, nextPoint.timestamp ?? 0]}
+              y={[basalScale(point.rate ?? 0), basalZero]}
+              fill={getBasalFillColor(segment.origin)}
+              {pattern}
+              style="opacity: {opacity}"
+            />
+          {/if}
+        {/each}
+      {:else}
+        <!-- Use Area for segments without patterns -->
+        <Area
+          data={segment.points}
+          x={(d) => new Date(d.timestamp ?? 0)}
+          y0={() => basalZero}
+          y1={(d) => basalScale(d.rate ?? 0)}
+          curve={curveStepAfter}
+          fill={getBasalFillColor(segment.origin)}
+          stroke={getBasalStrokeColor(segment.origin)}
+          class="stroke-1"
+          style="opacity: {opacity}"
+        />
+      {/if}
     {/each}
   {/if}
 {/if}

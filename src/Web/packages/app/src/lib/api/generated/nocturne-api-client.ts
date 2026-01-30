@@ -17710,6 +17710,7 @@ export enum BasalDeliveryOrigin {
     Scheduled = "Scheduled",
     Manual = "Manual",
     Suspended = "Suspended",
+    Inferred = "Inferred",
 }
 
 export enum PumpModeState {

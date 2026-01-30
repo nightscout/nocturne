@@ -199,5 +199,10 @@ public enum BasalDeliveryOrigin
     /// <summary>
     /// Delivery suspended (rate = 0)
     /// </summary>
-    Suspended
+    Suspended,
+
+    /// <summary>
+    /// Derived from profile when no pump data available
+    /// </summary>
+    Inferred
 }

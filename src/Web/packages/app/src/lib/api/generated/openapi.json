@@ -15821,13 +15821,15 @@
           "Algorithm",
           "Scheduled",
           "Manual",
-          "Suspended"
+          "Suspended",
+          "Inferred"
         ],
         "enum": [
           "Algorithm",
           "Scheduled",
           "Manual",
-          "Suspended"
+          "Suspended",
+          "Inferred"
         ]
       },
       "PumpModeState": {

@@ -163,6 +163,7 @@ function getBasalDeliveryColor(origin: BasalDeliveryOrigin): string {
 		[BasalDeliveryOrigin.Scheduled]: 'var(--insulin-basal)',
 		[BasalDeliveryOrigin.Manual]: 'var(--insulin-temp-basal)',
 		[BasalDeliveryOrigin.Suspended]: 'var(--pump-mode-suspended)',
+		[BasalDeliveryOrigin.Inferred]: 'var(--insulin-temp-basal)',
 	};
 	return originColors[origin] ?? 'var(--insulin-basal)';
 }
