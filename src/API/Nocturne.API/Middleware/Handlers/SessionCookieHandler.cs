@@ -222,6 +222,21 @@ public class SessionCookieHandler : IAuthHandler
                 Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
             }
         );
+
+        // Also update the non-HttpOnly IsAuthenticated cookie for frontend state tracking
+        context.Response.Cookies.Append(
+            "IsAuthenticated",
+            "true",
+            new CookieOptions
+            {
+                HttpOnly = false,
+                Secure = _options.Cookie.Secure,
+                SameSite = MapSameSiteMode(_options.Cookie.SameSite),
+                Path = "/",
+                Domain = _options.Cookie.Domain,
+                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
+            }
+        );
     }
 
     /// <summary>

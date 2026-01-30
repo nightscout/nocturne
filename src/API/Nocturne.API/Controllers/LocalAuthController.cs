@@ -685,6 +685,7 @@ public class LocalAuthController : ControllerBase
         );
 
         // Set a non-HttpOnly cookie for client-side auth state checking
+        // Use refresh token lifetime so frontend can detect auth state and trigger refresh
         Response.Cookies.Append(
             "IsAuthenticated",
             "true",
@@ -694,7 +695,7 @@ public class LocalAuthController : ControllerBase
                 Secure = cookieOptions.Secure,
                 SameSite = cookieOptions.SameSite,
                 Path = "/",
-                MaxAge = _jwtService.GetAccessTokenLifetime(),
+                MaxAge = TimeSpan.FromDays(7), // Match refresh token lifetime
             }
         );
     }
