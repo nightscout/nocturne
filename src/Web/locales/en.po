@@ -12109,3 +12109,24 @@ msgstr "Type {0}"
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 msgid "<0/> Processing..."
 msgstr "<0/> Processing..."
+
+#~ msgid "Medications"
+#~ msgstr "Medications"
+
+#~ msgid "Treatment created"
+#~ msgstr "Treatment created"
+
+#~ msgid "Failed to create treatment"
+#~ msgstr "Failed to create treatment"
+
+#~ msgid "Dose (mg)"
+#~ msgstr "Dose (mg)"
+
+#~ msgid "<0/> Medication Type"
+#~ msgstr "<0/> Medication Type"
+
+#~ msgid "Default (from profile)"
+#~ msgstr "Default (from profile)"
+
+#~ msgid "({0}h DIA)"
+#~ msgstr "({0}h DIA)"
