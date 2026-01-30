@@ -2,8 +2,8 @@
   import { Tooltip } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import type { BasalPoint, TimeSeriesPoint } from "$lib/data/chart-data.remote";
+  import { BasalDeliveryOrigin, type BasalPoint } from "$lib/api";
+  import type { TimeSeriesPoint } from "$lib/data/chart-data.remote";
 
   interface BolusMarker {
     time: Date;

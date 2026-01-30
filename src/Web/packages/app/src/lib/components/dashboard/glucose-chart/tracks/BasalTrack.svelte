@@ -30,7 +30,7 @@
 
   interface Props {
     basalData: BasalPoint[];
-    scheduledBasalData: { time: Date; rate: number }[];
+    scheduledBasalData: { timestamp?: number; rate?: number }[];
     tempBasalSpans: TempBasalSpan[];
     staleBasalData: StaleBasalData | null;
     maxBasalRate: number;
@@ -187,8 +187,8 @@
   {#if scheduledBasalData.length > 0}
     <Spline
       data={scheduledBasalData}
-      x={(d) => d.time}
-      y={(d) => basalScale(d.rate)}
+      x={(d) => new Date(d.timestamp ?? 0)}
+      y={(d) => basalScale(d.rate ?? 0)}
       curve={curveStepAfter}
       class="stroke-muted-foreground/50 stroke-1 fill-none"
       stroke-dasharray="4,4"
@@ -219,9 +219,9 @@
     {#each basalSegmentsByOrigin as segment, i (i)}
       <Area
         data={segment.points}
-        x={(d) => d.time}
+        x={(d) => new Date(d.timestamp ?? 0)}
         y0={() => basalZero}
-        y1={(d) => basalScale(d.rate)}
+        y1={(d) => basalScale(d.rate ?? 0)}
         curve={curveStepAfter}
         fill={getBasalFillColor(segment.origin)}
         stroke={getBasalStrokeColor(segment.origin)}

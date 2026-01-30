@@ -5,7 +5,7 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod';
 import { error } from '@sveltejs/kit';
-import { BasalDeliveryOrigin, type BasalPoint } from '$lib/api';
+import { type BasalPoint } from '$lib/api';
 
 /**
  * Input schema for chart data queries
@@ -64,12 +64,7 @@ export const getChartData = query(chartDataSchema, async ({ startTime, endTime, 
 				time: new Date(p.timestamp ?? 0),
 				value: p.value ?? 0,
 			})) ?? [],
-			basalSeries: data.basalSeries?.map((p) => ({
-				time: new Date(p.timestamp ?? 0),
-				rate: p.rate ?? 0,
-				scheduledRate: p.scheduledRate ?? p.rate ?? 0,
-				origin: p.origin ?? BasalDeliveryOrigin.Scheduled,
-			})) ?? [],
+			basalSeries: data.basalSeries ?? [],
 			defaultBasalRate: data.defaultBasalRate ?? 1.0,
 			maxBasalRate: data.maxBasalRate ?? 3.0,
 			maxIob: data.maxIob ?? 5.0,

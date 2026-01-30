@@ -333,48 +333,29 @@
         : displayDateRange.to),
   });
 
-  // Filter entries and treatments
-  const filteredEntries = $derived(
-    entries.filter((e) => {
+  // Filter entries and treatments with early exit for empty arrays
+  const filteredEntries = $derived.by(() => {
+    if (entries.length === 0) return [];
+    const rangeFrom = fullDataRange.from.getTime();
+    const rangeTo = fullDataRange.to.getTime();
+    return entries.filter((e) => {
       const entryTime = e.mills ?? 0;
-      return (
-        entryTime >= fullDataRange.from.getTime() &&
-        entryTime <= fullDataRange.to.getTime()
-      );
-    })
-  );
+      return entryTime >= rangeFrom && entryTime <= rangeTo;
+    });
+  });
 
-  const filteredTreatments = $derived(
-    treatments.filter((t) => {
+  const filteredTreatments = $derived.by(() => {
+    if (treatments.length === 0) return [];
+    const rangeFrom = fullDataRange.from.getTime();
+    const rangeTo = fullDataRange.to.getTime();
+    return treatments.filter((t) => {
       const treatmentTime =
         t.mills ?? (t.created_at ? new Date(t.created_at).getTime() : 0);
-      return (
-        treatmentTime >= fullDataRange.from.getTime() &&
-        treatmentTime <= fullDataRange.to.getTime()
-      );
-    })
-  );
+      return treatmentTime >= rangeFrom && treatmentTime <= rangeTo;
+    });
+  });
 
-  // Treatment categorization
-  const bolusTreatments = $derived(
-    filteredTreatments.filter(
-      (t) =>
-        t.insulin &&
-        t.insulin > 0 &&
-        (t.eventType?.includes("Bolus") ||
-          t.eventType === "SMB" ||
-          t.eventType === "Correction Bolus" ||
-          t.eventType === "Meal Bolus" ||
-          t.eventType === "Snack Bolus" ||
-          t.eventType === "Bolus Wizard" ||
-          t.eventType === "Combo Bolus")
-    )
-  );
-
-  const carbTreatments = $derived(
-    filteredTreatments.filter((t) => t.carbs && t.carbs > 0)
-  );
-
+  // Device event types constant
   const DEVICE_EVENT_TYPES = [
     "Sensor Start",
     "Sensor Change",
@@ -386,13 +367,49 @@
 
   type DeviceEventType = (typeof DEVICE_EVENT_TYPES)[number];
 
-  const deviceEventTreatments = $derived(
-    filteredTreatments.filter(
-      (t) =>
+  // Combined treatment categorization - single pass through filteredTreatments
+  const categorizedTreatments = $derived.by(() => {
+    const bolus: TreatmentWithFoods[] = [];
+    const carbs: TreatmentWithFoods[] = [];
+    const deviceEvents: TreatmentWithFoods[] = [];
+
+    for (const t of filteredTreatments) {
+      // Check for bolus
+      if (
+        t.insulin &&
+        t.insulin > 0 &&
+        (t.eventType?.includes("Bolus") ||
+          t.eventType === "SMB" ||
+          t.eventType === "Correction Bolus" ||
+          t.eventType === "Meal Bolus" ||
+          t.eventType === "Snack Bolus" ||
+          t.eventType === "Bolus Wizard" ||
+          t.eventType === "Combo Bolus")
+      ) {
+        bolus.push(t);
+      }
+
+      // Check for carbs
+      if (t.carbs && t.carbs > 0) {
+        carbs.push(t);
+      }
+
+      // Check for device events
+      if (
         t.eventType &&
         DEVICE_EVENT_TYPES.includes(t.eventType as DeviceEventType)
-    )
-  );
+      ) {
+        deviceEvents.push(t);
+      }
+    }
+
+    return { bolus, carbs, deviceEvents };
+  });
+
+  // Derived references to categorized treatments
+  const bolusTreatments = $derived(categorizedTreatments.bolus);
+  const carbTreatments = $derived(categorizedTreatments.carbs);
+  const deviceEventTreatments = $derived(categorizedTreatments.deviceEvents);
 
   // Glucose data
   const glucoseData = $derived(
@@ -492,7 +509,7 @@
 
   const scheduledBasalData = $derived(
     basalData.map((d) => ({
-      time: d.time,
+      timestamp: d.timestamp,
       rate: d.scheduledRate ?? d.rate,
     }))
   );
@@ -528,13 +545,14 @@
     return null;
   });
 
-  // State spans
-  const pumpModeSpans = $derived.by(() => {
-    if (!stateData?.pumpModeSpans) return [];
-    const rangeStart = displayDateRange.from.getTime();
-    const rangeEnd = displayDateRange.to.getTime();
-
-    return stateData.pumpModeSpans
+  // Helper function for filtering and mapping spans - avoids code duplication
+  function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
+    spans: T[] | undefined,
+    rangeStart: number,
+    rangeEnd: number
+  ) {
+    if (!spans) return [];
+    return spans
       .filter((span) => {
         const spanStart = span.startTime.getTime();
         const spanEnd = span.endTime?.getTime() ?? rangeEnd;
@@ -547,7 +565,67 @@
           Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
         ),
       }));
+  }
+
+  // Batched state span processing - single computation for all span types
+  const processedStateSpans = $derived.by(() => {
+    // Early exit if no state data available
+    if (!stateData) {
+      return {
+        pumpMode: [],
+        override: [],
+        profile: [],
+        activity: [],
+        tempBasal: [],
+        events: [],
+      };
+    }
+
+    const rangeStart = displayDateRange.from.getTime();
+    const rangeEnd = displayDateRange.to.getTime();
+
+    // Process all spans with the shared range values
+    const pumpMode = processSpans(stateData.pumpModeSpans, rangeStart, rangeEnd);
+
+    const override = processSpans(stateData.overrideSpans, rangeStart, rangeEnd);
+
+    const profile = processSpans(stateData.profileSpans, rangeStart, rangeEnd).map(
+      (span) => ({
+        ...span,
+        profileName: (span.metadata?.profileName as string) ?? span.state,
+      })
+    );
+
+    const activity = processSpans(stateData.activitySpans, rangeStart, rangeEnd);
+
+    const tempBasal = processSpans(stateData.tempBasalSpans, rangeStart, rangeEnd).map(
+      (span) => ({
+        ...span,
+        rate:
+          (span.metadata?.rate as number) ??
+          (span.metadata?.absolute as number) ??
+          null,
+        percent: (span.metadata?.percent as number) ?? null,
+      })
+    );
+
+    const events = stateData.systemEvents
+      ? stateData.systemEvents.filter((event) => {
+          const eventTime = event.time.getTime();
+          return eventTime >= rangeStart && eventTime <= rangeEnd;
+        })
+      : [];
+
+    return { pumpMode, override, profile, activity, tempBasal, events };
   });
+
+  // Derived references to processed state spans
+  const pumpModeSpans = $derived(processedStateSpans.pumpMode);
+  const overrideSpans = $derived(processedStateSpans.override);
+  const profileSpans = $derived(processedStateSpans.profile);
+  const activitySpans = $derived(processedStateSpans.activity);
+  const tempBasalSpans = $derived(processedStateSpans.tempBasal);
+  const systemEvents = $derived(processedStateSpans.events);
 
   const currentPumpMode = $derived.by(() => {
     if (pumpModeSpans.length === 0) return "Automatic";
@@ -566,102 +644,6 @@
   const uniquePumpModes = $derived([
     ...new Set(pumpModeSpans.map((s) => s.state)),
   ]);
-
-  const systemEvents = $derived.by(() => {
-    if (!stateData?.systemEvents) return [];
-    const rangeStart = displayDateRange.from.getTime();
-    const rangeEnd = displayDateRange.to.getTime();
-    return stateData.systemEvents.filter((event) => {
-      const eventTime = event.time.getTime();
-      return eventTime >= rangeStart && eventTime <= rangeEnd;
-    });
-  });
-
-  const tempBasalSpans = $derived.by(() => {
-    if (!stateData?.tempBasalSpans) return [];
-    const rangeStart = displayDateRange.from.getTime();
-    const rangeEnd = displayDateRange.to.getTime();
-
-    return stateData.tempBasalSpans
-      .filter((span) => {
-        const spanStart = span.startTime.getTime();
-        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
-        return spanEnd > rangeStart && spanStart < rangeEnd;
-      })
-      .map((span) => ({
-        ...span,
-        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
-        displayEnd: new Date(
-          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
-        ),
-        rate:
-          (span.metadata?.rate as number) ??
-          (span.metadata?.absolute as number) ??
-          null,
-        percent: (span.metadata?.percent as number) ?? null,
-      }));
-  });
-
-  const overrideSpans = $derived.by(() => {
-    if (!stateData?.overrideSpans) return [];
-    const rangeStart = displayDateRange.from.getTime();
-    const rangeEnd = displayDateRange.to.getTime();
-
-    return stateData.overrideSpans
-      .filter((span) => {
-        const spanStart = span.startTime.getTime();
-        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
-        return spanEnd > rangeStart && spanStart < rangeEnd;
-      })
-      .map((span) => ({
-        ...span,
-        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
-        displayEnd: new Date(
-          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
-        ),
-      }));
-  });
-
-  const profileSpans = $derived.by(() => {
-    if (!stateData?.profileSpans) return [];
-    const rangeStart = displayDateRange.from.getTime();
-    const rangeEnd = displayDateRange.to.getTime();
-
-    return stateData.profileSpans
-      .filter((span) => {
-        const spanStart = span.startTime.getTime();
-        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
-        return spanEnd > rangeStart && spanStart < rangeEnd;
-      })
-      .map((span) => ({
-        ...span,
-        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
-        displayEnd: new Date(
-          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
-        ),
-        profileName: (span.metadata?.profileName as string) ?? span.state,
-      }));
-  });
-
-  const activitySpans = $derived.by(() => {
-    if (!stateData?.activitySpans) return [];
-    const rangeStart = displayDateRange.from.getTime();
-    const rangeEnd = displayDateRange.to.getTime();
-
-    return stateData.activitySpans
-      .filter((span) => {
-        const spanStart = span.startTime.getTime();
-        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
-        return spanEnd > rangeStart && spanStart < rangeEnd;
-      })
-      .map((span) => ({
-        ...span,
-        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
-        displayEnd: new Date(
-          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
-        ),
-      }));
-  });
 
   // Scheduled tracker markers
   interface ScheduledTrackerMarker {
@@ -737,7 +719,8 @@
   // ===== TRACK CONFIGURATION =====
   const SWIM_LANE_HEIGHT = 0.04;
 
-  function getTrackRatios() {
+  // Memoized track configuration - only recalculates when visibility toggles or span counts change
+  const trackConfig = $derived.by(() => {
     const showBasalTrack = showBasal;
     const showIobTrack = showIob || showCob;
 
@@ -765,10 +748,81 @@
       showBasalTrack,
       showIobTrack,
     };
+  });
+
+  // Swim lane position types
+  type SwimLanePosition = {
+    top: number;
+    bottom: number;
+    visible: boolean;
+  };
+
+  type SwimLanePositions = {
+    pumpMode: SwimLanePosition;
+    override: SwimLanePosition;
+    profile: SwimLanePosition;
+    activity: SwimLanePosition;
+  };
+
+  // Memoized function to calculate swim lane positions (called with context.height)
+  // Returns a stable reference when inputs haven't changed
+  let cachedSwimLaneHeight = 0;
+  let cachedBasalTrackBottom = 0;
+  let cachedSwimLanes: typeof trackConfig.swimLanes | null = null;
+  let cachedSwimLanePositions: SwimLanePositions | null = null;
+
+  function getSwimLanePositions(
+    contextHeight: number,
+    basalTrackBottom: number,
+    swimLanes: typeof trackConfig.swimLanes
+  ): SwimLanePositions {
+    const swimLaneHeight = contextHeight * SWIM_LANE_HEIGHT;
+
+    // Return cached result if inputs are the same
+    if (
+      cachedSwimLanePositions &&
+      swimLaneHeight === cachedSwimLaneHeight &&
+      basalTrackBottom === cachedBasalTrackBottom &&
+      cachedSwimLanes &&
+      swimLanes.pumpMode === cachedSwimLanes.pumpMode &&
+      swimLanes.override === cachedSwimLanes.override &&
+      swimLanes.profile === cachedSwimLanes.profile &&
+      swimLanes.activity === cachedSwimLanes.activity
+    ) {
+      return cachedSwimLanePositions;
+    }
+
+    let currentY = basalTrackBottom;
+    const positions: SwimLanePositions = {
+      pumpMode: { top: 0, bottom: 0, visible: false },
+      override: { top: 0, bottom: 0, visible: false },
+      profile: { top: 0, bottom: 0, visible: false },
+      activity: { top: 0, bottom: 0, visible: false },
+    };
+
+    const laneOrder = ["pumpMode", "override", "profile", "activity"] as const;
+    for (const lane of laneOrder) {
+      const visible = swimLanes[lane];
+      positions[lane] = {
+        top: currentY,
+        bottom: visible ? currentY + swimLaneHeight : currentY,
+        visible,
+      };
+      if (visible) currentY += swimLaneHeight;
+    }
+
+    // Cache the result
+    cachedSwimLaneHeight = swimLaneHeight;
+    cachedBasalTrackBottom = basalTrackBottom;
+    cachedSwimLanes = { ...swimLanes };
+    cachedSwimLanePositions = positions;
+
+    return positions;
   }
 
   // ===== HELPER FUNCTIONS =====
   const bisectDate = bisector((d: { time: Date }) => d.time).left;
+  const bisectTimestamp = bisector((d: { timestamp?: number }) => d.timestamp ?? 0).left;
 
   function findSeriesValue<T extends { time: Date }>(
     series: T[],
@@ -785,16 +839,13 @@
       : d0;
   }
 
-  function findBasalValue(
-    series: {
-      time: Date;
-      rate: number;
-      scheduledRate?: number;
-    }[],
+  function findBasalValue<T extends { timestamp?: number }>(
+    series: T[],
     time: Date
-  ) {
+  ): T | undefined {
     if (!series || series.length === 0) return undefined;
-    const i = bisectDate(series, time, 1);
+    const timeMs = time.getTime();
+    const i = bisectTimestamp(series, { timestamp: timeMs }, 1);
     return series[i - 1];
   }
 
@@ -1077,63 +1128,20 @@
       >
         {#snippet children({ context })}
           <Svg>
-            {@const trackConfig = getTrackRatios()}
             {@const { showIobTrack, swimLanes } = trackConfig}
 
             {@const basalTrackHeight = context.height * trackConfig.basal}
-            {@const swimLaneHeight = context.height * SWIM_LANE_HEIGHT}
             {@const glucoseTrackHeight = context.height * trackConfig.glucose}
             {@const iobTrackHeight = context.height * trackConfig.iob}
 
             {@const basalTrackTop = 0}
             {@const basalTrackBottom = basalTrackHeight}
 
-            {@const swimLanePositions = (() => {
-              let currentY = basalTrackBottom;
-              type SwimLanePosition = {
-                top: number;
-                bottom: number;
-                visible: boolean;
-              };
-              const positions = {
-                pumpMode: {
-                  top: 0,
-                  bottom: 0,
-                  visible: false,
-                } as SwimLanePosition,
-                override: {
-                  top: 0,
-                  bottom: 0,
-                  visible: false,
-                } as SwimLanePosition,
-                profile: {
-                  top: 0,
-                  bottom: 0,
-                  visible: false,
-                } as SwimLanePosition,
-                activity: {
-                  top: 0,
-                  bottom: 0,
-                  visible: false,
-                } as SwimLanePosition,
-              };
-              const laneOrder = [
-                "pumpMode",
-                "override",
-                "profile",
-                "activity",
-              ] as const;
-              for (const lane of laneOrder) {
-                const visible = swimLanes[lane];
-                positions[lane] = {
-                  top: currentY,
-                  bottom: visible ? currentY + swimLaneHeight : currentY,
-                  visible,
-                };
-                if (visible) currentY += swimLaneHeight;
-              }
-              return positions;
-            })()}
+            {@const swimLanePositions = getSwimLanePositions(
+              context.height,
+              basalTrackBottom,
+              swimLanes
+            )}
 
             {@const swimLanesBottom =
               basalTrackBottom + trackConfig.swimLanesRatio * context.height}

@@ -955,9 +955,9 @@ msgstr ""
 #. placeholder {0}: foodEntry.fat
 #. placeholder {0}: scaledFat()
 #. placeholder {0}: foodEntry.fat
+#. placeholder {0}: formatCarbDisplay(averages.avgCarbs)
 #. placeholder {0}: formatCarbDisplay(averages.avgProtein)
 #. placeholder {0}: formatCarbDisplay(averages.avgFat)
-#. placeholder {0}: totalCarbs
 #. placeholder {0}: totalCarbs
 #. placeholder {0}: totalCarbs
 #. placeholder {0}: actualUnattributed
@@ -967,11 +967,11 @@ msgstr ""
 #. placeholder {0}: monthSummary.avgCarbs.toFixed(0)
 #. placeholder {0}: food.carbs
 #. placeholder {0}: formatMacro(scaledCarbs)
+#. placeholder {0}: dayTotalCarbs
 #. placeholder {0}: totalCarbs
 #. placeholder {0}: treatmentStats.totalCarbs.toFixed(0)
 #. placeholder {0}: treatmentStats.totalCarbs.toFixed(0)
 #. placeholder {0}: treatment.carbs
-#. placeholder {0}: formatCarbDisplay(treatment.carbs)
 #. placeholder {0}: formatCarbDisplay(treatment.carbs)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
@@ -1010,6 +1010,7 @@ msgstr "Insuline :"
 
 #. placeholder {0}: marker.insulin.toFixed(1)
 #. placeholder {0}: insulin.toFixed(1)
+#. placeholder {0}: averageTdd.toFixed(1)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.basal)
 #. placeholder {0}: formatInsulinDisplay((treatmentSummary?.totals?.insulin?.bolus ?? 0) + (treatmentSummary?.totals?.insulin?.basal ?? 0))
@@ -1019,16 +1020,15 @@ msgstr "Insuline :"
 #. placeholder {0}: evening.toFixed(1)
 #. placeholder {0}: formatInsulinDisplay(averages.avgTotalDaily)
 #. placeholder {0}: totalInsulin.toFixed(1)
-#. placeholder {0}: totalInsulin.toFixed(1)
 #. placeholder {0}: day.totalInsulin.toFixed(1)
 #. placeholder {0}: monthSummary.avgInsulin.toFixed(1)
+#. placeholder {0}: dayTotalInsulin.toFixed(1)
 #. placeholder {0}: meal.treatment.insulin.toFixed(1)
 #. placeholder {0}: treatmentStats.totalBolus.toFixed(1)
 #. placeholder {0}: treatmentStats.totalBolus.toFixed(1)
 #. placeholder {0}: treatmentStats.totalBasal.toFixed(1)
 #. placeholder {0}: treatmentStats.totalDailyInsulin.toFixed(1)
 #. placeholder {0}: treatment.insulin.toFixed(2)
-#. placeholder {0}: formatInsulinDisplay(treatment.insulin)
 #. placeholder {0}: formatInsulinDisplay(treatment.insulin)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
