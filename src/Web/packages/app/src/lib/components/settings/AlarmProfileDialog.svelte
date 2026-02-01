@@ -52,6 +52,7 @@
   import {
     BUILT_IN_SOUNDS,
     ALARM_TYPE_LABELS,
+    normalizeAlarmType,
     PRIORITY_LABELS,
   } from "$lib/types/alarm-profile";
   import {
@@ -84,6 +85,7 @@
     p: AlarmProfileConfiguration
   ): AlarmProfileConfiguration {
     const copy = JSON.parse(JSON.stringify(p)) as AlarmProfileConfiguration;
+    copy.alarmType = normalizeAlarmType(copy.alarmType);
     // Ensure schedule.activeDays is initialized
     if (!copy.schedule.activeDays) {
       copy.schedule.activeDays = [];
@@ -305,7 +307,7 @@
                 value={editedProfile.alarmType}
                 onValueChange={(value) => {
                   if (value) {
-                    editedProfile.alarmType = value as AlarmTriggerType;
+                    editedProfile.alarmType = normalizeAlarmType(value);
 
                     // Auto-fill emergency instructions for Urgent Low if empty
                     if (
@@ -325,7 +327,7 @@
                 <SelectContent>
                   {#each alarmTypes as type}
                     <SelectItem value={type}>
-                      {ALARM_TYPE_LABELS[type]}
+                      {ALARM_TYPE_LABELS[type] ?? type}
                     </SelectItem>
                   {/each}
                 </SelectContent>
@@ -346,7 +348,7 @@
                 <SelectContent>
                   {#each priorities as priority}
                     <SelectItem value={priority}>
-                      {PRIORITY_LABELS[priority]}
+                      {PRIORITY_LABELS[priority] ?? priority}
                     </SelectItem>
                   {/each}
                 </SelectContent>

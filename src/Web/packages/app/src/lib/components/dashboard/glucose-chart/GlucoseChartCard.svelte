@@ -38,6 +38,7 @@
   import {
     getChartStateData,
     type ChartStateData,
+    type BasalDeliveryChartData,
   } from "$lib/data/state-spans.remote";
   import {
     predictionMinutes,
@@ -89,6 +90,10 @@
     initialShowActivitySpans?: boolean;
     trackerInstances?: TrackerInstanceDto[];
     trackerDefinitions?: TrackerDefinitionDto[];
+    /** Hide header, mini overview, and legend for embedded/compact mode */
+    compact?: boolean;
+    /** Custom height class override (e.g., "h-[300px]") */
+    heightClass?: string;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -113,6 +118,9 @@
     initialShowActivitySpans = false,
     trackerInstances = realtimeStore.trackerInstances,
     trackerDefinitions = realtimeStore.trackerDefinitions,
+    compact = false,
+    heightClass,
+    defaultFocusHours,
   }: ComponentProps = $props();
 
   // ===== STATE =====
@@ -181,7 +189,7 @@
   const isBrowser = typeof window !== "undefined";
   const nowMinute = $derived(Math.floor(realtimeStore.now / 60000) * 60000);
   const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
-  const lookbackHours = $derived(glucoseChartLookback.current);
+  const lookbackHours = $derived(defaultFocusHours ?? glucoseChartLookback.current);
 
   function normalizeDate(
     date: Date | string | undefined,
@@ -525,37 +533,6 @@
     }))
   );
 
-  // Stale basal detection
-  const lastBasalSourceTime = $derived.by(() => {
-    const lastTempBasal = treatments.find((t) =>
-      ["Temp Basal", "Basal"].includes(t?.eventType ?? "")
-    );
-    const lastTempBasalTime =
-      lastTempBasal != null
-        ? (lastTempBasal.mills ?? 0) + (lastTempBasal.duration ?? 0) * 60 * 1000
-        : 0;
-    return lastTempBasalTime;
-  });
-
-  const STALE_THRESHOLD_MS = 10 * 60 * 1000;
-
-  const staleBasalData = $derived.by(() => {
-    if (lastBasalSourceTime === 0) return null;
-    const rangeEndTime = displayDateRange.to.getTime();
-    const timeSinceLastUpdate = rangeEndTime - lastBasalSourceTime;
-    const rangeStartTime = displayDateRange.from.getTime();
-    if (
-      timeSinceLastUpdate > STALE_THRESHOLD_MS &&
-      lastBasalSourceTime >= rangeStartTime
-    ) {
-      return {
-        start: new Date(lastBasalSourceTime),
-        end: new Date(rangeEndTime),
-      };
-    }
-    return null;
-  });
-
   // Helper function for filtering and mapping spans - avoids code duplication
   function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
     spans: T[] | undefined,
@@ -589,6 +566,7 @@
         profile: [],
         activity: [],
         tempBasal: [],
+        basalDelivery: [] as (BasalDeliveryChartData & { displayStart: Date; displayEnd: Date })[],
         events: [],
       };
     }
@@ -621,6 +599,9 @@
       })
     );
 
+    // Process basal delivery spans (all origins, with rate)
+    const basalDelivery = processSpans(stateData.basalDeliverySpans, rangeStart, rangeEnd);
+
     const events = stateData.systemEvents
       ? stateData.systemEvents.filter((event) => {
           const eventTime = event.time.getTime();
@@ -628,7 +609,7 @@
         })
       : [];
 
-    return { pumpMode, override, profile, activity, tempBasal, events };
+    return { pumpMode, override, profile, activity, tempBasal, basalDelivery, events };
   });
 
   // Derived references to processed state spans
@@ -637,7 +618,41 @@
   const profileSpans = $derived(processedStateSpans.profile);
   const activitySpans = $derived(processedStateSpans.activity);
   const tempBasalSpans = $derived(processedStateSpans.tempBasal);
+  const basalDeliverySpans = $derived(processedStateSpans.basalDelivery);
   const systemEvents = $derived(processedStateSpans.events);
+
+  // Stale basal detection - use basalDeliverySpans from state data
+  const lastBasalSourceTime = $derived.by(() => {
+    if (basalDeliverySpans.length === 0) return 0;
+    // Find the span with the latest end time
+    let latestEndTime = 0;
+    for (const span of basalDeliverySpans) {
+      const endTime = span.endTime?.getTime() ?? span.startTime.getTime();
+      if (endTime > latestEndTime) {
+        latestEndTime = endTime;
+      }
+    }
+    return latestEndTime;
+  });
+
+  const STALE_THRESHOLD_MS = 10 * 60 * 1000;
+
+  const staleBasalData = $derived.by(() => {
+    if (lastBasalSourceTime === 0) return null;
+    const rangeEndTime = displayDateRange.to.getTime();
+    const timeSinceLastUpdate = rangeEndTime - lastBasalSourceTime;
+    const rangeStartTime = displayDateRange.from.getTime();
+    if (
+      timeSinceLastUpdate > STALE_THRESHOLD_MS &&
+      lastBasalSourceTime >= rangeStartTime
+    ) {
+      return {
+        start: new Date(lastBasalSourceTime),
+        end: new Date(rangeEndTime),
+      };
+    }
+    return null;
+  });
 
   const currentPumpMode = $derived.by(() => {
     if (pumpModeSpans.length === 0) return "Automatic";
@@ -1091,6 +1106,8 @@
     findActiveSpan(activitySpans, time, true);
   const findActiveTempBasal = (time: Date) =>
     findActiveSpan(tempBasalSpans, time, false);
+  const findActiveBasalDelivery = (time: Date) =>
+    findActiveSpan(basalDeliverySpans, time, false);
 
   function findNearbySystemEvent(time: Date) {
     return systemEvents.find(
@@ -1100,36 +1117,10 @@
   }
 </script>
 
-<Card class="@container bg-card border-border">
-  <CardHeader class="pb-2 px-3 @md:px-6">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <CardTitle class="flex items-center gap-2 text-card-foreground">
-        Blood Glucose
-        {#if displayDemoMode}
-          <Badge
-            variant="outline"
-            class="text-xs border-border text-muted-foreground"
-          >
-            Demo
-          </Badge>
-        {/if}
-      </CardTitle>
-
-      <div class="flex items-center gap-2">
-        <PredictionSettings
-          {showPredictions}
-          predictionMode={predictionModeValue}
-          onPredictionModeChange={handlePredictionModeChange}
-        />
-      </div>
-    </div>
-  </CardHeader>
-
-  <CardContent class="p-1 @md:p-2">
-    <ZoomIndicator {isZoomed} {brushXDomain} onResetZoom={resetZoom} />
-
-    <!-- Main Chart -->
-    <div class="h-80 @md:h-[450px] p-2 @md:p-4">
+{#if compact}
+  <!-- Compact mode: no card wrapper, just the chart -->
+  <div class="h-full w-full @container">
+    <div class="h-full">
       <Chart
         data={glucoseData}
         x={(d) => d.time}
@@ -1321,6 +1312,12 @@
                 <Highlight
                   x={(d) => d.time}
                   y={(d) => {
+                    // Prefer state spans for accurate rate lookup
+                    const basalDelivery = findActiveBasalDelivery(d.time);
+                    if (basalDelivery) {
+                      return basalScale(basalDelivery.rate);
+                    }
+                    // Fallback to chart data series
                     const basal = findBasalValue(basalData, d.time);
                     return basalScale(basal?.rate ?? 0);
                   }}
@@ -1343,6 +1340,276 @@
             {findActiveProfile}
             {findActiveActivities}
             {findActiveTempBasal}
+            {findActiveBasalDelivery}
+            {findNearbySystemEvent}
+            {showBolus}
+            {showCarbs}
+            {showDeviceEvents}
+            {showIob}
+            {showCob}
+            {showBasal}
+            {showPumpModes}
+            {showOverrideSpans}
+            {showProfileSpans}
+            {showActivitySpans}
+            {showAlarms}
+            {staleBasalData}
+          />
+        {/snippet}
+      </Chart>
+    </div>
+  </div>
+{:else}
+<Card class="@container bg-card border-border">
+    <CardHeader class="pb-2 px-3 @md:px-6">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <CardTitle class="flex items-center gap-2 text-card-foreground">
+          Blood Glucose
+          {#if displayDemoMode}
+            <Badge
+              variant="outline"
+              class="text-xs border-border text-muted-foreground"
+            >
+              Demo
+            </Badge>
+          {/if}
+        </CardTitle>
+
+        <div class="flex items-center gap-2">
+          <PredictionSettings
+            {showPredictions}
+            predictionMode={predictionModeValue}
+            onPredictionModeChange={handlePredictionModeChange}
+          />
+        </div>
+      </div>
+    </CardHeader>
+
+  <CardContent class="p-1 @md:p-2">
+      <ZoomIndicator {isZoomed} {brushXDomain} onResetZoom={resetZoom} />
+
+    <!-- Main Chart -->
+    <div class={heightClass ?? 'h-80 @md:h-[450px]'}>
+      <Chart
+        data={glucoseData}
+        x={(d) => d.time}
+        y="sgv"
+        xScale={scaleTime()}
+        xDomain={[chartXDomain.from, chartXDomain.to]}
+        yDomain={[0, glucoseYMax]}
+        padding={{ left: 48, bottom: 30, top: 8, right: 48 }}
+        tooltip={{ mode: "quadtree-x" }}
+      >
+        {#snippet children({ context })}
+          <Svg>
+            {@const { showIobTrack, swimLanes } = trackConfig}
+
+            {@const basalTrackHeight = context.height * trackConfig.basal}
+            {@const glucoseTrackHeight = context.height * trackConfig.glucose}
+            {@const iobTrackHeight = context.height * trackConfig.iob}
+
+            {@const basalTrackTop = 0}
+            {@const basalTrackBottom = basalTrackHeight}
+
+            {@const swimLanePositions = getSwimLanePositions(
+              context.height,
+              basalTrackBottom,
+              swimLanes
+            )}
+
+            {@const swimLanesBottom =
+              basalTrackBottom + trackConfig.swimLanesRatio * context.height}
+            {@const glucoseTrackTop = swimLanesBottom}
+            {@const glucoseTrackBottom = glucoseTrackTop + glucoseTrackHeight}
+            {@const iobTrackTop = glucoseTrackBottom}
+            {@const iobTrackBottom = iobTrackTop + iobTrackHeight}
+
+            {@const pixelToGlucoseDomain = (pixelY: number) =>
+              glucoseYMax * (1 - pixelY / context.height)}
+
+            {@const basalScale = (rate: number) => {
+              const pixelY =
+                basalTrackTop + (rate / maxBasalRate) * basalTrackHeight;
+              return pixelToGlucoseDomain(pixelY);
+            }}
+            {@const basalZero = pixelToGlucoseDomain(basalTrackTop)}
+            {@const basalAxisScale = scaleLinear()
+              .domain([0, maxBasalRate])
+              .range([basalTrackTop, basalTrackBottom])}
+
+            {@const glucoseScale = scaleLinear()
+              .domain([0, glucoseYMax])
+              .range([
+                pixelToGlucoseDomain(glucoseTrackBottom),
+                pixelToGlucoseDomain(glucoseTrackTop),
+              ])}
+            {@const glucoseAxisScale = scaleLinear()
+              .domain([0, glucoseYMax])
+              .range([glucoseTrackBottom, glucoseTrackTop])}
+
+            {@const iobScale = (value: number) => {
+              const pixelY = iobTrackBottom - (value / maxIOB) * iobTrackHeight;
+              return pixelToGlucoseDomain(pixelY);
+            }}
+            {@const iobZero = pixelToGlucoseDomain(iobTrackBottom)}
+            {@const iobAxisScale = scaleLinear()
+              .domain([0, maxIOB])
+              .range([iobTrackBottom, iobTrackTop])}
+
+            <!-- Basal Track -->
+            <ChartClipPath>
+              <BasalTrack
+                {basalData}
+                {scheduledBasalData}
+                {tempBasalSpans}
+                {staleBasalData}
+                {maxBasalRate}
+                {basalScale}
+                {basalZero}
+                {basalTrackTop}
+                {basalAxisScale}
+                {context}
+                {showBasal}
+              />
+            </ChartClipPath>
+
+            <!-- Swim Lanes -->
+            <ChartClipPath>
+              <SwimLaneTrack
+                {context}
+                {swimLanePositions}
+                {pumpModeSpans}
+                {overrideSpans}
+                {profileSpans}
+                {activitySpans}
+              />
+            </ChartClipPath>
+
+            <!-- Glucose Track -->
+            <GlucoseTrack
+              {glucoseData}
+              {glucoseScale}
+              {glucoseAxisScale}
+              {glucoseTrackTop}
+              {highThreshold}
+              {lowThreshold}
+              contextWidth={context.width}
+              {showPredictions}
+              {predictionData}
+              predictionEnabled={predictionEnabled.current}
+              predictionDisplayMode={predictionDisplayMode.current}
+              {predictionError}
+              {chartXDomain}
+            />
+
+            <!-- IOB/COB Track -->
+            <IobCobTrack
+              {iobData}
+              {cobData}
+              {carbRatio}
+              {iobScale}
+              {iobZero}
+              {iobAxisScale}
+              {iobTrackTop}
+              {showIob}
+              {showCob}
+              {showBolus}
+              {showCarbs}
+              bolusMarkers={bolusMarkersForIob}
+              carbMarkers={carbMarkersForIob}
+              {context}
+              onMarkerClick={handleMarkerClick}
+              {showIobTrack}
+            />
+
+            <!-- X-Axis -->
+            <Axis
+              placement="bottom"
+              format={"hour"}
+              tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
+            />
+
+            <ChartClipPath>
+              <!-- Device event markers -->
+              {#if showDeviceEvents}
+                {#each deviceEventMarkers as marker}
+                  {@const xPos = context.xScale(marker.time)}
+                  {@const yPos = context.yScale(glucoseScale(medianGlucose))}
+                  <DeviceEventMarker
+                    {xPos}
+                    {yPos}
+                    eventType={marker.eventType}
+                    color={marker.config.color}
+                  />
+                {/each}
+              {/if}
+
+              <!-- System event markers -->
+              {#if showAlarms}
+                {#each systemEvents as event (event.id)}
+                  {@const xPos = context.xScale(event.time)}
+                  {@const yPos = context.yScale(
+                    glucoseScale(lowThreshold * 0.8)
+                  )}
+                  <SystemEventMarker
+                    {xPos}
+                    {yPos}
+                    eventType={event.eventType}
+                    color={event.color}
+                  />
+                {/each}
+              {/if}
+
+              <!-- Scheduled tracker expiration markers -->
+              {#if showScheduledTrackers}
+                {#each scheduledTrackerMarkers as marker (marker.id)}
+                  {@const xPos = context.xScale(marker.time)}
+                  <TrackerExpirationMarker
+                    {xPos}
+                    lineTop={basalTrackTop + 20}
+                    lineBottom={context.height}
+                    {basalTrackTop}
+                    time={marker.time}
+                    category={marker.category}
+                    color={marker.color}
+                  />
+                {/each}
+              {/if}
+
+              <!-- Basal highlight -->
+              {#if showBasal}
+                <Highlight
+                  x={(d) => d.time}
+                  y={(d) => {
+                    // Prefer state spans for accurate rate lookup
+                    const basalDelivery = findActiveBasalDelivery(d.time);
+                    if (basalDelivery) {
+                      return basalScale(basalDelivery.rate);
+                    }
+                    // Fallback to chart data series
+                    const basal = findBasalValue(basalData, d.time);
+                    return basalScale(basal?.rate ?? 0);
+                  }}
+                  points={{ class: "fill-insulin-basal" }}
+                />
+              {/if}
+            </ChartClipPath>
+          </Svg>
+
+          <ChartTooltip
+            {context}
+            findBasalValue={(time) => findBasalValue(basalData, time)}
+            findIobValue={(time) => findSeriesValue(iobData, time)}
+            findCobValue={(time) => findSeriesValue(cobData, time)}
+            {findNearbyBolus}
+            {findNearbyCarbs}
+            {findNearbyDeviceEvent}
+            {findActivePumpMode}
+            {findActiveOverride}
+            {findActiveProfile}
+            {findActiveActivities}
+            {findActiveTempBasal}
+            {findActiveBasalDelivery}
             {findNearbySystemEvent}
             {showBolus}
             {showCarbs}
@@ -1432,6 +1699,7 @@
     />
   </CardContent>
 </Card>
+{/if}
 
 <!-- Treatment Edit Dialog -->
 <TreatmentEditDialog

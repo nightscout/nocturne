@@ -3030,6 +3030,206 @@
         }
       }
     },
+    "/api/v4/clockfaces/{id}": {
+      "get": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Get a clock face configuration by ID (public, no authentication required)",
+        "operationId": "ClockFaces_GetById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clock face configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFacePublicDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Update an existing clock face (owner only)",
+        "operationId": "ClockFaces_Update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Update request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClockFaceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "Updated clock face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFace"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Delete a clock face (owner only)",
+        "operationId": "ClockFaces_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success status"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/clockfaces": {
+      "get": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "List all clock faces for the current user",
+        "operationId": "ClockFaces_List",
+        "responses": {
+          "200": {
+            "description": "List of clock faces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClockFaceListItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Create a new clock face",
+        "operationId": "ClockFaces_Create",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Clock face creation request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClockFaceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "Created clock face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/compatibility/config": {
       "get": {
         "tags": [
@@ -3626,6 +3826,68 @@
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/debug/test/notification": {
+      "get": {
+        "tags": [
+          "V4 Debug"
+        ],
+        "summary": "Simple test endpoint for creating in-app notifications without authentication\nCreates a test notification to verify the real-time notification system is working",
+        "operationId": "Debug_CreateSimpleTestNotification",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Notification type (info, warn, hazard, urgent)",
+            "schema": {
+              "type": "string",
+              "default": "info"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "description": "Optional notification title",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification created and broadcast successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InAppNotificationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/debug/test/signalr-broadcast": {
+      "get": {
+        "tags": [
+          "V4 Debug"
+        ],
+        "summary": "Test endpoint to broadcast a raw SignalR notification event\nThis bypasses the database and directly tests the SignalR broadcast",
+        "operationId": "Debug_TestSignalRBroadcast",
+        "responses": {
+          "200": {
+            "description": "Confirmation of broadcast",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -8858,6 +9120,117 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v4/ui-settings/notifications/webhooks": {
+      "get": {
+        "tags": [
+          "WebhookSettings"
+        ],
+        "operationId": "WebhookSettings_GetWebhookSettings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookNotificationSettings"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "WebhookSettings"
+        ],
+        "operationId": "WebhookSettings_SaveWebhookSettings",
+        "requestBody": {
+          "x-name": "settings",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookNotificationSettings"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookNotificationSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/ui-settings/notifications/webhooks/test": {
+      "post": {
+        "tags": [
+          "WebhookSettings"
+        ],
+        "operationId": "WebhookSettings_TestWebhookSettings",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookTestRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookTestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
           }
         }
       }
@@ -19629,6 +20002,307 @@
           }
         }
       },
+      "ClockFacePublicDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          }
+        }
+      },
+      "ClockFaceConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockRow"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ClockSettings"
+          }
+        }
+      },
+      "ClockRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockElement"
+            }
+          }
+        }
+      },
+      "ClockElement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "showUnits": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "minutesAhead": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "show": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibilityThreshold": {
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "style": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockElementStyle"
+              }
+            ]
+          },
+          "chartConfig": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockChartConfig"
+              }
+            ]
+          }
+        }
+      },
+      "ClockElementStyle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "font": {
+            "type": "string",
+            "nullable": true
+          },
+          "fontWeight": {
+            "type": "string",
+            "nullable": true
+          },
+          "opacity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "custom": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ClockChartConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "showIob": {
+            "type": "boolean"
+          },
+          "showCob": {
+            "type": "boolean"
+          },
+          "showBasal": {
+            "type": "boolean"
+          },
+          "showBolus": {
+            "type": "boolean"
+          },
+          "showCarbs": {
+            "type": "boolean"
+          },
+          "showDeviceEvents": {
+            "type": "boolean"
+          },
+          "showAlarms": {
+            "type": "boolean"
+          },
+          "showTrackers": {
+            "type": "boolean"
+          },
+          "showPredictions": {
+            "type": "boolean"
+          },
+          "lockToggles": {
+            "type": "boolean"
+          },
+          "showLegend": {
+            "type": "boolean"
+          },
+          "asBackground": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ClockSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bgColor": {
+            "type": "boolean"
+          },
+          "staleMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "alwaysShowTime": {
+            "type": "boolean"
+          },
+          "backgroundImage": {
+            "type": "string",
+            "nullable": true
+          },
+          "backgroundOpacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ClockFaceListItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ClockFace": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "CreateClockFaceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          }
+        }
+      },
+      "UpdateClockFaceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "config": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockFaceConfig"
+              }
+            ]
+          }
+        }
+      },
       "ProxyConfigurationDto": {
         "type": "object",
         "description": "Proxy configuration DTO",
@@ -23329,6 +24003,14 @@
             "description": "Event type to create when tracker is completed (for Nightscout compatibility)",
             "nullable": true
           },
+          "mode": {
+            "description": "Tracker mode: Duration or Event",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerMode"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -23448,6 +24130,18 @@
           "RoleRestricted"
         ]
       },
+      "TrackerMode": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Duration",
+          "Event"
+        ],
+        "enum": [
+          "Duration",
+          "Event"
+        ]
+      },
       "CreateTrackerDefinitionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -23521,6 +24215,14 @@
             "type": "string",
             "description": "Event type to create when tracker is completed (for Nightscout compatibility)",
             "nullable": true
+          },
+          "mode": {
+            "description": "Tracker mode: Duration (time-based) or Event (scheduled datetime)",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerMode"
+              }
+            ]
           }
         }
       },
@@ -23647,6 +24349,15 @@
             "type": "string",
             "description": "Event type to create when tracker is completed (for Nightscout compatibility)",
             "nullable": true
+          },
+          "mode": {
+            "description": "Tracker mode: Duration (time-based) or Event (scheduled datetime)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerMode"
+              }
+            ]
           }
         }
       },
@@ -23681,6 +24392,11 @@
             "nullable": true
           },
           "expectedEndAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scheduledAt": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -23775,6 +24491,12 @@
           "startedAt": {
             "type": "string",
             "description": "Optional custom start time for backdating. Defaults to now if not provided.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scheduledAt": {
+            "type": "string",
+            "description": "For Event mode: the scheduled datetime of the event",
             "format": "date-time",
             "nullable": true
           }
@@ -24965,6 +25687,62 @@
           "preferredLanguage": {
             "type": "string",
             "description": "User's preferred language code (e.g., \"en\", \"fr\", \"de\")",
+            "nullable": true
+          }
+        }
+      },
+      "WebhookNotificationSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "signatureVersion": {
+            "type": "string"
+          }
+        }
+      },
+      "WebhookTestResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "failedUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WebhookTestRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "secret": {
+            "type": "string",
             "nullable": true
           }
         }

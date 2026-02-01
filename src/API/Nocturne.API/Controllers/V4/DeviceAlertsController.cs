@@ -322,21 +322,24 @@ public class DeviceAlertsController : ControllerBase
                 return Unauthorized();
             }
 
-            var prefs = new NotificationPreferencesEntity
-            {
-                UserId = userId,
-                EmailEnabled = settings.EmailEnabled,
-                PushEnabled = settings.PushEnabled,
-                SmsEnabled = settings.SmsEnabled,
-                QuietHoursEnabled = settings.QuietHoursEnabled,
-                QuietHoursStart = TimeOnly.FromTimeSpan(settings.QuietHoursStart),
-                QuietHoursEnd = TimeOnly.FromTimeSpan(settings.QuietHoursEnd),
-                EmergencyOverrideQuietHours = settings.CriticalAlertsOverrideQuietHours,
-                BatteryLowThreshold = settings.BatteryLowThreshold,
-                SensorExpirationWarningHours = settings.SensorExpirationWarningHours,
-                DataGapWarningMinutes = settings.DataGapWarningMinutes,
-                CalibrationReminderHours = settings.CalibrationReminderHours,
-            };
+            var prefs =
+                await _preferencesRepository.GetPreferencesForUserAsync(
+                    userId,
+                    cancellationToken
+                )
+                ?? new NotificationPreferencesEntity { UserId = userId };
+
+            prefs.EmailEnabled = settings.EmailEnabled;
+            prefs.PushEnabled = settings.PushEnabled;
+            prefs.SmsEnabled = settings.SmsEnabled;
+            prefs.QuietHoursEnabled = settings.QuietHoursEnabled;
+            prefs.QuietHoursStart = TimeOnly.FromTimeSpan(settings.QuietHoursStart);
+            prefs.QuietHoursEnd = TimeOnly.FromTimeSpan(settings.QuietHoursEnd);
+            prefs.EmergencyOverrideQuietHours = settings.CriticalAlertsOverrideQuietHours;
+            prefs.BatteryLowThreshold = settings.BatteryLowThreshold;
+            prefs.SensorExpirationWarningHours = settings.SensorExpirationWarningHours;
+            prefs.DataGapWarningMinutes = settings.DataGapWarningMinutes;
+            prefs.CalibrationReminderHours = settings.CalibrationReminderHours;
 
             await _preferencesRepository.UpsertPreferencesAsync(prefs, cancellationToken);
 

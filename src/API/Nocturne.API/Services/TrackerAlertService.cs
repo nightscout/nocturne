@@ -117,8 +117,51 @@ public class TrackerAlertService : ITrackerAlertService
         TrackerDefinitionEntity definition,
         TrackerNotificationThresholdEntity threshold)
     {
+        // Calculate effective hours based on mode
+        double hoursFromReference;
+        double effectiveThresholdHours;
+
+        if (definition.Mode == TrackerMode.Event)
+        {
+            // Event mode: hours relative to ScheduledAt
+            // Negative threshold = before event, Positive = after event
+            if (!instance.ScheduledAt.HasValue)
+            {
+                _logger.LogWarning(
+                    "Event mode tracker instance {InstanceId} has no ScheduledAt",
+                    instance.Id);
+                return null;
+            }
+
+            hoursFromReference = (DateTime.UtcNow - instance.ScheduledAt.Value).TotalHours;
+            effectiveThresholdHours = threshold.Hours;
+        }
+        else
+        {
+            // Duration mode: hours relative to StartedAt
+            // Negative thresholds are relative to lifespan end
+            hoursFromReference = instance.AgeHours;
+
+            if (threshold.Hours >= 0)
+            {
+                effectiveThresholdHours = threshold.Hours;
+            }
+            else
+            {
+                // Negative threshold: trigger X hours before lifespan ends
+                if (!definition.LifespanHours.HasValue)
+                {
+                    _logger.LogWarning(
+                        "Negative threshold on tracker {DefinitionId} without lifespan",
+                        definition.Id);
+                    return null;
+                }
+                effectiveThresholdHours = definition.LifespanHours.Value + threshold.Hours;
+            }
+        }
+
         // Check if threshold is crossed
-        if (instance.AgeHours < threshold.Hours)
+        if (hoursFromReference < effectiveThresholdHours)
         {
             return null; // Not yet at threshold
         }
@@ -141,7 +184,7 @@ public class TrackerAlertService : ITrackerAlertService
 
         // Generate the alert message
         var message = threshold.Description
-            ?? $"{definition.Name} has been active for {threshold.Hours} hours";
+            ?? GenerateDefaultMessage(definition, threshold, instance);
 
         return new TrackerAlert(
             InstanceId: instance.Id,
@@ -160,6 +203,26 @@ public class TrackerAlertService : ITrackerAlertService
                 RespectQuietHours: threshold.RespectQuietHours
             )
         );
+    }
+
+    /// <summary>
+    /// Generate default alert message based on mode and threshold
+    /// </summary>
+    private static string GenerateDefaultMessage(
+        TrackerDefinitionEntity definition,
+        TrackerNotificationThresholdEntity threshold,
+        TrackerInstanceEntity instance)
+    {
+        if (definition.Mode == TrackerMode.Event)
+        {
+            if (threshold.Hours < 0)
+            {
+                return $"{definition.Name} in {Math.Abs(threshold.Hours)} hours";
+            }
+            return $"{definition.Name} was {threshold.Hours} hours ago";
+        }
+
+        return $"{definition.Name} has been active for {threshold.Hours} hours";
     }
 
     /// <summary>

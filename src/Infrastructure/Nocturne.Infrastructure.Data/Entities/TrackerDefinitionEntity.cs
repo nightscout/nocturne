@@ -101,6 +101,12 @@ public class TrackerDefinitionEntity
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
+    /// Tracker mode: Duration (time-based) or Event (scheduled datetime)
+    /// </summary>
+    [Column("mode")]
+    public TrackerMode Mode { get; set; } = TrackerMode.Duration;
+
+    /// <summary>
     /// Visibility level for this tracker (Public, Private, RoleRestricted)
     /// </summary>
     [Column("visibility")]

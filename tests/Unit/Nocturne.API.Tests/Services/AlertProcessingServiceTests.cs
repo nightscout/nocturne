@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -21,7 +22,7 @@ public class AlertProcessingServiceTests
     private readonly Mock<AlertHistoryRepository> _mockAlertHistoryRepository;
     private readonly Mock<AlertRuleRepository> _mockAlertRuleRepository;
     private readonly Mock<NotificationPreferencesRepository> _mockNotificationPreferencesRepository;
-    private readonly Mock<ISignalRBroadcastService> _mockSignalRBroadcastService;
+    private readonly Mock<INotifierDispatcher> _mockNotifierDispatcher;
     private readonly Mock<IOptions<AlertMonitoringOptions>> _mockOptions;
     private readonly Mock<ILogger<AlertProcessingService>> _mockLogger;
     private readonly AlertProcessingService _alertProcessingService;
@@ -42,7 +43,7 @@ public class AlertProcessingServiceTests
         {
             CallBase = true,
         };
-        _mockSignalRBroadcastService = new Mock<ISignalRBroadcastService>();
+        _mockNotifierDispatcher = new Mock<INotifierDispatcher>();
         _mockOptions = new Mock<IOptions<AlertMonitoringOptions>>();
         _mockLogger = new Mock<ILogger<AlertProcessingService>>();
 
@@ -59,7 +60,7 @@ public class AlertProcessingServiceTests
             _mockAlertHistoryRepository.Object,
             _mockAlertRuleRepository.Object,
             _mockNotificationPreferencesRepository.Object,
-            _mockSignalRBroadcastService.Object,
+            _mockNotifierDispatcher.Object,
             _mockOptions.Object,
             _mockLogger.Object
         );
@@ -88,8 +89,8 @@ public class AlertProcessingServiceTests
             Times.Once
         );
 
-        _mockSignalRBroadcastService.Verify(
-            x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
+        _mockNotifierDispatcher.Verify(
+            x => x.DispatchAsync(It.IsAny<NotificationBase>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -112,8 +113,8 @@ public class AlertProcessingServiceTests
         await _alertProcessingService.ProcessAlertEvent(alertEvent, CancellationToken.None);
 
         // Assert
-        _mockSignalRBroadcastService.Verify(
-            x => x.BroadcastUrgentAlarmAsync(It.IsAny<NotificationBase>()),
+        _mockNotifierDispatcher.Verify(
+            x => x.DispatchAsync(It.IsAny<NotificationBase>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -136,8 +137,8 @@ public class AlertProcessingServiceTests
         await _alertProcessingService.ProcessAlertEvent(alertEvent, CancellationToken.None);
 
         // Assert
-        _mockSignalRBroadcastService.Verify(
-            x => x.BroadcastNotificationAsync(It.IsAny<NotificationBase>()),
+        _mockNotifierDispatcher.Verify(
+            x => x.DispatchAsync(It.IsAny<NotificationBase>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -187,7 +188,7 @@ public class AlertProcessingServiceTests
             Times.Once
         );
 
-        _mockSignalRBroadcastService.Verify(
+        _mockNotifierDispatcher.Verify(
             x => x.BroadcastClearAlarmAsync(It.IsAny<NotificationBase>()),
             Times.Once
         );
@@ -400,7 +401,7 @@ public class AlertProcessingServiceTests
         var updated = await _mockAlertHistoryRepository.Object.GetByIdAsync(alert.Id);
         updated?.NextEscalationTime.Should().NotBeNull();
         updated?.EscalationLevel.Should().Be(0);
-        _mockSignalRBroadcastService.Verify(
+        _mockNotifierDispatcher.Verify(
             x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
             Times.Never
         );
@@ -427,7 +428,7 @@ public class AlertProcessingServiceTests
         var updated = await _mockAlertHistoryRepository.Object.GetByIdAsync(alert.Id);
         updated?.EscalationLevel.Should().Be(1);
         updated?.NextEscalationTime.Should().BeAfter(DateTime.UtcNow.AddMinutes(-2));
-        _mockSignalRBroadcastService.Verify(
+        _mockNotifierDispatcher.Verify(
             x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
             Times.AtLeastOnce
         );
@@ -465,7 +466,7 @@ public class AlertProcessingServiceTests
         var updated = await _mockAlertHistoryRepository.Object.GetByIdAsync(alert.Id);
         updated?.EscalationLevel.Should().Be(0);
         updated?.NextEscalationTime.Should().BeAfter(DateTime.UtcNow);
-        _mockSignalRBroadcastService.Verify(
+        _mockNotifierDispatcher.Verify(
             x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
             Times.Never
         );

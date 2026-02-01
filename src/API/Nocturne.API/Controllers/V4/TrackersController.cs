@@ -57,6 +57,35 @@ public class TrackersController : ControllerBase
         return false;
     }
 
+    /// <summary>
+    /// Validate notification thresholds for a definition
+    /// </summary>
+    private static string? ValidateThresholds(
+        List<CreateNotificationThresholdRequest>? thresholds,
+        int? lifespanHours,
+        TrackerMode mode)
+    {
+        if (thresholds == null) return null;
+
+        foreach (var threshold in thresholds)
+        {
+            // For Duration mode, negative thresholds must not exceed lifespan
+            if (mode == TrackerMode.Duration && threshold.Hours < 0)
+            {
+                if (!lifespanHours.HasValue)
+                {
+                    return "Negative thresholds require a lifespan to be set";
+                }
+                if (Math.Abs(threshold.Hours) >= lifespanHours.Value)
+                {
+                    return $"Negative threshold {threshold.Hours} exceeds tracker lifespan of {lifespanHours} hours";
+                }
+            }
+        }
+
+        return null;
+    }
+
     #endregion
 
     #region Definitions
@@ -129,6 +158,18 @@ public class TrackersController : ControllerBase
     {
         var userId = HttpContext.GetSubjectIdString()!;
 
+        // Validate thresholds
+        var validationError = ValidateThresholds(
+            request.NotificationThresholds,
+            request.LifespanHours,
+            request.Mode);
+        if (validationError != null)
+            return BadRequest(validationError);
+
+        // Validate mode-specific requirements
+        if (request.Mode == TrackerMode.Event && request.LifespanHours.HasValue)
+            return BadRequest("Event mode trackers should not have a lifespan");
+
         var entity = new TrackerDefinitionEntity
         {
             UserId = userId,
@@ -144,6 +185,7 @@ public class TrackersController : ControllerBase
             Visibility = request.Visibility,
             StartEventType = request.StartEventType,
             CompletionEventType = request.CompletionEventType,
+            Mode = request.Mode,
         };
 
         // Add notification thresholds if provided
@@ -204,6 +246,20 @@ public class TrackersController : ControllerBase
         if (existing.UserId != userId && !HttpContext.IsAdmin())
             return Forbid();
 
+        // Validate thresholds if being updated
+        var mode = request.Mode ?? existing.Mode;
+        var lifespan = request.LifespanHours ?? existing.LifespanHours;
+        if (request.NotificationThresholds != null)
+        {
+            var validationError = ValidateThresholds(request.NotificationThresholds, lifespan, mode);
+            if (validationError != null)
+                return BadRequest(validationError);
+        }
+
+        // Validate mode-specific requirements
+        if (mode == TrackerMode.Event && lifespan.HasValue)
+            return BadRequest("Event mode trackers should not have a lifespan");
+
         existing.Name = request.Name ?? existing.Name;
         existing.Description = request.Description ?? existing.Description;
         existing.Category = request.Category ?? existing.Category;
@@ -220,6 +276,7 @@ public class TrackersController : ControllerBase
         existing.Visibility = request.Visibility ?? existing.Visibility;
         existing.StartEventType = request.StartEventType ?? existing.StartEventType;
         existing.CompletionEventType = request.CompletionEventType ?? existing.CompletionEventType;
+        existing.Mode = request.Mode ?? existing.Mode;
 
         // Handle notification thresholds update (replaces all existing if provided)
         if (request.NotificationThresholds != null)
@@ -365,12 +422,19 @@ public class TrackersController : ControllerBase
         if (definition.UserId != userId && !HttpContext.IsAdmin())
             return Forbid();
 
+        // Validate mode-specific requirements
+        if (definition.Mode == TrackerMode.Event && !request.ScheduledAt.HasValue)
+            return BadRequest("Event mode trackers require a ScheduledAt datetime");
+        if (definition.Mode == TrackerMode.Duration && request.ScheduledAt.HasValue)
+            return BadRequest("Duration mode trackers should not have a ScheduledAt datetime");
+
         var instance = await _repository.StartInstanceAsync(
             request.DefinitionId,
             userId,
             request.StartNotes,
             request.StartTreatmentId,
             request.StartedAt,
+            request.ScheduledAt,
             HttpContext.RequestAborted
         );
 
@@ -678,6 +742,11 @@ public class TrackerDefinitionDto
     /// </summary>
     public string? CompletionEventType { get; set; }
 
+    /// <summary>
+    /// Tracker mode: Duration or Event
+    /// </summary>
+    public TrackerMode Mode { get; set; } = TrackerMode.Duration;
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
@@ -704,6 +773,7 @@ public class TrackerDefinitionDto
             Visibility = entity.Visibility,
             StartEventType = entity.StartEventType,
             CompletionEventType = entity.CompletionEventType,
+            Mode = entity.Mode,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
         };
@@ -719,6 +789,7 @@ public class TrackerInstanceDto
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime? ExpectedEndAt { get; set; }
+    public DateTime? ScheduledAt { get; set; }
     public string? StartNotes { get; set; }
     public string? CompletionNotes { get; set; }
     public CompletionReason? CompletionReason { get; set; }
@@ -738,6 +809,7 @@ public class TrackerInstanceDto
             StartedAt = entity.StartedAt,
             CompletedAt = entity.CompletedAt,
             ExpectedEndAt = entity.ExpectedEndAt,
+            ScheduledAt = entity.ScheduledAt,
             StartNotes = entity.StartNotes,
             CompletionNotes = entity.CompletionNotes,
             CompletionReason = entity.CompletionReason,
@@ -807,6 +879,11 @@ public class CreateTrackerDefinitionRequest
     /// Event type to create when tracker is completed (for Nightscout compatibility)
     /// </summary>
     public string? CompletionEventType { get; set; }
+
+    /// <summary>
+    /// Tracker mode: Duration (time-based) or Event (scheduled datetime)
+    /// </summary>
+    public TrackerMode Mode { get; set; } = TrackerMode.Duration;
 }
 
 public class UpdateTrackerDefinitionRequest
@@ -842,6 +919,11 @@ public class UpdateTrackerDefinitionRequest
     /// Event type to create when tracker is completed (for Nightscout compatibility)
     /// </summary>
     public string? CompletionEventType { get; set; }
+
+    /// <summary>
+    /// Tracker mode: Duration (time-based) or Event (scheduled datetime)
+    /// </summary>
+    public TrackerMode? Mode { get; set; }
 }
 
 public class CreateNotificationThresholdRequest
@@ -872,6 +954,11 @@ public class StartTrackerInstanceRequest
     /// Optional custom start time for backdating. Defaults to now if not provided.
     /// </summary>
     public DateTime? StartedAt { get; set; }
+
+    /// <summary>
+    /// For Event mode: the scheduled datetime of the event
+    /// </summary>
+    public DateTime? ScheduledAt { get; set; }
 }
 
 public class CompleteTrackerInstanceRequest

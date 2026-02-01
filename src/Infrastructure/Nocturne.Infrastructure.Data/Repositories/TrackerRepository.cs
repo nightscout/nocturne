@@ -298,6 +298,7 @@ public class TrackerRepository
         string? startNotes = null,
         string? startTreatmentId = null,
         DateTime? startedAt = null,
+        DateTime? scheduledAt = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -309,6 +310,7 @@ public class TrackerRepository
             StartedAt = startedAt ?? DateTime.UtcNow,
             StartNotes = startNotes,
             StartTreatmentId = startTreatmentId,
+            ScheduledAt = scheduledAt,
         };
 
         _context.TrackerInstances.Add(instance);

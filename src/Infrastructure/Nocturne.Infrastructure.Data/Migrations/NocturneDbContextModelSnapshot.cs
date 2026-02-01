@@ -451,6 +451,71 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("auth_audit_log");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ClockFaceEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}")
+                        .HasColumnName("config");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_clock_faces_created_at");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_clock_faces_user_id");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_clock_faces_user_created_at");
+
+                    b.ToTable("clock_faces");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorConfigurationEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2902,6 +2967,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("lifespan_hours");
 
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer")
+                        .HasColumnName("mode");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -2993,6 +3062,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("LastAckedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_acked_at");
+
+                    b.Property<DateTime?>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_at");
 
                     b.Property<string>("StartNotes")
                         .HasMaxLength(1000)

@@ -133,6 +133,7 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 - We use the backend as the source of truth. Abstain from creating frontend models or interfaces that are not derived from the NSwag client.
 - We never perform calculations on the frontend.
 - We never commit plans or design documents to the repository- these are ephemeral and just create noise in the git history.
+- We never use emoji generally, and we prefer Lucide icons over unicode emoji for UI elements.
 
 This repository is set up to use Aspire. Aspire is an orchestrator for the entire application and will take care of configuring dependencies, building, and running the application. The resources that make up the application are defined in `apphost.cs` including application code and external dependencies.
 

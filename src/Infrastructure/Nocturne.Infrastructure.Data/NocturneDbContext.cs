@@ -218,6 +218,11 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<InAppNotificationEntity> InAppNotifications { get; set; }
 
+    /// <summary>
+    /// Gets or sets the ClockFaces table for saved clock face configurations
+    /// </summary>
+    public DbSet<ClockFaceEntity> ClockFaces { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1050,6 +1055,24 @@ public class NocturneDbContext : DbContext
             .HasIndex(n => n.SourceId)
             .HasDatabaseName("ix_in_app_notifications_source_id")
             .HasFilter("source_id IS NOT NULL");
+
+        // ClockFaces indexes - optimized for user queries and public lookups
+        modelBuilder
+            .Entity<ClockFaceEntity>()
+            .HasIndex(cf => cf.UserId)
+            .HasDatabaseName("ix_clock_faces_user_id");
+
+        modelBuilder
+            .Entity<ClockFaceEntity>()
+            .HasIndex(cf => cf.CreatedAt)
+            .HasDatabaseName("ix_clock_faces_created_at")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<ClockFaceEntity>()
+            .HasIndex(cf => new { cf.UserId, cf.CreatedAt })
+            .HasDatabaseName("ix_clock_faces_user_created_at")
+            .IsDescending(false, true);
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1679,6 +1702,23 @@ public class NocturneDbContext : DbContext
             entity.Property(e => e.ArchiveReason).HasConversion<string>();
         });
 
+        // Configure ClockFace entity
+        modelBuilder.Entity<ClockFaceEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.ConfigJson).HasDefaultValue("{}");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.SysUpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+        });
+
     }
 
     /// <summary>
@@ -1885,6 +1925,16 @@ public class NocturneDbContext : DbContext
                     connectorConfigEntity.LastModified = DateTimeOffset.UtcNow;
                 }
                 connectorConfigEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is ClockFaceEntity clockFaceEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    clockFaceEntity.CreatedAt = utcNow;
+                    clockFaceEntity.SysCreatedAt = utcNow;
+                }
+                clockFaceEntity.UpdatedAt = utcNow;
+                clockFaceEntity.SysUpdatedAt = utcNow;
             }
         }
     }

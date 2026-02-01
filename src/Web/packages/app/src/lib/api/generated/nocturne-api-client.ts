@@ -3902,6 +3902,250 @@ export class ChartDataClient {
     }
 }
 
+export class ClockFacesClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get a clock face configuration by ID (public, no authentication required)
+     * @param id Clock face UUID
+     * @return Clock face configuration
+     */
+    getById(id: string, signal?: AbortSignal): Promise<ClockFacePublicDto> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetById(_response);
+        });
+    }
+
+    protected processGetById(response: Response): Promise<ClockFacePublicDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFacePublicDto;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFacePublicDto>(null as any);
+    }
+
+    /**
+     * Update an existing clock face (owner only)
+     * @param id Clock face UUID
+     * @param request Update request
+     * @return Updated clock face
+     */
+    update(id: string, request: UpdateClockFaceRequest, signal?: AbortSignal): Promise<ClockFace> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdate(_response);
+        });
+    }
+
+    protected processUpdate(response: Response): Promise<ClockFace> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFace;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFace>(null as any);
+    }
+
+    /**
+     * Delete a clock face (owner only)
+     * @param id Clock face UUID
+     * @return Success status
+     */
+    delete(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDelete(_response);
+        });
+    }
+
+    protected processDelete(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * List all clock faces for the current user
+     * @return List of clock faces
+     */
+    list(signal?: AbortSignal): Promise<ClockFaceListItem[]> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processList(_response);
+        });
+    }
+
+    protected processList(response: Response): Promise<ClockFaceListItem[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFaceListItem[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFaceListItem[]>(null as any);
+    }
+
+    /**
+     * Create a new clock face
+     * @param request Clock face creation request
+     * @return Created clock face
+     */
+    create(request: CreateClockFaceRequest, signal?: AbortSignal): Promise<ClockFace> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreate(_response);
+        });
+    }
+
+    protected processCreate(response: Response): Promise<ClockFace> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFace;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFace>(null as any);
+    }
+}
+
 export class CompatibilityClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -4538,6 +4782,92 @@ export class DebugClient {
             });
         }
         return Promise.resolve<InAppNotificationDto>(null as any);
+    }
+
+    /**
+     * Simple test endpoint for creating in-app notifications without authentication
+    Creates a test notification to verify the real-time notification system is working
+     * @param type (optional) Notification type (info, warn, hazard, urgent)
+     * @param title (optional) Optional notification title
+     * @return Notification created and broadcast successfully
+     */
+    createSimpleTestNotification(type?: string | undefined, title?: string | null | undefined, signal?: AbortSignal): Promise<InAppNotificationDto> {
+        let url_ = this.baseUrl + "/api/v4/debug/test/notification?";
+        if (type === null)
+            throw new globalThis.Error("The parameter 'type' cannot be null.");
+        else if (type !== undefined)
+            url_ += "type=" + encodeURIComponent("" + type) + "&";
+        if (title !== undefined && title !== null)
+            url_ += "title=" + encodeURIComponent("" + title) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateSimpleTestNotification(_response);
+        });
+    }
+
+    protected processCreateSimpleTestNotification(response: Response): Promise<InAppNotificationDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InAppNotificationDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InAppNotificationDto>(null as any);
+    }
+
+    /**
+     * Test endpoint to broadcast a raw SignalR notification event
+    This bypasses the database and directly tests the SignalR broadcast
+     * @return Confirmation of broadcast
+     */
+    testSignalRBroadcast(signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v4/debug/test/signalr-broadcast";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTestSignalRBroadcast(_response);
+        });
+    }
+
+    protected processTestSignalRBroadcast(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
     }
 
     testPostgreSqlConnection(signal?: AbortSignal): Promise<FileResponse> {
@@ -12023,6 +12353,151 @@ export class UserPreferencesClient {
     }
 }
 
+export class WebhookSettingsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    getWebhookSettings(signal?: AbortSignal): Promise<WebhookNotificationSettings> {
+        let url_ = this.baseUrl + "/api/v4/ui-settings/notifications/webhooks";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetWebhookSettings(_response);
+        });
+    }
+
+    protected processGetWebhookSettings(response: Response): Promise<WebhookNotificationSettings> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WebhookNotificationSettings;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<WebhookNotificationSettings>(null as any);
+    }
+
+    saveWebhookSettings(settings: WebhookNotificationSettings, signal?: AbortSignal): Promise<WebhookNotificationSettings> {
+        let url_ = this.baseUrl + "/api/v4/ui-settings/notifications/webhooks";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(settings);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSaveWebhookSettings(_response);
+        });
+    }
+
+    protected processSaveWebhookSettings(response: Response): Promise<WebhookNotificationSettings> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WebhookNotificationSettings;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<WebhookNotificationSettings>(null as any);
+    }
+
+    testWebhookSettings(request: WebhookTestRequest, signal?: AbortSignal): Promise<WebhookTestResult> {
+        let url_ = this.baseUrl + "/api/v4/ui-settings/notifications/webhooks/test";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTestWebhookSettings(_response);
+        });
+    }
+
+    protected processTestWebhookSettings(response: Response): Promise<WebhookTestResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WebhookTestResult;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<WebhookTestResult>(null as any);
+    }
+}
+
 export class DeviceStatusClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -18825,6 +19300,95 @@ export interface StateSpan {
     sources?: string[] | undefined;
 }
 
+export interface ClockFacePublicDto {
+    id?: string;
+    config?: ClockFaceConfig;
+}
+
+export interface ClockFaceConfig {
+    rows?: ClockRow[];
+    settings?: ClockSettings;
+}
+
+export interface ClockRow {
+    elements?: ClockElement[];
+}
+
+export interface ClockElement {
+    type?: string;
+    size?: number | undefined;
+    showUnits?: boolean | undefined;
+    hours?: number | undefined;
+    width?: number | undefined;
+    height?: number | undefined;
+    minutesAhead?: number | undefined;
+    format?: string | undefined;
+    definitionId?: string | undefined;
+    show?: string[] | undefined;
+    categories?: string[] | undefined;
+    visibilityThreshold?: string | undefined;
+    text?: string | undefined;
+    style?: ClockElementStyle | undefined;
+    chartConfig?: ClockChartConfig | undefined;
+}
+
+export interface ClockElementStyle {
+    color?: string | undefined;
+    font?: string | undefined;
+    fontWeight?: string | undefined;
+    opacity?: number | undefined;
+    custom?: { [key: string]: string; } | undefined;
+}
+
+export interface ClockChartConfig {
+    showIob?: boolean;
+    showCob?: boolean;
+    showBasal?: boolean;
+    showBolus?: boolean;
+    showCarbs?: boolean;
+    showDeviceEvents?: boolean;
+    showAlarms?: boolean;
+    showTrackers?: boolean;
+    showPredictions?: boolean;
+    lockToggles?: boolean;
+    showLegend?: boolean;
+    asBackground?: boolean;
+}
+
+export interface ClockSettings {
+    bgColor?: boolean;
+    staleMinutes?: number;
+    alwaysShowTime?: boolean;
+    backgroundImage?: string | undefined;
+    backgroundOpacity?: number;
+}
+
+export interface ClockFaceListItem {
+    id?: string;
+    name?: string;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export interface ClockFace {
+    id?: string;
+    userId?: string;
+    name?: string;
+    config?: ClockFaceConfig;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export interface CreateClockFaceRequest {
+    name?: string;
+    config?: ClockFaceConfig;
+}
+
+export interface UpdateClockFaceRequest {
+    name?: string | undefined;
+    config?: ClockFaceConfig | undefined;
+}
+
 /** Proxy configuration DTO */
 export interface ProxyConfigurationDto {
     nightscoutUrl?: string;
@@ -20038,6 +20602,8 @@ export interface TrackerDefinitionDto {
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
     completionEventType?: string | undefined;
+    /** Tracker mode: Duration or Event */
+    mode?: TrackerMode;
     createdAt?: Date;
     updatedAt?: Date | undefined;
 }
@@ -20083,6 +20649,11 @@ export enum TrackerVisibility {
     RoleRestricted = "RoleRestricted",
 }
 
+export enum TrackerMode {
+    Duration = "Duration",
+    Event = "Event",
+}
+
 export interface CreateTrackerDefinitionRequest {
     name: string;
     description?: string | undefined;
@@ -20101,6 +20672,8 @@ export interface CreateTrackerDefinitionRequest {
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
     completionEventType?: string | undefined;
+    /** Tracker mode: Duration (time-based) or Event (scheduled datetime) */
+    mode?: TrackerMode;
 }
 
 export interface CreateNotificationThresholdRequest {
@@ -20135,6 +20708,8 @@ export interface UpdateTrackerDefinitionRequest {
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
     completionEventType?: string | undefined;
+    /** Tracker mode: Duration (time-based) or Event (scheduled datetime) */
+    mode?: TrackerMode | undefined;
 }
 
 export interface TrackerInstanceDto {
@@ -20146,6 +20721,7 @@ export interface TrackerInstanceDto {
     startedAt?: Date;
     completedAt?: Date | undefined;
     expectedEndAt?: Date | undefined;
+    scheduledAt?: Date | undefined;
     startNotes?: string | undefined;
     completionNotes?: string | undefined;
     completionReason?: CompletionReason | undefined;
@@ -20176,6 +20752,8 @@ export interface StartTrackerInstanceRequest {
     startTreatmentId?: string | undefined;
     /** Optional custom start time for backdating. Defaults to now if not provided. */
     startedAt?: Date | undefined;
+    /** For Event mode: the scheduled datetime of the event */
+    scheduledAt?: Date | undefined;
 }
 
 export interface CompleteTrackerInstanceRequest {
@@ -20575,6 +21153,24 @@ export interface UserPreferencesResponse {
 export interface UpdateUserPreferencesRequest {
     /** User's preferred language code (e.g., "en", "fr", "de") */
     preferredLanguage?: string | undefined;
+}
+
+export interface WebhookNotificationSettings {
+    enabled?: boolean;
+    urls?: string[];
+    secret?: string | undefined;
+    hasSecret?: boolean;
+    signatureVersion?: string;
+}
+
+export interface WebhookTestResult {
+    ok?: boolean;
+    failedUrls?: string[];
+}
+
+export interface WebhookTestRequest {
+    urls?: string[];
+    secret?: string | undefined;
 }
 
 export interface V3CollectionResponseOfObject {

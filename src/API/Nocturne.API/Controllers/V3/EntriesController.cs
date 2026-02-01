@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -16,13 +18,22 @@ namespace Nocturne.API.Controllers.V3;
 [Route("api/v3/[controller]")]
 public class EntriesController : BaseV3Controller<Entry>
 {
+    private readonly IEntryService _entryService;
+    private readonly IAlertOrchestrator _alertOrchestrator;
+
     public EntriesController(
         IPostgreSqlService postgreSqlService,
         IDataFormatService dataFormatService,
         IDocumentProcessingService documentProcessingService,
+        IEntryService entryService,
+        IAlertOrchestrator alertOrchestrator,
         ILogger<EntriesController> logger
     )
-        : base(postgreSqlService, dataFormatService, documentProcessingService, logger) { }
+        : base(postgreSqlService, dataFormatService, documentProcessingService, logger)
+    {
+        _entryService = entryService;
+        _alertOrchestrator = alertOrchestrator;
+    }
 
     /// <summary>
     /// Get entries with V3 API features including pagination, field selection, and advanced filtering
@@ -180,7 +191,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Process the entry
             var processedEntry = _documentProcessingService.ProcessEntry(entry); // Save to database
-            var createdEntries = await _postgreSqlService.CreateEntriesAsync(
+            var createdEntries = await _entryService.CreateEntriesAsync(
                 new[] { processedEntry },
                 cancellationToken
             );
@@ -196,6 +207,20 @@ public class EntriesController : BaseV3Controller<Entry>
             }
 
             _logger.LogDebug("Successfully created V3 entry {Id}", createdEntry.Id);
+
+            try
+            {
+                var userId = GetUserId();
+                await _alertOrchestrator.EvaluateAndProcessEntriesAsync(
+                    createdEntries,
+                    userId,
+                    cancellationToken
+                );
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to process alerts for V3 entry creation");
+            }
 
             // Set location header for created resource
             Response.Headers["Location"] = $"/api/v3/entries/{createdEntry.Id}";
@@ -266,7 +291,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 .ToList();
 
             // Save to database
-            var createdEntries = await _postgreSqlService.CreateEntriesAsync(
+            var createdEntries = await _entryService.CreateEntriesAsync(
                 processedEntries,
                 cancellationToken
             );
@@ -275,6 +300,20 @@ public class EntriesController : BaseV3Controller<Entry>
                 "Successfully created {Count} V3 entries via bulk operation",
                 createdEntries.Count()
             );
+
+            try
+            {
+                var userId = GetUserId();
+                await _alertOrchestrator.EvaluateAndProcessEntriesAsync(
+                    createdEntries,
+                    userId,
+                    cancellationToken
+                );
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to process alerts for V3 bulk entries");
+            }
 
             return StatusCode(201, createdEntries.ToV3Responses());
         }
@@ -542,6 +581,12 @@ public class EntriesController : BaseV3Controller<Entry>
         // Use the most recent entry's date as last modified
         var latestMills = entries.Max(e => e.Mills);
         return DateTimeOffset.FromUnixTimeMilliseconds(latestMills);
+    }
+
+    private string GetUserId()
+    {
+        return HttpContext.GetSubjectIdString()
+            ?? "00000000-0000-0000-0000-000000000001";
     }
 
     #endregion

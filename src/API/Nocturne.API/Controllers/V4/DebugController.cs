@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -549,6 +550,121 @@ public class DebugController : ControllerBase
         );
 
         return Ok(notification);
+    }
+
+    /// <summary>
+    /// Simple test endpoint for creating in-app notifications without authentication
+    /// Creates a test notification to verify the real-time notification system is working
+    /// </summary>
+    /// <param name="type">Notification type (info, warn, hazard, urgent)</param>
+    /// <param name="title">Optional notification title</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The created notification</returns>
+    /// <response code="200">Notification created and broadcast successfully</response>
+    [HttpGet("test/notification")]
+    [ProducesResponseType(typeof(InAppNotificationDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<InAppNotificationDto>> CreateSimpleTestNotification(
+        [FromQuery] string type = "info",
+        [FromQuery] string? title = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Use default user ID for unauthenticated testing
+        var userId = "00000000-0000-0000-0000-000000000001";
+
+        var urgency = type.ToLowerInvariant() switch
+        {
+            "urgent" => NotificationUrgency.Urgent,
+            "hazard" => NotificationUrgency.Hazard,
+            "warning" or "warn" => NotificationUrgency.Warn,
+            _ => NotificationUrgency.Info
+        };
+
+        var notificationType = type.ToLowerInvariant() switch
+        {
+            "tracker" => InAppNotificationType.TrackerAlert,
+            "stats" or "statistics" => InAppNotificationType.StatisticsSummary,
+            "low" or "predicted" => InAppNotificationType.PredictedLow,
+            "meal" => InAppNotificationType.SuggestedMealMatch,
+            "help" => InAppNotificationType.HelpResponse,
+            _ => InAppNotificationType.TrackerAlert
+        };
+
+        var notificationTitle = title ?? $"Test Notification ({DateTime.UtcNow:HH:mm:ss})";
+
+        _logger.LogInformation(
+            "Creating simple test notification: type={Type}, urgency={Urgency}, title={Title}",
+            notificationType,
+            urgency,
+            notificationTitle
+        );
+
+        var notification = await _notificationService.CreateNotificationAsync(
+            userId,
+            notificationType,
+            urgency,
+            notificationTitle,
+            subtitle: $"This is a test notification created at {DateTime.UtcNow:u}",
+            sourceId: $"test-{Guid.NewGuid():N}",
+            actions: null,
+            resolutionConditions: null,
+            metadata: new Dictionary<string, object>
+            {
+                ["testCreatedAt"] = DateTime.UtcNow.ToString("o"),
+                ["testType"] = type
+            },
+            cancellationToken
+        );
+
+        return Ok(new
+        {
+            message = "Notification created and broadcast via SignalR",
+            notification,
+            testInstructions = new
+            {
+                step1 = "Open the Nocturne web app in your browser",
+                step2 = "Check the notification bell icon in the sidebar",
+                step3 = "You should see this notification appear in real-time",
+                step4 = "If it doesn't appear, check browser console for WebSocket errors"
+            }
+        });
+    }
+
+    /// <summary>
+    /// Test endpoint to broadcast a raw SignalR notification event
+    /// This bypasses the database and directly tests the SignalR broadcast
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Confirmation of broadcast</returns>
+    [HttpGet("test/signalr-broadcast")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    public async Task<ActionResult<object>> TestSignalRBroadcast(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var userId = "00000000-0000-0000-0000-000000000001";
+        var testNotification = new InAppNotificationDto
+        {
+            Id = Guid.NewGuid(),
+            Type = InAppNotificationType.TrackerAlert,
+            Urgency = NotificationUrgency.Info,
+            Title = $"SignalR Test ({DateTime.UtcNow:HH:mm:ss})",
+            Subtitle = "Testing direct SignalR broadcast",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _logger.LogInformation("Broadcasting test notification directly via SignalR");
+
+        // Get SignalR broadcast service and send directly
+        var signalRService = HttpContext.RequestServices.GetRequiredService<ISignalRBroadcastService>();
+        await signalRService.BroadcastNotificationCreatedAsync(userId, testNotification);
+
+        return Ok(new
+        {
+            message = "Notification broadcast directly via SignalR (not saved to DB)",
+            notification = testNotification,
+            note = "This tests the SignalR -> Bridge -> Socket.IO -> Frontend path"
+        });
     }
 }
 

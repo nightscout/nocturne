@@ -43,7 +43,9 @@ import {
   MigrationClient,
   DeduplicationClient,
   ConfigurationClient,
-  MealMatchingClient
+  WebhookSettingsClient,
+  MealMatchingClient,
+  ClockFacesClient
 } from "./generated/nocturne-api-client";
 
 /**
@@ -99,7 +101,9 @@ export class ApiClient {
   public readonly migration: MigrationClient;
   public readonly deduplication: DeduplicationClient;
   public readonly configuration: ConfigurationClient;
+  public readonly webhookSettings: WebhookSettingsClient;
   public readonly mealMatching: MealMatchingClient;
+  public readonly clockFaces: ClockFacesClient;
 
   constructor(
     baseUrl: string,
@@ -154,7 +158,9 @@ export class ApiClient {
     this.migration = new MigrationClient(apiBaseUrl, http);
     this.deduplication = new DeduplicationClient(apiBaseUrl, http);
     this.configuration = new ConfigurationClient(apiBaseUrl, http);
+    this.webhookSettings = new WebhookSettingsClient(apiBaseUrl, http);
     this.mealMatching = new MealMatchingClient(apiBaseUrl, http);
+    this.clockFaces = new ClockFacesClient(apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */
