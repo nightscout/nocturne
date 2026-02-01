@@ -15,10 +15,7 @@ public class MyLifeSyncService(
         CancellationToken cancellationToken)
     {
         var months = BuildMonths(since, DateTime.UtcNow);
-        if (maxMonths > 0 && months.Count > maxMonths)
-        {
-            months = months.Skip(months.Count - maxMonths).ToList();
-        }
+        if (maxMonths > 0 && months.Count > maxMonths) months = months.Skip(months.Count - maxMonths).ToList();
 
         var results = new List<MyLifeEvent>();
         foreach (var month in months)
@@ -31,16 +28,10 @@ public class MyLifeSyncService(
                 cancellationToken
             );
 
-            if (string.IsNullOrWhiteSpace(encrypted))
-            {
-                continue;
-            }
+            if (string.IsNullOrWhiteSpace(encrypted)) continue;
 
             var decrypted = MyLifeDecryptor.Decrypt(encrypted);
-            if (!IsZip(decrypted))
-            {
-                continue;
-            }
+            if (!IsZip(decrypted)) continue;
 
             var events = archiveReader.ReadEvents(decrypted);
             results.AddRange(events);
@@ -66,10 +57,7 @@ public class MyLifeSyncService(
 
     private static bool IsZip(byte[] data)
     {
-        if (data.Length < 2)
-        {
-            return false;
-        }
+        if (data.Length < 2) return false;
 
         return data[0] == (byte)'P' && data[1] == (byte)'K';
     }

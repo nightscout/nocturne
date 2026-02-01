@@ -1,24 +1,17 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <OutputType>Exe</OutputType>
         <Description>MyLife connector service</Description>
         <Company>Nocturne</Company>
         <Product>Nocturne Connectors</Product>
-        <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
-        <ContainerRepository>mylife-connector</ContainerRepository>
-        <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
-        <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
         <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
-        <ProjectReference Include="..\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj"/>
-        <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj"/>
     </ItemGroup>
     <ItemGroup>
-      <_ContentIncludedByDefault Remove="Resources\event_mappings.json" />
+        <_ContentIncludedByDefault Remove="Resources\event_mappings.json"/>
     </ItemGroup>
 </Project>

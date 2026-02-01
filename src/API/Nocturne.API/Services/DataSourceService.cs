@@ -16,19 +16,16 @@ public class DataSourceService : IDataSourceService
 {
     private readonly NocturneDbContext _context;
     private readonly IPostgreSqlService _postgreSqlService;
-    private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<DataSourceService> _logger;
 
     public DataSourceService(
         NocturneDbContext context,
         IPostgreSqlService postgreSqlService,
-        IConnectorSyncService connectorSyncService,
         ILogger<DataSourceService> logger
     )
     {
         _context = context;
         _postgreSqlService = postgreSqlService;
-        _connectorSyncService = connectorSyncService;
         _logger = logger;
     }
 
@@ -407,7 +404,7 @@ public class DataSourceService : IDataSourceService
 
         foreach (var connector in connectors)
         {
-            connector.IsConfigured = _connectorSyncService.IsConnectorConfigured(connector.Id);
+            connector.IsConfigured = ConnectorMetadataService.GetByConnectorId(connector.Id) != null;
         }
 
         return connectors;
@@ -710,8 +707,6 @@ public class DataSourceService : IDataSourceService
     )
     {
         var dataSources = await GetActiveDataSourcesAsync(cancellationToken);
-
-        var hasEnabledConnectors = _connectorSyncService.HasEnabledConnectors();
 
         return new ServicesOverview
         {

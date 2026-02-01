@@ -1,14 +1,15 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
+using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
-using Nocturne.Connectors.MiniMed.Services;
-using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Services;
 using Nocturne.Core.Models;
@@ -356,13 +357,6 @@ public class ConnectorExecutionService(
                     GlookoServer = config.GlookoServer,
                     TimezoneOffset = config.GlookoTimezoneOffset,
                 },
-                "minimedcarelink" or "carelink" => new CareLinkConnectorConfiguration
-                {
-                    ConnectSource = ConnectSource.CareLink,
-                    CareLinkUsername = config.CarelinkUsername ?? string.Empty,
-                    CareLinkPassword = config.CarelinkPassword ?? string.Empty,
-                    CareLinkCountry = config.CarelinkRegion ?? "US",
-                },
                 "dexcomshare" or "dexcom" => new DexcomConnectorConfiguration
                 {
                     ConnectSource = ConnectSource.Dexcom,
@@ -376,12 +370,6 @@ public class ConnectorExecutionService(
                     LibreUsername = config.LibreUsername ?? string.Empty,
                     LibrePassword = config.LibrePassword ?? string.Empty,
                     LibreRegion = config.LibreRegion,
-                },
-                "nightscout" => new NightscoutConnectorConfiguration
-                {
-                    ConnectSource = ConnectSource.Nightscout,
-                    SourceEndpoint = config.SourceEndpoint ?? string.Empty,
-                    SourceApiSecret = config.SourceApiSecret ?? string.Empty,
                 },
                 "mylife" => new MyLifeConnectorConfiguration
                 {
@@ -423,16 +411,12 @@ public class ConnectorExecutionService(
             return source switch
             {
                 "glooko" => CreateGlookoWrapper((GlookoConnectorConfiguration)config),
-                "minimedcarelink" or "carelink" => CreateCareLinkWrapper(
-                    (CareLinkConnectorConfiguration)config
-                ),
                 "dexcomshare" or "dexcom" => CreateDexcomWrapper(
                     (DexcomConnectorConfiguration)config
                 ),
                 "linkup" or "librelinkup" => CreateLibreWrapper(
                     (LibreLinkUpConnectorConfiguration)config
                 ),
-                "nightscout" => CreateNightscoutWrapper((NightscoutConnectorConfiguration)config),
                 "mylife" => CreateMyLifeWrapper((MyLifeConnectorConfiguration)config),
                 _ => null,
             };
@@ -452,44 +436,45 @@ public class ConnectorExecutionService(
         GlookoConnectorConfiguration config
     )
     {
+        var tokenProvider = new GlookoAuthTokenProvider(
+            Options.Create(config),
+            new HttpClient(),
+            _loggerFactory.CreateLogger<GlookoAuthTokenProvider>()
+        );
         var service = new GlookoConnectorService(
             new HttpClient(),
             Options.Create(config),
             _loggerFactory.CreateLogger<GlookoConnectorService>(),
             new ProductionRetryDelayStrategy(),
-            new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-            null, // IConnectorFileService
-            null  // IApiDataSubmitter
+            new ProductionRateLimitingStrategy(
+                _loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()
+            ),
+            tokenProvider,
+            new TreatmentClassificationService(),
+            null  // IConnectorPublisher
         );
         return new ConnectorServiceWrapper<GlookoConnectorConfiguration>(service);
-    }
-
-    private IConnectorService<IConnectorConfiguration> CreateCareLinkWrapper(
-        CareLinkConnectorConfiguration config
-    )
-    {
-        var service = new CareLinkConnectorService(
-            new HttpClient(),
-            Options.Create(config),
-            _loggerFactory.CreateLogger<CareLinkConnectorService>(),
-            new ProductionRetryDelayStrategy(),
-            new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-            null  // IApiDataSubmitter
-        );
-        return new ConnectorServiceWrapper<CareLinkConnectorConfiguration>(service);
     }
 
     private IConnectorService<IConnectorConfiguration> CreateDexcomWrapper(
         DexcomConnectorConfiguration config
     )
     {
+        var tokenProvider = new DexcomAuthTokenProvider(
+            Options.Create(config),
+            new HttpClient(),
+            _loggerFactory.CreateLogger<DexcomAuthTokenProvider>(),
+            new ProductionRetryDelayStrategy()
+        );
         var service = new DexcomConnectorService(
             new HttpClient(),
-            Options.Create(config),
             _loggerFactory.CreateLogger<DexcomConnectorService>(),
             new ProductionRetryDelayStrategy(),
-            new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-            null  // IApiDataSubmitter
+            new ProductionRateLimitingStrategy(
+                _loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()
+            ),
+            tokenProvider,
+            null  // IConnectorPublisher
         );
         return new ConnectorServiceWrapper<DexcomConnectorConfiguration>(service);
     }
@@ -498,13 +483,22 @@ public class ConnectorExecutionService(
         LibreLinkUpConnectorConfiguration config
     )
     {
+        var tokenProvider = new LibreLinkAuthTokenProvider(
+            Options.Create(config),
+            new HttpClient(),
+            _loggerFactory.CreateLogger<LibreLinkAuthTokenProvider>(),
+            new ProductionRetryDelayStrategy()
+        );
         var service = new LibreConnectorService(
             new HttpClient(),
             Options.Create(config),
             _loggerFactory.CreateLogger<LibreConnectorService>(),
             new ProductionRetryDelayStrategy(),
-            new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-            null  // IApiDataSubmitter
+            new ProductionRateLimitingStrategy(
+                _loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()
+            ),
+            tokenProvider,
+            null  // IConnectorPublisher
         );
         return new ConnectorServiceWrapper<LibreLinkUpConnectorConfiguration>(service);
     }
@@ -542,27 +536,11 @@ public class ConnectorExecutionService(
             eventsCache,
             mapper,
             sessionStore,
-            null,
-            null,
             null
         );
         return new ConnectorServiceWrapper<MyLifeConnectorConfiguration>(service);
     }
 
-    private IConnectorService<IConnectorConfiguration> CreateNightscoutWrapper(
-        NightscoutConnectorConfiguration config
-    )
-    {
-        var service = new NightscoutConnectorService(
-            new HttpClient(),
-            Options.Create(config),
-            _loggerFactory.CreateLogger<NightscoutConnectorService>(),
-            new ProductionRetryDelayStrategy(),
-            new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-            null  // IApiDataSubmitter
-        );
-        return new ConnectorServiceWrapper<NightscoutConnectorConfiguration>(service);
-    }
 }
 
 /// <summary>

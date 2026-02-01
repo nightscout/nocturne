@@ -1,4 +1,4 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
 

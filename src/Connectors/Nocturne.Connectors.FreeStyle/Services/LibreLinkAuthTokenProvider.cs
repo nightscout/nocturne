@@ -1,17 +1,18 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.FreeStyle.Constants;
+using Nocturne.Connectors.FreeStyle.Configurations.Constants;
 
 namespace Nocturne.Connectors.FreeStyle.Services;
 
 /// <summary>
-/// Token provider for LibreLinkUp authentication.
-/// Returns a Bearer token for API requests.
+///     Token provider for LibreLinkUp authentication.
+///     Returns a Bearer token for API requests.
 /// </summary>
 public class LibreLinkAuthTokenProvider(
     IOptions<LibreLinkUpConnectorConfiguration> config,
@@ -20,28 +21,27 @@ public class LibreLinkAuthTokenProvider(
     IRetryDelayStrategy retryDelayStrategy
 ) : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>(config.Value, httpClient, logger)
 {
-    private readonly IRetryDelayStrategy _retryDelayStrategy = 
-        retryDelayStrategy 
-        ?? throw new ArgumentNullException(nameof(retryDelayStrategy))
-    ;
-    
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true,
+        PropertyNameCaseInsensitive = true
     };
 
+    private readonly IRetryDelayStrategy _retryDelayStrategy =
+        retryDelayStrategy
+        ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+
     /// <summary>
-    /// LibreLinkUp tokens typically last 24 hours.
+    ///     LibreLinkUp tokens typically last 24 hours.
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(CancellationToken cancellationToken)
+    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
+        CancellationToken cancellationToken)
     {
         const int maxRetries = LibreLinkUpConstants.Configuration.MaxRetries;
 
-        for (var attempt = 0; attempt < maxRetries; attempt++)
-        {
-            try
+        var token = await ExecuteWithRetryAsync(
+            async attempt =>
             {
                 _logger.LogInformation(
                     "Authenticating with LibreLinkUp for user: {Username} (attempt {Attempt}/{MaxRetries})",
@@ -52,7 +52,7 @@ public class LibreLinkAuthTokenProvider(
                 var loginPayload = new
                 {
                     email = _config.LibreUsername,
-                    password = _config.LibrePassword,
+                    password = _config.LibrePassword
                 };
 
                 var json = JsonSerializer.Serialize(loginPayload);
@@ -74,21 +74,14 @@ public class LibreLinkAuthTokenProvider(
                             attempt + 1,
                             response.StatusCode,
                             errorContent);
+                        return (null, true);
+                    }
 
-                        if (attempt < maxRetries - 1)
-                        {
-                            await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogError(
-                            "LibreLinkUp authentication failed with non-retryable error: {StatusCode} - {Error}",
-                            response.StatusCode,
-                            errorContent);
-                    }
-                    return (null, DateTime.MinValue);
+                    _logger.LogError(
+                        "LibreLinkUp authentication failed with non-retryable error: {StatusCode} - {Error}",
+                        response.StatusCode,
+                        errorContent);
+                    return (null, false);
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -100,43 +93,27 @@ public class LibreLinkAuthTokenProvider(
                 if (loginResponse?.Data?.AuthTicket?.Token == null)
                 {
                     _logger.LogError("LibreLinkUp authentication failed: Invalid response structure");
-                    return (null, DateTime.MinValue);
+                    return (null, false);
                 }
 
-                var token = loginResponse.Data.AuthTicket.Token;
-                var expiresAt = DateTime.UtcNow.AddHours(24);
+                return (loginResponse.Data.AuthTicket.Token, false);
+            },
+            _retryDelayStrategy,
+            maxRetries,
+            "LibreLinkUp authentication",
+            cancellationToken
+        );
 
-                _logger.LogInformation(
-                    "LibreLinkUp authentication successful, token expires at {ExpiresAt}",
-                    expiresAt);
+        if (string.IsNullOrEmpty(token))
+            return (null, DateTime.MinValue);
 
-                return (token, expiresAt);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "HTTP error during LibreLinkUp authentication attempt {Attempt}: {Message}",
-                    attempt + 1,
-                    ex.Message);
+        var expiresAt = DateTime.UtcNow.AddHours(24);
 
-                if (attempt < maxRetries - 1)
-                {
-                    await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Unexpected error during LibreLinkUp authentication attempt {Attempt}",
-                    attempt + 1);
-                return (null, DateTime.MinValue);
-            }
-        }
+        _logger.LogInformation(
+            "LibreLinkUp authentication successful, token expires at {ExpiresAt}",
+            expiresAt);
 
-        _logger.LogError("LibreLinkUp authentication failed after {MaxRetries} attempts", maxRetries);
-        return (null, DateTime.MinValue);
+        return (token, expiresAt);
     }
 
     #region Response Models

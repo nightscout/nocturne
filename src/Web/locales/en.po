@@ -2545,6 +2545,8 @@ msgstr "Something went wrong"
 #: src/routes/auth/reset-password/+page.svelte
 #: src/routes/auth/verify-email/+page.svelte
 #: src/routes/reports/+page.svelte
+#: src/routes/reports/executive-summary/+page.svelte
+#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Try again"
 msgstr "Try again"
@@ -7771,8 +7773,9 @@ msgstr ""
 "Data from {0} – {1}.\n"
 "Last updated {2}."
 
-#~ msgid "Failed to load battery report data"
-#~ msgstr "Failed to load battery report data"
+#: src/routes/reports/battery/+page.svelte
+msgid "Failed to load battery report data"
+msgstr "Failed to load battery report data"
 
 #: src/routes/reports/battery/+page.svelte
 msgid "Battery Report - Nocturne"
@@ -7787,8 +7790,9 @@ msgstr "Device battery statistics and charge cycle history"
 msgid "Battery Report"
 msgstr "Battery Report"
 
-#~ msgid "Loading battery data..."
-#~ msgstr "Loading battery data..."
+#: src/routes/reports/battery/+page.svelte
+msgid "Loading battery data..."
+msgstr "Loading battery data..."
 
 #: src/routes/reports/battery/+page.svelte
 msgid "No Battery Data Available"
@@ -7936,8 +7940,9 @@ msgstr "Executive Summary - Nocturne Reports"
 msgid "High-level overview of your diabetes management metrics"
 msgstr "High-level overview of your diabetes management metrics"
 
-#~ msgid "<0/> Error Loading Executive Summary"
-#~ msgstr "<0/> Error Loading Executive Summary"
+#: src/routes/reports/executive-summary/+page.svelte
+msgid "<0/> Error Loading Executive Summary"
+msgstr "<0/> Error Loading Executive Summary"
 
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Diabetes Management Report"
@@ -8203,8 +8208,9 @@ msgstr ""
 msgid "Tight Range"
 msgstr "Tight Range"
 
-#~ msgid "<0/> Error Loading Data"
-#~ msgstr "<0/> Error Loading Data"
+#: src/routes/reports/glucose-distribution/+page.svelte
+msgid "<0/> Error Loading Data"
+msgstr "<0/> Error Loading Data"
 
 #. placeholder {0}: dateRangeDisplay
 #. placeholder {1}: overallStats.totalReadings
@@ -11804,9 +11810,8 @@ msgstr "Total Daily Dose"
 #~ msgid "{0}U <0/>"
 #~ msgstr "{0}U <0/>"
 
-#: src/routes/time-spans/+page.svelte
-msgid "<0/> Basal"
-msgstr "<0/> Basal"
+#~ msgid "<0/> Basal"
+#~ msgstr "<0/> Basal"
 
 #~ msgid "No insulin data today"
 #~ msgstr "No insulin data today"
@@ -11849,8 +11854,9 @@ msgstr "No data for 90-day average"
 msgid "No 90-day data available"
 msgstr "No 90-day data available"
 
-#~ msgid "Click on a bar to view the day in detail"
-#~ msgstr "Click on a bar to view the day in detail"
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+msgid "Click on a bar to view the day in detail"
+msgstr "Click on a bar to view the day in detail"
 
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/routes/calendar/+page.svelte
@@ -12108,100 +12114,9 @@ msgstr "Type {0}"
 msgid "<0/> Processing..."
 msgstr "<0/> Processing..."
 
-#~ msgid "Medications"
-#~ msgstr "Medications"
-
-#~ msgid "Treatment created"
-#~ msgstr "Treatment created"
-
-#~ msgid "Failed to create treatment"
-#~ msgstr "Failed to create treatment"
-
-#~ msgid "Dose (mg)"
-#~ msgstr "Dose (mg)"
-
-#~ msgid "<0/> Medication Type"
-#~ msgstr "<0/> Medication Type"
-
-#~ msgid "Default (from profile)"
-#~ msgstr "Default (from profile)"
-
-#~ msgid "({0}h DIA)"
-#~ msgstr "({0}h DIA)"
-
-#: src/routes/time-spans/+page.svelte
-msgid "State Spans Timeline"
-msgstr "State Spans Timeline"
-
-#: src/routes/time-spans/+page.svelte
-msgid "View pump modes, profiles, temp basals, overrides, and activities over time"
-msgstr "View pump modes, profiles, temp basals, overrides, and activities over time"
-
-#: src/routes/time-spans/+page.svelte
-msgid "Toggle pump modes"
-msgstr "Toggle pump modes"
-
-#: src/routes/time-spans/+page.svelte
-msgid "<0/> Pump Modes"
-msgstr "<0/> Pump Modes"
-
-#: src/routes/time-spans/+page.svelte
-msgid "Toggle profiles"
-msgstr "Toggle profiles"
-
-#: src/routes/time-spans/+page.svelte
-msgid "<0/> Profiles"
-msgstr "<0/> Profiles"
-
-#~ msgid "Toggle temp basals"
-#~ msgstr "Toggle temp basals"
-
-#~ msgid "<0/> Temp Basals"
-#~ msgstr "<0/> Temp Basals"
-
-#: src/routes/time-spans/+page.svelte
-msgid "Toggle overrides"
-msgstr "Toggle overrides"
-
-#: src/routes/time-spans/+page.svelte
-msgid "<0/> Overrides"
-msgstr "<0/> Overrides"
-
-#: src/routes/time-spans/+page.svelte
-msgid "Toggle activities"
-msgstr "Toggle activities"
-
-#: src/routes/time-spans/+page.svelte
-msgid "<0/> Activities"
-msgstr "<0/> Activities"
-
-#: src/lib/components/dashboard/state-spans-timeline/state-spans-timeline.svelte
-msgid "No tracks selected. Enable at least one category above."
-msgstr "No tracks selected. Enable at least one category above."
-
-#. placeholder {0}: formatDuration(hoveredSpan.startTime, hoveredSpan.endTime)
-#: src/lib/components/dashboard/state-spans-timeline/state-spans-timeline.svelte
-msgid "Duration: {0}"
-msgstr "Duration: {0}"
-
-#~ msgid "Rate: {0} U/hr"
-#~ msgstr "Rate: {0} U/hr"
-
-#~ msgid "Percent: {0}%"
-#~ msgstr "Percent: {0}%"
-
-#~ msgid "Profile: {0}"
-#~ msgstr "Profile: {0}"
-
-#~ msgid "{0} U/h"
-#~ msgstr "{0} U/h"
-
-#~ msgid "No basal data"
-#~ msgstr "No basal data"
-
-#: src/routes/time-spans/+page.svelte
-msgid "Toggle basal delivery"
-msgstr "Toggle basal delivery"
+#: src/routes/reports/day-in-review/+page.svelte
+msgid "Error Loading Day in Review"
+msgstr "Error Loading Day in Review"
 
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/lib/hooks/resource-context.svelte.ts
@@ -12213,52 +12128,6 @@ msgstr "Error Loading Data"
 msgid "<0/> Try again"
 msgstr "<0/> Try again"
 
-#~ msgid "Failed to load basal/bolus ratio data"
-#~ msgstr "Failed to load basal/bolus ratio data"
-
-#~ msgid "Error Loading Ratio Data"
-#~ msgstr "Error Loading Ratio Data"
-
-#: src/routes/reports/executive-summary/+page.svelte
-msgid "Error Loading Executive Summary"
-msgstr "Error Loading Executive Summary"
-
-#: src/routes/reports/agp/+page.svelte
-msgid "Error Loading AGP Report"
-msgstr "Error Loading AGP Report"
-
 #: src/routes/reports/readings/+page.svelte
 msgid "Error Loading Readings"
 msgstr "Error Loading Readings"
-
-#: src/routes/reports/insulin-delivery/+page.svelte
-msgid "Error Loading Insulin Delivery Data"
-msgstr "Error Loading Insulin Delivery Data"
-
-#: src/routes/reports/basal-analysis/+page.svelte
-msgid "Error Loading Basal Analysis"
-msgstr "Error Loading Basal Analysis"
-
-#: src/routes/reports/battery/+page.svelte
-msgid "Error Loading Battery Report"
-msgstr "Error Loading Battery Report"
-
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Error Loading Day in Review"
-msgstr "Error Loading Day in Review"
-
-#: src/routes/reports/glucose-distribution/+page.svelte
-msgid "Error Loading Glucose Distribution"
-msgstr "Error Loading Glucose Distribution"
-
-#: src/routes/reports/treatments/+page.svelte
-msgid "Error Loading Treatments"
-msgstr "Error Loading Treatments"
-
-#: src/routes/reports/site-change-impact/+page.svelte
-msgid "Error Loading Site Change Data"
-msgstr "Error Loading Site Change Data"
-
-#: src/routes/reports/week-to-week/+page.svelte
-msgid "Error Loading Week Comparison"
-msgstr "Error Loading Week Comparison"

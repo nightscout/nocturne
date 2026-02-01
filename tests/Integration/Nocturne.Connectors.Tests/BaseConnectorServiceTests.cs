@@ -29,25 +29,21 @@ public class BaseConnectorServiceTests
         };
 
         // Assert
-        Assert.True(config.UseAsyncProcessing);
-        Assert.Equal(TimeSpan.FromMinutes(5), config.MessageTimeout);
         Assert.Equal(3, config.MaxRetryAttempts);
         Assert.Equal(50, config.BatchSize);
-        Assert.Null(config.RoutingKeyPrefix);
     }
 
     [Fact]
     public async Task PublishGlucoseDataAsync_WithValidData_SubmitsToAPI()
     {
         // Arrange
-        var apiSubmitterMock = new Mock<IApiDataSubmitter>();
+        var publisherMock = new Mock<IConnectorPublisher>();
         var loggerMock = new Mock<ILogger<BaseConnectorService<TestConnectorConfiguration>>>();
-        var testService = new TestConnectorService(apiSubmitterMock.Object, loggerMock.Object);
+        var testService = new TestConnectorService(publisherMock.Object, loggerMock.Object);
 
         var config = new TestConnectorConfiguration
         {
             ConnectSource = ConnectSource.Dexcom,
-            UseAsyncProcessing = true,
         };
 
         var entries = new[]
@@ -60,9 +56,9 @@ public class BaseConnectorServiceTests
             },
         };
 
-        apiSubmitterMock
+        publisherMock
             .Setup(m =>
-                m.SubmitEntriesAsync(
+                m.PublishEntriesAsync(
                     It.IsAny<IEnumerable<Entry>>(),
                     It.IsAny<string>(),
                     It.IsAny<CancellationToken>()
@@ -76,9 +72,9 @@ public class BaseConnectorServiceTests
         // Assert
         Assert.True(result);
 
-        apiSubmitterMock.Verify(
+        publisherMock.Verify(
             m =>
-                m.SubmitEntriesAsync(
+                m.PublishEntriesAsync(
                     It.Is<IEnumerable<Entry>>(e => e.Count() == 2),
                     It.Is<string>(s => s == "test-connector"),
                     It.IsAny<CancellationToken>()
@@ -87,27 +83,6 @@ public class BaseConnectorServiceTests
         );
     }
 
-    [Fact]
-    public async Task SyncDataAsync_WithAsyncProcessingDisabled_UsesDirectAPI()
-    {
-        // Arrange
-        var apiSubmitterMock = new Mock<IApiDataSubmitter>();
-        var loggerMock = new Mock<ILogger<BaseConnectorService<TestConnectorConfiguration>>>();
-        var testService = new TestConnectorService(apiSubmitterMock.Object, loggerMock.Object);
-
-        var config = new TestConnectorConfiguration
-        {
-            ConnectSource = ConnectSource.Dexcom,
-            UseAsyncProcessing = false, // Direct API mode
-        };
-
-        // Act
-        var result = await testService.SyncDataAsync(config, TestContext.Current.CancellationToken);
-
-        // Assert
-        // Should have tried direct upload (will fail in test but that's expected)
-        Assert.False(result); // Fails because no real Nightscout endpoint
-    }
 }
 
 /// <summary>
@@ -127,12 +102,12 @@ public class TestConnectorConfiguration : BaseConnectorConfiguration
 public class TestConnectorService : BaseConnectorService<TestConnectorConfiguration>
 {
     public TestConnectorService(
-        IApiDataSubmitter apiDataSubmitter,
+        IConnectorPublisher publisher,
         ILogger<BaseConnectorService<TestConnectorConfiguration>> logger
     )
-        : base(new HttpClient(), logger, apiDataSubmitter) { }
+        : base(new HttpClient(), logger, publisher) { }
 
-    public override string ConnectorSource => "test-connector";
+    protected override string ConnectorSource => "test-connector";
     public override string ServiceName => "Test Connector";
 
     public override Task<bool> AuthenticateAsync() => Task.FromResult(true);

@@ -1,4 +1,4 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Constants;
@@ -15,15 +15,9 @@ internal sealed class ManualBgTreatmentHandler : IMyLifeTreatmentHandler
 
     public IEnumerable<Treatment> Handle(MyLifeEvent ev, MyLifeTreatmentContext context)
     {
-        if (!context.EnableManualBgSync)
-        {
-            return Enumerable.Empty<Treatment>();
-        }
+        if (!context.EnableManualBgSync) return Enumerable.Empty<Treatment>();
 
-        if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var glucose))
-        {
-            return Enumerable.Empty<Treatment>();
-        }
+        if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var glucose)) return Enumerable.Empty<Treatment>();
 
         var timestamp = MyLifeMapperHelpers.FromInstantTicks(ev.EventDateTime);
         var treatment = new Treatment

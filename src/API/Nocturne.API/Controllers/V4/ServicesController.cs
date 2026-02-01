@@ -18,7 +18,6 @@ namespace Nocturne.API.Controllers.V4;
 public class ServicesController : ControllerBase
 {
     private readonly IDataSourceService _dataSourceService;
-    private readonly IConnectorSyncService _connectorSyncService;
     private readonly IPostgreSqlService _postgreSqlService;
     private readonly IConnectorHealthService _connectorHealthService;
     private readonly ILogger<ServicesController> _logger;
@@ -26,7 +25,6 @@ public class ServicesController : ControllerBase
 
     public ServicesController(
         IDataSourceService dataSourceService,
-        IConnectorSyncService connectorSyncService,
         IPostgreSqlService postgreSqlService,
         IConnectorHealthService connectorHealthService,
         ILogger<ServicesController> logger,
@@ -34,7 +32,6 @@ public class ServicesController : ControllerBase
     )
     {
         _dataSourceService = dataSourceService;
-        _connectorSyncService = connectorSyncService;
         _postgreSqlService = postgreSqlService;
         _connectorHealthService = connectorHealthService;
         _logger = logger;
@@ -367,80 +364,26 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
-    /// Trigger a manual sync for a specific connector with granular control.
+    /// Manual connector sync is currently disabled.
     /// </summary>
     /// <param name="id">Connector ID</param>
     /// <param name="request">Sync request parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result of the manual sync operation</returns>
+    /// <returns>Not implemented</returns>
     [HttpPost("connectors/{id}/sync")]
-    [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
-    [ProducesResponseType(400)]
-    [ProducesResponseType(404)]
-    [ProducesResponseType(500)]
-    public async Task<ActionResult<Nocturne.Connectors.Core.Models.SyncResult>> TriggerConnectorSync(
+    [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 501)]
+    public ActionResult<Nocturne.Connectors.Core.Models.SyncResult> TriggerConnectorSync(
         string id,
-        [FromBody] Nocturne.Connectors.Core.Models.SyncRequest request,
-        CancellationToken cancellationToken = default
-    )
+        [FromBody] Nocturne.Connectors.Core.Models.SyncRequest request)
     {
-        _logger.LogInformation("Granular sync triggered for connector {Id} via API", id);
-
-        try
-        {
-            var result = await _connectorSyncService.TriggerConnectorSyncAsync(id, request, cancellationToken);
-
-            if (!result.Success)
+        return StatusCode(
+            501,
+            new Nocturne.Connectors.Core.Models.SyncResult
             {
-                if (result.Message?.Contains("not found") == true)
-                {
-                    return NotFound(new { error = result.Message });
-                }
-                if (result.Message?.Contains("not configured") == true)
-                {
-                    return BadRequest(new { error = result.Message });
-                }
-                return StatusCode(500, result);
+                Success = false,
+                Message = "Manual connector sync is disabled."
             }
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error triggering granular sync for {Id}", id);
-            return StatusCode(500, new { error = "Failed to trigger sync" });
-        }
+        );
     }
-
-    /// <summary>
-    /// Get the supported sync capabilities for a specific connector.
-    /// </summary>
-    /// <param name="id">Connector ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>List of supported data types</returns>
-    [HttpGet("connectors/{id}/capabilities")]
-    [ProducesResponseType(typeof(List<Nocturne.Connectors.Core.Models.SyncDataType>), 200)]
-    [ProducesResponseType(404)]
-    [ProducesResponseType(500)]
-    public async Task<ActionResult<List<Nocturne.Connectors.Core.Models.SyncDataType>>> GetConnectorCapabilities(
-        string id,
-        CancellationToken cancellationToken = default
-    )
-    {
-        _logger.LogDebug("Getting capabilities for connector {Id}", id);
-
-        try
-        {
-            var capabilities = await _connectorSyncService.GetConnectorCapabilitiesAsync(id, cancellationToken);
-            return Ok(capabilities);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting capabilities for {Id}", id);
-            return StatusCode(500, new { error = "Failed to get connector capabilities" });
-        }
-    }
-
 
 
     /// <summary>

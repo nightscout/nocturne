@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.MyLife.Models;
 
 namespace Nocturne.Connectors.MyLife.Services;
@@ -10,9 +11,9 @@ public class MyLifeEventsCache(
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(5);
 
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private DateTime _cachedAt;
     private Task<IReadOnlyList<MyLifeEvent>>? _currentTask;
     private DateTime? _since;
-    private DateTime _cachedAt;
 
     public async Task<IReadOnlyList<MyLifeEvent>> GetEventsAsync(
         DateTime since,

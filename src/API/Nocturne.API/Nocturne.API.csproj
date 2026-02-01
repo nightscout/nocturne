@@ -1,115 +1,111 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>Nocturne.API</RootNamespace>
-    <AssemblyName>Nocturne.API</AssemblyName>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591;NU1608;NU1701</NoWarn>
-    <!-- Container publishing configuration for Aspire -->
-    <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
-    <ContainerRepository>nocturne-api</ContainerRepository>
-    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
-    <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Alexa.NET" />
-    <PackageReference Include="dotAPNS" />
-    <PackageReference Include="HtmlSanitizer" />
-    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Microsoft.Extensions.Http.Polly" />
-    <PackageReference Include="NSwag.AspNetCore" />
-    <PackageReference Include="NSwag.MSBuild">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="OpenTelemetry.Exporter.Console" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
-    <PackageReference Include="Scalar.AspNetCore" />
-    <PackageReference Include="ShiroTrie" />
-    <PackageReference Include="Wasmtime" />
-    <PackageReference Include="Yarp.ReverseProxy" />
-    <PackageReference Include="MongoDB.Driver" />
-  </ItemGroup>
-  <!-- oref WASM configuration -->
-  <PropertyGroup>
-    <OrefVersion>0.1.0</OrefVersion>
-    <OrefWasmPath>$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release\oref.wasm</OrefWasmPath>
-    <OrefDownloadUrl>https://github.com/nightscout/nocturne/releases/download/oref-v$(OrefVersion)/oref.wasm</OrefDownloadUrl>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Nocturne.API</RootNamespace>
+        <AssemblyName>Nocturne.API</AssemblyName>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591;NU1608;NU1701</NoWarn>
+        <!-- Container publishing configuration for Aspire -->
+        <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
+        <ContainerRepository>nocturne-api</ContainerRepository>
+        <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
+        <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Alexa.NET"/>
+        <PackageReference Include="dotAPNS"/>
+        <PackageReference Include="HtmlSanitizer"/>
+        <PackageReference Include="Konscious.Security.Cryptography.Argon2"/>
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer"/>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi"/>
+        <PackageReference Include="Microsoft.Extensions.Http.Polly"/>
+        <PackageReference Include="NSwag.AspNetCore"/>
+        <PackageReference Include="NSwag.MSBuild">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="OpenTelemetry.Exporter.Console"/>
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting"/>
+        <PackageReference Include="Scalar.AspNetCore"/>
+        <PackageReference Include="ShiroTrie"/>
+        <PackageReference Include="Wasmtime"/>
+        <PackageReference Include="Yarp.ReverseProxy"/>
+        <PackageReference Include="MongoDB.Driver"/>
+    </ItemGroup>
+    <!-- oref WASM configuration -->
+    <PropertyGroup>
+        <OrefVersion>0.1.0</OrefVersion>
+        <OrefWasmPath>$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release\oref.wasm</OrefWasmPath>
+        <OrefDownloadUrl>https://github.com/nightscout/nocturne/releases/download/oref-v$(OrefVersion)/oref.wasm</OrefDownloadUrl>
+    </PropertyGroup>
 
-  <!-- Download oref WASM from GitHub Releases if not present (default behavior) -->
-  <Target Name="DownloadOrefWasm" BeforeTargets="Build" Condition="!Exists('$(OrefWasmPath)')">
-    <Message Importance="high" Text="Downloading pre-built oref WASM from GitHub Releases (v$(OrefVersion))..." />
-    <MakeDir Directories="$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release" />
-    <DownloadFile
-      SourceUrl="$(OrefDownloadUrl)"
-      DestinationFolder="$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release"
-      DestinationFileName="oref.wasm"
-    />
-    <Message Importance="high" Text="oref WASM download complete." />
-  </Target>
+    <!-- Download oref WASM from GitHub Releases if not present (default behavior) -->
+    <Target Name="DownloadOrefWasm" BeforeTargets="Build" Condition="!Exists('$(OrefWasmPath)')">
+        <Message Importance="high" Text="Downloading pre-built oref WASM from GitHub Releases (v$(OrefVersion))..."/>
+        <MakeDir Directories="$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release"/>
+        <DownloadFile
+                SourceUrl="$(OrefDownloadUrl)"
+                DestinationFolder="$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release"
+                DestinationFileName="oref.wasm"
+        />
+        <Message Importance="high" Text="oref WASM download complete."/>
+    </Target>
 
-  <ItemGroup>
-    <Content
-      Include="..\..\..\appsettings.json"
-      Link="appsettings.json"
-      CopyToOutputDirectory="PreserveNewest"
-      Condition="Exists('..\..\..\appsettings.json')"
-    />
-    <Content
-      Include="..\..\..\appsettings.Development.json"
-      Link="appsettings.Development.json"
-      CopyToOutputDirectory="PreserveNewest"
-      Condition="Exists('..\..\..\appsettings.Development.json')"
-    />
-    <Content
-      Include="..\..\Core\oref\target\wasm32-unknown-unknown\release\oref.wasm"
-      Link="oref.wasm"
-      CopyToOutputDirectory="PreserveNewest"
-    />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj" />
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Oref\Nocturne.Core.Oref.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\Nocturne.Infrastructure.Cache.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Shared\Nocturne.Infrastructure.Shared.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MiniMed\Nocturne.Connectors.MiniMed.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj" />
-  </ItemGroup>
-  <!-- NSwag TypeScript Client Generation -->
-  <!-- Runs automatically after build in development mode -->
-  <!-- Set GenerateNSwagClient=false to skip (e.g., in CI/CD or publish scenarios) -->
-  <!-- Manual: dotnet build -t:GenerateClient or dotnet build -p:GenerateNSwagClient=true -->
-  <PropertyGroup>
-    <GenerateNSwagClient Condition="'$(GenerateNSwagClient)' == ''">true</GenerateNSwagClient>
-    <!-- Skip NSwag generation during publish to avoid issues with runtime dependencies -->
-    <GenerateNSwagClient Condition="'$(PublishDir)' != ''">false</GenerateNSwagClient>
-  </PropertyGroup>
+    <ItemGroup>
+        <Content
+                Include="..\..\..\appsettings.json"
+                Link="appsettings.json"
+                CopyToOutputDirectory="PreserveNewest"
+                Condition="Exists('..\..\..\appsettings.json')"
+        />
+        <Content
+                Include="..\..\..\appsettings.Development.json"
+                Link="appsettings.Development.json"
+                CopyToOutputDirectory="PreserveNewest"
+                Condition="Exists('..\..\..\appsettings.Development.json')"
+        />
+        <Content
+                Include="..\..\Core\oref\target\wasm32-unknown-unknown\release\oref.wasm"
+                Link="oref.wasm"
+                CopyToOutputDirectory="PreserveNewest"
+        />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Oref\Nocturne.Core.Oref.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\Nocturne.Infrastructure.Cache.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Shared\Nocturne.Infrastructure.Shared.csproj"/>
+        <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
+        <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj"/>
+        <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj"/>
+        <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj"/>
+        <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj"/>
+    </ItemGroup>
+    <!-- NSwag TypeScript Client Generation -->
+    <!-- Runs automatically after build in development mode -->
+    <!-- Set GenerateNSwagClient=false to skip (e.g., in CI/CD or publish scenarios) -->
+    <!-- Manual: dotnet build -t:GenerateClient or dotnet build -p:GenerateNSwagClient=true -->
+    <PropertyGroup>
+        <GenerateNSwagClient Condition="'$(GenerateNSwagClient)' == ''">true</GenerateNSwagClient>
+        <!-- Skip NSwag generation during publish to avoid issues with runtime dependencies -->
+        <GenerateNSwagClient Condition="'$(PublishDir)' != ''">false</GenerateNSwagClient>
+    </PropertyGroup>
 
-  <Target Name="GenerateClient" AfterTargets="Build" Condition="'$(GenerateNSwagClient)' == 'true'">
-    <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
-    <Exec
-      Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)"
-      WorkingDirectory="$(MSBuildProjectDirectory)"
-      ContinueOnError="false"
-    />
-    <Message Importance="high" Text="TypeScript API client generation complete." />
-  </Target>
+    <Target Name="GenerateClient" AfterTargets="Build" Condition="'$(GenerateNSwagClient)' == 'true'">
+        <Message Importance="high" Text="Generating TypeScript API client with NSwag..."/>
+        <Exec
+                Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)"
+                WorkingDirectory="$(MSBuildProjectDirectory)"
+                ContinueOnError="false"
+        />
+        <Message Importance="high" Text="TypeScript API client generation complete."/>
+    </Target>
 </Project>

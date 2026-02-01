@@ -34,7 +34,7 @@ public class ConnectConfiguration : IToolConfiguration
 
     /// <summary>
     /// The source connector to use when fetching data; valid values are:
-    /// "glooko", "minimedcarelink", "dexcomshare", "linkup", or "nightscout".
+    /// "glooko", "dexcomshare", "linkup", or "mylife".
     /// </summary>
     [Required(ErrorMessage = "Connect Source is required")]
     public string ConnectSource { get; set; } = string.Empty;
@@ -69,23 +69,6 @@ public class ConnectConfiguration : IToolConfiguration
 
     public string GlookoServer { get; set; } = "eu.api.glooko.com";
     public int GlookoTimezoneOffset { get; set; } = 0;
-
-    // MiniMed CareLink Configuration
-    [RequiredIf(
-        nameof(ConnectSource),
-        "minimedcarelink",
-        ErrorMessage = "CareLink username is required when using CareLink as source"
-    )]
-    public string? CarelinkUsername { get; set; }
-
-    [RequiredIf(
-        nameof(ConnectSource),
-        "minimedcarelink",
-        ErrorMessage = "CareLink password is required when using CareLink as source"
-    )]
-    public string? CarelinkPassword { get; set; }
-
-    public string CarelinkRegion { get; set; } = "us";
 
     // Dexcom Share Configuration
     [RequiredIf(
@@ -142,32 +125,14 @@ public class ConnectConfiguration : IToolConfiguration
     public bool MyLifeEnableTempBasalConsolidation { get; set; } = true;
     public int MyLifeTempBasalConsolidationWindowMinutes { get; set; } = 5;
 
-    // Nightscout Source Configuration
-    [RequiredIf(
-        nameof(ConnectSource),
-        "nightscout",
-        ErrorMessage = "Source endpoint is required when using Nightscout as source"
-    )]
-    [Url(ErrorMessage = "Source endpoint must be a valid URL")]
-    public string? SourceEndpoint { get; set; }
-
-    [RequiredIf(
-        nameof(ConnectSource),
-        "nightscout",
-        ErrorMessage = "Source API secret is required when using Nightscout as source"
-    )]
-    public string? SourceApiSecret { get; set; }
-
     /// <inheritdoc/>
     public ValidationResult ValidateConfiguration()
     {
         var validSources = new[]
         {
             "glooko",
-            "minimedcarelink",
             "dexcomshare",
             "linkup",
-            "nightscout",
             "mylife",
         };
 

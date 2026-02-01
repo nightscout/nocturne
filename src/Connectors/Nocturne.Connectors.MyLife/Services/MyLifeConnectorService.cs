@@ -1,5 +1,6 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -14,25 +15,21 @@ public class MyLifeConnectorService(
     HttpClient httpClient,
     IOptions<MyLifeConnectorConfiguration> config,
     ILogger<MyLifeConnectorService> logger,
-    IAuthTokenProvider tokenProvider,
+    MyLifeAuthTokenProvider tokenProvider,
     MyLifeEventsCache eventsCache,
     MyLifeEventProcessor eventMapper,
     MyLifeSessionStore sessionStore,
-    IApiDataSubmitter? apiDataSubmitter = null,
-    IConnectorMetricsTracker? metricsTracker = null,
-    IConnectorStateService? stateService = null
+    IConnectorPublisher? publisher = null
 )
     : BaseConnectorService<MyLifeConnectorConfiguration>(
         httpClient,
         logger,
-        apiDataSubmitter,
-        metricsTracker,
-        stateService)
+        publisher)
 {
     private readonly MyLifeConnectorConfiguration _config = config.Value;
 
     public override string ServiceName => "MyLife";
-    public override string ConnectorSource => DataSources.MyLifeConnector;
+    protected override string ConnectorSource => DataSources.MyLifeConnector;
 
     public override List<SyncDataType> SupportedDataTypes =>
         [SyncDataType.Glucose, SyncDataType.Treatments];
@@ -89,8 +86,8 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    /// Fetches BasalDelivery StateSpans from MyLife events.
-    /// These provide pump-confirmed basal delivery tracking with implicit duration model.
+    ///     Fetches BasalDelivery StateSpans from MyLife events.
+    ///     These provide pump-confirmed basal delivery tracking with implicit duration model.
     /// </summary>
     protected async Task<IEnumerable<StateSpan>> FetchStateSpansAsync(
         DateTime? from,
@@ -112,7 +109,7 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    /// Override sync to also publish BasalDelivery StateSpans alongside Treatments.
+    ///     Override sync to also publish BasalDelivery StateSpans alongside Treatments.
     /// </summary>
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
@@ -124,7 +121,6 @@ public class MyLifeConnectorService(
 
         // If treatments were synced, also sync BasalDelivery StateSpans
         if (request.DataTypes.Contains(SyncDataType.Treatments))
-        {
             try
             {
                 var stateSpans = await FetchStateSpansAsync(request.From, request.To);
@@ -138,16 +134,12 @@ public class MyLifeConnectorService(
                         cancellationToken);
 
                     if (stateSpanSuccess)
-                    {
                         _logger.LogInformation(
                             "Successfully synced {Count} BasalDelivery StateSpans",
                             stateSpanList.Count);
-                    }
                     else
-                    {
                         _logger.LogWarning(
                             "Failed to sync some BasalDelivery StateSpans");
-                    }
                 }
             }
             catch (Exception ex)
@@ -155,17 +147,8 @@ public class MyLifeConnectorService(
                 _logger.LogError(ex, "Error syncing BasalDelivery StateSpans");
                 // Don't fail the overall sync if StateSpan sync fails
             }
-        }
 
         return result;
-    }
-
-    protected override Task<IEnumerable<Activity>> FetchActivitiesAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult<IEnumerable<Activity>>(Array.Empty<Activity>());
     }
 
     private static IEnumerable<MyLifeEvent> FilterEventsBySince(

@@ -1,39 +1,22 @@
-using System;
-using System.IO;
 using System.IO.Compression;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
-using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Core.Services;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
 /// <summary>
-/// Token provider for Glooko authentication.
-/// Handles session cookie extraction for API requests.
-/// Note: Glooko returns a session cookie rather than a bearer token,
-/// but we represent it as a token for consistency.
+///     Token provider for Glooko authentication.
+///     Handles session cookie extraction for API requests.
+///     Note: Glooko returns a session cookie rather than a bearer token,
+///     but we represent it as a token for consistency.
 /// </summary>
 public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConfiguration>
 {
-    /// <summary>
-    /// Gets the user data obtained during authentication.
-    /// Contains the Glooko code needed for API requests.
-    /// </summary>
-    public GlookoUserData? UserData { get; private set; }
-
-    /// <summary>
-    /// Gets the session cookie for API requests.
-    /// </summary>
-    public string? SessionCookie { get; private set; }
-
     public GlookoAuthTokenProvider(
         IOptions<GlookoConnectorConfiguration> config,
         HttpClient httpClient,
@@ -42,7 +25,19 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
     {
     }
 
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(CancellationToken cancellationToken)
+    /// <summary>
+    ///     Gets the user data obtained during authentication.
+    ///     Contains the Glooko code needed for API requests.
+    /// </summary>
+    public GlookoUserData? UserData { get; private set; }
+
+    /// <summary>
+    ///     Gets the session cookie for API requests.
+    /// </summary>
+    public string? SessionCookie { get; private set; }
+
+    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -54,7 +49,7 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                 userLogin = new
                 {
                     email = _config.GlookoUsername,
-                    password = _config.GlookoPassword,
+                    password = _config.GlookoPassword
                 },
                 deviceInformation = new
                 {
@@ -69,8 +64,8 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                     deviceId = "HIDDEN",
                     applicationVersion = "6.1.3",
                     buildNumber = "0",
-                    gitHash = "g4fbed2011b",
-                },
+                    gitHash = "g4fbed2011b"
+                }
             };
 
             var json = JsonSerializer.Serialize(loginData);
@@ -78,7 +73,7 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
 
             var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/users/sign_in")
             {
-                Content = content,
+                Content = content
             };
 
             // Add browser-like headers
@@ -103,17 +98,13 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
 
             // Extract session cookie from response headers
             if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
-            {
                 foreach (var cookie in cookies)
-                {
                     if (cookie.StartsWith("_logbook-web_session="))
                     {
                         SessionCookie = cookie.Split(';')[0];
                         _logger.LogInformation("Session cookie extracted successfully");
                         break;
                     }
-                }
-            }
 
             // Parse user data
             var responseJson = await ReadResponseContentAsync(response, cancellationToken);
@@ -121,11 +112,9 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
             {
                 UserData = JsonSerializer.Deserialize<GlookoUserData>(responseJson);
                 if (UserData?.UserLogin?.GlookoCode != null)
-                {
                     _logger.LogInformation(
                         "User data parsed successfully. Glooko code: {GlookoCode}",
                         UserData.UserLogin.GlookoCode);
-                }
             }
             catch (Exception ex)
             {
@@ -149,7 +138,8 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
         }
     }
 
-    private static async Task<string> ReadResponseContentAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static async Task<string> ReadResponseContentAsync(HttpResponseMessage response,
+        CancellationToken cancellationToken)
     {
         var responseBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
 
@@ -168,19 +158,17 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
 }
 
 /// <summary>
-/// Glooko user data returned from authentication.
+///     Glooko user data returned from authentication.
 /// </summary>
 public class GlookoUserData
 {
-    [JsonPropertyName("userLogin")]
-    public GlookoUserLogin? UserLogin { get; set; }
+    [JsonPropertyName("userLogin")] public GlookoUserLogin? UserLogin { get; set; }
 }
 
 /// <summary>
-/// Glooko user login details.
+///     Glooko user login details.
 /// </summary>
 public class GlookoUserLogin
 {
-    [JsonPropertyName("glookoCode")]
-    public string? GlookoCode { get; set; }
+    [JsonPropertyName("glookoCode")] public string? GlookoCode { get; set; }
 }

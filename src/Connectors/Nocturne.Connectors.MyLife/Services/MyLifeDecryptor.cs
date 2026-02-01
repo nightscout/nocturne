@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 
 namespace Nocturne.Connectors.MyLife.Services;
 
@@ -9,9 +9,7 @@ public class MyLifeDecryptor
     public static byte[] Decrypt(string encryptedBase64)
     {
         if (string.IsNullOrWhiteSpace(encryptedBase64))
-        {
             throw new ArgumentException("Encrypted data cannot be null or empty", nameof(encryptedBase64));
-        }
 
         byte[] encrypted;
         try
@@ -23,10 +21,7 @@ public class MyLifeDecryptor
             throw new CryptographicException("Invalid Base64 encoded data", ex);
         }
 
-        if (encrypted.Length == 0)
-        {
-            throw new CryptographicException("Encrypted data is empty");
-        }
+        if (encrypted.Length == 0) throw new CryptographicException("Encrypted data is empty");
 
         try
         {

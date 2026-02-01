@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Models;
 
 namespace Nocturne.Connectors.MyLife.Mappers.Helpers;
@@ -35,34 +35,19 @@ internal static class MyLifeMapperHelpers
         var builder = new StringBuilder();
         builder.Append(ev.EventTypeId).Append('|');
         builder.Append(ev.EventDateTime).Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.Value))
-        {
-            builder.Append(ev.Value);
-        }
+        if (!string.IsNullOrWhiteSpace(ev.Value)) builder.Append(ev.Value);
 
         builder.Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.InformationFromDevice))
-        {
-            builder.Append(ev.InformationFromDevice);
-        }
+        if (!string.IsNullOrWhiteSpace(ev.InformationFromDevice)) builder.Append(ev.InformationFromDevice);
 
         builder.Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.PatientId))
-        {
-            builder.Append(ev.PatientId);
-        }
+        if (!string.IsNullOrWhiteSpace(ev.PatientId)) builder.Append(ev.PatientId);
 
         builder.Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.DeviceId))
-        {
-            builder.Append(ev.DeviceId);
-        }
+        if (!string.IsNullOrWhiteSpace(ev.DeviceId)) builder.Append(ev.DeviceId);
 
         builder.Append('|');
-        if (ev.IndexOnDevice.HasValue)
-        {
-            builder.Append(ev.IndexOnDevice.Value);
-        }
+        if (ev.IndexOnDevice.HasValue) builder.Append(ev.IndexOnDevice.Value);
 
         builder.Append('|');
         builder.Append(ev.CRC32Checksum);
@@ -75,26 +60,14 @@ internal static class MyLifeMapperHelpers
 
     internal static bool IsBatteryRemovedIndication(JsonElement? info)
     {
-        if (info == null)
-        {
-            return false;
-        }
+        if (info == null) return false;
 
-        if (!info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var element))
-        {
-            return false;
-        }
+        if (!info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var element)) return false;
 
-        if (element.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
+        if (element.ValueKind != JsonValueKind.String) return false;
 
         var value = element.GetString();
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(value)) return false;
 
         return string.Equals(
             value,
@@ -105,10 +78,7 @@ internal static class MyLifeMapperHelpers
 
     internal static JsonElement? ParseInfo(string? info)
     {
-        if (string.IsNullOrWhiteSpace(info))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(info)) return null;
 
         try
         {
@@ -123,15 +93,9 @@ internal static class MyLifeMapperHelpers
     internal static bool TryGetInfoDouble(JsonElement? info, string name, out double value)
     {
         value = 0;
-        if (info == null)
-        {
-            return false;
-        }
+        if (info == null) return false;
 
-        if (!info.Value.TryGetProperty(name, out var element))
-        {
-            return false;
-        }
+        if (!info.Value.TryGetProperty(name, out var element)) return false;
 
         return element.ValueKind switch
         {
@@ -143,15 +107,9 @@ internal static class MyLifeMapperHelpers
 
     internal static bool TryGetInfoBool(JsonElement? info, string name)
     {
-        if (info == null)
-        {
-            return false;
-        }
+        if (info == null) return false;
 
-        if (!info.Value.TryGetProperty(name, out var element))
-        {
-            return false;
-        }
+        if (!info.Value.TryGetProperty(name, out var element)) return false;
 
         switch (element.ValueKind)
         {
@@ -168,40 +126,22 @@ internal static class MyLifeMapperHelpers
 
     internal static bool IsCalculatedBolus(JsonElement? info)
     {
-        if (info == null)
-        {
-            return false;
-        }
+        if (info == null) return false;
 
-        if (TryGetInfoBool(info, MyLifeJsonKeys.BolusIsCalculated))
-        {
-            return true;
-        }
+        if (TryGetInfoBool(info, MyLifeJsonKeys.BolusIsCalculated)) return true;
 
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs) && carbs > 0)
-        {
-            return true;
-        }
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs) && carbs > 0) return true;
 
         return TryGetInfoDouble(info, MyLifeJsonKeys.SuggestedMealBolus, out var suggested) && suggested > 0;
     }
 
     internal static double? ResolveBolusCarbs(JsonElement? info)
     {
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs))
-        {
-            return carbs;
-        }
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs)) return carbs;
 
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.Carbs, out var carbsAlt))
-        {
-            return carbsAlt;
-        }
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.Carbs, out var carbsAlt)) return carbsAlt;
 
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarb, out var carbsSingle))
-        {
-            return carbsSingle;
-        }
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarb, out var carbsSingle)) return carbsSingle;
 
         return null;
     }

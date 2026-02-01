@@ -1,5 +1,6 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyLife.Models;
 

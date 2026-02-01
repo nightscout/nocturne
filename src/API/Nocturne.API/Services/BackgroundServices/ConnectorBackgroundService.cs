@@ -39,7 +39,15 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Check if connector is enabled
+        if (!Config.Enabled)
+        {
+            Logger.LogInformation(
+                "{ConnectorName} connector is disabled, background service will not run",
+                ConnectorName
+            );
+            return;
+        }
+
         if (Config.SyncIntervalMinutes <= 0)
         {
             Logger.LogInformation(

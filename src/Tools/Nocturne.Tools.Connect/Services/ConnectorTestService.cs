@@ -4,13 +4,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
+using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
-using Nocturne.Connectors.MiniMed.Services;
 using Nocturne.Tools.Abstractions.Services;
 using Nocturne.Tools.Connect.Configuration;
 
@@ -75,7 +76,7 @@ public class ConnectorTestService
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
                 tokenProvider,
-                new TreatmentClassificationService(_loggerFactory.CreateLogger<TreatmentClassificationService>())
+                new TreatmentClassificationService()
             );
 
             _logger.LogInformation(
@@ -109,90 +110,6 @@ public class ConnectorTestService
             return new ConnectionTestResult(
                 false,
                 $"Glooko connection test failed: {ex.Message}",
-                DateTime.UtcNow - startTime
-            );
-        }
-    }
-
-    /// <summary>
-    /// Tests CareLink connection using actual authentication
-    /// </summary>
-    public async Task<ConnectionTestResult> TestCareLinkConnectionAsync(
-        ConnectConfiguration config,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var startTime = DateTime.UtcNow;
-
-        try
-        {
-            if (
-                string.IsNullOrWhiteSpace(config.CarelinkUsername)
-                || string.IsNullOrWhiteSpace(config.CarelinkPassword)
-            )
-            {
-                return new ConnectionTestResult(
-                    false,
-                    "CareLink credentials not configured",
-                    DateTime.UtcNow - startTime
-                );
-            }
-
-            var carelinkConfig = new CareLinkConnectorConfiguration
-            {
-                ConnectSource = ConnectSource.CareLink,
-                CareLinkUsername = config.CarelinkUsername,
-                CareLinkPassword = config.CarelinkPassword,
-                CareLinkCountry = config.CarelinkRegion,
-            };
-
-            var carelinkHttpClient = new HttpClient();
-            var carelinkTokenProvider = new CareLinkAuthTokenProvider(
-                Options.Create(carelinkConfig),
-                carelinkHttpClient,
-                _loggerFactory.CreateLogger<CareLinkAuthTokenProvider>(),
-                new ProductionRetryDelayStrategy()
-            );
-            using var connector = new CareLinkConnectorService(
-                carelinkHttpClient,
-                Options.Create(carelinkConfig),
-                _loggerFactory.CreateLogger<CareLinkConnectorService>(),
-                new ProductionRetryDelayStrategy(),
-                new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-                carelinkTokenProvider
-            );
-
-            _logger.LogInformation(
-                "Testing CareLink authentication with region: {Region}",
-                config.CarelinkRegion
-            );
-
-            var authResult = await connector.AuthenticateAsync();
-            var duration = DateTime.UtcNow - startTime;
-
-            if (authResult)
-            {
-                return new ConnectionTestResult(
-                    true,
-                    $"Successfully authenticated with CareLink region {config.CarelinkRegion}",
-                    duration
-                );
-            }
-            else
-            {
-                return new ConnectionTestResult(
-                    false,
-                    "CareLink authentication failed - check credentials and region configuration",
-                    duration
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error testing CareLink connection");
-            return new ConnectionTestResult(
-                false,
-                $"CareLink connection test failed: {ex.Message}",
                 DateTime.UtcNow - startTime
             );
         }
@@ -239,7 +156,6 @@ public class ConnectorTestService
             );
             using var connector = new DexcomConnectorService(
                 dexcomHttpClient,
-                Options.Create(dexcomConfig),
                 _loggerFactory.CreateLogger<DexcomConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),

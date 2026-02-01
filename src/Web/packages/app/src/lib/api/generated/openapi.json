@@ -6282,7 +6282,7 @@
         "tags": [
           "Services"
         ],
-        "summary": "Trigger a manual sync for a specific connector with granular control.",
+        "summary": "Manual connector sync is currently disabled.",
         "operationId": "Services_TriggerConnectorSync",
         "parameters": [
           {
@@ -6310,8 +6310,8 @@
           "x-position": 2
         },
         "responses": {
-          "200": {
-            "description": "Result of the manual sync operation",
+          "501": {
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6319,78 +6319,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v4/services/connectors/{id}/capabilities": {
-      "get": {
-        "tags": [
-          "Services"
-        ],
-        "summary": "Get the supported sync capabilities for a specific connector.",
-        "operationId": "Services_GetConnectorCapabilities",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "Connector ID",
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of supported data types",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SyncDataType"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": ""
           }
         }
       }

@@ -1,9 +1,9 @@
+using System.Collections.Generic;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.ServiceDiscovery;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
@@ -11,17 +11,15 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services;
+using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Dexcom.Services;
-using Nocturne.Connectors.FreeStyle.Services;
-using Nocturne.Connectors.Glooko.Services;
-using Nocturne.Connectors.MiniMed.Services;
-using Nocturne.Connectors.MyFitnessPal.Services;
-using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Dexcom;
+using Nocturne.Connectors.FreeStyle;
+using Nocturne.Connectors.Glooko;
+using Nocturne.Connectors.MyLife;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
@@ -68,6 +66,17 @@ builder.Configuration.AddJsonFile(
 
 // Ensure environment variables (injected by Aspire) take precedence over appsettings.json
 builder.Configuration.AddEnvironmentVariables();
+
+if (string.IsNullOrEmpty(builder.Configuration["NocturneApiUrl"]))
+{
+    var baseUrl = builder.Configuration["BaseUrl"];
+    if (!string.IsNullOrEmpty(baseUrl))
+    {
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?> { ["NocturneApiUrl"] = baseUrl }
+        );
+    }
+}
 
 // Configure Kestrel to allow larger request bodies for analytics endpoints
 // 90 days of demo data can exceed the 30MB default limit
@@ -249,62 +258,38 @@ builder.Services.AddScoped<IDataSourceService, DataSourceService>();
 // Deduplication service for linking records from multiple data sources
 builder.Services.AddScoped<IDeduplicationService, DeduplicationService>();
 
-// Connector sync service for triggering granular syncs
-builder.Services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
-
 // Secret encryption service - singleton since key derivation should happen once
 builder.Services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
 
 // Connector configuration service for runtime config and secrets management
 builder.Services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
 
-// HTTP client for connector sync operations
-// Connector sync calls can take a long time (multiple API calls to fetch data)
-// Timeouts are set to be less than the minimum sync interval (5 minutes) to prevent overlapping syncs
-builder
-    .Services.AddHttpClient(
-        "ConnectorSync",
-        client =>
-        {
-            // Allow up to 5 minutes for the entire sync operation
-            // This should be less than the minimum sync interval to prevent overlap
-            client.Timeout = TimeSpan.FromMinutes(5);
-        }
-    )
-    .AddResilienceHandler(
-        "ConnectorSyncResilience",
-        builder =>
-        {
-            // Total timeout for the sync operation (including retries)
-            // Must be <= HttpClient.Timeout to be effective
-            builder.AddTimeout(TimeSpan.FromMinutes(5));
+// Connector runtime services (single executable)
+builder.Services.AddBaseConnectorServices();
+builder.Services.AddSingleton<IConnectorPublisher, InProcessConnectorPublisher>();
+builder.Services.AddDexcomConnector(builder.Configuration);
+builder.Services.AddGlookoConnector(builder.Configuration);
+builder.Services.AddLibreLinkUpConnector(builder.Configuration);
+builder.Services.AddMyLifeConnector(builder.Configuration);
 
-            // Retry transient failures (but not timeouts - those should propagate)
-            builder.AddRetry(
-                new Microsoft.Extensions.Http.Resilience.HttpRetryStrategyOptions
-                {
-                    MaxRetryAttempts = 1, // Only 1 retry to stay within timeout budget
-                    Delay = TimeSpan.FromSeconds(3),
-                    BackoffType = Polly.DelayBackoffType.Constant,
-                    UseJitter = false,
-                    // Only retry on connection/network errors, not timeouts
-                    ShouldHandle = args =>
-                        ValueTask.FromResult(
-                            args.Outcome.Exception is HttpRequestException
-                                || args.Outcome.Result?.StatusCode
-                                    == System.Net.HttpStatusCode.ServiceUnavailable
-                                || args.Outcome.Result?.StatusCode
-                                    == System.Net.HttpStatusCode.BadGateway
-                                || args.Outcome.Result?.StatusCode
-                                    == System.Net.HttpStatusCode.GatewayTimeout
-                        ),
-                }
-            );
+static bool IsConnectorEnabled(IConfiguration configuration, string connectorName)
+{
+    var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
+    if (!section.Exists())
+        section = configuration.GetSection($"Connectors:{connectorName}");
 
-            // Per-attempt timeout (each individual request)
-            builder.AddTimeout(TimeSpan.FromMinutes(2));
-        }
-    );
+    return section.GetValue<bool>("Enabled");
+}
+
+if (IsConnectorEnabled(builder.Configuration, "Dexcom"))
+    builder.Services.AddHostedService<DexcomConnectorBackgroundService>();
+if (IsConnectorEnabled(builder.Configuration, "Glooko"))
+    builder.Services.AddHostedService<GlookoConnectorBackgroundService>();
+if (IsConnectorEnabled(builder.Configuration, "LibreLinkUp"))
+    builder.Services.AddHostedService<FreeStyleConnectorBackgroundService>();
+if (IsConnectorEnabled(builder.Configuration, "MyLife"))
+    builder.Services.AddHostedService<MyLifeConnectorBackgroundService>();
+
 
 // Configure JWT authentication
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName);
@@ -444,8 +429,7 @@ builder.Services.Configure<AnalyticsConfiguration>(
 // Register analytics services
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
-// Register connector health service with service discovery-enabled HTTP client
-builder.Services.AddHttpClient(ConnectorHealthService.HttpClientName).AddServiceDiscovery();
+// Register connector health service
 builder.Services.AddScoped<IConnectorHealthService, ConnectorHealthService>();
 
 // Register migration job service for data migration from Nightscout

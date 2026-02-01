@@ -1,4 +1,4 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Constants;
@@ -7,12 +7,12 @@ using Nocturne.Core.Models;
 namespace Nocturne.Connectors.MyLife.Mappers;
 
 /// <summary>
-/// Factory for creating StateSpan instances from MyLife events
+///     Factory for creating StateSpan instances from MyLife events
 /// </summary>
 internal static class MyLifeStateSpanFactory
 {
     /// <summary>
-    /// Creates a BasalDelivery StateSpan from a MyLife event
+    ///     Creates a BasalDelivery StateSpan from a MyLife event
     /// </summary>
     /// <param name="ev">The MyLife event</param>
     /// <param name="rate">The basal rate in U/h</param>
@@ -45,7 +45,7 @@ internal static class MyLifeStateSpanFactory
     }
 
     /// <summary>
-    /// Creates a BasalDelivery StateSpan with a suffix for unique identification
+    ///     Creates a BasalDelivery StateSpan with a suffix for unique identification
     /// </summary>
     internal static StateSpan CreateBasalDeliveryWithSuffix(
         MyLifeEvent ev,
@@ -54,10 +54,7 @@ internal static class MyLifeStateSpanFactory
         string suffix)
     {
         var stateSpan = CreateBasalDelivery(ev, rate, origin);
-        if (!string.IsNullOrWhiteSpace(suffix))
-        {
-            stateSpan.Id = $"{stateSpan.Id}-{suffix}";
-        }
+        if (!string.IsNullOrWhiteSpace(suffix)) stateSpan.Id = $"{stateSpan.Id}-{suffix}";
         return stateSpan;
     }
 }

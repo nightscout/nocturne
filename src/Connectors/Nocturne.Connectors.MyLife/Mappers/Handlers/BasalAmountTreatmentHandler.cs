@@ -1,4 +1,4 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
@@ -6,9 +6,9 @@ using Nocturne.Core.Models;
 namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
 
 /// <summary>
-/// Handler for MyLife Basal events (event ID 22) - Basal insulin amount delivered.
-/// These events report actual insulin delivery amounts, typically from non-loop pumps.
-/// Produces BasalDelivery StateSpans only - basal treatments are synthesized on-demand from v1-v3 endpoints.
+///     Handler for MyLife Basal events (event ID 22) - Basal insulin amount delivered.
+///     These events report actual insulin delivery amounts, typically from non-loop pumps.
+///     Produces BasalDelivery StateSpans only - basal treatments are synthesized on-demand from v1-v3 endpoints.
 /// </summary>
 internal sealed class BasalAmountTreatmentHandler : IMyLifeStateSpanHandler
 {
@@ -28,10 +28,7 @@ internal sealed class BasalAmountTreatmentHandler : IMyLifeStateSpanHandler
         // In typical MyLife data, these events happen once per hour or less frequently.
         // The actual rate calculation will need the duration from the next event.
 
-        if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var insulin))
-        {
-            return [];
-        }
+        if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var insulin)) return [];
 
         // Since these are typically hourly delivery amounts, we can estimate the rate
         // as equal to the insulin value (U delivered in ~1 hour = U/h)
@@ -44,10 +41,7 @@ internal sealed class BasalAmountTreatmentHandler : IMyLifeStateSpanHandler
         var origin = BasalDeliveryOrigin.Scheduled;
 
         // Check if rate is 0 (suspended)
-        if (estimatedRate <= 0)
-        {
-            origin = BasalDeliveryOrigin.Suspended;
-        }
+        if (estimatedRate <= 0) origin = BasalDeliveryOrigin.Suspended;
 
         var stateSpan = MyLifeStateSpanFactory.CreateBasalDelivery(ev, estimatedRate, origin);
         return [stateSpan];

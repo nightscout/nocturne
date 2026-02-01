@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Nocturne.Connectors.Core.Constants;
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
@@ -13,8 +13,8 @@ internal sealed class BolusTreatmentHandler : IMyLifeTreatmentHandler
     {
         return ev.EventTypeId
             is MyLifeEventTypeIds.BolusNormal
-                or MyLifeEventTypeIds.BolusSquare
-                or MyLifeEventTypeIds.BolusDual;
+            or MyLifeEventTypeIds.BolusSquare
+            or MyLifeEventTypeIds.BolusDual;
     }
 
     public IEnumerable<Treatment> Handle(MyLifeEvent ev, MyLifeTreatmentContext context)
@@ -27,9 +27,7 @@ internal sealed class BolusTreatmentHandler : IMyLifeTreatmentHandler
                 out var insulin
             )
         )
-        {
             return [];
-        }
 
         var isCalculated = MyLifeMapperHelpers.IsCalculatedBolus(info);
         var carbs = MyLifeMapperHelpers.ResolveBolusCarbs(info);
@@ -39,9 +37,7 @@ internal sealed class BolusTreatmentHandler : IMyLifeTreatmentHandler
                 out var matchedCarbs
             )
         )
-        {
             carbs = matchedCarbs;
-        }
 
         // Use consistent classification logic from shared TreatmentTypes
         // Classification rules:
@@ -64,13 +60,10 @@ internal sealed class BolusTreatmentHandler : IMyLifeTreatmentHandler
         {
             MyLifeEventTypeIds.BolusSquare => MyLifeBolusTypes.Square,
             MyLifeEventTypeIds.BolusDual => MyLifeBolusTypes.Dual,
-            _ => MyLifeBolusTypes.Normal,
+            _ => MyLifeBolusTypes.Normal
         };
 
-        if (carbs is > 0)
-        {
-            treatment.Carbs = carbs.Value;
-        }
+        if (carbs is > 0) treatment.Carbs = carbs.Value;
 
         if (isCalculated && info.HasValue)
         {
@@ -105,9 +98,7 @@ internal sealed class BolusTreatmentHandler : IMyLifeTreatmentHandler
                 out var duration
             )
         )
-        {
             treatment.Duration = duration;
-        }
 
         return [treatment];
     }

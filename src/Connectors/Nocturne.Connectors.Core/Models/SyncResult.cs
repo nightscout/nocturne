@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Nocturne.Connectors.Core.Models;
 
 public class SyncResult

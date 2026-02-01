@@ -1,4 +1,4 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
@@ -29,9 +29,7 @@ internal sealed class PrimingTreatmentHandler : IMyLifeTreatmentHandler
                 MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice),
                 MyLifeJsonKeys.PrimingAmount,
                 out var amount))
-        {
             treatment.Insulin = amount;
-        }
 
         var treatments = new List<Treatment>
         {

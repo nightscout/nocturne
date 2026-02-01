@@ -1,16 +1,16 @@
 using System.Security;
 using System.Text;
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
-using Nocturne.Connectors.MyLife.Constants;
+using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Models;
 
 namespace Nocturne.Connectors.MyLife.Services;
 
 public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> logger)
 {
-    private readonly HttpClient _httpClient = httpClient;
-    private readonly ILogger<MyLifeSoapClient> _logger = logger;
 
     public async Task<MyLifeLocation?> GetUserLocationAsync(string login, CancellationToken cancellationToken)
     {
@@ -72,9 +72,7 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
         if (string.IsNullOrWhiteSpace(response)) return null;
 
         var payload = ExtractSoapResult(response, "LoginResult");
-        if (string.IsNullOrWhiteSpace(payload)) return null;
-
-        return JsonSerializer.Deserialize<MyLifeLoginResult>(payload);
+        return string.IsNullOrWhiteSpace(payload) ? null : JsonSerializer.Deserialize<MyLifeLoginResult>(payload);
     }
 
     public async Task<IReadOnlyList<MyLifePatient>> SyncPatientListAsync(
@@ -156,12 +154,12 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
         request.Headers.Add("SOAPAction", action);
         request.Content = new StringContent(body, Encoding.UTF8, "text/xml");
 
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var response = await httpClient.SendAsync(request, cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (response.IsSuccessStatusCode) return content;
 
-        _logger.LogWarning("MyLife SOAP request failed {StatusCode}", response.StatusCode);
+        logger.LogWarning("MyLife SOAP request failed {StatusCode}", response.StatusCode);
         return string.Empty;
     }
 
@@ -173,9 +171,9 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
             var element = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == elementName);
             return element?.Value;
         }
-        catch (System.Xml.XmlException ex)
+        catch (XmlException ex)
         {
-            _logger.LogWarning(ex, "Failed to parse SOAP XML response for element {ElementName}", elementName);
+            logger.LogWarning(ex, "Failed to parse SOAP XML response for element {ElementName}", elementName);
             return null;
         }
     }
