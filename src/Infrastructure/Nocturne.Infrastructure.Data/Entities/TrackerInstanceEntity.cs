@@ -43,6 +43,12 @@ public class TrackerInstanceEntity
     public DateTime? CompletedAt { get; set; }
 
     /// <summary>
+    /// For Event mode: the scheduled datetime of the event
+    /// </summary>
+    [Column("scheduled_at")]
+    public DateTime? ScheduledAt { get; set; }
+
+    /// <summary>
     /// Optional: Treatment ID that started this tracker
     /// </summary>
     [Column("start_treatment_id")]
@@ -95,13 +101,15 @@ public class TrackerInstanceEntity
     public virtual TrackerDefinitionEntity Definition { get; set; } = null!;
 
     /// <summary>
-    /// Calculated: expected end time based on definition lifespan
+    /// Calculated: expected end time based on definition lifespan or scheduled time
     /// </summary>
     [NotMapped]
     public DateTime? ExpectedEndAt =>
-        Definition?.LifespanHours != null
-            ? StartedAt.AddHours(Definition.LifespanHours.Value)
-            : null;
+        Definition?.Mode == TrackerMode.Event
+            ? ScheduledAt
+            : Definition?.LifespanHours != null
+                ? StartedAt.AddHours(Definition.LifespanHours.Value)
+                : null;
 
     /// <summary>
     /// Calculated: is this tracker still active?
@@ -114,4 +122,14 @@ public class TrackerInstanceEntity
     /// </summary>
     [NotMapped]
     public double AgeHours => (DateTime.UtcNow - StartedAt).TotalHours;
+
+    /// <summary>
+    /// Calculated: hours relative to reference point (StartedAt for Duration, ScheduledAt for Event)
+    /// Negative means before the reference point (for Event mode)
+    /// </summary>
+    [NotMapped]
+    public double? HoursFromScheduled =>
+        ScheduledAt.HasValue
+            ? (DateTime.UtcNow - ScheduledAt.Value).TotalHours
+            : null;
 }

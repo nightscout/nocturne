@@ -49,6 +49,7 @@
     CompletionReason,
     DashboardVisibility,
     TrackerVisibility,
+    TrackerMode,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -100,6 +101,7 @@
     DashboardVisibility.Always
   );
   let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Public);
+  let formMode = $state<TrackerMode>(TrackerMode.Duration);
   let formStartEventType = $state<string | undefined>(undefined);
   let formCompletionEventType = $state<string | undefined>(undefined);
 
@@ -332,6 +334,7 @@
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
     formVisibility = TrackerVisibility.Public;
+    formMode = TrackerMode.Duration;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
     isDefinitionDialogOpen = true;
@@ -352,6 +355,7 @@
     formDashboardVisibility =
       def.dashboardVisibility ?? DashboardVisibility.Always;
     formVisibility = def.visibility ?? TrackerVisibility.Public;
+    formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
     isDefinitionDialogOpen = true;
@@ -368,11 +372,12 @@
         description: formDescription || undefined,
         category: formCategory,
         icon: formIcon,
-        lifespanHours: formLifespanHours,
+        lifespanHours: formMode === TrackerMode.Duration ? formLifespanHours : undefined,
         notificationThresholds: notificationThresholds,
         isFavorite: formIsFavorite,
         dashboardVisibility: formDashboardVisibility,
         visibility: formVisibility,
+        mode: formMode,
         startEventType: formStartEventType || undefined,
         completionEventType: formCompletionEventType || undefined,
       };
@@ -930,15 +935,51 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="lifespan">Expected Lifespan</Label>
-        <DurationInput
-          id="lifespan"
-          bind:value={formLifespanHours}
-          placeholder="e.g., 10x24 or 10d"
-        />
+        <Label>Tracker Mode</Label>
+        <Select.Root type="single" bind:value={formMode}>
+          <Select.Trigger>
+            {#if formMode === TrackerMode.Duration}
+              Duration - runs for a time period
+            {:else}
+              Event - scheduled for specific datetime
+            {/if}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item
+              value={TrackerMode.Duration}
+              label="Duration - runs for a time period"
+            />
+            <Select.Item
+              value={TrackerMode.Event}
+              label="Event - scheduled for specific datetime"
+            />
+          </Select.Content>
+        </Select.Root>
+        <p class="text-xs text-muted-foreground">
+          {#if formMode === TrackerMode.Duration}
+            Duration trackers run from a start time for a specified lifespan.
+          {:else}
+            Event trackers are scheduled for a specific date and time.
+          {/if}
+        </p>
       </div>
 
-      <TrackerNotificationEditor bind:notifications={formNotifications} />
+      {#if formMode === TrackerMode.Duration}
+        <div class="space-y-2">
+          <Label for="lifespan">Expected Lifespan</Label>
+          <DurationInput
+            id="lifespan"
+            bind:value={formLifespanHours}
+            placeholder="e.g., 10x24 or 10d"
+          />
+        </div>
+      {/if}
+
+      <TrackerNotificationEditor
+        bind:notifications={formNotifications}
+        mode={formMode === TrackerMode.Duration ? "Duration" : "Event"}
+        lifespanHours={formMode === TrackerMode.Duration ? formLifespanHours : undefined}
+      />
 
       <div class="space-y-2">
         <Label for="dashboardVisibility">Dashboard Visibility</Label>

@@ -406,7 +406,11 @@ msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
+#: src/lib/components/trackers/tracker-notification-editor.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/components/ui/duration-input/duration-input.svelte
+#: src/lib/components/ui/duration-input/duration-input.svelte
+#: src/routes/settings/trackers/+page.svelte
 msgid "Duration"
 msgstr ""
 
@@ -4846,9 +4850,8 @@ msgstr ""
 msgid "Remove notification"
 msgstr ""
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "Notifications trigger when tracker age exceeds the specified hours."
-msgstr ""
+#~ msgid "Notifications trigger when tracker age exceeds the specified hours."
+#~ msgstr ""
 
 #. placeholder {0}: definition?.name ?? "Tracker"
 #: src/lib/components/trackers/TrackerStartDialog.svelte
@@ -4890,7 +4893,6 @@ msgstr ""
 msgid "Triggering in"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "<0/> Start"
 msgstr ""
@@ -8763,9 +8765,7 @@ msgstr ""
 msgid "<0/> Back to Reports"
 msgstr ""
 
-#. placeholder {0}: (computedHours / 24).toFixed(1)
 #. placeholder {0}: dayCount
-#: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/routes/reports/site-change-impact/+page.svelte
 msgid "({0} days)"
 msgstr ""
@@ -11458,9 +11458,8 @@ msgstr ""
 msgid "<0/> or <1/> — weeks to hours"
 msgstr ""
 
-#: src/lib/components/ui/duration-input/duration-input.svelte
-msgid "= <0/> hours <1/>"
-msgstr ""
+#~ msgid "= <0/> hours <1/>"
+#~ msgstr ""
 
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Invalid format. Try: 168, 7x24, 7d, or 1w"
@@ -14341,6 +14340,7 @@ msgstr ""
 
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/trackers/tracker-notification-editor.svelte
 msgid "Hours"
 msgstr ""
 
@@ -14859,4 +14859,79 @@ msgstr ""
 #. placeholder {0}: position
 #: src/lib/components/clock-builder/DropZone.svelte
 msgid "New row at {0}"
+msgstr ""
+
+#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/duration-input/duration-input.svelte
+#: src/lib/components/ui/duration-input/duration-input.svelte
+#: src/routes/settings/trackers/+page.svelte
+msgid "Event"
+msgstr ""
+
+#: src/lib/components/trackers/tracker-notification-editor.svelte
+msgid "Negative = before event, Positive = after event."
+msgstr ""
+
+#: src/lib/components/trackers/tracker-notification-editor.svelte
+msgid "Positive = after start, Negative = before expiration."
+msgstr ""
+
+#: src/lib/components/trackers/TrackerStartDialog.svelte
+msgid "Scheduled For"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerStartDialog.svelte
+msgid "When is this event scheduled?"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerStartDialog.svelte
+msgid "Schedule"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerStartDialog.svelte
+msgid "Start"
+msgstr ""
+
+#: src/routes/settings/trackers/+page.svelte
+msgid "Tracker Mode"
+msgstr ""
+
+#: src/routes/settings/trackers/+page.svelte
+#: src/routes/settings/trackers/+page.svelte
+msgid "Duration - runs for a time period"
+msgstr ""
+
+#: src/routes/settings/trackers/+page.svelte
+#: src/routes/settings/trackers/+page.svelte
+msgid "Event - scheduled for specific datetime"
+msgstr ""
+
+#: src/routes/settings/trackers/+page.svelte
+msgid "Duration trackers run from a start time for a specified lifespan."
+msgstr ""
+
+#: src/routes/settings/trackers/+page.svelte
+msgid "Event trackers are scheduled for a specific date and time."
+msgstr ""
+
+#: src/lib/components/ui/duration-input/duration-input.svelte
+msgid "<0/> or <1/> — before expiration/event"
+msgstr ""
+
+#: src/lib/components/ui/duration-input/duration-input.svelte
+msgid "= <0/> before event"
+msgstr ""
+
+#: src/lib/components/ui/duration-input/duration-input.svelte
+msgid "= <0/> after event"
+msgstr ""
+
+#. placeholder {0}: formatHours(Math.abs(computedHours))
+#: src/lib/components/ui/duration-input/duration-input.svelte
+msgid "({0} before expiration)"
+msgstr ""
+
+#: src/lib/components/ui/duration-input/duration-input.svelte
+msgid "Exceeds tracker lifespan"
 msgstr ""

@@ -23902,6 +23902,14 @@
             "description": "Event type to create when tracker is completed (for Nightscout compatibility)",
             "nullable": true
           },
+          "mode": {
+            "description": "Tracker mode: Duration or Event",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerMode"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -24021,6 +24029,18 @@
           "RoleRestricted"
         ]
       },
+      "TrackerMode": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Duration",
+          "Event"
+        ],
+        "enum": [
+          "Duration",
+          "Event"
+        ]
+      },
       "CreateTrackerDefinitionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -24094,6 +24114,14 @@
             "type": "string",
             "description": "Event type to create when tracker is completed (for Nightscout compatibility)",
             "nullable": true
+          },
+          "mode": {
+            "description": "Tracker mode: Duration (time-based) or Event (scheduled datetime)",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerMode"
+              }
+            ]
           }
         }
       },
@@ -24220,6 +24248,15 @@
             "type": "string",
             "description": "Event type to create when tracker is completed (for Nightscout compatibility)",
             "nullable": true
+          },
+          "mode": {
+            "description": "Tracker mode: Duration (time-based) or Event (scheduled datetime)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerMode"
+              }
+            ]
           }
         }
       },
@@ -24254,6 +24291,11 @@
             "nullable": true
           },
           "expectedEndAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scheduledAt": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -24348,6 +24390,12 @@
           "startedAt": {
             "type": "string",
             "description": "Optional custom start time for backdating. Defaults to now if not provided.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scheduledAt": {
+            "type": "string",
+            "description": "For Event mode: the scheduled datetime of the event",
             "format": "date-time",
             "nullable": true
           }

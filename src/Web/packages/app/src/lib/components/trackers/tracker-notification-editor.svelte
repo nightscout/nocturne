@@ -21,9 +21,18 @@
     notifications?: TrackerNotification[];
     /** Additional CSS classes */
     class?: string;
+    /** Tracker mode for display formatting */
+    mode?: "Duration" | "Event";
+    /** Lifespan hours for negative threshold validation (Duration mode only) */
+    lifespanHours?: number | undefined;
   }
 
-  let { notifications = $bindable([]), class: className }: Props = $props();
+  let {
+    notifications = $bindable([]),
+    class: className,
+    mode = "Duration",
+    lifespanHours,
+  }: Props = $props();
 
   const urgencyOptions: {
     value: NotificationUrgency;
@@ -129,12 +138,14 @@
 
           <div class="flex-shrink-0 w-36">
             <Label class="text-xs text-muted-foreground mb-1 block">
-              After (hours)
+              {mode === "Event" ? "Hours" : "After (hours)"}
             </Label>
             <DurationInput
               value={notification.hours}
               onchange={(v) => updateNotification(i, "hours", v)}
-              placeholder="e.g., 7x24"
+              placeholder="e.g., 7x24 or -24"
+              {mode}
+              {lifespanHours}
             />
           </div>
 
@@ -169,7 +180,11 @@
 
   {#if notifications.length > 0}
     <p class="text-xs text-muted-foreground">
-      Notifications trigger when tracker age exceeds the specified hours.
+      {#if mode === "Event"}
+        Negative = before event, Positive = after event.
+      {:else}
+        Positive = after start, Negative = before expiration.
+      {/if}
     </p>
   {/if}
 </div>

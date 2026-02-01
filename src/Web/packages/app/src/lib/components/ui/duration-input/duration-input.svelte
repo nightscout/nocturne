@@ -18,6 +18,10 @@
     disabled?: boolean;
     /** Callback when value changes (alternative to bind:value) */
     onchange?: (value: number | undefined) => void;
+    /** Tracker mode for display formatting */
+    mode?: "Duration" | "Event";
+    /** Lifespan hours for negative threshold validation (Duration mode only) */
+    lifespanHours?: number | undefined;
   }
 
   let {
@@ -27,6 +31,8 @@
     id,
     disabled = false,
     onchange,
+    mode = "Duration",
+    lifespanHours,
   }: Props = $props();
 
   // Internal state for the text input
@@ -41,50 +47,65 @@
   });
 
   /**
-   * Parse duration expression and return hours Supports:
+   * Parse duration expression and return hours. Supports:
    *
-   * - Plain numbers: 168 → 168
+   * - Plain numbers: 168 → 168, -24 → -24
    * - Multiplication: 7x24, 7*24, 7 x 24, 7 * 24 → 168
-   * - Days: 7d, 7 days, 7 day → 168
-   * - Weeks: 1w, 1 week, 1 weeks → 168
+   * - Days: 7d, 7 days, 7 day → 168, -2d → -48
+   * - Weeks: 1w, 1 week, 1 weeks → 168, -1w → -168
+   * - Hours explicit: 168h, 168 hours, -24h → -24
    */
   function parseExpression(expr: string): number | null {
     if (!expr || expr.trim() === "") return null;
 
     const trimmed = expr.trim().toLowerCase();
 
-    // Plain number
-    if (/^\d+(\.\d+)?$/.test(trimmed)) {
-      return parseFloat(trimmed);
-    }
+    // Check for negative prefix
+    const isNegative = trimmed.startsWith("-");
+    const absExpr = isNegative ? trimmed.slice(1) : trimmed;
 
+    let result: number | null = null;
+
+    // Plain number
+    if (/^\d+(\.\d+)?$/.test(absExpr)) {
+      result = parseFloat(absExpr);
+    }
     // Multiplication expression: 7x24, 7*24, 7 x 24, 7 * 24
-    const multiplyMatch = trimmed.match(
-      /^(\d+(?:\.\d+)?)\s*[x*×]\s*(\d+(?:\.\d+)?)$/
-    );
-    if (multiplyMatch) {
-      return parseFloat(multiplyMatch[1]) * parseFloat(multiplyMatch[2]);
+    else {
+      const multiplyMatch = absExpr.match(
+        /^(\d+(?:\.\d+)?)\s*[x*×]\s*(\d+(?:\.\d+)?)$/
+      );
+      if (multiplyMatch) {
+        result = parseFloat(multiplyMatch[1]) * parseFloat(multiplyMatch[2]);
+      }
     }
 
     // Days: 7d, 7 days, 7day
-    const daysMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*d(?:ays?)?$/);
-    if (daysMatch) {
-      return parseFloat(daysMatch[1]) * 24;
+    if (result === null) {
+      const daysMatch = absExpr.match(/^(\d+(?:\.\d+)?)\s*d(?:ays?)?$/);
+      if (daysMatch) {
+        result = parseFloat(daysMatch[1]) * 24;
+      }
     }
 
     // Weeks: 1w, 1 week, 1weeks
-    const weeksMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*w(?:eeks?)?$/);
-    if (weeksMatch) {
-      return parseFloat(weeksMatch[1]) * 24 * 7;
+    if (result === null) {
+      const weeksMatch = absExpr.match(/^(\d+(?:\.\d+)?)\s*w(?:eeks?)?$/);
+      if (weeksMatch) {
+        result = parseFloat(weeksMatch[1]) * 24 * 7;
+      }
     }
 
     // Hours explicit: 168h, 168 hours
-    const hoursMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?)?$/);
-    if (hoursMatch) {
-      return parseFloat(hoursMatch[1]);
+    if (result === null) {
+      const hoursMatch = absExpr.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?)?$/);
+      if (hoursMatch) {
+        result = parseFloat(hoursMatch[1]);
+      }
     }
 
-    return null;
+    if (result === null) return null;
+    return isNegative ? -result : result;
   }
 
   function handleInput() {
@@ -102,6 +123,34 @@
     }
   }
 
+  /**
+   * Format hours with smart day/hour display
+   * <= 48 hours: show hours only
+   * < 360 hours (15 days): show days + hours
+   * >= 360 hours: show days only
+   */
+  function formatHours(hours: number): string {
+    const absHours = Math.abs(hours);
+
+    if (absHours <= 48) {
+      return `${absHours} hours`;
+    }
+
+    const days = Math.floor(absHours / 24);
+    const remainingHours = Math.floor(absHours % 24);
+
+    if (absHours >= 360) {
+      // 15+ days: show days only
+      return `${days} days`;
+    }
+
+    // Show days + hours (omit hours if 0)
+    if (remainingHours === 0) {
+      return `${days} days`;
+    }
+    return `${days} days ${remainingHours} hours`;
+  }
+
   // Computed display value
   const computedHours = $derived(value !== undefined ? value : null);
   const showComputed = $derived(
@@ -109,6 +158,24 @@
       inputValue.trim() !== "" &&
       inputValue.trim() !== String(computedHours)
   );
+
+  // Validation for negative thresholds in Duration mode
+  const exceedsLifespan = $derived(
+    mode === "Duration" &&
+      value !== undefined &&
+      value < 0 &&
+      lifespanHours !== undefined &&
+      Math.abs(value) >= lifespanHours
+  );
+
+  // Effective hours for Duration mode negative thresholds
+  const effectiveHours = $derived(() => {
+    if (value === undefined) return null;
+    if (mode === "Event") return null; // Event mode doesn't need this
+    if (value >= 0) return null; // Positive values don't need effective calculation
+    if (lifespanHours === undefined) return null;
+    return lifespanHours + value;
+  });
 </script>
 
 <div class="space-y-1">
@@ -163,22 +230,39 @@
             <code class="bg-muted px-1 rounded">1 week</code>
             — weeks to hours
           </li>
+          <li>
+            <code class="bg-muted px-1 rounded">-24</code>
+            or
+            <code class="bg-muted px-1 rounded">-2d</code>
+            — before expiration/event
+          </li>
         </ul>
       </Tooltip.Content>
     </Tooltip.Root>
   </div>
-  {#if showComputed}
+  {#if showComputed && computedHours !== null}
     <p class="text-sm text-muted-foreground px-1">
-      = <span class="font-medium">{computedHours}</span>
-      hours
-      {#if computedHours && computedHours >= 24}
+      {#if mode === "Event"}
+        {#if computedHours < 0}
+          = <span class="font-medium">{formatHours(computedHours)}</span> before event
+        {:else}
+          = <span class="font-medium">{formatHours(computedHours)}</span> after event
+        {/if}
+      {:else if computedHours < 0 && lifespanHours !== undefined}
+        = <span class="font-medium">{formatHours(effectiveHours() ?? 0)}</span>
         <span class="text-muted-foreground/70">
-          ({(computedHours / 24).toFixed(1)} days)
+          ({formatHours(Math.abs(computedHours))} before expiration)
         </span>
+      {:else}
+        = <span class="font-medium">{formatHours(computedHours)}</span>
       {/if}
     </p>
   {/if}
-  {#if parseError}
+  {#if exceedsLifespan}
+    <p class="text-sm text-destructive px-1">
+      Exceeds tracker lifespan
+    </p>
+  {:else if parseError}
     <p class="text-sm text-destructive px-1">
       Invalid format. Try: 168, 7x24, 7d, or 1w
     </p>
