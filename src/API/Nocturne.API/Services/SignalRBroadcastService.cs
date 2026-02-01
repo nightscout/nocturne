@@ -389,9 +389,15 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 notification.Id
             );
 
+            // Broadcast to user-specific group for multi-user scenarios
             var userGroup = $"user-{userId}";
             await _dataHubContext
                 .Clients.Group(userGroup)
+                .SendCoreAsync("notificationCreated", new object[] { notification });
+
+            // Also broadcast to authorized group for single-user deployments and bridge relay
+            await _dataHubContext
+                .Clients.Group("authorized")
                 .SendCoreAsync("notificationCreated", new object[] { notification });
 
             _logger.LogDebug("Notification created broadcast completed for user {UserId}", userId);
@@ -420,8 +426,15 @@ public class SignalRBroadcastService : ISignalRBroadcastService
 
             var userGroup = $"user-{userId}";
             var payload = new { notification, archiveReason };
+
+            // Broadcast to user-specific group for multi-user scenarios
             await _dataHubContext
                 .Clients.Group(userGroup)
+                .SendCoreAsync("notificationArchived", new object[] { payload });
+
+            // Also broadcast to authorized group for single-user deployments and bridge relay
+            await _dataHubContext
+                .Clients.Group("authorized")
                 .SendCoreAsync("notificationArchived", new object[] { payload });
 
             _logger.LogDebug("Notification archived broadcast completed for user {UserId}", userId);
@@ -448,8 +461,15 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             );
 
             var userGroup = $"user-{userId}";
+
+            // Broadcast to user-specific group for multi-user scenarios
             await _dataHubContext
                 .Clients.Group(userGroup)
+                .SendCoreAsync("notificationUpdated", new object[] { notification });
+
+            // Also broadcast to authorized group for single-user deployments and bridge relay
+            await _dataHubContext
+                .Clients.Group("authorized")
                 .SendCoreAsync("notificationUpdated", new object[] { notification });
 
             _logger.LogDebug("Notification updated broadcast completed for user {UserId}", userId);

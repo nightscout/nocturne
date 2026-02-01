@@ -9,6 +9,7 @@ import MessageTranslator from "./message-translator.js";
 
 interface SignalRConfig {
   hubUrl: string;
+  alarmHubUrl?: string;
   reconnectAttempts: number;
   reconnectDelay: number;
   maxReconnectDelay: number;
@@ -24,12 +25,14 @@ class SignalRClient {
   private reconnectDelay: number;
   private maxReconnectDelay: number;
   private hubUrl: string;
+  private alarmHubUrl?: string;
   private apiSecret: string;
   private isConnecting: boolean = false;
 
   constructor(messageHandler: MessageTranslator, config: SignalRConfig) {
     this.messageHandler = messageHandler;
     this.hubUrl = config.hubUrl;
+    this.alarmHubUrl = config.alarmHubUrl;
     this.maxReconnectAttempts = config.reconnectAttempts;
     this.reconnectDelay = config.reconnectDelay;
     this.maxReconnectDelay = config.maxReconnectDelay;
@@ -45,85 +48,58 @@ class SignalRClient {
     this.isConnecting = true;
 
     try {
-      // Derive alarm hub URL from data hub URL
-      // e.g., http://localhost:5000/hubs/data -> http://localhost:5000/hubs/alarms
-      const alarmHubUrl = this.hubUrl.replace("/hubs/data", "/hubs/alarms");
+      this.dataConnection = this.buildConnection(this.hubUrl);
+      this.setupDataEventHandlers();
 
-      // Create Data Hub connection
-      this.dataConnection = new HubConnectionBuilder()
-        .withUrl(this.hubUrl)
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (retryContext) => {
-            const delay = Math.min(
-              this.reconnectDelay *
-                Math.pow(2, retryContext.previousRetryCount),
-              this.maxReconnectDelay,
-            );
-            logger.info(
-              `SignalR DataHub reconnect attempt ${
-                retryContext.previousRetryCount + 1
-              } in ${delay}ms`,
-            );
-            return delay;
-          },
-        })
-        .configureLogging(LogLevel.Information)
-        .build();
+      await this.dataConnection.start();
+      logger.info("SignalR DataHub connection established");
 
-      // Create Alarm Hub connection
-      this.alarmConnection = new HubConnectionBuilder()
-        .withUrl(alarmHubUrl)
-        .withAutomaticReconnect({
-          nextRetryDelayInMilliseconds: (retryContext) => {
-            const delay = Math.min(
-              this.reconnectDelay *
-                Math.pow(2, retryContext.previousRetryCount),
-              this.maxReconnectDelay,
-            );
-            logger.info(
-              `SignalR AlarmHub reconnect attempt ${
-                retryContext.previousRetryCount + 1
-              } in ${delay}ms`,
-            );
-            return delay;
-          },
-        })
-        .configureLogging(LogLevel.Information)
-        .build();
-
-      // Set up event handlers for both hubs
-      this.setupDataHubEventHandlers();
-      this.setupAlarmHubEventHandlers();
-
-      // Start both connections
-      await Promise.all([
-        this.dataConnection.start(),
-        this.alarmConnection.start(),
-      ]);
-      logger.info("SignalR connections established (DataHub + AlarmHub)");
-
-      // Authenticate with the data hub to join the "authorized" group
       await this.authenticateWithDataHub();
-
-      // Subscribe to storage collections to receive create/update/delete events
       await this.subscribeToStorageCollections();
 
-      // Subscribe to alarm notifications
-      await this.subscribeToAlarms();
+      if (this.alarmHubUrl) {
+        this.alarmConnection = this.buildConnection(this.alarmHubUrl);
+        this.setupAlarmEventHandlers();
+
+        await this.alarmConnection.start();
+        logger.info("SignalR AlarmHub connection established");
+
+        await this.subscribeToAlarmHub();
+      }
 
       this.reconnectAttempts = 0;
-      this.isConnecting = false;
     } catch (error) {
-      logger.error("Failed to connect to SignalR hubs:", error);
-      this.isConnecting = false;
+      logger.error("Failed to connect to SignalR hub:", error);
       await this.handleReconnect();
+    } finally {
+      this.isConnecting = false;
     }
   }
 
-  private setupDataHubEventHandlers(): void {
+  private buildConnection(hubUrl: string): HubConnection {
+    return new HubConnectionBuilder()
+      .withUrl(hubUrl)
+      .withAutomaticReconnect({
+        nextRetryDelayInMilliseconds: (retryContext) => {
+          const delay = Math.min(
+            this.reconnectDelay * Math.pow(2, retryContext.previousRetryCount),
+            this.maxReconnectDelay,
+          );
+          logger.info(
+            `SignalR reconnect attempt ${
+              retryContext.previousRetryCount + 1
+            } in ${delay}ms`,
+          );
+          return delay;
+        },
+      })
+      .configureLogging(LogLevel.Information)
+      .build();
+  }
+
+  private setupDataEventHandlers(): void {
     if (!this.dataConnection) return;
 
-    // Handle connection state changes
     this.dataConnection.onclose(() => {
       logger.warn("SignalR DataHub connection closed");
       this.handleReconnect();
@@ -137,15 +113,23 @@ class SignalRClient {
       logger.info("SignalR DataHub connection reestablished");
       this.reconnectAttempts = 0;
 
-      // Re-authenticate and re-subscribe after reconnection
       await this.authenticateWithDataHub();
       await this.subscribeToStorageCollections();
     });
 
-    // Handle incoming messages from DataHub
     this.dataConnection.on("dataUpdate", (data: any) => {
       logger.debug("Received dataUpdate from SignalR:", data);
       this.messageHandler.handleDataUpdate(data);
+    });
+
+    this.dataConnection.on("announcement", (message: any) => {
+      logger.debug("Received announcement from SignalR:", message);
+      this.messageHandler.handleAnnouncement(message);
+    });
+
+    this.dataConnection.on("notification", (notification: any) => {
+      logger.debug("Received notification from SignalR:", notification);
+      this.messageHandler.handleNotification(notification);
     });
 
     this.dataConnection.on("statusUpdate", (status: any) => {
@@ -153,8 +137,6 @@ class SignalRClient {
       this.messageHandler.handleStatusUpdate(status);
     });
 
-    // Handle storage events (create, update, delete)
-    // These method names must match the WebSocketEvents enum in C#
     this.dataConnection.on("create", (data: any) => {
       logger.debug("Received create from SignalR:", data);
       this.messageHandler.handleStorageCreate(data);
@@ -187,16 +169,12 @@ class SignalRClient {
     });
   }
 
-  private setupAlarmHubEventHandlers(): void {
+  private setupAlarmEventHandlers(): void {
     if (!this.alarmConnection) return;
 
-    // Handle connection state changes
     this.alarmConnection.onclose(() => {
       logger.warn("SignalR AlarmHub connection closed");
-      // Only trigger reconnect if data connection is also down
-      if (!this.dataConnection || this.dataConnection.state !== "Connected") {
-        this.handleReconnect();
-      }
+      this.handleReconnect();
     });
 
     this.alarmConnection.onreconnecting(() => {
@@ -205,35 +183,24 @@ class SignalRClient {
 
     this.alarmConnection.onreconnected(async () => {
       logger.info("SignalR AlarmHub connection reestablished");
-      // Re-subscribe to alarms after reconnection
-      await this.subscribeToAlarms();
+      this.reconnectAttempts = 0;
+
+      await this.subscribeToAlarmHub();
     });
 
-    // Handle alarm events from AlarmHub
     this.alarmConnection.on("alarm", (alarm: any) => {
-      logger.debug("Received alarm from SignalR AlarmHub:", alarm);
+      logger.debug("Received alarm from SignalR:", alarm);
       this.messageHandler.handleAlarm(alarm);
     });
 
     this.alarmConnection.on("urgent_alarm", (alarm: any) => {
-      logger.debug("Received urgent_alarm from SignalR AlarmHub:", alarm);
-      // Mark as urgent level for the message translator
-      this.messageHandler.handleAlarm({ ...alarm, level: "urgent" });
+      logger.debug("Received urgent_alarm from SignalR:", alarm);
+      this.messageHandler.handleAlarm(alarm);
     });
 
     this.alarmConnection.on("clear_alarm", () => {
-      logger.debug("Received clear_alarm from SignalR AlarmHub");
+      logger.debug("Received clear_alarm from SignalR");
       this.messageHandler.handleClearAlarm();
-    });
-
-    this.alarmConnection.on("announcement", (message: any) => {
-      logger.debug("Received announcement from SignalR AlarmHub:", message);
-      this.messageHandler.handleAnnouncement(message);
-    });
-
-    this.alarmConnection.on("notification", (notification: any) => {
-      logger.debug("Received notification from SignalR AlarmHub:", notification);
-      this.messageHandler.handleNotification(notification);
     });
   }
 
@@ -245,7 +212,6 @@ class SignalRClient {
       );
     }
     try {
-      // Hash the API secret with SHA1 to match Nightscout authentication
       const secretHash = createHash("sha1")
         .update(this.apiSecret)
         .digest("hex")
@@ -274,7 +240,6 @@ class SignalRClient {
     if (!this.dataConnection) return;
 
     try {
-      // Subscribe to all storage collections
       const collections = ["entries", "treatments", "devicestatus", "profiles"];
 
       logger.info("Subscribing to storage collections:", collections);
@@ -298,7 +263,7 @@ class SignalRClient {
     }
   }
 
-  private async subscribeToAlarms(): Promise<void> {
+  private async subscribeToAlarmHub(): Promise<void> {
     if (!this.alarmConnection) return;
     if (!this.apiSecret) {
       throw new Error(
@@ -307,18 +272,15 @@ class SignalRClient {
     }
 
     try {
-      // Hash the API secret with SHA1 to match Nightscout authentication
       const secretHash = createHash("sha1")
         .update(this.apiSecret)
         .digest("hex")
         .toLowerCase();
 
-      const subscribeData = {
-        Secret: secretHash,
-      };
-
       logger.info("Subscribing to SignalR AlarmHub...");
-      const subscribeResult = await this.alarmConnection.invoke("Subscribe", subscribeData);
+      const subscribeResult = await this.alarmConnection.invoke("Subscribe", {
+        secret: secretHash,
+      });
 
       if (subscribeResult?.success) {
         logger.info("Successfully subscribed to SignalR AlarmHub");
@@ -354,34 +316,33 @@ class SignalRClient {
   }
 
   async disconnect(): Promise<void> {
-    const disconnectPromises: Promise<void>[] = [];
-
     if (this.dataConnection) {
-      disconnectPromises.push(
-        this.dataConnection.stop().then(() => {
-          logger.info("SignalR DataHub connection stopped");
-        }).catch((error) => {
-          logger.error("Error stopping SignalR DataHub connection:", error);
-        })
-      );
+      try {
+        await this.dataConnection.stop();
+        logger.info("SignalR DataHub connection stopped");
+      } catch (error) {
+        logger.error("Error stopping SignalR DataHub connection:", error);
+      }
     }
 
     if (this.alarmConnection) {
-      disconnectPromises.push(
-        this.alarmConnection.stop().then(() => {
-          logger.info("SignalR AlarmHub connection stopped");
-        }).catch((error) => {
-          logger.error("Error stopping SignalR AlarmHub connection:", error);
-        })
-      );
+      try {
+        await this.alarmConnection.stop();
+        logger.info("SignalR AlarmHub connection stopped");
+      } catch (error) {
+        logger.error("Error stopping SignalR AlarmHub connection:", error);
+      }
     }
-
-    await Promise.all(disconnectPromises);
   }
 
   isConnected(): boolean {
-    const dataConnected = this.dataConnection !== null && this.dataConnection.state === "Connected";
-    const alarmConnected = this.alarmConnection !== null && this.alarmConnection.state === "Connected";
+    const dataConnected =
+      this.dataConnection !== null && this.dataConnection.state === "Connected";
+    const alarmConnected =
+      !this.alarmHubUrl ||
+      (this.alarmConnection !== null &&
+        this.alarmConnection.state === "Connected");
+
     return dataConnected && alarmConnected;
   }
 }

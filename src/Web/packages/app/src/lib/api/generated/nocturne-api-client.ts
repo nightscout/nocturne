@@ -4784,6 +4784,92 @@ export class DebugClient {
         return Promise.resolve<InAppNotificationDto>(null as any);
     }
 
+    /**
+     * Simple test endpoint for creating in-app notifications without authentication
+    Creates a test notification to verify the real-time notification system is working
+     * @param type (optional) Notification type (info, warn, hazard, urgent)
+     * @param title (optional) Optional notification title
+     * @return Notification created and broadcast successfully
+     */
+    createSimpleTestNotification(type?: string | undefined, title?: string | null | undefined, signal?: AbortSignal): Promise<InAppNotificationDto> {
+        let url_ = this.baseUrl + "/api/v4/debug/test/notification?";
+        if (type === null)
+            throw new globalThis.Error("The parameter 'type' cannot be null.");
+        else if (type !== undefined)
+            url_ += "type=" + encodeURIComponent("" + type) + "&";
+        if (title !== undefined && title !== null)
+            url_ += "title=" + encodeURIComponent("" + title) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateSimpleTestNotification(_response);
+        });
+    }
+
+    protected processCreateSimpleTestNotification(response: Response): Promise<InAppNotificationDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InAppNotificationDto;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InAppNotificationDto>(null as any);
+    }
+
+    /**
+     * Test endpoint to broadcast a raw SignalR notification event
+    This bypasses the database and directly tests the SignalR broadcast
+     * @return Confirmation of broadcast
+     */
+    testSignalRBroadcast(signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v4/debug/test/signalr-broadcast";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTestSignalRBroadcast(_response);
+        });
+    }
+
+    protected processTestSignalRBroadcast(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
     testPostgreSqlConnection(signal?: AbortSignal): Promise<FileResponse> {
         let url_ = this.baseUrl + "/api/v1/Debug/postgresql-test";
         url_ = url_.replace(/[?&]$/, "");
@@ -12334,6 +12420,151 @@ export class UserPreferencesClient {
             });
         }
         return Promise.resolve<UserPreferencesResponse>(null as any);
+    }
+}
+
+export class WebhookSettingsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    getWebhookSettings(signal?: AbortSignal): Promise<WebhookNotificationSettings> {
+        let url_ = this.baseUrl + "/api/v4/ui-settings/notifications/webhooks";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetWebhookSettings(_response);
+        });
+    }
+
+    protected processGetWebhookSettings(response: Response): Promise<WebhookNotificationSettings> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WebhookNotificationSettings;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<WebhookNotificationSettings>(null as any);
+    }
+
+    saveWebhookSettings(settings: WebhookNotificationSettings, signal?: AbortSignal): Promise<WebhookNotificationSettings> {
+        let url_ = this.baseUrl + "/api/v4/ui-settings/notifications/webhooks";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(settings);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSaveWebhookSettings(_response);
+        });
+    }
+
+    protected processSaveWebhookSettings(response: Response): Promise<WebhookNotificationSettings> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WebhookNotificationSettings;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<WebhookNotificationSettings>(null as any);
+    }
+
+    testWebhookSettings(request: WebhookTestRequest, signal?: AbortSignal): Promise<WebhookTestResult> {
+        let url_ = this.baseUrl + "/api/v4/ui-settings/notifications/webhooks/test";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTestWebhookSettings(_response);
+        });
+    }
+
+    protected processTestWebhookSettings(response: Response): Promise<WebhookTestResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WebhookTestResult;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<WebhookTestResult>(null as any);
     }
 }
 
@@ -20992,6 +21223,24 @@ export interface UserPreferencesResponse {
 export interface UpdateUserPreferencesRequest {
     /** User's preferred language code (e.g., "en", "fr", "de") */
     preferredLanguage?: string | undefined;
+}
+
+export interface WebhookNotificationSettings {
+    enabled?: boolean;
+    urls?: string[];
+    secret?: string | undefined;
+    hasSecret?: boolean;
+    signatureVersion?: string;
+}
+
+export interface WebhookTestResult {
+    ok?: boolean;
+    failedUrls?: string[];
+}
+
+export interface WebhookTestRequest {
+    urls?: string[];
+    secret?: string | undefined;
 }
 
 export interface V3CollectionResponseOfObject {

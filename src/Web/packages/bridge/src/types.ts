@@ -4,6 +4,7 @@ import { Server as SocketIOServerClass } from 'socket.io';
 export interface BridgeConfig {
   signalr: {
     hubUrl: string;
+    alarmHubUrl?: string;
     reconnectAttempts?: number;
     reconnectDelay?: number;
     maxReconnectDelay?: number;
@@ -28,6 +29,7 @@ export interface BridgeConfig {
 export interface CompleteBridgeConfig {
   signalr: {
     hubUrl: string;
+    alarmHubUrl?: string;
     reconnectAttempts: number;
     reconnectDelay: number;
     maxReconnectDelay: number;

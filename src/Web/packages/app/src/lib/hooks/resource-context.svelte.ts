@@ -1,5 +1,4 @@
 import { getContext, setContext } from "svelte";
-import { resource as runedResource } from "runed";
 
 const RESOURCE_CONTEXT_KEY = Symbol("resource-context");
 

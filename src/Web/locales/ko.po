@@ -203,6 +203,7 @@ msgstr ""
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -234,6 +235,7 @@ msgstr ""
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -586,6 +588,8 @@ msgid "Failed to save settings"
 msgstr ""
 
 #: src/lib/stores/settings-store.svelte.ts
+#: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/alarms/+page.svelte
 msgid "Failed to save alarm configuration"
 msgstr ""
 
@@ -1878,6 +1882,7 @@ msgid "Show hidden <0/>"
 msgstr ""
 
 #: src/lib/components/entries/EntryEditDialog.svelte
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/routes/food/QuickPicksList.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -2918,6 +2923,7 @@ msgstr ""
 msgid "Default"
 msgstr ""
 
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
 #: src/routes/clock/[id]/+page.svelte
 #: src/routes/profile/+page.svelte
 msgid "<0/> Edit"
