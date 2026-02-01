@@ -45,7 +45,8 @@ import {
   ConfigurationClient,
   WebhookSettingsClient,
   MealMatchingClient,
-  ClockFacesClient
+  ClockFacesClient,
+  NoteClient
 } from "./generated/nocturne-api-client";
 
 /**
@@ -104,6 +105,7 @@ export class ApiClient {
   public readonly webhookSettings: WebhookSettingsClient;
   public readonly mealMatching: MealMatchingClient;
   public readonly clockFaces: ClockFacesClient;
+  public readonly notes: NoteClient;
 
   constructor(
     baseUrl: string,
@@ -161,6 +163,7 @@ export class ApiClient {
     this.webhookSettings = new WebhookSettingsClient(apiBaseUrl, http);
     this.mealMatching = new MealMatchingClient(apiBaseUrl, http);
     this.clockFaces = new ClockFacesClient(apiBaseUrl, http);
+    this.notes = new NoteClient(apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */

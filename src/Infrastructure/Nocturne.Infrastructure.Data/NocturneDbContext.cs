@@ -223,6 +223,38 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<ClockFaceEntity> ClockFaces { get; set; }
 
+    // Notes entities
+
+    /// <summary>
+    /// Gets or sets the Notes table for user notes
+    /// </summary>
+    public DbSet<NoteEntity> Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteChecklistItems table for note checklist items
+    /// </summary>
+    public DbSet<NoteChecklistItemEntity> NoteChecklistItems { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteAttachments table for note file attachments
+    /// </summary>
+    public DbSet<NoteAttachmentEntity> NoteAttachments { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteTrackerLinks table for note-tracker links
+    /// </summary>
+    public DbSet<NoteTrackerLinkEntity> NoteTrackerLinks { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteTrackerThresholds table for note tracker thresholds
+    /// </summary>
+    public DbSet<NoteTrackerThresholdEntity> NoteTrackerThresholds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteStateSpanLinks table for note-state span links
+    /// </summary>
+    public DbSet<NoteStateSpanLinkEntity> NoteStateSpanLinks { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1073,6 +1105,95 @@ public class NocturneDbContext : DbContext
             .HasIndex(cf => new { cf.UserId, cf.CreatedAt })
             .HasDatabaseName("ix_clock_faces_user_created_at")
             .IsDescending(false, true);
+
+        // Notes indexes - optimized for user queries
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.UserId)
+            .HasDatabaseName("ix_notes_user_id");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.Category)
+            .HasDatabaseName("ix_notes_category");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.IsArchived)
+            .HasDatabaseName("ix_notes_is_archived");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.OccurredAt)
+            .HasDatabaseName("ix_notes_occurred_at")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => new { n.UserId, n.Category })
+            .HasDatabaseName("ix_notes_user_category");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => new { n.UserId, n.IsArchived })
+            .HasDatabaseName("ix_notes_user_archived");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => new { n.UserId, n.OccurredAt })
+            .HasDatabaseName("ix_notes_user_occurred_at")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.CreatedAt)
+            .HasDatabaseName("ix_notes_created_at")
+            .IsDescending();
+
+        // NoteChecklistItem indexes
+        modelBuilder
+            .Entity<NoteChecklistItemEntity>()
+            .HasIndex(ci => ci.NoteId)
+            .HasDatabaseName("ix_note_checklist_items_note_id");
+
+        modelBuilder
+            .Entity<NoteChecklistItemEntity>()
+            .HasIndex(ci => new { ci.NoteId, ci.SortOrder })
+            .HasDatabaseName("ix_note_checklist_items_note_sort");
+
+        // NoteAttachment indexes
+        modelBuilder
+            .Entity<NoteAttachmentEntity>()
+            .HasIndex(a => a.NoteId)
+            .HasDatabaseName("ix_note_attachments_note_id");
+
+        // NoteTrackerLink indexes
+        modelBuilder
+            .Entity<NoteTrackerLinkEntity>()
+            .HasIndex(tl => tl.NoteId)
+            .HasDatabaseName("ix_note_tracker_links_note_id");
+
+        modelBuilder
+            .Entity<NoteTrackerLinkEntity>()
+            .HasIndex(tl => tl.TrackerDefinitionId)
+            .HasDatabaseName("ix_note_tracker_links_tracker_definition_id");
+
+        // NoteTrackerThreshold indexes
+        modelBuilder
+            .Entity<NoteTrackerThresholdEntity>()
+            .HasIndex(t => t.NoteTrackerLinkId)
+            .HasDatabaseName("ix_note_tracker_thresholds_note_tracker_link_id");
+
+        // NoteStateSpanLink indexes
+        modelBuilder
+            .Entity<NoteStateSpanLinkEntity>()
+            .HasIndex(sl => sl.NoteId)
+            .HasDatabaseName("ix_note_state_span_links_note_id");
+
+        modelBuilder
+            .Entity<NoteStateSpanLinkEntity>()
+            .HasIndex(sl => sl.StateSpanId)
+            .HasDatabaseName("ix_note_state_span_links_state_span_id");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1719,6 +1840,103 @@ public class NocturneDbContext : DbContext
                 .ValueGeneratedOnAddOrUpdate();
         });
 
+        // Configure Note entities
+        modelBuilder.Entity<NoteEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.IsArchived).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+
+            // Store enum as int in database
+            entity.Property(e => e.Category).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<NoteChecklistItemEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.IsCompleted).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.ChecklistItems)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteAttachmentEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.Attachments)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteTrackerLinkEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete when note is deleted
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.TrackerLinks)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relationship with cascade delete when tracker definition is deleted
+            entity
+                .HasOne(e => e.TrackerDefinition)
+                .WithMany()
+                .HasForeignKey(e => e.TrackerDefinitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteTrackerThresholdEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+
+            // Store enum as int in database
+            entity.Property(e => e.Urgency).HasConversion<int>();
+
+            // Relationship with cascade delete when note tracker link is deleted
+            entity
+                .HasOne(e => e.NoteTrackerLink)
+                .WithMany(tl => tl.Thresholds)
+                .HasForeignKey(e => e.NoteTrackerLinkId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteStateSpanLinkEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete when note is deleted
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.StateSpanLinks)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relationship with cascade delete when state span is deleted
+            entity
+                .HasOne(e => e.StateSpan)
+                .WithMany(ss => ss.NoteLinks)
+                .HasForeignKey(e => e.StateSpanId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
 
     /// <summary>
@@ -1935,6 +2153,43 @@ public class NocturneDbContext : DbContext
                 }
                 clockFaceEntity.UpdatedAt = utcNow;
                 clockFaceEntity.SysUpdatedAt = utcNow;
+            }
+            // Note entities
+            else if (entry.Entity is NoteEntity noteEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    noteEntity.CreatedAt = utcNow;
+                }
+                noteEntity.UpdatedAt = utcNow;
+            }
+            else if (entry.Entity is NoteChecklistItemEntity noteChecklistItemEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    noteChecklistItemEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is NoteAttachmentEntity noteAttachmentEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    noteAttachmentEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is NoteTrackerLinkEntity noteTrackerLinkEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    noteTrackerLinkEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is NoteStateSpanLinkEntity noteStateSpanLinkEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    noteStateSpanLinkEntity.CreatedAt = utcNow;
+                }
             }
         }
     }
