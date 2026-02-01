@@ -2,7 +2,7 @@
  * Remote functions for user preferences management
  */
 import { getRequestEvent, command } from "$app/server";
-import { error } from "@sveltejs/kit";
+import { z } from "zod";
 
 /**
  * Update user preferences request
@@ -18,14 +18,18 @@ interface UserPreferencesResponse {
   preferredLanguage?: string;
 }
 
+const updateLanguageSchema = z.object({
+  preferredLanguage: z.string(),
+});
+
 /**
  * Update the current user's language preference
  * @param preferredLanguage The language code to set (e.g., "en", "fr")
  */
 export const updateLanguagePreference = command(
-  async (preferredLanguage: string): Promise<UserPreferencesResponse | null> => {
+  updateLanguageSchema,
+  async ({ preferredLanguage }): Promise<UserPreferencesResponse | null> => {
     const { locals } = getRequestEvent();
-    const { apiClient } = locals;
 
     // Only update if user is authenticated
     if (!locals.isAuthenticated || !locals.user) {

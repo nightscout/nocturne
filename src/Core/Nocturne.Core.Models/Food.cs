@@ -109,6 +109,14 @@ public class Food
     /// </summary>
     [JsonPropertyName("position")]
     public int Position { get; set; } = 99999;
+
+    /// <summary>
+    /// Gets or sets the creation timestamp (ISO 8601 format)
+    /// This is set by the server when a record is created
+    /// </summary>
+    [JsonPropertyName("created_at")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CreatedAt { get; set; }
 }
 
 /// <summary>

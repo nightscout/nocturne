@@ -88,6 +88,78 @@ public class MyLifeConnectorService(
             _config.TempBasalConsolidationWindowMinutes);
     }
 
+    /// <summary>
+    /// Fetches BasalDelivery StateSpans from MyLife events.
+    /// These provide pump-confirmed basal delivery tracking with implicit duration model.
+    /// </summary>
+    protected async Task<IEnumerable<StateSpan>> FetchStateSpansAsync(
+        DateTime? from,
+        DateTime? to
+    )
+    {
+        var actualSince = await CalculateTreatmentSinceTimestampAsync(_config, from);
+        var events = await eventsCache.GetEventsAsync(
+            actualSince,
+            _config.SyncMonths,
+            CancellationToken.None
+        );
+
+        var filtered = FilterEventsBySince(events, actualSince);
+        return eventMapper.MapStateSpans(
+            filtered,
+            _config.EnableTempBasalConsolidation,
+            _config.TempBasalConsolidationWindowMinutes);
+    }
+
+    /// <summary>
+    /// Override sync to also publish BasalDelivery StateSpans alongside Treatments.
+    /// </summary>
+    protected override async Task<SyncResult> PerformSyncInternalAsync(
+        SyncRequest request,
+        MyLifeConnectorConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        // Call the base implementation first
+        var result = await base.PerformSyncInternalAsync(request, config, cancellationToken);
+
+        // If treatments were synced, also sync BasalDelivery StateSpans
+        if (request.DataTypes.Contains(SyncDataType.Treatments))
+        {
+            try
+            {
+                var stateSpans = await FetchStateSpansAsync(request.From, request.To);
+                var stateSpanList = stateSpans.ToList();
+
+                if (stateSpanList.Count > 0)
+                {
+                    var stateSpanSuccess = await PublishStateSpanDataAsync(
+                        stateSpanList,
+                        config,
+                        cancellationToken);
+
+                    if (stateSpanSuccess)
+                    {
+                        _logger.LogInformation(
+                            "Successfully synced {Count} BasalDelivery StateSpans",
+                            stateSpanList.Count);
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "Failed to sync some BasalDelivery StateSpans");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing BasalDelivery StateSpans");
+                // Don't fail the overall sync if StateSpan sync fails
+            }
+        }
+
+        return result;
+    }
+
     protected override Task<IEnumerable<Activity>> FetchActivitiesAsync(
         DateTime? from,
         DateTime? to

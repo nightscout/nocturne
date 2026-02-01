@@ -74,7 +74,7 @@
         ></div>
       </div>
     {/snippet}
-    {#snippet failed()}
+    {#snippet failed(_error)}
       <p class="text-red-500 text-center">Error loading recent treatments.</p>
     {/snippet}
     <CardHeader class="px-3 @md:px-6">

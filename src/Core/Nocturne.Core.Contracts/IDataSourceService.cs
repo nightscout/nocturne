@@ -83,4 +83,15 @@ public interface IDataSourceService
         string connectorId,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Get a summary of data counts for a specific connector.
+    /// </summary>
+    /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Summary of data counts by type</returns>
+    Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
+        string connectorId,
+        CancellationToken cancellationToken = default
+    );
 }

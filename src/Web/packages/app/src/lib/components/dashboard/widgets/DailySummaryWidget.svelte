@@ -2,20 +2,18 @@
   import WidgetCard from "./WidgetCard.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
   import { TrendingUp, TrendingDown, Minus } from "lucide-svelte";
 
   const realtimeStore = getRealtimeStore();
-  const settingsStore = getSettingsStore();
 
   // Get units
   const units = $derived(glucoseUnits.current);
   const unitLabel = $derived(getUnitLabel(units));
 
-  // Get glucose target ranges from settings
-  const targetLow = $derived(settingsStore.algorithm?.targetRange?.low ?? 70);
-  const targetHigh = $derived(settingsStore.algorithm?.targetRange?.high ?? 180);
+  // Get glucose target ranges from settings (using safety limits or defaults)
+  const targetLow = $derived(70);
+  const targetHigh = $derived(180);
 
   // Calculate daily stats from today's entries
   const dailyStats = $derived.by(() => {

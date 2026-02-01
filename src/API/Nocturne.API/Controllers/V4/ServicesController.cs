@@ -298,6 +298,35 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
+    /// Get a summary of data counts for a specific connector.
+    /// Returns the number of entries, treatments, and device statuses synced by this connector.
+    /// </summary>
+    /// <param name="id">Connector ID (e.g., "dexcom")</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Data summary with counts by type</returns>
+    [HttpGet("connectors/{id}/data-summary")]
+    [ProducesResponseType(typeof(ConnectorDataSummary), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult<ConnectorDataSummary>> GetConnectorDataSummary(
+        string id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug("Getting data summary for connector: {Id}", id);
+
+        try
+        {
+            var summary = await _dataSourceService.GetConnectorDataSummaryAsync(id, cancellationToken);
+            return Ok(summary);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting data summary for connector: {Id}", id);
+            return StatusCode(500, new { error = "Failed to get connector data summary" });
+        }
+    }
+
+    /// <summary>
     /// Delete all data from a specific connector.
     /// WARNING: This is a destructive operation that cannot be undone.
     /// </summary>

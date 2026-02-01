@@ -11,7 +11,6 @@
   import {
     BarChart3,
     Calendar,
-    AlertTriangle,
     Info,
     Target,
     TrendingUp,
@@ -19,24 +18,22 @@
     Printer,
     HelpCircle,
     CheckCircle2,
+    AlertTriangle,
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 14 days is the standard AGP report period
+  const reportsParams = requireDateParamsContext(14);
 
-  // Use resource for controlled reactivity - prevents excessive re-fetches
-  const reportsResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getReportsData(dateRangeInput);
-    },
-    { debounce: 100 }
+  // Create resource with automatic layout registration
+  const reportsResource = contextResource(
+    () => getReportsData(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading AGP Report" }
   );
 
   // Unwrap the data from the resource with null safety
@@ -50,9 +47,6 @@
       lastUpdated: new Date().toISOString(),
     },
   });
-
-  // Loading state
-  const isLoading = $derived(reportsResource.loading);
 
   // Derived values from data
   const entries = $derived(data.entries);
@@ -78,9 +72,7 @@
   />
 </svelte:head>
 
-{#if isLoading && !reportsResource.current}
-  <ReportsSkeleton />
-{:else}
+{#if reportsResource.current}
 <div class="container mx-auto px-4 py-6 space-y-8 max-w-7xl">
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">

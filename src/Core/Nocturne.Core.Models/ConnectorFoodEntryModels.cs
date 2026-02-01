@@ -15,17 +15,6 @@ public enum ConnectorFoodEntryStatus
 }
 
 /// <summary>
-/// Behavior when unmatched entries hit the timeout window.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum UnmatchedBehavior
-{
-    Prompt,
-    AutoStandalone,
-    AutoDelete,
-}
-
-/// <summary>
 /// Represents a connector-imported food entry for matching and attribution.
 /// </summary>
 public class ConnectorFoodEntry

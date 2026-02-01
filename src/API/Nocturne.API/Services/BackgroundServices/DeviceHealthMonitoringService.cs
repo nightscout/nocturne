@@ -285,6 +285,11 @@ public class DeviceHealthMonitoringService : BackgroundService
     }
 
     /// <summary>
+    /// Minimum data gap in minutes to consider for sensor warmup suggestion
+    /// </summary>
+    private const int MinimumGapMinutesForWarmupSuggestion = 60;
+
+    /// <summary>
     /// Perform CGM-specific monitoring
     /// </summary>
     /// <param name="device">CGM device</param>
@@ -329,8 +334,52 @@ public class DeviceHealthMonitoringService : BackgroundService
             }
         }
 
-        // Check data continuity
+        // Check data continuity and evaluate for sensor tracker suggestion
         await CheckDataContinuityAsync(device, cancellationToken);
+
+        // Check if there's a significant data gap that might indicate sensor warmup
+        if (device.LastDataReceived.HasValue)
+        {
+            var minutesSinceLastData = (DateTime.UtcNow - device.LastDataReceived.Value).TotalMinutes;
+
+            if (minutesSinceLastData >= MinimumGapMinutesForWarmupSuggestion)
+            {
+                // Evaluate for sensor tracker suggestion (might be a warmup)
+                await EvaluateSensorWarmupSuggestionAsync(device, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Evaluate if a sensor tracker suggestion should be created based on data gap
+    /// </summary>
+    /// <param name="device">The CGM device with a data gap</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    private async Task EvaluateSensorWarmupSuggestionAsync(
+        DeviceHealth device,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var trackerSuggestionService = scope.ServiceProvider.GetRequiredService<ITrackerSuggestionService>();
+
+            await trackerSuggestionService.EvaluateDataGapForTrackerSuggestionAsync(
+                device.UserId,
+                device.LastDataReceived!.Value,
+                DateTime.UtcNow,
+                cancellationToken
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error evaluating sensor warmup suggestion for device {DeviceId}",
+                device.DeviceId
+            );
+        }
     }
 
     /// <summary>

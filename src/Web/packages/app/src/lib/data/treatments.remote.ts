@@ -35,11 +35,12 @@ export const getTreatments = query(treatmentsQuerySchema, async (props) => {
     },
   });
 
-  // Fetch treatments with pagination
-  const treatments = await apiClient.treatments.getTreatments2(
-    treatmentsQuery,
+  // Fetch treatments with pagination using v4 endpoint
+  const treatments = await apiClient.treatments.getTreatments(
+    undefined,
     props.pageSize,
-    props.page * props.pageSize
+    props.page * props.pageSize,
+    treatmentsQuery
   );
 
   // Apply category filter if specified
@@ -92,10 +93,11 @@ export const getAllTreatments = query(
     let hasMore = true;
 
     while (hasMore) {
-      const batch = await apiClient.treatments.getTreatments2(
-        treatmentsQuery,
+      const batch = await apiClient.treatments.getTreatments(
+        undefined,
         pageSize,
-        offset
+        offset,
+        treatmentsQuery
       );
       allTreatments = allTreatments.concat(batch);
 
@@ -138,8 +140,8 @@ export const getTreatmentStats = query(
       },
     });
 
-    // Get all treatments for stats
-    const treatments = await apiClient.treatments.getTreatments2(treatmentsQuery, 10000, 0);
+    // Get all treatments for stats using v4 endpoint
+    const treatments = await apiClient.treatments.getTreatments(undefined, 10000, 0, treatmentsQuery);
 
     // Calculate category counts
     const categoryCounts: Record<string, number> = {};
@@ -218,5 +220,5 @@ export const updateTreatment = command(TreatmentSchema, async (treatment) => {
 export const deleteTreatment = command(z.string(), async (id) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
-  return apiClient.treatments.deleteTreatment2(id);
+  return apiClient.treatments.deleteTreatment(id);
 });

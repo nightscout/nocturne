@@ -29,28 +29,15 @@ public class TimeQueryController : ControllerBase
     }
 
     /// <summary>
-    /// Complex time pattern matching with bash-style brace expansion
+    /// /api/v1/times without prefix is not a valid Nightscout endpoint.
+    /// Nightscout returns 404 for this path. We match that behavior for parity.
     /// </summary>
-    /// <example>
-    /// - /api/v1/times/2015-04/T{13..18}:{00..15} - Matches April 2015 between 1-6 PM, minutes 0-15
-    /// - /api/v1/times/20{14..15}/T{13..18}:{00..15} - Matches 2014-2015 between 1-6 PM, minutes 0-15
-    /// </example>
-    /// <param name="count">Maximum number of entries to return (default: 10)</param>
-    /// <param name="format">Output format (json, csv, tsv, txt)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Entries matching the time patterns</returns>
+    /// <returns>404 Not Found to match Nightscout behavior</returns>
     [HttpGet("times")]
-    [NightscoutEndpoint("/api/v1/times")]
-    [ProducesResponseType(typeof(Entry[]), 200)]
-    [ProducesResponseType(400)]
-    [ProducesResponseType(500)]
-    public async Task<ActionResult> GetTimeBasedEntries(
-        [FromQuery] int count = 10,
-        [FromQuery] string? format = null,
-        CancellationToken cancellationToken = default
-    )
+    [ApiExplorerSettings(IgnoreApi = true)] // Hide from OpenAPI as it's not a real endpoint
+    public ActionResult GetTimeBasedEntries()
     {
-        return await GetTimeBasedEntriesInternal(null, null, count, format, cancellationToken);
+        return NotFound();
     }
 
     /// <summary>

@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import {
     getServicesOverview,
     getUploaderSetup,
     deleteDemoData as deleteDemoDataRemote,
     deleteDataSourceData as deleteDataSourceDataRemote,
-    deleteConnectorData as deleteConnectorDataRemote,
     getConnectorStatuses,
     startDeduplicationJob,
     getDeduplicationJobStatus,
@@ -22,6 +21,11 @@
     AvailableConnector,
     DeduplicationJobStatus,
   } from "$lib/api/generated/nocturne-api-client";
+
+  // Extended type that includes description for UI display
+  interface ConnectorStatusWithDescription extends ConnectorStatusDto {
+    description?: string;
+  }
   import {
     Card,
     CardContent,
@@ -131,17 +135,8 @@
   // Connector heartbeat metrics state
   let connectorStatuses = $state<ConnectorStatusDto[]>([]);
   let isLoadingConnectorStatuses = $state(false);
-  let selectedConnector = $state<ConnectorStatusDto | null>(null);
+  let selectedConnector = $state<ConnectorStatusWithDescription | null>(null);
   let showConnectorDialog = $state(false);
-
-  // Connector deletion state
-  let showConnectorDeleteConfirmDialog = $state(false);
-  let isDeletingConnector = $state(false);
-  let connectorDeleteResult = $state<{
-    success: boolean;
-    entriesDeleted?: number;
-    error?: string;
-  } | null>(null);
 
   // Deduplication state
   let showDeduplicationDialog = $state(false);
@@ -149,10 +144,17 @@
   let deduplicationJobId = $state<string | null>(null);
   let deduplicationStatus = $state<DeduplicationJobStatus | null>(null);
   let deduplicationError = $state<string | null>(null);
-  let deduplicationPollingInterval = $state<ReturnType<typeof setInterval> | null>(null);
+  let deduplicationPollingInterval = $state<ReturnType<
+    typeof setInterval
+  > | null>(null);
 
   onMount(async () => {
     await Promise.all([loadServices(), loadConnectorStatuses()]);
+  });
+
+  onDestroy(() => {
+    // Clean up deduplication polling interval to prevent memory leaks
+    stopDeduplicationPolling();
   });
 
   async function refreshAll() {
@@ -184,39 +186,6 @@
     }
   }
 
-  function openConnectorDeleteConfirmation() {
-    showConnectorDialog = false;
-    showConnectorDeleteConfirmDialog = true;
-    deleteConfirmText = "";
-    connectorDeleteResult = null;
-  }
-
-  async function deleteConnector() {
-    if (!selectedConnector) return;
-
-    isDeletingConnector = true;
-    connectorDeleteResult = null;
-    try {
-      const result = await deleteConnectorDataRemote(selectedConnector.id!);
-      connectorDeleteResult = {
-        success: result.success ?? false,
-        entriesDeleted: result.entriesDeleted,
-        error: result.error ?? undefined,
-      };
-      if (result.success) {
-        await loadConnectorStatuses();
-      }
-    } catch (e) {
-      connectorDeleteResult = {
-        success: false,
-        error:
-          e instanceof Error ? e.message : "Failed to delete connector data",
-      };
-    } finally {
-      isDeletingConnector = false;
-    }
-  }
-
   async function startDeduplication() {
     isDeduplicating = true;
     deduplicationError = null;
@@ -229,11 +198,13 @@
         // Start polling for status
         startDeduplicationPolling();
       } else {
-        deduplicationError = result.error ?? "Failed to start deduplication job";
+        deduplicationError =
+          result.error ?? "Failed to start deduplication job";
         isDeduplicating = false;
       }
     } catch (e) {
-      deduplicationError = e instanceof Error ? e.message : "Failed to start deduplication";
+      deduplicationError =
+        e instanceof Error ? e.message : "Failed to start deduplication";
       isDeduplicating = false;
     }
   }
@@ -249,7 +220,11 @@
           deduplicationStatus = status;
 
           // Check if job is complete
-          if (status.state === "Completed" || status.state === "Failed" || status.state === "Cancelled") {
+          if (
+            status.state === "Completed" ||
+            status.state === "Failed" ||
+            status.state === "Cancelled"
+          ) {
             stopDeduplicationPolling();
             isDeduplicating = false;
 
@@ -769,7 +744,11 @@
       </p>
     </div>
     <Button variant="outline" size="sm" onclick={refreshAll} class="gap-2">
-      <RefreshCw class="h-4 w-4 {isLoading || isLoadingConnectorStatuses ? 'animate-spin' : ''}" />
+      <RefreshCw
+        class="h-4 w-4 {isLoading || isLoadingConnectorStatuses
+          ? 'animate-spin'
+          : ''}"
+      />
       Refresh
     </Button>
   </div>
@@ -1327,7 +1306,8 @@
           {/each}
         </div>
         <p class="text-sm text-muted-foreground mt-4">
-          Click on a connector to configure credentials and settings. Changes take effect immediately.
+          Click on a connector to configure credentials and settings. Changes
+          take effect immediately.
         </p>
       </CardContent>
     </Card>
@@ -1420,14 +1400,17 @@
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+          >
             <Link2 class="h-5 w-5 text-primary" />
           </div>
           <div class="flex-1">
             <h4 class="font-medium">Deduplicate Records</h4>
             <p class="text-sm text-muted-foreground mt-1">
-              Link records from multiple data sources that represent the same underlying event.
-              This improves data quality when the same glucose readings or treatments are uploaded from different apps.
+              Link records from multiple data sources that represent the same
+              underlying event. This improves data quality when the same glucose
+              readings or treatments are uploaded from different apps.
             </p>
             <Button
               variant="outline"
@@ -2310,32 +2293,6 @@
             </div>
           {/if}
         {/if}
-
-        <!-- Delete warning - show for any connector with data -->
-        {#if selectedConnector.totalEntries || selectedConnector.state === "Offline" || selectedConnector.state === "Disabled" || selectedConnector.isHealthy}
-          <Separator />
-
-          <div
-            class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4"
-          >
-            <div class="flex items-start gap-3">
-              <AlertTriangle
-                class="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
-              />
-              <div>
-                <p
-                  class="text-sm font-medium text-amber-800 dark:text-amber-200"
-                >
-                  Delete All Data from This Connector
-                </p>
-                <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                  This will permanently delete all entries, treatments, and
-                  device status records synchronized by this connector.
-                </p>
-              </div>
-            </div>
-          </div>
-        {/if}
       </div>
 
       <Dialog.Footer>
@@ -2350,133 +2307,16 @@
           <Wrench class="h-4 w-4" />
           Configure
         </Button>
-        {#if selectedConnector.totalEntries || selectedConnector.state === "Offline" || selectedConnector.state === "Disabled" || selectedConnector.isHealthy}
-          <Button
-            variant="outline"
-            class="gap-2"
-            onclick={openConnectorDeleteConfirmation}
-          >
-            <Trash2 class="h-4 w-4" />
-            Delete Data...
-          </Button>
-        {/if}
       </Dialog.Footer>
     {/if}
   </Dialog.Content>
 </Dialog.Root>
 
-<!-- Connector Delete Confirmation Dialog -->
-<AlertDialog.Root bind:open={showConnectorDeleteConfirmDialog}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title class="flex items-center gap-2 text-destructive">
-        <AlertTriangle class="h-5 w-5" />
-        Permanently Delete Connector Data
-      </AlertDialog.Title>
-      <AlertDialog.Description class="space-y-4">
-        {#if selectedConnector}
-          <div
-            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4 mt-4"
-          >
-            <p class="text-sm font-semibold text-red-800 dark:text-red-200">
-              ⚠️ THIS ACTION CANNOT BE UNDONE
-            </p>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-2">
-              You are about to permanently delete <strong>all data</strong>
-              synchronized by
-              <strong>{selectedConnector.name}</strong>
-              . This includes:
-            </p>
-            <ul
-              class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
-            >
-              <li>
-                All glucose records ({selectedConnector.totalEntries?.toLocaleString() ??
-                  0} records)
-              </li>
-              <li>
-                Any treatments and device status records from this connector
-              </li>
-            </ul>
-          </div>
-
-          {#if connectorDeleteResult}
-            {#if connectorDeleteResult.success}
-              <div
-                class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4"
-              >
-                <div
-                  class="flex items-center gap-2 text-green-800 dark:text-green-200"
-                >
-                  <CheckCircle class="h-5 w-5" />
-                  <span class="font-medium">Data deleted successfully</span>
-                </div>
-                <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-                  Deleted {connectorDeleteResult.entriesDeleted?.toLocaleString() ??
-                    0} records
-                </p>
-              </div>
-            {:else}
-              <div
-                class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
-              >
-                <div
-                  class="flex items-center gap-2 text-red-800 dark:text-red-200"
-                >
-                  <AlertCircle class="h-5 w-5" />
-                  <span class="font-medium">Failed to delete data</span>
-                </div>
-                <p class="text-sm text-red-700 dark:text-red-300 mt-1">
-                  {connectorDeleteResult.error}
-                </p>
-              </div>
-            {/if}
-          {:else}
-            <div class="space-y-2 mt-4">
-              <label for="connector-confirm-delete" class="text-sm font-medium">
-                Type <strong>DELETE</strong>
-                to confirm:
-              </label>
-              <input
-                id="connector-confirm-delete"
-                type="text"
-                bind:value={deleteConfirmText}
-                class="w-full px-3 py-2 rounded-md border bg-background text-sm"
-                placeholder="Type DELETE"
-              />
-            </div>
-          {/if}
-        {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        onclick={() => (showConnectorDeleteConfirmDialog = false)}
-      >
-        Cancel
-      </AlertDialog.Cancel>
-      {#if !connectorDeleteResult?.success}
-        <Button
-          variant="destructive"
-          onclick={deleteConnector}
-          disabled={isDeletingConnector || deleteConfirmText !== "DELETE"}
-          class="gap-2"
-        >
-          {#if isDeletingConnector}
-            <Loader2 class="h-4 w-4 animate-spin" />
-            Deleting...
-          {:else}
-            <Trash2 class="h-4 w-4" />
-            Delete All Data
-          {/if}
-        </Button>
-      {/if}
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
-
 <!-- Deduplication Dialog -->
-<Dialog.Root bind:open={showDeduplicationDialog} onOpenChange={(open) => !open && closeDeduplicationDialog()}>
+<Dialog.Root
+  bind:open={showDeduplicationDialog}
+  onOpenChange={(open) => !open && closeDeduplicationDialog()}
+>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
@@ -2484,7 +2324,8 @@
         Deduplicate Records
       </Dialog.Title>
       <Dialog.Description>
-        Link records from multiple data sources that represent the same underlying event
+        Link records from multiple data sources that represent the same
+        underlying event
       </Dialog.Description>
     </Dialog.Header>
 
@@ -2505,23 +2346,36 @@
         <div
           class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4"
         >
-          <div class="flex items-center gap-2 text-green-800 dark:text-green-200">
+          <div
+            class="flex items-center gap-2 text-green-800 dark:text-green-200"
+          >
             <CheckCircle class="h-5 w-5" />
             <span class="font-medium">Deduplication Complete</span>
           </div>
           {#if deduplicationStatus.result}
-            <div class="mt-3 space-y-1 text-sm text-green-700 dark:text-green-300">
+            <div
+              class="mt-3 space-y-1 text-sm text-green-700 dark:text-green-300"
+            >
               <div class="flex justify-between">
                 <span>Records processed:</span>
-                <span class="font-mono">{deduplicationStatus.result.totalRecordsProcessed?.toLocaleString() ?? 0}</span>
+                <span class="font-mono">
+                  {deduplicationStatus.result.totalRecordsProcessed?.toLocaleString() ??
+                    0}
+                </span>
               </div>
               <div class="flex justify-between">
                 <span>Groups created:</span>
-                <span class="font-mono">{deduplicationStatus.result.canonicalGroupsCreated?.toLocaleString() ?? 0}</span>
+                <span class="font-mono">
+                  {deduplicationStatus.result.canonicalGroupsCreated?.toLocaleString() ??
+                    0}
+                </span>
               </div>
               <div class="flex justify-between">
                 <span>Duplicates found:</span>
-                <span class="font-mono">{deduplicationStatus.result.duplicateGroupsFound?.toLocaleString() ?? 0}</span>
+                <span class="font-mono">
+                  {deduplicationStatus.result.duplicateGroupsFound?.toLocaleString() ??
+                    0}
+                </span>
               </div>
             </div>
           {/if}
@@ -2530,7 +2384,9 @@
         <div
           class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4"
         >
-          <div class="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+          <div
+            class="flex items-center gap-2 text-amber-800 dark:text-amber-200"
+          >
             <AlertTriangle class="h-5 w-5" />
             <span class="font-medium">Job Cancelled</span>
           </div>
@@ -2552,22 +2408,27 @@
               <div class="flex justify-between text-sm">
                 <span class="text-muted-foreground">Progress</span>
                 <span class="font-medium">
-                  {deduplicationStatus.progress.percentComplete?.toFixed(1) ?? 0}%
+                  {deduplicationStatus.progress.percentComplete?.toFixed(1) ??
+                    0}%
                 </span>
               </div>
               <div class="w-full h-2 bg-muted rounded-full overflow-hidden">
                 <div
                   class="h-full bg-primary transition-all duration-300"
-                  style="width: {deduplicationStatus.progress.percentComplete ?? 0}%"
+                  style="width: {deduplicationStatus.progress.percentComplete ??
+                    0}%"
                 ></div>
               </div>
               <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                 <div>
-                  Processed: {deduplicationStatus.progress.processedRecords?.toLocaleString() ?? 0}
-                  / {deduplicationStatus.progress.totalRecords?.toLocaleString() ?? 0}
+                  Processed: {deduplicationStatus.progress.processedRecords?.toLocaleString() ??
+                    0}
+                  / {deduplicationStatus.progress.totalRecords?.toLocaleString() ??
+                    0}
                 </div>
                 <div class="text-right">
-                  Groups: {deduplicationStatus.progress.groupsFound?.toLocaleString() ?? 0}
+                  Groups: {deduplicationStatus.progress.groupsFound?.toLocaleString() ??
+                    0}
                 </div>
               </div>
             </div>
@@ -2576,10 +2437,13 @@
       {:else}
         <div class="rounded-lg border bg-muted/50 p-4">
           <p class="text-sm text-muted-foreground">
-            This process will scan all your glucose records, treatments, and state spans
-            to identify and link records that represent the same event from different data sources.
+            This process will scan all your glucose records, treatments, and
+            state spans to identify and link records that represent the same
+            event from different data sources.
           </p>
-          <ul class="mt-3 text-sm text-muted-foreground list-disc list-inside space-y-1">
+          <ul
+            class="mt-3 text-sm text-muted-foreground list-disc list-inside space-y-1"
+          >
             <li>Records within 30 seconds are considered potential matches</li>
             <li>Matching criteria include timestamps and values</li>
             <li>Original data is preserved; only links are created</li>
@@ -2594,7 +2458,11 @@
         {deduplicationStatus?.state === "Completed" ? "Done" : "Close"}
       </Button>
       {#if isDeduplicating}
-        <Button variant="destructive" onclick={cancelDeduplication} class="gap-2">
+        <Button
+          variant="destructive"
+          onclick={cancelDeduplication}
+          class="gap-2"
+        >
           Cancel Job
         </Button>
       {:else if !deduplicationStatus || deduplicationStatus.state === "Failed" || deduplicationStatus.state === "Cancelled"}

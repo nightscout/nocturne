@@ -155,21 +155,21 @@ public class ChartDataController : ControllerBase
                     maxCob = cob;
             }
 
-            // Build basal series from temp basal treatments
-            var basalSeries = BuildBasalSeries(
-                relevantTreatments,
+            // Fetch StateSpans for pump modes, basal delivery, and profiles
+            var pumpModeSpans = await _stateSpanRepository.GetByCategory(
+                StateSpanCategory.PumpMode, startTime, endTime, cancellationToken);
+            var basalDeliverySpans = await _stateSpanRepository.GetByCategory(
+                StateSpanCategory.BasalDelivery, startTime, endTime, cancellationToken);
+            var profileSpans = await _stateSpanRepository.GetByCategory(
+                StateSpanCategory.Profile, startTime, endTime, cancellationToken);
+
+            // Build basal series from BasalDelivery StateSpans (primary) with profile fallback
+            var basalSeries = BuildBasalSeriesFromStateSpans(
+                basalDeliverySpans.ToList(),
                 startTime,
                 endTime,
                 defaultBasalRate
             );
-
-            // Fetch StateSpans for pump modes and temp basals
-            var pumpModeSpans = await _stateSpanRepository.GetByCategory(
-                StateSpanCategory.PumpMode, startTime, endTime, cancellationToken);
-            var tempBasalSpans = await _stateSpanRepository.GetByCategory(
-                StateSpanCategory.TempBasal, startTime, endTime, cancellationToken);
-            var profileSpans = await _stateSpanRepository.GetByCategory(
-                StateSpanCategory.Profile, startTime, endTime, cancellationToken);
 
             var maxBasalRate = Math.Max(
                 defaultBasalRate * 2.5,
@@ -187,7 +187,7 @@ public class ChartDataController : ControllerBase
                     MaxIob = Math.Max(3, maxIob),
                     MaxCob = Math.Max(30, maxCob),
                     PumpModeSpans = pumpModeSpans.ToList(),
-                    TempBasalSpans = tempBasalSpans.ToList(),
+                    BasalDeliverySpans = basalDeliverySpans.ToList(),
                     ProfileSpans = profileSpans.ToList(),
                 }
             );
@@ -200,15 +200,12 @@ public class ChartDataController : ControllerBase
     }
 
     /// <summary>
-    /// Build basal series using the profile service for accurate scheduled rates and temp basals.
-    /// Uses IProfileService.GetTempBasal() which correctly handles:
-    /// - Profile basal schedule lookups at each time point
-    /// - Active profile switches over time
-    /// - Temp basal treatments (absolute and percent-based)
-    /// - Combo bolus basal contributions
+    /// Build basal series from BasalDelivery StateSpans.
+    /// StateSpans are the source of truth for pump-confirmed delivery.
+    /// Falls back to profile-based rates when there are gaps in StateSpan data.
     /// </summary>
-    private List<BasalPoint> BuildBasalSeries(
-        List<Treatment> treatments,
+    private List<BasalPoint> BuildBasalSeriesFromStateSpans(
+        List<StateSpan> basalDeliverySpans,
         long startTime,
         long endTime,
         double defaultBasalRate
@@ -216,124 +213,159 @@ public class ChartDataController : ControllerBase
     {
         var series = new List<BasalPoint>();
 
-        // Update profile service with temp basal treatments for accurate lookups
-        // Use case-insensitive Contains to match "Temp Basal", "temp basal", etc.
-        var tempBasalTreatments = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) &&
-                       (t.EventType.Contains("Temp Basal", StringComparison.OrdinalIgnoreCase) ||
-                        t.EventType.Replace(" ", "").Replace("-", "").Contains("tempbasal", StringComparison.OrdinalIgnoreCase)))
+        // Sort spans by start time
+        var sortedSpans = basalDeliverySpans
+            .OrderBy(s => s.StartMills)
             .ToList();
 
         _logger.LogDebug(
-            "Found {TempBasalCount} temp basal treatments in time range. Sample: {Sample}",
-            tempBasalTreatments.Count,
-            tempBasalTreatments.FirstOrDefault() is { } first
-                ? $"Mills={first.Mills}, Rate={first.Rate}, Absolute={first.Absolute}, Duration={first.Duration}"
-                : "none"
+            "Building basal series from {SpanCount} BasalDelivery StateSpans",
+            sortedSpans.Count
         );
 
-        var comboBolusTreatments = treatments.Where(t => t.EventType == "Combo Bolus").ToList();
-
-        var profileSwitchTreatments = treatments
-            .Where(t => t.EventType == "Profile Switch")
-            .ToList();
-
-        _profileService.UpdateTreatments(
-            profileSwitchTreatments,
-            tempBasalTreatments,
-            comboBolusTreatments
-        );
-
-        // Use 5-minute intervals for the basal series (same as IOB/COB)
-        const long intervalMs = 5 * 60 * 1000;
-
-        // Track previous values to only add points when rate or temp status changes
-        double? prevRate = null;
-        double? prevScheduledRate = null;
-        bool? prevIsTemp = null;
-
-        for (long t = startTime; t <= endTime; t += intervalMs)
+        if (sortedSpans.Count == 0)
         {
-            double rate;
-            double scheduledRate;
-            bool isTemp;
+            // No StateSpan data - fall back to profile or default
+            return BuildBasalSeriesFromProfile(startTime, endTime, defaultBasalRate);
+        }
 
-            if (_profileService.HasData())
+        long currentTime = startTime;
+
+        foreach (var span in sortedSpans)
+        {
+            var spanStart = span.StartMills;
+            var spanEnd = span.EndMills ?? endTime;
+
+            // Skip spans entirely outside our range
+            if (spanEnd < startTime || spanStart > endTime)
+                continue;
+
+            // Clamp to our range
+            spanStart = Math.Max(spanStart, startTime);
+            spanEnd = Math.Min(spanEnd, endTime);
+
+            // If there's a gap before this span, fill with profile-based rates
+            if (spanStart > currentTime)
             {
-                // Use GetTempBasal which handles:
-                // - Looking up the scheduled basal rate from the active profile at this time
-                // - Checking for active temp basals and applying absolute or percent adjustments
-                // - Including combo bolus basal contributions
-                var tempBasalResult = _profileService.GetTempBasal(t, null);
-
-                // TotalBasal includes temp basal + combo bolus contributions
-                rate = tempBasalResult.TotalBasal;
-
-                // Basal is the scheduled rate from the profile (without temp basal)
-                scheduledRate = tempBasalResult.Basal;
-
-                // IsTemp is true if there's an active temp basal treatment
-                isTemp = tempBasalResult.Treatment != null;
-            }
-            else
-            {
-                // No profile data - fall back to default rate
-                rate = defaultBasalRate;
-                scheduledRate = defaultBasalRate;
-                isTemp = false;
+                var gapPoints = BuildBasalSeriesFromProfile(currentTime, spanStart, defaultBasalRate);
+                series.AddRange(gapPoints);
             }
 
-            // Add point if rate, scheduled rate, or temp status changed (or first point)
-            if (
-                prevRate == null
-                || Math.Abs(rate - prevRate.Value) > 0.001
-                || Math.Abs(scheduledRate - (prevScheduledRate ?? 0)) > 0.001
-                || isTemp != prevIsTemp
-            )
+            // Extract rate and origin from metadata
+            double rate = defaultBasalRate;
+            if (span.Metadata?.TryGetValue("rate", out var rateObj) == true)
             {
-                series.Add(
-                    new BasalPoint
-                    {
-                        Timestamp = t,
-                        Rate = rate,
-                        ScheduledRate = scheduledRate,
-                        IsTemp = isTemp,
-                    }
-                );
-
-                prevRate = rate;
-                prevScheduledRate = scheduledRate;
-                prevIsTemp = isTemp;
+                rate = rateObj switch
+                {
+                    System.Text.Json.JsonElement jsonElement => jsonElement.GetDouble(),
+                    double d => d,
+                    _ => Convert.ToDouble(rateObj)
+                };
             }
+
+            string? originStr = "Scheduled";
+            if (span.Metadata?.TryGetValue("origin", out var originObj) == true)
+            {
+                originStr = originObj switch
+                {
+                    System.Text.Json.JsonElement jsonElement => jsonElement.GetString(),
+                    string s => s,
+                    _ => originObj?.ToString()
+                };
+            }
+
+            // Parse origin string to enum
+            var origin = originStr?.ToLowerInvariant() switch
+            {
+                "algorithm" => BasalDeliveryOrigin.Algorithm,
+                "manual" => BasalDeliveryOrigin.Manual,
+                "suspended" => BasalDeliveryOrigin.Suspended,
+                _ => BasalDeliveryOrigin.Scheduled
+            };
+
+            // Get scheduled rate from profile for comparison
+            var scheduledRate = _profileService.HasData()
+                ? _profileService.GetBasalRate(spanStart, null)
+                : defaultBasalRate;
+
+            // Add point at span start
+            series.Add(new BasalPoint
+            {
+                Timestamp = spanStart,
+                Rate = origin == BasalDeliveryOrigin.Suspended ? 0 : rate,
+                ScheduledRate = scheduledRate,
+                Origin = origin,
+            });
+
+            currentTime = spanEnd;
+        }
+
+        // If there's remaining time after the last span, fill with profile
+        if (currentTime < endTime)
+        {
+            var tailPoints = BuildBasalSeriesFromProfile(currentTime, endTime, defaultBasalRate);
+            series.AddRange(tailPoints);
         }
 
         // Ensure we have at least one point
         if (series.Count == 0)
         {
-            series.Add(
-                new BasalPoint
-                {
-                    Timestamp = startTime,
-                    Rate = defaultBasalRate,
-                    ScheduledRate = defaultBasalRate,
-                    IsTemp = false,
-                }
-            );
+            series.Add(new BasalPoint
+            {
+                Timestamp = startTime,
+                Rate = defaultBasalRate,
+                ScheduledRate = defaultBasalRate,
+                Origin = BasalDeliveryOrigin.Scheduled,
+            });
         }
 
-        // Ensure we end at endTime
-        var lastPoint = series.Last();
-        if (lastPoint.Timestamp < endTime)
+        return series;
+    }
+
+    /// <summary>
+    /// Build basal series from profile data (fallback when no StateSpan data).
+    /// </summary>
+    private List<BasalPoint> BuildBasalSeriesFromProfile(
+        long startTime,
+        long endTime,
+        double defaultBasalRate
+    )
+    {
+        var series = new List<BasalPoint>();
+        const long intervalMs = 5 * 60 * 1000; // 5-minute intervals
+
+        double? prevRate = null;
+
+        for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            series.Add(
-                new BasalPoint
+            var rate = _profileService.HasData()
+                ? _profileService.GetBasalRate(t, null)
+                : defaultBasalRate;
+
+            // Only add point if rate changed
+            if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)
+            {
+                series.Add(new BasalPoint
                 {
-                    Timestamp = endTime,
-                    Rate = lastPoint.Rate,
-                    ScheduledRate = lastPoint.ScheduledRate,
-                    IsTemp = lastPoint.IsTemp,
-                }
-            );
+                    Timestamp = t,
+                    Rate = rate,
+                    ScheduledRate = rate,
+                    Origin = BasalDeliveryOrigin.Inferred,
+                });
+                prevRate = rate;
+            }
+        }
+
+        // Ensure at least one point
+        if (series.Count == 0)
+        {
+            series.Add(new BasalPoint
+            {
+                Timestamp = startTime,
+                Rate = defaultBasalRate,
+                ScheduledRate = defaultBasalRate,
+                Origin = BasalDeliveryOrigin.Inferred,
+            });
         }
 
         return series;
@@ -386,9 +418,9 @@ public class DashboardChartData
     public List<StateSpan> PumpModeSpans { get; set; } = new();
 
     /// <summary>
-    /// Temp basal state spans with rate and duration metadata
+    /// Basal delivery state spans (pump-confirmed delivery data)
     /// </summary>
-    public List<StateSpan> TempBasalSpans { get; set; } = new();
+    public List<StateSpan> BasalDeliverySpans { get; set; } = new();
 
     /// <summary>
     /// Profile state spans showing active profile changes
@@ -423,17 +455,17 @@ public class BasalPoint
     public long Timestamp { get; set; }
 
     /// <summary>
-    /// Effective basal rate in U/hr (includes temp basals and combo bolus)
+    /// Effective basal rate in U/hr
     /// </summary>
     public double Rate { get; set; }
 
     /// <summary>
-    /// Scheduled basal rate from profile in U/hr (without temp basal modifications)
+    /// Scheduled basal rate from profile in U/hr
     /// </summary>
     public double ScheduledRate { get; set; }
 
     /// <summary>
-    /// Whether this is a temporary basal rate
+    /// Origin of this basal rate - where it came from
     /// </summary>
-    public bool IsTemp { get; set; }
+    public BasalDeliveryOrigin Origin { get; set; }
 }

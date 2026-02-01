@@ -1772,6 +1772,84 @@ export class MetadataClient {
     }
 
     /**
+     * Get state span types metadata
+    This endpoint exposes all available state span categories and their states for type-safe usage in frontend clients
+     * @return State span types metadata
+     */
+    getStateSpanTypes(signal?: AbortSignal): Promise<StateSpanTypesMetadata> {
+        let url_ = this.baseUrl + "/api/Metadata/state-span-types";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStateSpanTypes(_response);
+        });
+    }
+
+    protected processGetStateSpanTypes(response: Response): Promise<StateSpanTypesMetadata> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpanTypesMetadata;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpanTypesMetadata>(null as any);
+    }
+
+    /**
+     * Get statistics metadata for type generation
+    This endpoint exists primarily to ensure NSwag generates TypeScript types for statistics models
+     * @return Statistics types metadata
+     */
+    getStatisticsTypes(signal?: AbortSignal): Promise<StatisticsTypesMetadata> {
+        let url_ = this.baseUrl + "/api/Metadata/statistics-types";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStatisticsTypes(_response);
+        });
+    }
+
+    protected processGetStatisticsTypes(response: Response): Promise<StatisticsTypesMetadata> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StatisticsTypesMetadata;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StatisticsTypesMetadata>(null as any);
+    }
+
+    /**
      * Get widget definitions metadata
     This endpoint provides all available dashboard widget definitions for frontend configuration
      * @return Widget definitions metadata
@@ -3173,6 +3251,150 @@ export class StatisticsClient {
         }
         return Promise.resolve<SiteChangeImpactAnalysis>(null as any);
     }
+
+    /**
+     * Calculate daily basal/bolus ratio statistics for a date range
+     * @param startDate (optional) Start date of the analysis period
+     * @param endDate (optional) End date of the analysis period
+     * @return Daily basal/bolus ratio breakdown with averages
+     */
+    getDailyBasalBolusRatios(startDate?: Date | undefined, endDate?: Date | undefined, signal?: AbortSignal): Promise<DailyBasalBolusRatioResponse> {
+        let url_ = this.baseUrl + "/api/v1/Statistics/daily-basal-bolus-ratios?";
+        if (startDate === null)
+            throw new globalThis.Error("The parameter 'startDate' cannot be null.");
+        else if (startDate !== undefined)
+            url_ += "startDate=" + encodeURIComponent(startDate ? "" + startDate.toISOString() : "") + "&";
+        if (endDate === null)
+            throw new globalThis.Error("The parameter 'endDate' cannot be null.");
+        else if (endDate !== undefined)
+            url_ += "endDate=" + encodeURIComponent(endDate ? "" + endDate.toISOString() : "") + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDailyBasalBolusRatios(_response);
+        });
+    }
+
+    protected processGetDailyBasalBolusRatios(response: Response): Promise<DailyBasalBolusRatioResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DailyBasalBolusRatioResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DailyBasalBolusRatioResponse>(null as any);
+    }
+
+    /**
+     * Calculate comprehensive insulin delivery statistics for a date range
+     * @param startDate (optional) Start date of the analysis period
+     * @param endDate (optional) End date of the analysis period
+     * @return Comprehensive insulin delivery statistics
+     */
+    getInsulinDeliveryStatistics(startDate?: Date | undefined, endDate?: Date | undefined, signal?: AbortSignal): Promise<InsulinDeliveryStatistics> {
+        let url_ = this.baseUrl + "/api/v1/Statistics/insulin-delivery-stats?";
+        if (startDate === null)
+            throw new globalThis.Error("The parameter 'startDate' cannot be null.");
+        else if (startDate !== undefined)
+            url_ += "startDate=" + encodeURIComponent(startDate ? "" + startDate.toISOString() : "") + "&";
+        if (endDate === null)
+            throw new globalThis.Error("The parameter 'endDate' cannot be null.");
+        else if (endDate !== undefined)
+            url_ += "endDate=" + encodeURIComponent(endDate ? "" + endDate.toISOString() : "") + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetInsulinDeliveryStatistics(_response);
+        });
+    }
+
+    protected processGetInsulinDeliveryStatistics(response: Response): Promise<InsulinDeliveryStatistics> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InsulinDeliveryStatistics;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InsulinDeliveryStatistics>(null as any);
+    }
+
+    /**
+     * Calculate comprehensive basal analysis statistics for a date range
+     * @param startDate (optional) Start date of the analysis period
+     * @param endDate (optional) End date of the analysis period
+     * @return Comprehensive basal analysis with stats, temp basal info, and hourly percentiles
+     */
+    getBasalAnalysis(startDate?: Date | undefined, endDate?: Date | undefined, signal?: AbortSignal): Promise<BasalAnalysisResponse> {
+        let url_ = this.baseUrl + "/api/v1/Statistics/basal-analysis?";
+        if (startDate === null)
+            throw new globalThis.Error("The parameter 'startDate' cannot be null.");
+        else if (startDate !== undefined)
+            url_ += "startDate=" + encodeURIComponent(startDate ? "" + startDate.toISOString() : "") + "&";
+        if (endDate === null)
+            throw new globalThis.Error("The parameter 'endDate' cannot be null.");
+        else if (endDate !== undefined)
+            url_ += "endDate=" + encodeURIComponent(endDate ? "" + endDate.toISOString() : "") + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetBasalAnalysis(_response);
+        });
+    }
+
+    protected processGetBasalAnalysis(response: Response): Promise<BasalAnalysisResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as BasalAnalysisResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<BasalAnalysisResponse>(null as any);
+    }
 }
 
 export class VersionsClient {
@@ -3677,6 +3899,250 @@ export class ChartDataClient {
             });
         }
         return Promise.resolve<DashboardChartData>(null as any);
+    }
+}
+
+export class ClockFacesClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get a clock face configuration by ID (public, no authentication required)
+     * @param id Clock face UUID
+     * @return Clock face configuration
+     */
+    getById(id: string, signal?: AbortSignal): Promise<ClockFacePublicDto> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetById(_response);
+        });
+    }
+
+    protected processGetById(response: Response): Promise<ClockFacePublicDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFacePublicDto;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFacePublicDto>(null as any);
+    }
+
+    /**
+     * Update an existing clock face (owner only)
+     * @param id Clock face UUID
+     * @param request Update request
+     * @return Updated clock face
+     */
+    update(id: string, request: UpdateClockFaceRequest, signal?: AbortSignal): Promise<ClockFace> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdate(_response);
+        });
+    }
+
+    protected processUpdate(response: Response): Promise<ClockFace> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFace;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFace>(null as any);
+    }
+
+    /**
+     * Delete a clock face (owner only)
+     * @param id Clock face UUID
+     * @return Success status
+     */
+    delete(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDelete(_response);
+        });
+    }
+
+    protected processDelete(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * List all clock faces for the current user
+     * @return List of clock faces
+     */
+    list(signal?: AbortSignal): Promise<ClockFaceListItem[]> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processList(_response);
+        });
+    }
+
+    protected processList(response: Response): Promise<ClockFaceListItem[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFaceListItem[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFaceListItem[]>(null as any);
+    }
+
+    /**
+     * Create a new clock face
+     * @param request Clock face creation request
+     * @return Created clock face
+     */
+    create(request: CreateClockFaceRequest, signal?: AbortSignal): Promise<ClockFace> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreate(_response);
+        });
+    }
+
+    protected processCreate(response: Response): Promise<ClockFace> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFace;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFace>(null as any);
     }
 }
 
@@ -4256,6 +4722,68 @@ export class DebugClient {
         return Promise.resolve<any>(null as any);
     }
 
+    /**
+     * Test endpoint for creating in-app notifications (development only)
+    Creates a test notification for the current user to verify the notification system
+     * @param request The test notification parameters
+     * @return Notification created successfully
+     */
+    createTestNotification(request: TestNotificationRequest, signal?: AbortSignal): Promise<InAppNotificationDto> {
+        let url_ = this.baseUrl + "/api/v4/debug/test/inappnotification";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTestNotification(_response);
+        });
+    }
+
+    protected processCreateTestNotification(response: Response): Promise<InAppNotificationDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InAppNotificationDto;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Invalid request parameters", status, _responseText, _headers, result400);
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("User not authenticated", status, _responseText, _headers, result401);
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Endpoint only available in development", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InAppNotificationDto>(null as any);
+    }
+
     testPostgreSqlConnection(signal?: AbortSignal): Promise<FileResponse> {
         let url_ = this.baseUrl + "/api/v1/Debug/postgresql-test";
         url_ = url_.replace(/[?&]$/, "");
@@ -4646,6 +5174,260 @@ export class DeduplicationClient {
             });
         }
         return Promise.resolve<LinkedRecordsResponse>(null as any);
+    }
+}
+
+export class DeviceAgeClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get cannula/site age (CAGE)
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getCannulaAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
+        let url_ = this.baseUrl + "/api/v4/deviceage/cannula?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetCannulaAge(_response);
+        });
+    }
+
+    protected processGetCannulaAge(response: Response): Promise<DeviceAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceAgeInfo>(null as any);
+    }
+
+    /**
+     * Get sensor age (SAGE)
+    Returns both Sensor Start and Sensor Change events
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getSensorAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<SensorAgeInfo> {
+        let url_ = this.baseUrl + "/api/v4/deviceage/sensor?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSensorAge(_response);
+        });
+    }
+
+    protected processGetSensorAge(response: Response): Promise<SensorAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SensorAgeInfo>(null as any);
+    }
+
+    /**
+     * Get insulin reservoir age (IAGE)
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getInsulinAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
+        let url_ = this.baseUrl + "/api/v4/deviceage/insulin?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetInsulinAge(_response);
+        });
+    }
+
+    protected processGetInsulinAge(response: Response): Promise<DeviceAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceAgeInfo>(null as any);
+    }
+
+    /**
+     * Get pump battery age (BAGE)
+     * @param info (optional) 
+     * @param warn (optional) 
+     * @param urgent (optional) 
+     * @param display (optional) 
+     * @param enableAlerts (optional) 
+     */
+    getBatteryAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
+        let url_ = this.baseUrl + "/api/v4/deviceage/battery?";
+        if (info !== undefined && info !== null)
+            url_ += "info=" + encodeURIComponent("" + info) + "&";
+        if (warn !== undefined && warn !== null)
+            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
+        if (urgent !== undefined && urgent !== null)
+            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
+        if (display !== undefined && display !== null)
+            url_ += "display=" + encodeURIComponent("" + display) + "&";
+        if (enableAlerts !== undefined && enableAlerts !== null)
+            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetBatteryAge(_response);
+        });
+    }
+
+    protected processGetBatteryAge(response: Response): Promise<DeviceAgeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceAgeInfo>(null as any);
+    }
+
+    /**
+     * Get all device ages in a single call
+     */
+    getAllDeviceAges(signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/deviceage/all";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetAllDeviceAges(_response);
+        });
+    }
+
+    protected processGetAllDeviceAges(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
     }
 }
 
@@ -5673,6 +6455,188 @@ export class FoodsClient {
     }
 }
 
+export class MealMatchingClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get a food entry for review
+     */
+    getFoodEntry(id: string, signal?: AbortSignal): Promise<ConnectorFoodEntry> {
+        let url_ = this.baseUrl + "/api/v4/meal-matching/food-entries/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetFoodEntry(_response);
+        });
+    }
+
+    protected processGetFoodEntry(response: Response): Promise<ConnectorFoodEntry> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ConnectorFoodEntry;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ConnectorFoodEntry>(null as any);
+    }
+
+    /**
+     * Get suggested meal matches for a date range
+     * @param from (optional) 
+     * @param to (optional) 
+     */
+    getSuggestions(from?: Date | null | undefined, to?: Date | null | undefined, signal?: AbortSignal): Promise<SuggestedMealMatch[]> {
+        let url_ = this.baseUrl + "/api/v4/meal-matching/suggestions?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent(from ? "" + from.toISOString() : "") + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent(to ? "" + to.toISOString() : "") + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSuggestions(_response);
+        });
+    }
+
+    protected processGetSuggestions(response: Response): Promise<SuggestedMealMatch[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SuggestedMealMatch[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SuggestedMealMatch[]>(null as any);
+    }
+
+    /**
+     * Accept a meal match
+     */
+    acceptMatch(request: AcceptMatchRequest, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/meal-matching/accept";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAcceptMatch(_response);
+        });
+    }
+
+    protected processAcceptMatch(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Dismiss a meal match
+     */
+    dismissMatch(request: DismissMatchRequest, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/meal-matching/dismiss";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDismissMatch(_response);
+        });
+    }
+
+    protected processDismissMatch(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+}
+
 export class MigrationClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -6064,6 +7028,634 @@ export class MyFitnessPalSettingsClient {
             });
         }
         return Promise.resolve<MyFitnessPalMatchingSettings>(null as any);
+    }
+}
+
+export class NotificationsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get all active notifications for the current user
+     * @return List of active notifications
+     */
+    getNotifications(signal?: AbortSignal): Promise<InAppNotificationDto[]> {
+        let url_ = this.baseUrl + "/api/v4/notifications";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetNotifications(_response);
+        });
+    }
+
+    protected processGetNotifications(response: Response): Promise<InAppNotificationDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InAppNotificationDto[];
+            return result200;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InAppNotificationDto[]>(null as any);
+    }
+
+    /**
+     * Execute an action on a notification
+     * @param id The notification ID
+     * @param actionId The action ID to execute
+     * @return No content if successful
+     */
+    executeAction(id: string, actionId: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/notifications/{id}/actions/{actionId}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        if (actionId === undefined || actionId === null)
+            throw new globalThis.Error("The parameter 'actionId' must be defined.");
+        url_ = url_.replace("{actionId}", encodeURIComponent("" + actionId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processExecuteAction(_response);
+        });
+    }
+
+    protected processExecuteAction(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Dismiss a notification (archive with dismissed reason)
+     * @param id The notification ID to dismiss
+     * @return No content if successful
+     */
+    dismissNotification(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/notifications/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDismissNotification(_response);
+        });
+    }
+
+    protected processDismissNotification(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Send Loop notification for iOS Loop app integration
+    Implements the /api/v2/notifications/loop endpoint from legacy notifications-v2.js
+     * @param request Loop notification request data
+     * @return Notification processed successfully
+     */
+    sendLoopNotification(request: LoopNotificationRequest, signal?: AbortSignal): Promise<NotificationV2Response> {
+        let url_ = this.baseUrl + "/api/v2/notifications/loop";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSendLoopNotification(_response);
+        });
+    }
+
+    protected processSendLoopNotification(response: Response): Promise<NotificationV2Response> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
+            return throwException("Invalid notification request", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationV2Response>(null as any);
+    }
+
+    /**
+     * Process a generic V2 notification
+    Provides a generic endpoint for processing various notification types
+     * @param notification Notification data to process
+     * @return Notification processed successfully
+     */
+    processNotification(notification: NotificationBase, signal?: AbortSignal): Promise<NotificationV2Response> {
+        let url_ = this.baseUrl + "/api/v2/notifications";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(notification);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processProcessNotification(_response);
+        });
+    }
+
+    protected processProcessNotification(response: Response): Promise<NotificationV2Response> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
+            return throwException("Invalid notification request", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationV2Response>(null as any);
+    }
+
+    /**
+     * Get current notification system status and configuration
+    Provides information about the notification system capabilities and status
+     * @return Notification status retrieved successfully
+     */
+    getNotificationStatus(signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v2/notifications/status";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetNotificationStatus(_response);
+        });
+    }
+
+    protected processGetNotificationStatus(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("Internal server error", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
+     * Acknowledge a notification alarm to silence it
+    Implements the /notifications/ack endpoint from legacy notifications.js
+     * @param request Acknowledgment request containing level, group, and silence time
+     * @return Notification acknowledged successfully
+     */
+    ackNotification(request: NotificationAckRequest, signal?: AbortSignal): Promise<NotificationAckResponse> {
+        let url_ = this.baseUrl + "/api/v1/notifications/ack";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAckNotification(_response);
+        });
+    }
+
+    protected processAckNotification(response: Response): Promise<NotificationAckResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Invalid acknowledgment request", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationAckResponse>(null as any);
+    }
+
+    /**
+     * Handle Pushover webhook callbacks for notification acknowledgments
+    Implements the /notifications/pushovercallback endpoint for Pushover integration
+     * @param request Pushover callback request data from webhook
+     * @return Pushover callback processed successfully
+     */
+    pushoverCallback(request: PushoverCallbackRequest, signal?: AbortSignal): Promise<NotificationAckResponse> {
+        let url_ = this.baseUrl + "/api/v1/notifications/pushovercallback";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processPushoverCallback(_response);
+        });
+    }
+
+    protected processPushoverCallback(response: Response): Promise<NotificationAckResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Invalid callback request", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationAckResponse>(null as any);
+    }
+
+    /**
+     * Get all admin notifications with their counts and timestamps
+    Implements the /adminnotifies endpoint from legacy adminnotifies.js
+     * @return Admin notifications retrieved successfully
+     */
+    getAdminNotifies(signal?: AbortSignal): Promise<AdminNotifiesResponse> {
+        let url_ = this.baseUrl + "/api/v1/adminnotifies";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetAdminNotifies(_response);
+        });
+    }
+
+    protected processGetAdminNotifies(response: Response): Promise<AdminNotifiesResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AdminNotifiesResponse;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("Internal server error", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<AdminNotifiesResponse>(null as any);
+    }
+
+    /**
+     * Add a new admin notification or increment count if it already exists
+    Provides an endpoint for creating admin notifications (typically used internally)
+     * @param notification Admin notification to add
+     * @return Admin notification added successfully
+     */
+    addAdminNotification(notification: AdminNotification, signal?: AbortSignal): Promise<NotificationAckResponse> {
+        let url_ = this.baseUrl + "/api/v1/adminnotifies";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(notification);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAddAdminNotification(_response);
+        });
+    }
+
+    protected processAddAdminNotification(response: Response): Promise<NotificationAckResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Invalid notification request", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationAckResponse>(null as any);
+    }
+
+    /**
+     * Clear all admin notifications
+    Provides an endpoint for clearing all admin notifications (typically used for maintenance)
+     * @return Admin notifications cleared successfully
+     */
+    clearAllAdminNotifications(signal?: AbortSignal): Promise<NotificationAckResponse> {
+        let url_ = this.baseUrl + "/api/v1/adminnotifies";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processClearAllAdminNotifications(_response);
+        });
+    }
+
+    protected processClearAllAdminNotifications(response: Response): Promise<NotificationAckResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationAckResponse>(null as any);
+    }
+
+    /**
+     * Send a Pushover notification for testing or manual triggering
+    Provides an endpoint for sending Pushover notifications directly
+     * @param request Pushover notification request
+     * @return Pushover notification sent successfully
+     */
+    sendPushoverNotification(request: PushoverNotificationRequest, signal?: AbortSignal): Promise<NotificationAckResponse> {
+        let url_ = this.baseUrl + "/api/v1/notifications/pushover";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSendPushoverNotification(_response);
+        });
+    }
+
+    protected processSendPushoverNotification(response: Response): Promise<NotificationAckResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Invalid notification request", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
+            return throwException("Internal server error", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<NotificationAckResponse>(null as any);
     }
 }
 
@@ -6889,6 +8481,53 @@ export class ServicesClient {
     }
 
     /**
+     * Get a summary of data counts for a specific connector.
+    Returns the number of entries, treatments, and device statuses synced by this connector.
+     * @param id Connector ID (e.g., "dexcom")
+     * @return Data summary with counts by type
+     */
+    getConnectorDataSummary(id: string, signal?: AbortSignal): Promise<ConnectorDataSummary> {
+        let url_ = this.baseUrl + "/api/v4/services/connectors/{id}/data-summary";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetConnectorDataSummary(_response);
+        });
+    }
+
+    protected processGetConnectorDataSummary(response: Response): Promise<ConnectorDataSummary> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ConnectorDataSummary;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ConnectorDataSummary>(null as any);
+    }
+
+    /**
      * Delete all data from a specific connector.
     WARNING: This is a destructive operation that cannot be undone.
      * @param id Connector ID (e.g., "dexcom")
@@ -7399,12 +9038,12 @@ export class StateSpansClient {
     }
 
     /**
-     * Get temp basal state spans
+     * Get basal delivery state spans (pump-confirmed basal rates)
      * @param from (optional) 
      * @param to (optional) 
      */
-    getTempBasals(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
-        let url_ = this.baseUrl + "/api/v4/state-spans/temp-basals?";
+    getBasalDelivery(from?: number | null | undefined, to?: number | null | undefined, signal?: AbortSignal): Promise<StateSpan[]> {
+        let url_ = this.baseUrl + "/api/v4/state-spans/basal-delivery?";
         if (from !== undefined && from !== null)
             url_ += "from=" + encodeURIComponent("" + from) + "&";
         if (to !== undefined && to !== null)
@@ -7420,11 +9059,11 @@ export class StateSpansClient {
         };
 
         return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTempBasals(_response);
+            return this.processGetBasalDelivery(_response);
         });
     }
 
-    protected processGetTempBasals(response: Response): Promise<StateSpan[]> {
+    protected processGetBasalDelivery(response: Response): Promise<StateSpan[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 200) {
@@ -7911,8 +9550,53 @@ export class StatusClient {
     }
 
     /**
+     * Get the current system status as JSON.
+    This is the .json suffix variant that always returns JSON (Nightscout compatibility).
+     * @return Status response in JSON format
+     */
+    getStatusJson(signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v1/status.json";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStatusJson(_response);
+        });
+    }
+
+    protected processGetStatusJson(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+
+    /**
      * Get the current system status.
-    Returns HTML by default for Nightscout compatibility, or JSON if Accept header requests it.
+    Returns JSON when Accept header includes application/json (Nightscout client behavior),
+    otherwise returns HTML for browser access.
      * @return Status response in HTML or JSON format
      */
     getStatus22(signal?: AbortSignal): Promise<FileResponse> {
@@ -8249,48 +9933,6 @@ export class TrackersClient {
     constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
         this.http = http ? http : window as any;
         this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Seed default tracker definitions for the current user
-     */
-    seedDefaults(signal?: AbortSignal): Promise<FileResponse> {
-        let url_ = this.baseUrl + "/api/v4/trackers/seed";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "POST",
-            signal,
-            headers: {
-                "Accept": "application/octet-stream"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processSeedDefaults(_response);
-        });
-    }
-
-    protected processSeedDefaults(response: Response): Promise<FileResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<FileResponse>(null as any);
     }
 
     /**
@@ -9205,6 +10847,977 @@ export class TreatmentFoodsClient {
     }
 }
 
+export class TreatmentsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get treatments with optional filtering and pagination.
+    Unlike V1-V3 endpoints, this does NOT include StateSpan-derived basal data.
+    For basal delivery, query /api/v4/state-spans?category=BasalDelivery instead.
+     * @param eventType (optional) Optional filter by event type
+     * @param count (optional) Maximum number of treatments to return (default: 100)
+     * @param skip (optional) Number of treatments to skip for pagination (default: 0)
+     * @param findQuery (optional) Optional MongoDB-style query filter for advanced filtering
+     * @return Array of treatments ordered by most recent first
+     */
+    getTreatments(eventType?: string | null | undefined, count?: number | undefined, skip?: number | undefined, findQuery?: string | null | undefined, signal?: AbortSignal): Promise<Treatment[]> {
+        let url_ = this.baseUrl + "/api/v4/treatments?";
+        if (eventType !== undefined && eventType !== null)
+            url_ += "eventType=" + encodeURIComponent("" + eventType) + "&";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        if (findQuery !== undefined && findQuery !== null)
+            url_ += "find=" + encodeURIComponent("" + findQuery) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatments(_response);
+        });
+    }
+
+    protected processGetTreatments(response: Response): Promise<Treatment[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment[]>(null as any);
+    }
+
+    /**
+     * Create a treatment with tracker integration.
+    If the treatment's event type matches a tracker's trigger event types,
+    the tracker instance will be automatically started/restarted.
+     */
+    createTreatment(treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v4/treatments";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatment);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTreatment(_response);
+        });
+    }
+
+    protected processCreateTreatment(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Create multiple treatments with tracker integration.
+     */
+    createTreatments(treatments: Treatment[], signal?: AbortSignal): Promise<Treatment[]> {
+        let url_ = this.baseUrl + "/api/v4/treatments/bulk";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatments);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTreatments(_response);
+        });
+    }
+
+    protected processCreateTreatments(response: Response): Promise<Treatment[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment[]>(null as any);
+    }
+
+    /**
+     * Get a specific treatment by ID
+     */
+    getTreatment(id: string, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v4/treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatment(_response);
+        });
+    }
+
+    protected processGetTreatment(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Update an existing treatment by ID
+     */
+    updateTreatment(id: string, treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v4/treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatment);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateTreatment(_response);
+        });
+    }
+
+    protected processUpdateTreatment(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Delete a treatment by ID
+     */
+    deleteTreatment(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteTreatment(_response);
+        });
+    }
+
+    protected processDeleteTreatment(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Get treatments with V3 API features including pagination, field selection, and advanced filtering
+     * @return V3 treatments collection response
+     */
+    getTreatments2(signal?: AbortSignal): Promise<V3CollectionResponseOfObject> {
+        let url_ = this.baseUrl + "/api/v3/Treatments";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatments2(_response);
+        });
+    }
+
+    protected processGetTreatments2(response: Response): Promise<V3CollectionResponseOfObject> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3CollectionResponseOfObject;
+            return result200;
+            });
+        } else if (status === 304) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<V3CollectionResponseOfObject>(null as any);
+    }
+
+    /**
+     * Create a new treatment via V3 API
+     * @param treatment Treatment to create
+     * @return Created treatment
+     */
+    createTreatment2(treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v3/Treatments";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatment);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTreatment2(_response);
+        });
+    }
+
+    protected processCreateTreatment2(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Get a specific treatment by ID with V3 format
+     * @param id Treatment ID
+     * @return Single treatment in V3 format
+     */
+    getTreatment2(id: string, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatment2(_response);
+        });
+    }
+
+    protected processGetTreatment2(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Update a treatment via V3 API
+     * @param id Treatment ID
+     * @param treatment Updated treatment data
+     * @return Updated treatment
+     */
+    updateTreatment2(id: string, treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatment);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateTreatment2(_response);
+        });
+    }
+
+    protected processUpdateTreatment2(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Delete a treatment via V3 API
+     * @param id Treatment ID
+     * @return No content on success
+     */
+    deleteTreatment2(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteTreatment2(_response);
+        });
+    }
+
+    protected processDeleteTreatment2(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Create multiple treatments via V3 API (bulk operation)
+     * @param treatments Treatments to create
+     * @return Created treatments
+     */
+    createTreatments2(treatments: Treatment[], signal?: AbortSignal): Promise<Treatment[]> {
+        let url_ = this.baseUrl + "/api/v3/Treatments/bulk";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatments);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTreatments2(_response);
+        });
+    }
+
+    protected processCreateTreatments2(response: Response): Promise<Treatment[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment[]>(null as any);
+    }
+
+    /**
+     * Get treatments with optional filtering and pagination
+     * @param find (optional) MongoDB-style query filter for date range filtering
+     * @param count (optional) Maximum number of treatments to return (default: 10)
+     * @param skip (optional) Number of treatments to skip for pagination (default: 0)
+     * @param format (optional) Output format (json, csv, tsv, txt)
+     * @return Array of treatments ordered by most recent first
+     */
+    getTreatments2All(find?: string | null | undefined, count?: number | undefined, skip?: number | undefined, format?: string | null | undefined, signal?: AbortSignal): Promise<Treatment[]> {
+        let url_ = this.baseUrl + "/api/v1/Treatments?";
+        if (find !== undefined && find !== null)
+            url_ += "find=" + encodeURIComponent("" + find) + "&";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        if (format !== undefined && format !== null)
+            url_ += "format=" + encodeURIComponent("" + format) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatments2All(_response);
+        });
+    }
+
+    protected processGetTreatments2All(response: Response): Promise<Treatment[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment[]>(null as any);
+    }
+
+    /**
+     * Create new treatments
+     * @param treatments Treatments to create (can be single object or array)
+     * @return Created treatments with assigned IDs
+     */
+    createTreatments22(treatments: any, signal?: AbortSignal): Promise<Treatment[]> {
+        let url_ = this.baseUrl + "/api/v1/Treatments";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatments);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateTreatments22(_response);
+        });
+    }
+
+    protected processCreateTreatments22(response: Response): Promise<Treatment[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment[]>(null as any);
+    }
+
+    /**
+     * Bulk delete treatments using query parameters
+     * @return Number of treatments deleted
+     */
+    bulkDeleteTreatments(signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v1/Treatments";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processBulkDeleteTreatments(_response);
+        });
+    }
+
+    protected processBulkDeleteTreatments(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
+     * Get a specific treatment by ID
+     * @param id Treatment ID
+     * @return The treatment with the specified ID
+     */
+    getTreatmentById(id: string, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v1/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatmentById(_response);
+        });
+    }
+
+    protected processGetTreatmentById(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Update an existing treatment by ID
+     * @param id Treatment ID to update
+     * @param treatment Updated treatment data
+     * @return Updated treatment
+     */
+    updateTreatment22(id: string, treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
+        let url_ = this.baseUrl + "/api/v1/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(treatment);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateTreatment22(_response);
+        });
+    }
+
+    protected processUpdateTreatment22(response: Response): Promise<Treatment> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<Treatment>(null as any);
+    }
+
+    /**
+     * Delete a treatment by ID
+     * @param id Treatment ID to delete
+     * @return Success status
+     */
+    deleteTreatment22(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v1/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteTreatment22(_response);
+        });
+    }
+
+    protected processDeleteTreatment22(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+}
+
 export class UISettingsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -10039,17 +12652,17 @@ export class DeviceStatusClient {
     /**
      * Update a device status record by ID with V3 format
      * @param id Device status ID to update
-     * @param deviceStatus Updated device status data
+     * @param request Updated device status data
      * @return Updated device status record
      */
-    updateDeviceStatus(id: string, deviceStatus: DeviceStatus, signal?: AbortSignal): Promise<DeviceStatus> {
+    updateDeviceStatus(id: string, request: any, signal?: AbortSignal): Promise<{ [key: string]: any; }> {
         let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
         url_ = url_.replace("{id}", encodeURIComponent("" + id));
         url_ = url_.replace(/[?&]$/, "");
 
-        const content_ = JSON.stringify(deviceStatus);
+        const content_ = JSON.stringify(request);
 
         let options_: RequestInit = {
             body: content_,
@@ -10066,13 +12679,13 @@ export class DeviceStatusClient {
         });
     }
 
-    protected processUpdateDeviceStatus(response: Response): Promise<DeviceStatus> {
+    protected processUpdateDeviceStatus(response: Response): Promise<{ [key: string]: any; }> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 200) {
             return response.text().then((_responseText) => {
             let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as { [key: string]: any; };
             return result200;
             });
         } else if (status === 400) {
@@ -10087,16 +12700,12 @@ export class DeviceStatusClient {
             result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
             return throwException("A server side error occurred.", status, _responseText, _headers, result404);
             });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<DeviceStatus>(null as any);
+        return Promise.resolve<{ [key: string]: any; }>(null as any);
     }
 
     /**
@@ -10213,14 +12822,14 @@ export class DeviceStatusClient {
 
     /**
      * Create new device status entries
-     * @param deviceStatusEntries Device status entries to create
+     * @param body Device status entry or array of entries to create (accepts both single object and array)
      * @return Created device status entries with assigned IDs
      */
-    createDeviceStatus2(deviceStatusEntries: DeviceStatus[], signal?: AbortSignal): Promise<DeviceStatus[]> {
+    createDeviceStatus2(body: any, signal?: AbortSignal): Promise<DeviceStatus[]> {
         let url_ = this.baseUrl + "/api/v1/DeviceStatus";
         url_ = url_.replace(/[?&]$/, "");
 
-        const content_ = JSON.stringify(deviceStatusEntries);
+        const content_ = JSON.stringify(body);
 
         let options_: RequestInit = {
             body: content_,
@@ -10240,11 +12849,11 @@ export class DeviceStatusClient {
     protected processCreateDeviceStatus2(response: Response): Promise<DeviceStatus[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
+        if (status === 200) {
             return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
-            return result201;
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
+            return result200;
             });
         } else if (status === 400) {
             return response.text().then((_responseText) => {
@@ -10940,11 +13549,11 @@ export class EntriesClient {
     protected processCreateEntries2All(response: Response): Promise<Entry[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
+        if (status === 200) {
             return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Entry[];
-            return result201;
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Entry[];
+            return result200;
             });
         } else if (status === 400) {
             return response.text().then((_responseText) => {
@@ -11265,6 +13874,7 @@ export class FoodClient {
 
     /**
      * Create new food records with V3 format and deduplication support
+    Nightscout V3 API requires date field validation before processing
      * @param foodData Food data to create (single object or array)
      * @return Created food records
      */
@@ -11370,18 +13980,19 @@ export class FoodClient {
 
     /**
      * Update a food record by ID with V3 format
+    Nightscout V3 API requires date field validation before checking document existence
      * @param id Food ID to update
-     * @param food Updated food data
+     * @param foodData Updated food data as JSON
      * @return Updated food record
      */
-    updateFood(id: string, food: Food, signal?: AbortSignal): Promise<Food> {
+    updateFood(id: string, foodData: any, signal?: AbortSignal): Promise<Food> {
         let url_ = this.baseUrl + "/api/v3/Food/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
         url_ = url_.replace("{id}", encodeURIComponent("" + id));
         url_ = url_.replace(/[?&]$/, "");
 
-        const content_ = JSON.stringify(food);
+        const content_ = JSON.stringify(foodData);
 
         let options_: RequestInit = {
             body: content_,
@@ -11635,6 +14246,50 @@ export class FoodClient {
     }
 
     /**
+     * Bulk delete food records by filter query
+    Compatible with Nightscout's DELETE /api/v1/food?find[field]=value
+    Note: Nightscout V1 API doesn't officially support bulk delete, but returns 200 {} for such requests
+     * @return Empty object for parity with Nightscout
+     */
+    deleteFoodByFilter(signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v1/Food";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteFoodByFilter(_response);
+        });
+    }
+
+    protected processDeleteFoodByFilter(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
      * Alternative endpoint with .json extension for compatibility
      * @return Array of food records
      */
@@ -11719,7 +14374,8 @@ export class FoodClient {
     }
 
     /**
-     * Get quickpick food records only (type="quickpick")
+     * Get quickpick food records only (type="quickpick" and hidden="false")
+    Matches Nightscout's listquickpicks behavior which filters by hidden='false' and sorts by position
      * @return Array of quickpick food records ordered by position
      */
     getQuickPickFood(signal?: AbortSignal): Promise<Food[]> {
@@ -12315,15 +14971,16 @@ export class ProfileClient {
     }
 
     /**
-     * Create or update profiles
-     * @param profiles Profiles to create or update
-     * @return Created profiles with assigned IDs
+     * Create or update a profile.
+    Nightscout accepts either a single profile object or an array of profiles.
+     * @param body Profile(s) to create or update (single object or array)
+     * @return Created profiles with assigned IDs as an array
      */
-    createProfiles(profiles: Profile[], signal?: AbortSignal): Promise<Profile[]> {
+    createProfiles(body: any, signal?: AbortSignal): Promise<Profile[]> {
         let url_ = this.baseUrl + "/api/v1/Profile";
         url_ = url_.replace(/[?&]$/, "");
 
-        const content_ = JSON.stringify(profiles);
+        const content_ = JSON.stringify(body);
 
         let options_: RequestInit = {
             body: content_,
@@ -12365,7 +15022,7 @@ export class ProfileClient {
 
     /**
      * Get the current active profile
-     * @return The current active profile, or empty array if no profiles exist
+     * @return The current active profile as a single object (Nightscout format), or empty array if no profiles exist
      */
     getCurrentProfile(signal?: AbortSignal): Promise<Profile[]> {
         let url_ = this.baseUrl + "/api/v1/Profile/current";
@@ -12771,680 +15428,6 @@ export class SettingsClient {
     }
 }
 
-export class TreatmentsClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Get treatments with V3 API features including pagination, field selection, and advanced filtering
-     * @return V3 treatments collection response
-     */
-    getTreatments(signal?: AbortSignal): Promise<V3CollectionResponseOfObject> {
-        let url_ = this.baseUrl + "/api/v3/Treatments";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTreatments(_response);
-        });
-    }
-
-    protected processGetTreatments(response: Response): Promise<V3CollectionResponseOfObject> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3CollectionResponseOfObject;
-            return result200;
-            });
-        } else if (status === 304) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<V3CollectionResponseOfObject>(null as any);
-    }
-
-    /**
-     * Create a new treatment via V3 API
-     * @param treatment Treatment to create
-     * @return Created treatment
-     */
-    createTreatment(treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
-        let url_ = this.baseUrl + "/api/v3/Treatments";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(treatment);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processCreateTreatment(_response);
-        });
-    }
-
-    protected processCreateTreatment(response: Response): Promise<Treatment> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
-            return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
-            return result201;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment>(null as any);
-    }
-
-    /**
-     * Get a specific treatment by ID with V3 format
-     * @param id Treatment ID
-     * @return Single treatment in V3 format
-     */
-    getTreatment(id: string, signal?: AbortSignal): Promise<Treatment> {
-        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTreatment(_response);
-        });
-    }
-
-    protected processGetTreatment(response: Response): Promise<Treatment> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
-            return result200;
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment>(null as any);
-    }
-
-    /**
-     * Update a treatment via V3 API
-     * @param id Treatment ID
-     * @param treatment Updated treatment data
-     * @return Updated treatment
-     */
-    updateTreatment(id: string, treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
-        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(treatment);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "PUT",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processUpdateTreatment(_response);
-        });
-    }
-
-    protected processUpdateTreatment(response: Response): Promise<Treatment> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment>(null as any);
-    }
-
-    /**
-     * Delete a treatment via V3 API
-     * @param id Treatment ID
-     * @return No content on success
-     */
-    deleteTreatment(id: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processDeleteTreatment(_response);
-        });
-    }
-
-    protected processDeleteTreatment(response: Response): Promise<void> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 204) {
-            return response.text().then((_responseText) => {
-            return;
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<void>(null as any);
-    }
-
-    /**
-     * Create multiple treatments via V3 API (bulk operation)
-     * @param treatments Treatments to create
-     * @return Created treatments
-     */
-    createTreatments(treatments: Treatment[], signal?: AbortSignal): Promise<Treatment[]> {
-        let url_ = this.baseUrl + "/api/v3/Treatments/bulk";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(treatments);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processCreateTreatments(_response);
-        });
-    }
-
-    protected processCreateTreatments(response: Response): Promise<Treatment[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
-            return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
-            return result201;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment[]>(null as any);
-    }
-
-    /**
-     * Get treatments with optional filtering and pagination
-     * @param find (optional) MongoDB-style query filter for date range filtering
-     * @param count (optional) Maximum number of treatments to return (default: 10)
-     * @param skip (optional) Number of treatments to skip for pagination (default: 0)
-     * @param format (optional) Output format (json, csv, tsv, txt)
-     * @return Array of treatments ordered by most recent first
-     */
-    getTreatments2(find?: string | null | undefined, count?: number | undefined, skip?: number | undefined, format?: string | null | undefined, signal?: AbortSignal): Promise<Treatment[]> {
-        let url_ = this.baseUrl + "/api/v1/Treatments?";
-        if (find !== undefined && find !== null)
-            url_ += "find=" + encodeURIComponent("" + find) + "&";
-        if (count === null)
-            throw new globalThis.Error("The parameter 'count' cannot be null.");
-        else if (count !== undefined)
-            url_ += "count=" + encodeURIComponent("" + count) + "&";
-        if (skip === null)
-            throw new globalThis.Error("The parameter 'skip' cannot be null.");
-        else if (skip !== undefined)
-            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
-        if (format !== undefined && format !== null)
-            url_ += "format=" + encodeURIComponent("" + format) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTreatments2(_response);
-        });
-    }
-
-    protected processGetTreatments2(response: Response): Promise<Treatment[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment[]>(null as any);
-    }
-
-    /**
-     * Create new treatments
-     * @param treatments Treatments to create (can be single object or array)
-     * @return Created treatments with assigned IDs
-     */
-    createTreatments2(treatments: any, signal?: AbortSignal): Promise<Treatment[]> {
-        let url_ = this.baseUrl + "/api/v1/Treatments";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(treatments);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processCreateTreatments2(_response);
-        });
-    }
-
-    protected processCreateTreatments2(response: Response): Promise<Treatment[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
-            return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment[];
-            return result201;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment[]>(null as any);
-    }
-
-    /**
-     * Bulk delete treatments using query parameters
-     * @return Number of treatments deleted
-     */
-    bulkDeleteTreatments(signal?: AbortSignal): Promise<any> {
-        let url_ = this.baseUrl + "/api/v1/Treatments";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processBulkDeleteTreatments(_response);
-        });
-    }
-
-    protected processBulkDeleteTreatments(response: Response): Promise<any> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<any>(null as any);
-    }
-
-    /**
-     * Get a specific treatment by ID
-     * @param id Treatment ID
-     * @return The treatment with the specified ID
-     */
-    getTreatmentById(id: string, signal?: AbortSignal): Promise<Treatment> {
-        let url_ = this.baseUrl + "/api/v1/Treatments/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTreatmentById(_response);
-        });
-    }
-
-    protected processGetTreatmentById(response: Response): Promise<Treatment> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment>(null as any);
-    }
-
-    /**
-     * Update an existing treatment by ID
-     * @param id Treatment ID to update
-     * @param treatment Updated treatment data
-     * @return Updated treatment
-     */
-    updateTreatment2(id: string, treatment: Treatment, signal?: AbortSignal): Promise<Treatment> {
-        let url_ = this.baseUrl + "/api/v1/Treatments/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(treatment);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "PUT",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processUpdateTreatment2(_response);
-        });
-    }
-
-    protected processUpdateTreatment2(response: Response): Promise<Treatment> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Treatment;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Treatment>(null as any);
-    }
-
-    /**
-     * Delete a treatment by ID
-     * @param id Treatment ID to delete
-     * @return Success status
-     */
-    deleteTreatment2(id: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/api/v1/Treatments/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processDeleteTreatment2(_response);
-        });
-    }
-
-    protected processDeleteTreatment2(response: Response): Promise<void> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 204) {
-            return response.text().then((_responseText) => {
-            return;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<void>(null as any);
-    }
-}
-
 export class VersionClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -13760,484 +15743,6 @@ export class LoopClient {
     }
 }
 
-export class NotificationsClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Send Loop notification for iOS Loop app integration
-    Implements the /api/v2/notifications/loop endpoint from legacy notifications-v2.js
-     * @param request Loop notification request data
-     * @return Notification processed successfully
-     */
-    sendLoopNotification(request: LoopNotificationRequest, signal?: AbortSignal): Promise<NotificationV2Response> {
-        let url_ = this.baseUrl + "/api/v2/notifications/loop";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processSendLoopNotification(_response);
-        });
-    }
-
-    protected processSendLoopNotification(response: Response): Promise<NotificationV2Response> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
-            return throwException("Invalid notification request", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationV2Response>(null as any);
-    }
-
-    /**
-     * Process a generic V2 notification
-    Provides a generic endpoint for processing various notification types
-     * @param notification Notification data to process
-     * @return Notification processed successfully
-     */
-    processNotification(notification: NotificationBase, signal?: AbortSignal): Promise<NotificationV2Response> {
-        let url_ = this.baseUrl + "/api/v2/notifications";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(notification);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processProcessNotification(_response);
-        });
-    }
-
-    protected processProcessNotification(response: Response): Promise<NotificationV2Response> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
-            return throwException("Invalid notification request", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationV2Response;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationV2Response>(null as any);
-    }
-
-    /**
-     * Get current notification system status and configuration
-    Provides information about the notification system capabilities and status
-     * @return Notification status retrieved successfully
-     */
-    getNotificationStatus(signal?: AbortSignal): Promise<any> {
-        let url_ = this.baseUrl + "/api/v2/notifications/status";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetNotificationStatus(_response);
-        });
-    }
-
-    protected processGetNotificationStatus(response: Response): Promise<any> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
-            return result200;
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("Internal server error", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<any>(null as any);
-    }
-
-    /**
-     * Acknowledge a notification alarm to silence it
-    Implements the /notifications/ack endpoint from legacy notifications.js
-     * @param request Acknowledgment request containing level, group, and silence time
-     * @return Notification acknowledged successfully
-     */
-    ackNotification(request: NotificationAckRequest, signal?: AbortSignal): Promise<NotificationAckResponse> {
-        let url_ = this.baseUrl + "/api/v1/notifications/ack";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processAckNotification(_response);
-        });
-    }
-
-    protected processAckNotification(response: Response): Promise<NotificationAckResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Invalid acknowledgment request", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationAckResponse>(null as any);
-    }
-
-    /**
-     * Handle Pushover webhook callbacks for notification acknowledgments
-    Implements the /notifications/pushovercallback endpoint for Pushover integration
-     * @param request Pushover callback request data from webhook
-     * @return Pushover callback processed successfully
-     */
-    pushoverCallback(request: PushoverCallbackRequest, signal?: AbortSignal): Promise<NotificationAckResponse> {
-        let url_ = this.baseUrl + "/api/v1/notifications/pushovercallback";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processPushoverCallback(_response);
-        });
-    }
-
-    protected processPushoverCallback(response: Response): Promise<NotificationAckResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Invalid callback request", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationAckResponse>(null as any);
-    }
-
-    /**
-     * Get all admin notifications with their counts and timestamps
-    Implements the /adminnotifies endpoint from legacy adminnotifies.js
-     * @return Admin notifications retrieved successfully
-     */
-    getAdminNotifies(signal?: AbortSignal): Promise<AdminNotifiesResponse> {
-        let url_ = this.baseUrl + "/api/v1/adminnotifies";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetAdminNotifies(_response);
-        });
-    }
-
-    protected processGetAdminNotifies(response: Response): Promise<AdminNotifiesResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AdminNotifiesResponse;
-            return result200;
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("Internal server error", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<AdminNotifiesResponse>(null as any);
-    }
-
-    /**
-     * Add a new admin notification or increment count if it already exists
-    Provides an endpoint for creating admin notifications (typically used internally)
-     * @param notification Admin notification to add
-     * @return Admin notification added successfully
-     */
-    addAdminNotification(notification: AdminNotification, signal?: AbortSignal): Promise<NotificationAckResponse> {
-        let url_ = this.baseUrl + "/api/v1/adminnotifies";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(notification);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processAddAdminNotification(_response);
-        });
-    }
-
-    protected processAddAdminNotification(response: Response): Promise<NotificationAckResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Invalid notification request", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationAckResponse>(null as any);
-    }
-
-    /**
-     * Clear all admin notifications
-    Provides an endpoint for clearing all admin notifications (typically used for maintenance)
-     * @return Admin notifications cleared successfully
-     */
-    clearAllAdminNotifications(signal?: AbortSignal): Promise<NotificationAckResponse> {
-        let url_ = this.baseUrl + "/api/v1/adminnotifies";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processClearAllAdminNotifications(_response);
-        });
-    }
-
-    protected processClearAllAdminNotifications(response: Response): Promise<NotificationAckResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return result200;
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationAckResponse>(null as any);
-    }
-
-    /**
-     * Send a Pushover notification for testing or manual triggering
-    Provides an endpoint for sending Pushover notifications directly
-     * @param request Pushover notification request
-     * @return Pushover notification sent successfully
-     */
-    sendPushoverNotification(request: PushoverNotificationRequest, signal?: AbortSignal): Promise<NotificationAckResponse> {
-        let url_ = this.baseUrl + "/api/v1/notifications/pushover";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processSendPushoverNotification(_response);
-        });
-    }
-
-    protected processSendPushoverNotification(response: Response): Promise<NotificationAckResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Invalid notification request", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            let result500: any = null;
-            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as NotificationAckResponse;
-            return throwException("Internal server error", status, _responseText, _headers, result500);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<NotificationAckResponse>(null as any);
-    }
-}
-
 export class PropertiesClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -14483,7 +15988,7 @@ export class ActivityClient {
     /**
      * Create one or more new activities
      * @param activities Activity data (single object or array)
-     * @return Activities created successfully
+     * @return Activities created successfully (Nightscout compatibility)
      */
     createActivities(activities: any, signal?: AbortSignal): Promise<Activity[]> {
         let url_ = this.baseUrl + "/api/v1/Activity";
@@ -14509,11 +16014,11 @@ export class ActivityClient {
     protected processCreateActivities(response: Response): Promise<Activity[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
+        if (status === 200) {
             return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Activity[];
-            return result201;
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Activity[];
+            return result200;
             });
         } else if (status === 400) {
             return response.text().then((_responseText) => {
@@ -15167,260 +16672,6 @@ export class IobClient {
     }
 }
 
-export class LegacyDeviceAgeClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Get cannula/site age (CAGE) - equivalent to LegacyApp cage plugin
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
-     */
-    getCannulaAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/deviceage/cannula?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetCannulaAge(_response);
-        });
-    }
-
-    protected processGetCannulaAge(response: Response): Promise<DeviceAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceAgeInfo>(null as any);
-    }
-
-    /**
-     * Get sensor age (SAGE) - equivalent to LegacyApp sage plugin
-    Returns both Sensor Start and Sensor Change events
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
-     */
-    getSensorAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<SensorAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/deviceage/sensor?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetSensorAge(_response);
-        });
-    }
-
-    protected processGetSensorAge(response: Response): Promise<SensorAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<SensorAgeInfo>(null as any);
-    }
-
-    /**
-     * Get insulin reservoir age (IAGE) - equivalent to LegacyApp iage plugin
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
-     */
-    getInsulinAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/deviceage/insulin?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetInsulinAge(_response);
-        });
-    }
-
-    protected processGetInsulinAge(response: Response): Promise<DeviceAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceAgeInfo>(null as any);
-    }
-
-    /**
-     * Get pump battery age (BAGE) - equivalent to LegacyApp bage plugin
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
-     */
-    getBatteryAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
-        let url_ = this.baseUrl + "/api/v1/deviceage/battery?";
-        if (info !== undefined && info !== null)
-            url_ += "info=" + encodeURIComponent("" + info) + "&";
-        if (warn !== undefined && warn !== null)
-            url_ += "warn=" + encodeURIComponent("" + warn) + "&";
-        if (urgent !== undefined && urgent !== null)
-            url_ += "urgent=" + encodeURIComponent("" + urgent) + "&";
-        if (display !== undefined && display !== null)
-            url_ += "display=" + encodeURIComponent("" + display) + "&";
-        if (enableAlerts !== undefined && enableAlerts !== null)
-            url_ += "enableAlerts=" + encodeURIComponent("" + enableAlerts) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetBatteryAge(_response);
-        });
-    }
-
-    protected processGetBatteryAge(response: Response): Promise<DeviceAgeInfo> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceAgeInfo;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceAgeInfo>(null as any);
-    }
-
-    /**
-     * Get all device ages in a single call
-     */
-    getAllDeviceAges(signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/api/v1/deviceage/all";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetAllDeviceAges(_response);
-        });
-    }
-
-    protected processGetAllDeviceAges(response: Response): Promise<void> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            return;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<void>(null as any);
-    }
-}
-
 export class TimeQueryClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -15429,62 +16680,6 @@ export class TimeQueryClient {
     constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
         this.http = http ? http : window as any;
         this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Complex time pattern matching with bash-style brace expansion
-     * @param count (optional) Maximum number of entries to return (default: 10)
-     * @param format (optional) Output format (json, csv, tsv, txt)
-     * @return Entries matching the time patterns
-     */
-    getTimeBasedEntries(count?: number | undefined, format?: string | null | undefined, signal?: AbortSignal): Promise<Entry[]> {
-        let url_ = this.baseUrl + "/api/v1/times?";
-        if (count === null)
-            throw new globalThis.Error("The parameter 'count' cannot be null.");
-        else if (count !== undefined)
-            url_ += "count=" + encodeURIComponent("" + count) + "&";
-        if (format !== undefined && format !== null)
-            url_ += "format=" + encodeURIComponent("" + format) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTimeBasedEntries(_response);
-        });
-    }
-
-    protected processGetTimeBasedEntries(response: Response): Promise<Entry[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as Entry[];
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<Entry[]>(null as any);
     }
 
     /**
@@ -16867,6 +18062,156 @@ export interface EventTypeConfiguration {
     sensor?: boolean;
 }
 
+/** Metadata about state span types for NSwag generation */
+export interface StateSpanTypesMetadata {
+    /** Array of all available state span categories */
+    availableCategories?: StateSpanCategory[];
+    /** Array of all basal delivery states */
+    basalDeliveryStates?: BasalDeliveryState[];
+    /** Array of all basal delivery origin values */
+    basalDeliveryOrigins?: BasalDeliveryOrigin[];
+    /** Array of all pump mode states */
+    pumpModeStates?: PumpModeState[];
+    /** Array of all pump connectivity states */
+    pumpConnectivityStates?: PumpConnectivityState[];
+    /** Description of the state span types */
+    description?: string;
+}
+
+export enum StateSpanCategory {
+    PumpMode = "PumpMode",
+    PumpConnectivity = "PumpConnectivity",
+    Override = "Override",
+    Profile = "Profile",
+    BasalDelivery = "BasalDelivery",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Illness = "Illness",
+    Travel = "Travel",
+}
+
+export enum BasalDeliveryState {
+    Active = "Active",
+}
+
+export enum BasalDeliveryOrigin {
+    Algorithm = "Algorithm",
+    Scheduled = "Scheduled",
+    Manual = "Manual",
+    Suspended = "Suspended",
+    Inferred = "Inferred",
+}
+
+export enum PumpModeState {
+    Automatic = "Automatic",
+    Limited = "Limited",
+    Manual = "Manual",
+    Boost = "Boost",
+    EaseOff = "EaseOff",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Suspended = "Suspended",
+    Off = "Off",
+}
+
+export enum PumpConnectivityState {
+    Connected = "Connected",
+    Disconnected = "Disconnected",
+    Removed = "Removed",
+    BluetoothOff = "BluetoothOff",
+}
+
+/** Metadata about statistics types for NSwag generation */
+export interface StatisticsTypesMetadata {
+    /** Description of the statistics types */
+    description?: string;
+    /** Sample basal analysis response (for type generation) */
+    sampleBasalAnalysis?: BasalAnalysisResponse | undefined;
+    /** Sample daily basal/bolus ratio response (for type generation) */
+    sampleDailyBasalBolusRatio?: DailyBasalBolusRatioResponse | undefined;
+    /** Sample hourly basal percentile data (for type generation) */
+    sampleHourlyPercentile?: HourlyBasalPercentileData | undefined;
+    /** Sample daily basal/bolus ratio data (for type generation) */
+    sampleDailyData?: DailyBasalBolusRatioData | undefined;
+    /** Sample insulin delivery statistics (for type generation) */
+    sampleInsulinDelivery?: InsulinDeliveryStatistics | undefined;
+}
+
+export interface BasalAnalysisResponse {
+    stats?: BasalStats;
+    tempBasalInfo?: TempBasalInfo;
+    hourlyPercentiles?: HourlyBasalPercentileData[];
+    dayCount?: number;
+    startDate?: string;
+    endDate?: string;
+}
+
+export interface BasalStats {
+    count?: number;
+    avgRate?: number;
+    minRate?: number;
+    maxRate?: number;
+    totalDelivered?: number;
+}
+
+export interface TempBasalInfo {
+    total?: number;
+    perDay?: number;
+    highTemps?: number;
+    lowTemps?: number;
+    zeroTemps?: number;
+}
+
+export interface HourlyBasalPercentileData {
+    hour?: number;
+    p10?: number;
+    p25?: number;
+    median?: number;
+    p75?: number;
+    p90?: number;
+    count?: number;
+}
+
+export interface DailyBasalBolusRatioResponse {
+    dailyData?: DailyBasalBolusRatioData[];
+    averageBasalPercent?: number;
+    averageBolusPercent?: number;
+    averageTdd?: number;
+    dayCount?: number;
+}
+
+export interface DailyBasalBolusRatioData {
+    date?: string;
+    displayDate?: string;
+    basal?: number;
+    bolus?: number;
+    total?: number;
+    basalPercent?: number;
+    bolusPercent?: number;
+}
+
+export interface InsulinDeliveryStatistics {
+    totalBolus?: number;
+    totalBasal?: number;
+    totalInsulin?: number;
+    totalCarbs?: number;
+    bolusCount?: number;
+    basalCount?: number;
+    basalPercent?: number;
+    bolusPercent?: number;
+    tdd?: number;
+    avgBolus?: number;
+    mealBoluses?: number;
+    correctionBoluses?: number;
+    icRatio?: number;
+    bolusesPerDay?: number;
+    dayCount?: number;
+    startDate?: string;
+    endDate?: string;
+    carbCount?: number;
+    carbBolusCount?: number;
+}
+
 /** Metadata about available widget definitions */
 export interface WidgetDefinitionsMetadata {
     /** Array of all widget definitions with full metadata */
@@ -16899,6 +18244,8 @@ export enum WidgetId {
     Trackers = "Trackers",
     TirChart = "TirChart",
     DailySummary = "DailySummary",
+    Clock = "Clock",
+    Tdd = "Tdd",
     GlucoseChart = "GlucoseChart",
     Statistics = "Statistics",
     Treatments = "Treatments",
@@ -17270,6 +18617,9 @@ export interface InsulinTotals {
 
 export interface Treatment extends ProcessableDocumentBase {
     _id?: string | undefined;
+    identifier?: string | undefined;
+    srvModified?: number | undefined;
+    srvCreated?: number | undefined;
     eventType?: string | undefined;
     reason?: string | undefined;
     glucose?: number | undefined;
@@ -17348,6 +18698,7 @@ export interface Treatment extends ProcessableDocumentBase {
     calculationType?: CalculationType | undefined;
     additional_properties?: { [key: string]: any; } | undefined;
     canonicalId?: string | undefined;
+    dbId?: string | undefined;
     sources?: string[] | undefined;
 }
 
@@ -17692,6 +19043,7 @@ export interface PeriodStatistics {
     endDate?: Date;
     analytics?: GlucoseAnalytics | undefined;
     treatmentSummary?: TreatmentSummary | undefined;
+    insulinDelivery?: InsulinDeliveryStatistics | undefined;
     hasSufficientData?: boolean;
     entryCount?: number;
     treatmentCount?: number;
@@ -17891,8 +19243,8 @@ export interface DashboardChartData {
     maxCob?: number;
     /** Pump mode state spans for chart background coloring */
     pumpModeSpans?: StateSpan[];
-    /** Temp basal state spans with rate and duration metadata */
-    tempBasalSpans?: StateSpan[];
+    /** Basal delivery state spans (pump-confirmed delivery data) */
+    basalDeliverySpans?: StateSpan[];
     /** Profile state spans showing active profile changes */
     profileSpans?: StateSpan[];
 }
@@ -17909,12 +19261,12 @@ export interface TimeSeriesPoint {
 export interface BasalPoint {
     /** Timestamp in Unix milliseconds */
     timestamp?: number;
-    /** Effective basal rate in U/hr (includes temp basals and combo bolus) */
+    /** Effective basal rate in U/hr */
     rate?: number;
-    /** Scheduled basal rate from profile in U/hr (without temp basal modifications) */
+    /** Scheduled basal rate from profile in U/hr */
     scheduledRate?: number;
-    /** Whether this is a temporary basal rate */
-    isTemp?: boolean;
+    /** Origin of this basal rate - where it came from */
+    origin?: BasalDeliveryOrigin;
 }
 
 export interface StateSpan {
@@ -17932,16 +19284,93 @@ export interface StateSpan {
     sources?: string[] | undefined;
 }
 
-export enum StateSpanCategory {
-    PumpMode = "PumpMode",
-    PumpConnectivity = "PumpConnectivity",
-    Override = "Override",
-    Profile = "Profile",
-    TempBasal = "TempBasal",
-    Sleep = "Sleep",
-    Exercise = "Exercise",
-    Illness = "Illness",
-    Travel = "Travel",
+export interface ClockFacePublicDto {
+    id?: string;
+    config?: ClockFaceConfig;
+}
+
+export interface ClockFaceConfig {
+    rows?: ClockRow[];
+    settings?: ClockSettings;
+}
+
+export interface ClockRow {
+    elements?: ClockElement[];
+}
+
+export interface ClockElement {
+    type?: string;
+    size?: number | undefined;
+    showUnits?: boolean | undefined;
+    hours?: number | undefined;
+    width?: number | undefined;
+    height?: number | undefined;
+    minutesAhead?: number | undefined;
+    format?: string | undefined;
+    definitionId?: string | undefined;
+    show?: string[] | undefined;
+    categories?: string[] | undefined;
+    visibilityThreshold?: string | undefined;
+    text?: string | undefined;
+    style?: ClockElementStyle | undefined;
+    chartConfig?: ClockChartConfig | undefined;
+}
+
+export interface ClockElementStyle {
+    color?: string | undefined;
+    font?: string | undefined;
+    fontWeight?: string | undefined;
+    opacity?: number | undefined;
+    custom?: { [key: string]: string; } | undefined;
+}
+
+export interface ClockChartConfig {
+    showIob?: boolean;
+    showCob?: boolean;
+    showBasal?: boolean;
+    showBolus?: boolean;
+    showCarbs?: boolean;
+    showDeviceEvents?: boolean;
+    showAlarms?: boolean;
+    showTrackers?: boolean;
+    showPredictions?: boolean;
+    lockToggles?: boolean;
+    showLegend?: boolean;
+    asBackground?: boolean;
+}
+
+export interface ClockSettings {
+    bgColor?: boolean;
+    staleMinutes?: number;
+    alwaysShowTime?: boolean;
+    backgroundImage?: string | undefined;
+    backgroundOpacity?: number;
+}
+
+export interface ClockFaceListItem {
+    id?: string;
+    name?: string;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export interface ClockFace {
+    id?: string;
+    userId?: string;
+    name?: string;
+    config?: ClockFaceConfig;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export interface CreateClockFaceRequest {
+    name?: string;
+    config?: ClockFaceConfig;
+}
+
+export interface UpdateClockFaceRequest {
+    name?: string | undefined;
+    config?: ClockFaceConfig | undefined;
 }
 
 /** Proxy configuration DTO */
@@ -18149,6 +19578,7 @@ export interface Food {
     hideafteruse?: boolean;
     hidden?: boolean;
     position?: number;
+    created_at?: string | undefined;
 }
 
 export interface QuickPickFood {
@@ -18192,6 +19622,76 @@ export interface ConnectorFoodImport {
     energy?: number;
     portion?: number;
     unit?: string | undefined;
+}
+
+export interface InAppNotificationDto {
+    id?: string;
+    type?: InAppNotificationType;
+    urgency?: NotificationUrgency;
+    title?: string;
+    subtitle?: string | undefined;
+    createdAt?: Date;
+    sourceId?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    actions?: NotificationActionDto[];
+}
+
+export enum InAppNotificationType {
+    PasswordResetRequest = "PasswordResetRequest",
+    UnconfiguredTracker = "UnconfiguredTracker",
+    TrackerAlert = "TrackerAlert",
+    StatisticsSummary = "StatisticsSummary",
+    HelpResponse = "HelpResponse",
+    AnonymousLoginRequest = "AnonymousLoginRequest",
+    PredictedLow = "PredictedLow",
+    SuggestedMealMatch = "SuggestedMealMatch",
+    SuggestedTrackerMatch = "SuggestedTrackerMatch",
+}
+
+export enum NotificationUrgency {
+    Info = "Info",
+    Warn = "Warn",
+    Hazard = "Hazard",
+    Urgent = "Urgent",
+}
+
+export interface NotificationActionDto {
+    actionId?: string;
+    label?: string;
+    icon?: string | undefined;
+    variant?: string | undefined;
+}
+
+/** Request model for creating test notifications */
+export interface TestNotificationRequest {
+    /** Type of notification to create */
+    type?: InAppNotificationType;
+    /** Urgency level for the notification */
+    urgency?: NotificationUrgency;
+    /** Optional title (defaults to "Test {Type} Notification") */
+    title?: string | undefined;
+    /** Optional subtitle */
+    subtitle?: string | undefined;
+    /** Optional source ID for grouping */
+    sourceId?: string | undefined;
+    /** Optional actions for the notification */
+    actions?: NotificationActionDto[] | undefined;
+    /** Optional resolution conditions */
+    resolutionConditions?: ResolutionConditions | undefined;
+    /** Optional metadata */
+    metadata?: { [key: string]: any; } | undefined;
+}
+
+export interface ResolutionConditions {
+    expiresAt?: Date | undefined;
+    sourceDeletedType?: string | undefined;
+    glucose?: GlucoseCondition | undefined;
+}
+
+export interface GlucoseCondition {
+    aboveMgDl?: number | undefined;
+    belowMgDl?: number | undefined;
+    sustainedMinutes?: number | undefined;
 }
 
 /** Response for starting a deduplication job */
@@ -18269,6 +19769,33 @@ export interface LinkedRecord {
     dataSource?: string;
     isPrimary?: boolean;
     createdAt?: Date;
+}
+
+export interface DeviceAgeInfo {
+    found?: boolean;
+    age?: number;
+    days?: number;
+    hours?: number;
+    treatmentDate?: number | undefined;
+    notes?: string | undefined;
+    minFractions?: number;
+    level?: number;
+    display?: string;
+    notification?: DeviceAgeNotification | undefined;
+}
+
+export interface DeviceAgeNotification {
+    title?: string;
+    message?: string;
+    pushoverSound?: string;
+    level?: number;
+    group?: string;
+}
+
+export interface SensorAgeInfo {
+    "Sensor Start"?: DeviceAgeInfo;
+    "Sensor Change"?: DeviceAgeInfo;
+    min?: string;
 }
 
 export interface DeviceAlert {
@@ -18454,6 +19981,32 @@ export interface ForwardedDiscrepancyDto {
     analysis?: DiscrepancyAnalysisDto;
 }
 
+/** A suggested meal match between a food entry and treatment */
+export interface SuggestedMealMatch {
+    foodEntryId?: string;
+    foodName?: string | undefined;
+    mealName?: string | undefined;
+    carbs?: number;
+    consumedAt?: Date;
+    treatmentId?: string;
+    treatmentCarbs?: number;
+    treatmentMills?: number;
+    matchScore?: number;
+}
+
+/** Request to accept a meal match */
+export interface AcceptMatchRequest {
+    foodEntryId?: string;
+    treatmentId?: string;
+    carbs?: number;
+    timeOffsetMinutes?: number;
+}
+
+/** Request to dismiss a meal match */
+export interface DismissMatchRequest {
+    foodEntryId?: string;
+}
+
 /** Result of testing a migration connection */
 export interface TestMigrationConnectionResult {
     isSuccess?: boolean;
@@ -18582,16 +20135,7 @@ export interface MyFitnessPalMatchingSettings {
     matchTimeWindowMinutes?: number;
     matchCarbTolerancePercent?: number;
     matchCarbToleranceGrams?: number;
-    unmatchedTimeoutHours?: number;
-    unmatchedBehavior?: UnmatchedBehavior;
     enableMatchNotifications?: boolean;
-    enableUnmatchedNotifications?: boolean;
-}
-
-export enum UnmatchedBehavior {
-    Prompt = "Prompt",
-    AutoStandalone = "AutoStandalone",
-    AutoDelete = "AutoDelete",
 }
 
 /** Response containing glucose predictions. */
@@ -18873,6 +20417,14 @@ export interface DataSourceDeleteResult {
     error?: string | undefined;
 }
 
+export interface ConnectorDataSummary {
+    connectorId?: string;
+    entries?: number;
+    treatments?: number;
+    deviceStatuses?: number;
+    total?: number;
+}
+
 export interface SyncResult {
     success?: boolean;
     message?: string;
@@ -18958,6 +20510,9 @@ export interface StatusResponse {
     settings?: { [key: string]: any; } | undefined;
     extendedSettings?: { [key: string]: any; } | undefined;
     careportalEnabled?: boolean | undefined;
+    boluscalcEnabled?: boolean | undefined;
+    authorized?: any | undefined;
+    runtimeState?: string | undefined;
     head?: string | undefined;
 }
 
@@ -19010,13 +20565,6 @@ export interface TrackerAlertDto {
     audioEnabled?: boolean;
     audioSound?: string | undefined;
     vibrateEnabled?: boolean;
-}
-
-export enum NotificationUrgency {
-    Info = "Info",
-    Warn = "Warn",
-    Hazard = "Hazard",
-    Urgent = "Urgent",
 }
 
 export interface TrackerDefinitionDto {
@@ -19630,6 +21178,7 @@ export interface DeviceStatus extends ProcessableDocumentBase {
     mills?: number;
     created_at?: string | undefined;
     utcOffset?: number | undefined;
+    uploaderBattery?: number | undefined;
     device?: string;
     isCharging?: boolean | undefined;
     uploader?: UploaderStatus | undefined;
@@ -20266,33 +21815,6 @@ export interface HourlyIobData {
     totalIOB?: number;
     bolusIOB?: number;
     basalIOB?: number;
-}
-
-export interface DeviceAgeInfo {
-    found?: boolean;
-    age?: number;
-    days?: number;
-    hours?: number;
-    treatmentDate?: number | undefined;
-    notes?: string | undefined;
-    minFractions?: number;
-    level?: number;
-    display?: string;
-    notification?: DeviceAgeNotification | undefined;
-}
-
-export interface DeviceAgeNotification {
-    title?: string;
-    message?: string;
-    pushoverSound?: string;
-    level?: number;
-    group?: string;
-}
-
-export interface SensorAgeInfo {
-    "Sensor Start"?: DeviceAgeInfo;
-    "Sensor Change"?: DeviceAgeInfo;
-    min?: string;
 }
 
 export interface NotificationAckResponse {

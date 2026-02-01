@@ -4,7 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { TextareaAutosize } from "$lib/components/ui/textarea";
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Check } from "lucide-svelte";
@@ -22,6 +22,8 @@
     definitionId?: string;
     /** Event type to create on completion */
     completionEventType?: string;
+    /** Default date/time for completion (Date object or YYYY-MM-DD string). If not provided, defaults to now. */
+    defaultCompletedAt?: Date | string;
     onClose: () => void;
     onComplete?: () => void;
   }
@@ -33,6 +35,7 @@
     category,
     definitionId,
     completionEventType,
+    defaultCompletedAt,
     onClose,
     onComplete,
   }: TrackerCompletionDialogProps = $props();
@@ -84,12 +87,71 @@
     [CompletionReason.Missed]: "Missed",
   };
 
+  // General reasons available to all categories
+  const generalReasons: CompletionReason[] = [
+    CompletionReason.Completed,
+    CompletionReason.Failed,
+    CompletionReason.Expired,
+    CompletionReason.Other,
+  ];
+
+  // Category-specific reasons
+  const consumableReasons: CompletionReason[] = [
+    CompletionReason.FellOff,
+    CompletionReason.ReplacedEarly,
+  ];
+
+  const reservoirReasons: CompletionReason[] = [
+    CompletionReason.Empty,
+    CompletionReason.Refilled,
+  ];
+
+  const appointmentReasons: CompletionReason[] = [
+    CompletionReason.Attended,
+    CompletionReason.Rescheduled,
+    CompletionReason.Cancelled,
+    CompletionReason.Missed,
+  ];
+
+  // Get available completion reasons based on tracker category
+  function getReasonsForCategory(cat?: TrackerCategory): CompletionReason[] {
+    switch (cat) {
+      case TrackerCategory.Reservoir:
+        return [...reservoirReasons, ...generalReasons];
+      case TrackerCategory.Appointment:
+        return [...appointmentReasons, ...generalReasons];
+      case TrackerCategory.Sensor:
+      case TrackerCategory.Cannula:
+      case TrackerCategory.Consumable:
+        return [...consumableReasons, ...generalReasons];
+      case TrackerCategory.Battery:
+        // Battery uses general + failed (device failure)
+        return [CompletionReason.Failed, ...generalReasons];
+      case TrackerCategory.Reminder:
+      case TrackerCategory.Custom:
+      default:
+        return generalReasons;
+    }
+  }
+
+  // Reactive list of available reasons based on category
+  let availableReasons = $derived(getReasonsForCategory(category));
+
+  // Get default date for completion
+  function getDefaultDate(): Date {
+    if (!defaultCompletedAt) return new Date();
+    if (defaultCompletedAt instanceof Date) return defaultCompletedAt;
+    // If it's a YYYY-MM-DD string, parse it and set time to noon to avoid timezone issues
+    const parsed = new Date(defaultCompletedAt + "T12:00:00");
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+
   // Reset form when dialog opens
   $effect(() => {
     if (open) {
       completionReason = getDefaultReasonForCategory(category);
       completionNotes = "";
-      completedAt = formatDateTimeLocal(new Date());
+      completedAt = formatDateTimeLocal(getDefaultDate());
       startAnother = false;
     }
   });
@@ -167,30 +229,15 @@
             {completionReasonLabels[completionReason]}
           </Select.Trigger>
           <Select.Content>
-            <Select.Item value={CompletionReason.Completed} label="Completed" />
-            <Select.Item value={CompletionReason.Expired} label="Expired" />
-            <Select.Item value={CompletionReason.Failed} label="Failed" />
-            <Select.Item value={CompletionReason.FellOff} label="Fell Off" />
-            <Select.Item
-              value={CompletionReason.ReplacedEarly}
-              label="Replaced Early"
-            />
-            <Select.Item value={CompletionReason.Empty} label="Empty" />
-            <Select.Item value={CompletionReason.Refilled} label="Refilled" />
-            <Select.Item value={CompletionReason.Attended} label="Attended" />
-            <Select.Item
-              value={CompletionReason.Rescheduled}
-              label="Rescheduled"
-            />
-            <Select.Item value={CompletionReason.Cancelled} label="Cancelled" />
-            <Select.Item value={CompletionReason.Missed} label="Missed" />
-            <Select.Item value={CompletionReason.Other} label="Other" />
+            {#each availableReasons as reason}
+              <Select.Item value={reason} label={completionReasonLabels[reason]} />
+            {/each}
           </Select.Content>
         </Select.Root>
       </div>
       <div class="space-y-2">
         <Label for="completionNotes">Notes (optional)</Label>
-        <Textarea
+        <TextareaAutosize
           id="completionNotes"
           bind:value={completionNotes}
           placeholder="e.g., Sensor error E2 on day 8"

@@ -14,6 +14,8 @@
     Filter,
     X,
     Check,
+    Loader2,
+    Sparkles,
   } from "lucide-svelte";
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
@@ -22,12 +24,14 @@
     Treatment,
     TreatmentFood,
     TreatmentFoodRequest,
+    SuggestedMealMatch,
   } from "$lib/api";
   import { getMealTreatments } from "$lib/data/treatment-foods.remote";
   import {
     updateTreatment,
     deleteTreatment,
   } from "$lib/data/treatments.remote";
+  import * as mealMatchingRemote from "$lib/data/meal-matching.remote";
   import { toast } from "svelte-sonner";
   import { invalidateAll } from "$app/navigation";
   import {
@@ -41,6 +45,7 @@
   import { TreatmentTypeIcon } from "$lib/components/icons";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { cn } from "$lib/utils";
+  import { MealMatchReviewDialog } from "$lib/components/meal-matching";
 
   let dateRange = $state<{ from?: string; to?: string }>({});
   let filterMode = $state<"all" | "unattributed">("all");
@@ -72,6 +77,10 @@
   let editFoodEntry = $state<TreatmentFood | null>(null);
   let editFoodEntryMeal = $state<MealTreatment | null>(null);
 
+  // Meal match review dialog state
+  let showReviewDialog = $state(false);
+  let reviewMatch = $state<SuggestedMealMatch | null>(null);
+
   function handleDateChange(params: { from?: string; to?: string }) {
     dateRange = { from: params.from, to: params.to };
   }
@@ -84,6 +93,35 @@
 
   const mealsQuery = $derived(getMealTreatments(queryParams));
   const meals = $derived<MealTreatment[]>(mealsQuery.current ?? []);
+
+  // Query for suggested meal matches using the endpoint
+  const suggestionsQueryParams = $derived({
+    from: dateRange.from ?? new Date().toISOString().split("T")[0],
+    to: dateRange.to ?? new Date().toISOString().split("T")[0],
+  });
+  const suggestionsQuery = $derived(
+    mealMatchingRemote.getSuggestions(suggestionsQueryParams)
+  );
+  const suggestedMatches = $derived<SuggestedMealMatch[]>(
+    suggestionsQuery.current ?? []
+  );
+
+  // Loading state - check if data has arrived yet
+  const isLoading = $derived(mealsQuery.current === undefined);
+
+  // Create a map of treatmentId -> suggestions for easy lookup
+  const suggestionsByTreatment = $derived.by(() => {
+    const map = new Map<string, SuggestedMealMatch[]>();
+    for (const match of suggestedMatches) {
+      const treatmentId = match.treatmentId;
+      if (!treatmentId) continue;
+      if (!map.has(treatmentId)) {
+        map.set(treatmentId, []);
+      }
+      map.get(treatmentId)!.push(match);
+    }
+    return map;
+  });
 
   // Get unique food names for filter dropdown
   const uniqueFoods = $derived.by(() => {
@@ -289,7 +327,7 @@
   }
 
   async function handleFoodEntrySaved() {
-    await getMealTreatments(queryParams).refresh();
+    await mealsQuery.refresh();
   }
 
   async function handleAddFoodSubmit(request: TreatmentFoodRequest) {
@@ -303,7 +341,7 @@
       toast.success("Food added");
       showAddFoodDialog = false;
       addFoodMeal = null;
-      getMealTreatments(queryParams).refresh();
+      mealsQuery.refresh();
     } catch (err) {
       console.error("Add food error:", err);
       toast.error("Failed to add food");
@@ -322,7 +360,7 @@
       toast.success("Treatment updated");
       showEditDialog = false;
       treatmentToEdit = null;
-      getMealTreatments(queryParams).refresh();
+      mealsQuery.refresh();
       invalidateAll();
     } catch (err) {
       console.error("Update error:", err);
@@ -339,7 +377,7 @@
       toast.success("Treatment deleted");
       showEditDialog = false;
       treatmentToEdit = null;
-      getMealTreatments(queryParams).refresh();
+      mealsQuery.refresh();
       invalidateAll();
     } catch (err) {
       console.error("Delete error:", err);
@@ -373,6 +411,46 @@
   function getFoodsSummary(foods: TreatmentFood[] | undefined): string {
     if (!foods || foods.length === 0) return "No foods attributed";
     return foods.map((f) => f.foodName ?? f.note ?? "Other").join(", ");
+  }
+
+  // Suggested match handlers
+  function openReviewDialog(match: SuggestedMealMatch) {
+    reviewMatch = match;
+    showReviewDialog = true;
+  }
+
+  async function handleQuickAccept(match: SuggestedMealMatch) {
+    try {
+      await mealMatchingRemote.acceptMatch({
+        foodEntryId: match.foodEntryId!,
+        treatmentId: match.treatmentId!,
+        carbs: match.carbs ?? 0,
+        timeOffsetMinutes: 0,
+      });
+      toast.success("Meal match accepted");
+      mealsQuery.refresh();
+      suggestionsQuery.refresh();
+    } catch (err) {
+      console.error("Failed to accept match:", err);
+      toast.error("Failed to accept match");
+    }
+  }
+
+  async function handleDismiss(match: SuggestedMealMatch) {
+    try {
+      await mealMatchingRemote.dismissMatch({ foodEntryId: match.foodEntryId! });
+      toast.success("Match dismissed");
+      suggestionsQuery.refresh();
+    } catch (err) {
+      console.error("Failed to dismiss match:", err);
+      toast.error("Failed to dismiss match");
+    }
+  }
+
+  function handleReviewComplete() {
+    reviewMatch = null;
+    mealsQuery.refresh();
+    suggestionsQuery.refresh();
   }
 </script>
 
@@ -476,7 +554,7 @@
                       >
                         <div
                           class={cn(
-                            "mr-2 h-4 w-4 flex-shrink-0 border rounded flex items-center justify-center",
+                            "mr-2 h-4 w-4 shrink-0 border rounded flex items-center justify-center",
                             selectedFoods.includes(food)
                               ? "bg-primary border-primary"
                               : "border-muted"
@@ -556,7 +634,11 @@
 
   <Card.Root>
     <Card.Content class="p-0">
-      {#if filteredAndSortedMeals.length === 0}
+      {#if isLoading}
+        <div class="flex items-center justify-center p-12">
+          <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      {:else if filteredAndSortedMeals.length === 0}
         <div class="p-6 text-center text-sm text-muted-foreground">
           {meals.length === 0
             ? "No meals found in this range."
@@ -698,12 +780,13 @@
               </Table.Row>
 
               {#if !isDateCollapsed}
-                {#each day.meals as meal (meal.treatment?._id)}
+                {#each day.meals as meal, mealIndex (`${day.date}-${mealIndex}-${meal.treatment?._id}`)}
                   {@const isExpanded = expandedRows.has(
                     meal.treatment?._id ?? ""
                   )}
                   {@const hasFoods = (meal.foods?.length ?? 0) > 0}
                   {@const totalCarbs = meal.treatment?.carbs ?? 0}
+                  {@const mealSuggestions = suggestionsByTreatment.get(meal.treatment?.dbId ?? "") ?? []}
 
                   <!-- Main meal row -->
                   <Table.Row
@@ -808,6 +891,66 @@
                     </Table.Cell>
                   </Table.Row>
 
+                  <!-- Suggested matches row (only for unattributed meals with suggestions) -->
+                  {#if !meal.isAttributed && mealSuggestions.length > 0}
+                    <Table.Row class="bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary">
+                      <Table.Cell colspan={7} class="py-2 px-4">
+                        <div class="space-y-2">
+                          {#each mealSuggestions as match, matchIndex (`${match.foodEntryId}-${matchIndex}`)}
+                            <div class="flex items-center justify-between gap-4">
+                              <div class="flex items-center gap-3 min-w-0">
+                                <Sparkles class="h-4 w-4 text-primary shrink-0" />
+                                <div class="min-w-0">
+                                  <span class="font-medium truncate">
+                                    {match.foodName ?? match.mealName ?? "Food entry"}
+                                  </span>
+                                  <span class="text-sm text-muted-foreground ml-2">
+                                    {match.carbs}g carbs
+                                    · {Math.round((match.matchScore ?? 0) * 100)}% match
+                                  </span>
+                                </div>
+                              </div>
+                              <div class="flex items-center gap-2 shrink-0">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onclick={(e) => {
+                                    e.stopPropagation();
+                                    handleDismiss(match);
+                                  }}
+                                >
+                                  Dismiss
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onclick={(e) => {
+                                    e.stopPropagation();
+                                    openReviewDialog(match);
+                                  }}
+                                >
+                                  Review
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onclick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuickAccept(match);
+                                  }}
+                                >
+                                  Accept
+                                </Button>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      </Table.Cell>
+                    </Table.Row>
+                  {/if}
+
                   <!-- Expanded details row (only shown when there are foods) -->
                   {#if isExpanded && hasFoods}
                     <Table.Row class="bg-accent/20 hover:bg-accent/20">
@@ -906,4 +1049,14 @@
     ? getRemainingCarbsForEntry(editFoodEntryMeal, editFoodEntry?.id)
     : 0}
   onSave={handleFoodEntrySaved}
+/>
+
+<MealMatchReviewDialog
+  bind:open={showReviewDialog}
+  onOpenChange={(value) => {
+    showReviewDialog = value;
+    if (!value) reviewMatch = null;
+  }}
+  match={reviewMatch}
+  onComplete={handleReviewComplete}
 />

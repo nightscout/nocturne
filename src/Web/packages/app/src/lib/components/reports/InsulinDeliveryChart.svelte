@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
-  import type { Treatment } from "$lib/api";
+  import type { Treatment, BasalPoint } from "$lib/api";
+  import { BasalDeliveryOrigin } from "$lib/api";
   import { Syringe } from "lucide-svelte";
 
   interface HourlyInsulinData {
@@ -16,10 +17,11 @@
 
   interface Props {
     treatments: Treatment[];
+    basalSeries?: BasalPoint[];
     showStacked?: boolean;
   }
 
-  let { treatments, showStacked = true }: Props = $props();
+  let { treatments, basalSeries = [], showStacked = true }: Props = $props();
 
   // Check if a treatment is a bolus type
   function isBolusTreatment(treatment: Treatment): boolean {
@@ -40,44 +42,6 @@
     );
   }
 
-  // Check if a treatment is a scheduled basal
-  function isScheduledBasal(treatment: Treatment): boolean {
-    const eventType = treatment.eventType?.toLowerCase() || "";
-    return eventType === "scheduled basal" || eventType === "scheduledbasal";
-  }
-
-  // Check if a treatment is a temp basal
-  function isTempBasal(treatment: Treatment): boolean {
-    const eventType = treatment.eventType?.toLowerCase() || "";
-    return (
-      eventType.includes("temp") ||
-      eventType === "tempbasal" ||
-      (eventType.includes("basal") && !isScheduledBasal(treatment))
-    );
-  }
-
-  // Check if a treatment is any basal type
-  function isBasalTreatment(treatment: Treatment): boolean {
-    const eventType = treatment.eventType?.toLowerCase() || "";
-    return (
-      eventType.includes("basal") ||
-      eventType === "tempbasal" ||
-      eventType === "temp basal" ||
-      treatment.rate !== undefined ||
-      treatment.absolute !== undefined
-    );
-  }
-
-  // Calculate basal insulin delivered from a basal treatment
-  function getBasalInsulin(treatment: Treatment): number {
-    const rate = treatment.rate ?? treatment.absolute ?? 0;
-    const duration = treatment.duration ?? 0;
-    if (rate > 0 && duration > 0) {
-      return (rate * duration) / 60;
-    }
-    return 0;
-  }
-
   // Format hour for display
   function formatHour(hour: number): string {
     if (hour === 0) return "12 AM";
@@ -86,8 +50,8 @@
     return `${hour - 12} PM`;
   }
 
-  // Process treatments to get hourly insulin delivery
-  function processInsulinData(treatments: Treatment[]): HourlyInsulinData[] {
+  // Process treatments and basal series to get hourly insulin delivery
+  function processInsulinData(treatments: Treatment[], basalPoints: BasalPoint[]): HourlyInsulinData[] {
     // Initialize hourly buckets
     const hourlyData: Map<
       number,
@@ -110,6 +74,7 @@
     // Count number of days for averaging
     const uniqueDays = new Set<string>();
 
+    // Process bolus treatments
     for (const treatment of treatments) {
       const date = new Date(
         treatment.created_at ??
@@ -120,23 +85,50 @@
       if (isNaN(date.getTime())) continue;
 
       uniqueDays.add(date.toISOString().split("T")[0]);
+
+      if (isBolusTreatment(treatment)) {
+        const hour = date.getHours();
+        const hourData = hourlyData.get(hour)!;
+        hourData.bolus += treatment.insulin ?? 0;
+        hourData.count++;
+      }
+    }
+
+    // Process basal series from chart data API
+    // Each BasalPoint represents a rate at a timestamp - we need to calculate insulin delivered
+    const sortedBasal = [...basalPoints].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+
+    for (let i = 0; i < sortedBasal.length; i++) {
+      const point = sortedBasal[i];
+      const timestamp = point.timestamp ?? 0;
+      const rate = point.rate ?? 0;
+      const origin = point.origin;
+
+      // Calculate duration until next point (or assume 5 min if last point)
+      const nextTimestamp = sortedBasal[i + 1]?.timestamp ?? (timestamp + 5 * 60 * 1000);
+      const durationMs = nextTimestamp - timestamp;
+      const durationHours = durationMs / (1000 * 60 * 60);
+
+      // Calculate insulin delivered during this period
+      const insulinDelivered = rate * durationHours;
+
+      if (insulinDelivered <= 0) continue;
+
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) continue;
+
+      uniqueDays.add(date.toISOString().split("T")[0]);
       const hour = date.getHours();
       const hourData = hourlyData.get(hour)!;
 
-      if (isBolusTreatment(treatment)) {
-        hourData.bolus += treatment.insulin ?? 0;
-        hourData.count++;
-      } else if (isScheduledBasal(treatment)) {
-        hourData.scheduledBasal += getBasalInsulin(treatment);
-        hourData.count++;
-      } else if (isTempBasal(treatment)) {
-        hourData.tempBasal += getBasalInsulin(treatment);
-        hourData.count++;
-      } else if (isBasalTreatment(treatment)) {
-        // Fallback for unknown basal types - add to temp basal
-        hourData.tempBasal += getBasalInsulin(treatment);
-        hourData.count++;
+      // Categorize by origin
+      if (origin === BasalDeliveryOrigin.Scheduled || origin === BasalDeliveryOrigin.Inferred) {
+        hourData.scheduledBasal += insulinDelivered;
+      } else {
+        // Algorithm, Manual, Suspended all count as "temp" adjustments
+        hourData.tempBasal += insulinDelivered;
       }
+      hourData.count++;
     }
 
     const numDays = Math.max(1, uniqueDays.size);
@@ -166,7 +158,9 @@
 
   // Use derived values instead of effect to avoid infinite loops
   const chartData = $derived(
-    treatments && treatments.length > 0 ? processInsulinData(treatments) : []
+    (treatments && treatments.length > 0) || (basalSeries && basalSeries.length > 0)
+      ? processInsulinData(treatments, basalSeries)
+      : []
   );
 
   const maxInsulin = $derived.by(() => {

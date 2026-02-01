@@ -169,8 +169,8 @@
         mongoConnectionString:
           mode === "MongoDb" ? mongoConnectionString : undefined,
         mongoDatabaseName: mode === "MongoDb" ? mongoDatabaseName : undefined,
-        startDate: dateRangeStart ? new Date(dateRangeStart) : undefined,
-        endDate: dateRangeEnd ? new Date(dateRangeEnd) : undefined,
+        startDate: dateRangeStart ? new Date(dateRangeStart).toISOString() : undefined,
+        endDate: dateRangeEnd ? new Date(dateRangeEnd).toISOString() : undefined,
         collections: ["entries", "treatments"],
       });
 

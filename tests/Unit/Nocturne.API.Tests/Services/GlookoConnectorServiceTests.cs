@@ -11,6 +11,7 @@ using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Services;
+using Nocturne.Core.Contracts;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services
@@ -22,6 +23,7 @@ namespace Nocturne.API.Tests.Services
         private readonly Mock<ILogger<GlookoAuthTokenProvider>> _mockTokenLogger;
         private readonly Mock<IRetryDelayStrategy> _mockRetryDelay;
         private readonly Mock<IRateLimitingStrategy> _mockRateLimiting;
+        private readonly Mock<ITreatmentClassificationService> _mockClassificationService;
         private readonly HttpClient _httpClient;
 
         public GlookoConnectorServiceTests()
@@ -31,6 +33,7 @@ namespace Nocturne.API.Tests.Services
             _mockTokenLogger = new Mock<ILogger<GlookoAuthTokenProvider>>();
             _mockRetryDelay = new Mock<IRetryDelayStrategy>();
             _mockRateLimiting = new Mock<IRateLimitingStrategy>();
+            _mockClassificationService = new Mock<ITreatmentClassificationService>();
             _httpClient = new HttpClient();
         }
 
@@ -49,7 +52,8 @@ namespace Nocturne.API.Tests.Services
                 _mockLogger.Object,
                 _mockRetryDelay.Object,
                 _mockRateLimiting.Object,
-                tokenProvider
+                tokenProvider,
+                _mockClassificationService.Object
             );
         }
 

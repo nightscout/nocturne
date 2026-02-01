@@ -372,6 +372,42 @@ public class ApiEndpointInfo
 }
 
 /// <summary>
+/// Summary of data counts for a connector
+/// </summary>
+public class ConnectorDataSummary
+{
+    /// <summary>
+    /// The connector ID
+    /// </summary>
+    [JsonPropertyName("connectorId")]
+    public string ConnectorId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Number of glucose entries
+    /// </summary>
+    [JsonPropertyName("entries")]
+    public long Entries { get; set; }
+
+    /// <summary>
+    /// Number of treatments
+    /// </summary>
+    [JsonPropertyName("treatments")]
+    public long Treatments { get; set; }
+
+    /// <summary>
+    /// Number of device status records
+    /// </summary>
+    [JsonPropertyName("deviceStatuses")]
+    public long DeviceStatuses { get; set; }
+
+    /// <summary>
+    /// Total count of all records
+    /// </summary>
+    [JsonPropertyName("total")]
+    public long Total => Entries + Treatments + DeviceStatuses;
+}
+
+/// <summary>
 /// Result of a data source deletion operation
 /// </summary>
 public class DataSourceDeleteResult

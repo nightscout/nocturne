@@ -1,3 +1,6 @@
 {
-  "appHostPath": "../src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj"
+  "appHostPath": "../src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj",
+  "features": {
+    "defaultWatchEnabled": "true"
+  }
 }

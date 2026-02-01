@@ -834,6 +834,11 @@ public class PeriodStatistics
     public TreatmentSummary? TreatmentSummary { get; set; }
 
     /// <summary>
+    /// Comprehensive insulin delivery statistics for this period
+    /// </summary>
+    public InsulinDeliveryStatistics? InsulinDelivery { get; set; }
+
+    /// <summary>
     /// Indicates if there was sufficient data for meaningful statistics
     /// </summary>
     public bool HasSufficientData { get; set; }
@@ -1713,6 +1718,318 @@ public class SiteChangeImpactSummary
     /// <summary>Coefficient of variation after site change (%)</summary>
     [JsonPropertyName("cvAfterChange")]
     public double CvAfterChange { get; set; }
+}
+
+/// <summary>
+/// Comprehensive insulin delivery statistics for reports
+/// </summary>
+public class InsulinDeliveryStatistics
+{
+    /// <summary>
+    /// Total bolus insulin in units for the period
+    /// </summary>
+    public double TotalBolus { get; set; }
+
+    /// <summary>
+    /// Total basal insulin in units for the period
+    /// </summary>
+    public double TotalBasal { get; set; }
+
+    /// <summary>
+    /// Total insulin (bolus + basal) for the period
+    /// </summary>
+    public double TotalInsulin { get; set; }
+
+    /// <summary>
+    /// Total carbohydrates consumed in grams
+    /// </summary>
+    public double TotalCarbs { get; set; }
+
+    /// <summary>
+    /// Number of bolus treatments
+    /// </summary>
+    public int BolusCount { get; set; }
+
+    /// <summary>
+    /// Number of basal treatments
+    /// </summary>
+    public int BasalCount { get; set; }
+
+    /// <summary>
+    /// Percentage of total insulin that is basal (0-100)
+    /// </summary>
+    public double BasalPercent { get; set; }
+
+    /// <summary>
+    /// Percentage of total insulin that is bolus (0-100)
+    /// </summary>
+    public double BolusPercent { get; set; }
+
+    /// <summary>
+    /// Average Total Daily Dose (units per day)
+    /// </summary>
+    public double Tdd { get; set; }
+
+    /// <summary>
+    /// Average bolus size (units)
+    /// </summary>
+    public double AvgBolus { get; set; }
+
+    /// <summary>
+    /// Number of meal boluses (based on event type)
+    /// </summary>
+    public int MealBoluses { get; set; }
+
+    /// <summary>
+    /// Number of correction boluses (based on event type)
+    /// </summary>
+    public int CorrectionBoluses { get; set; }
+
+    /// <summary>
+    /// Insulin to carb ratio (grams of carbs per unit of insulin)
+    /// </summary>
+    public double IcRatio { get; set; }
+
+    /// <summary>
+    /// Average number of boluses per day
+    /// </summary>
+    public double BolusesPerDay { get; set; }
+
+    /// <summary>
+    /// Number of days in the analysis period
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary>
+    /// Start date of the analysis period (ISO format)
+    /// </summary>
+    public string StartDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// End date of the analysis period (ISO format)
+    /// </summary>
+    public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Number of carb entries (meals with carbs logged)
+    /// </summary>
+    public int CarbCount { get; set; }
+
+    /// <summary>
+    /// Number of treatments with both carbs and bolus
+    /// </summary>
+    public int CarbBolusCount { get; set; }
+}
+
+/// <summary>
+/// Daily basal/bolus ratio data for chart rendering
+/// </summary>
+public class DailyBasalBolusRatioData
+{
+    /// <summary>
+    /// Date in ISO format (YYYY-MM-DD)
+    /// </summary>
+    public string Date { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Display-formatted date (e.g., "Jan 15")
+    /// </summary>
+    public string DisplayDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Basal insulin delivered in units
+    /// </summary>
+    public double Basal { get; set; }
+
+    /// <summary>
+    /// Bolus insulin delivered in units
+    /// </summary>
+    public double Bolus { get; set; }
+
+    /// <summary>
+    /// Total insulin (basal + bolus) in units
+    /// </summary>
+    public double Total { get; set; }
+
+    /// <summary>
+    /// Basal as percentage of total (0-100)
+    /// </summary>
+    public double BasalPercent { get; set; }
+
+    /// <summary>
+    /// Bolus as percentage of total (0-100)
+    /// </summary>
+    public double BolusPercent { get; set; }
+}
+
+/// <summary>
+/// Response model for daily basal/bolus ratio statistics
+/// </summary>
+public class DailyBasalBolusRatioResponse
+{
+    /// <summary>
+    /// Daily breakdown of basal/bolus ratios
+    /// </summary>
+    public List<DailyBasalBolusRatioData> DailyData { get; set; } = new();
+
+    /// <summary>
+    /// Average basal percentage across all days (0-100)
+    /// </summary>
+    public double AverageBasalPercent { get; set; }
+
+    /// <summary>
+    /// Average bolus percentage across all days (0-100)
+    /// </summary>
+    public double AverageBolusPercent { get; set; }
+
+    /// <summary>
+    /// Average total daily dose (TDD) in units
+    /// </summary>
+    public double AverageTdd { get; set; }
+
+    /// <summary>
+    /// Number of days with data
+    /// </summary>
+    public int DayCount { get; set; }
+}
+
+/// <summary>
+/// Hourly basal rate percentile data for AGP-style charts
+/// </summary>
+public class HourlyBasalPercentileData
+{
+    /// <summary>
+    /// Hour of day (0-23)
+    /// </summary>
+    public int Hour { get; set; }
+
+    /// <summary>
+    /// 10th percentile of basal rates at this hour
+    /// </summary>
+    public double P10 { get; set; }
+
+    /// <summary>
+    /// 25th percentile of basal rates at this hour
+    /// </summary>
+    public double P25 { get; set; }
+
+    /// <summary>
+    /// Median (50th percentile) basal rate at this hour
+    /// </summary>
+    public double Median { get; set; }
+
+    /// <summary>
+    /// 75th percentile of basal rates at this hour
+    /// </summary>
+    public double P75 { get; set; }
+
+    /// <summary>
+    /// 90th percentile of basal rates at this hour
+    /// </summary>
+    public double P90 { get; set; }
+
+    /// <summary>
+    /// Number of data points used for this hour
+    /// </summary>
+    public int Count { get; set; }
+}
+
+/// <summary>
+/// Temp basal information statistics
+/// </summary>
+public class TempBasalInfo
+{
+    /// <summary>
+    /// Total number of temp basals in the period
+    /// </summary>
+    public int Total { get; set; }
+
+    /// <summary>
+    /// Average temp basals per day
+    /// </summary>
+    public double PerDay { get; set; }
+
+    /// <summary>
+    /// Number of temp basals with rate higher than scheduled
+    /// </summary>
+    public int HighTemps { get; set; }
+
+    /// <summary>
+    /// Number of temp basals with rate lower than scheduled
+    /// </summary>
+    public int LowTemps { get; set; }
+
+    /// <summary>
+    /// Number of zero or suspend temp basals
+    /// </summary>
+    public int ZeroTemps { get; set; }
+}
+
+/// <summary>
+/// Basic basal statistics for a period
+/// </summary>
+public class BasalStats
+{
+    /// <summary>
+    /// Number of basal events
+    /// </summary>
+    public int Count { get; set; }
+
+    /// <summary>
+    /// Average basal rate in U/hr
+    /// </summary>
+    public double AvgRate { get; set; }
+
+    /// <summary>
+    /// Minimum basal rate in U/hr
+    /// </summary>
+    public double MinRate { get; set; }
+
+    /// <summary>
+    /// Maximum basal rate in U/hr
+    /// </summary>
+    public double MaxRate { get; set; }
+
+    /// <summary>
+    /// Total basal insulin delivered in units
+    /// </summary>
+    public double TotalDelivered { get; set; }
+}
+
+/// <summary>
+/// Comprehensive basal analysis response
+/// </summary>
+public class BasalAnalysisResponse
+{
+    /// <summary>
+    /// Basic basal statistics
+    /// </summary>
+    public BasalStats Stats { get; set; } = new();
+
+    /// <summary>
+    /// Temp basal information
+    /// </summary>
+    public TempBasalInfo TempBasalInfo { get; set; } = new();
+
+    /// <summary>
+    /// Hourly basal rate percentiles for chart rendering
+    /// </summary>
+    public List<HourlyBasalPercentileData> HourlyPercentiles { get; set; } = new();
+
+    /// <summary>
+    /// Number of days in the analysis period
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary>
+    /// Start date of the analysis period
+    /// </summary>
+    public string StartDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// End date of the analysis period
+    /// </summary>
+    public string EndDate { get; set; } = string.Empty;
 }
 
 /// <summary>

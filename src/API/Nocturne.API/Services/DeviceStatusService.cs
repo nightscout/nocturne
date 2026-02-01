@@ -79,10 +79,11 @@ public class DeviceStatusService : IDeviceStatusService
             count,
             skip
         );
-        return await _postgreSqlService.GetDeviceStatusAsync(
-            count ?? 10,
-            skip ?? 0,
-            cancellationToken
+        return await _postgreSqlService.GetDeviceStatusWithAdvancedFilterAsync(
+            count: count ?? 10,
+            skip: skip ?? 0,
+            findQuery: find,
+            cancellationToken: cancellationToken
         );
     }
 

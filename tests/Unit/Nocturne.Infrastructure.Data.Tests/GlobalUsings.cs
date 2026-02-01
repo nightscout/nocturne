@@ -3,6 +3,7 @@ global using FluentAssertions;
 global using Microsoft.EntityFrameworkCore;
 global using Microsoft.Extensions.Logging;
 global using Moq;
+global using Nocturne.Core.Contracts;
 global using Nocturne.Core.Models;
 global using Nocturne.Infrastructure.Data;
 global using Nocturne.Infrastructure.Data.Entities;

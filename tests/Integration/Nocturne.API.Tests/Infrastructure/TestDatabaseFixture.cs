@@ -94,6 +94,7 @@ public class TestDatabaseFixture : IAsyncLifetime
         if (DbContext != null)
         {
             // Clear all entities in the correct order to avoid foreign key constraints
+            DbContext.InAppNotifications.RemoveRange(DbContext.InAppNotifications);
             DbContext.Profiles.RemoveRange(DbContext.Profiles);
             DbContext.Settings.RemoveRange(DbContext.Settings);
             DbContext.Foods.RemoveRange(DbContext.Foods);

@@ -43,6 +43,9 @@ namespace Nocturne.Connectors.Core.Extensions
             services.TryAddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
             services.TryAddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
 
+            // Treatment classification service for consistent bolus/carb classification
+            services.TryAddSingleton<ITreatmentClassificationService, TreatmentClassificationService>();
+
             return services;
         }
 

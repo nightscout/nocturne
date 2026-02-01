@@ -39,7 +39,9 @@
     Activity,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
-  import { tick } from "svelte";
+  import { tick, onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import * as trackersRemote from "$lib/data/trackers.remote";
   import {
     NotificationUrgency,
@@ -51,6 +53,10 @@
     type TrackerInstanceDto,
     type TrackerPresetDto,
   } from "$api";
+
+  // Auth state
+  const authStore = getAuthStore();
+  const isAuthenticated = $derived(authStore.isAuthenticated);
 
   // State
   let activeTab = $state("active");
@@ -132,6 +138,8 @@
   let startDefinition = $state<TrackerDefinitionDto | null>(null);
 
   function openStartDialog(definition: TrackerDefinitionDto) {
+    if (!requireAuth()) return;
+
     startDefinition = definition;
     isStartDialogOpen = true;
   }
@@ -142,6 +150,8 @@
   let completingDefinition = $state<TrackerDefinitionDto | null>(null);
 
   function openCompleteDialog(instanceId: string) {
+    if (!requireAuth()) return;
+
     const instance = activeInstances.find((i) => i.id === instanceId);
     if (!instance) return;
 
@@ -217,8 +227,7 @@
     }
   }
 
-  // Initial load
-  $effect(() => {
+  onMount(() => {
     loadData();
   });
 
@@ -248,13 +257,6 @@
     if (!def || !def.lifespanHours || instance.ageHours === undefined)
       return undefined;
     return def.lifespanHours - instance.ageHours;
-  }
-
-  // Format time remaining
-  function formatTimeRemaining(hours: number | undefined): string {
-    if (hours === undefined) return "";
-    if (hours <= 0) return "Overdue";
-    return `${formatAge(hours)} left`;
   }
 
   // Get notification level for instance
@@ -305,8 +307,20 @@
     }
   }
 
+  // Redirect to login if not authenticated
+  function requireAuth(): boolean {
+    if (!isAuthenticated) {
+      const returnUrl = encodeURIComponent(window.location.pathname);
+      goto(`/auth/login?returnUrl=${returnUrl}`);
+      return false;
+    }
+    return true;
+  }
+
   // Open definition dialog
   function openNewDefinition() {
+    if (!requireAuth()) return;
+
     isNewDefinition = true;
     editingDefinition = null;
     formName = "";
@@ -324,6 +338,8 @@
   }
 
   function openEditDefinition(def: TrackerDefinitionDto) {
+    if (!requireAuth()) return;
+
     isNewDefinition = false;
     editingDefinition = def;
     formName = def.name || "";
@@ -379,6 +395,8 @@
 
   // Delete definition
   function openDeleteDefinitionDialog(id: string) {
+    if (!requireAuth()) return;
+
     deletingDefinitionId = id;
     isDeleteDefinitionDialogOpen = true;
   }
@@ -400,6 +418,8 @@
 
   // Delete instance
   function openDeleteInstanceDialog(id: string) {
+    if (!requireAuth()) return;
+
     deletingInstanceId = id;
     isDeleteInstanceDialogOpen = true;
   }
@@ -419,6 +439,8 @@
 
   // Apply preset
   async function applyPresetHandler(presetId: string) {
+    if (!requireAuth()) return;
+
     try {
       await trackersRemote.applyPreset({ id: presetId });
       await loadData();
@@ -430,6 +452,8 @@
 
   // Create preset
   function openNewPreset() {
+    if (!requireAuth()) return;
+
     isNewPreset = true;
     formPresetName = "";
     formPresetDefinitionId = definitions[0]?.id ?? undefined;
@@ -456,6 +480,8 @@
 
   // Delete preset
   function openDeletePresetDialog(id: string) {
+    if (!requireAuth()) return;
+
     deletingPresetId = id;
     isDeletePresetDialogOpen = true;
   }

@@ -50,43 +50,46 @@ public static class ServiceCollectionExtensions
         var dataSource = dataSourceBuilder.Build();
         services.AddSingleton(dataSource);
 
-        // Register DbContext with PostgreSQL
-        services.AddDbContext<NocturneDbContext>(
-            (serviceProvider, options) =>
+        // Use the simpler AddDbContextPool overload that doesn't require service provider access
+        // This avoids "Cannot resolve scoped service from root provider" errors in .NET 9+
+        services.AddDbContextPool<NocturneDbContext>(
+            options =>
             {
-                var config = serviceProvider
-                    .GetRequiredService<IOptions<PostgreSqlConfiguration>>()
-                    .Value;
-
-                var dataSource = serviceProvider.GetRequiredService<Npgsql.NpgsqlDataSource>();
-
                 options.UseNpgsql(
                     dataSource,
                     npgsqlOptions =>
                     {
                         npgsqlOptions.EnableRetryOnFailure(
-                            maxRetryCount: config.MaxRetryCount,
-                            maxRetryDelay: TimeSpan.FromSeconds(config.MaxRetryDelaySeconds),
+                            maxRetryCount: postgreSqlConfig.MaxRetryCount,
+                            maxRetryDelay: TimeSpan.FromSeconds(postgreSqlConfig.MaxRetryDelaySeconds),
                             errorCodesToAdd: null
                         );
 
-                        npgsqlOptions.CommandTimeout(config.CommandTimeoutSeconds);
+                        npgsqlOptions.CommandTimeout(postgreSqlConfig.CommandTimeoutSeconds);
                     }
                 );
 
-                if (config.EnableSensitiveDataLogging)
+                if (postgreSqlConfig.EnableSensitiveDataLogging)
                 {
                     options.EnableSensitiveDataLogging();
                 }
 
-                if (config.EnableDetailedErrors)
+                if (postgreSqlConfig.EnableDetailedErrors)
                 {
                     options.EnableDetailedErrors();
                 }
 
                 options.EnableServiceProviderCaching();
-            }
+            },
+            poolSize: 128
         );
+
+        // Register deduplication service (required by repositories)
+        services.AddScoped<IDeduplicationService, DeduplicationService>();
+
+        // Register core repositories required by PostgreSqlService
+        services.AddScoped<EntryRepository>();
+        services.AddScoped<TreatmentRepository>();
 
         // Register PostgreSQL service
         services.AddScoped<IPostgreSqlService, PostgreSqlService>();
@@ -149,16 +152,11 @@ public static class ServiceCollectionExtensions
         var dataSource = dataSourceBuilder.Build();
         services.AddSingleton(dataSource);
 
-        // Register DbContext with PostgreSQL
-        services.AddDbContext<NocturneDbContext>(
-            (serviceProvider, options) =>
+        // Use the simpler AddDbContextPool overload that doesn't require service provider access
+        // This avoids "Cannot resolve scoped service from root provider" errors in .NET 9+
+        services.AddDbContextPool<NocturneDbContext>(
+            options =>
             {
-                var config = serviceProvider
-                    .GetRequiredService<IOptions<PostgreSqlConfiguration>>()
-                    .Value;
-
-                var dataSource = serviceProvider.GetRequiredService<Npgsql.NpgsqlDataSource>();
-
                 options.UseNpgsql(
                     dataSource,
                     npgsqlOptions =>
@@ -184,8 +182,16 @@ public static class ServiceCollectionExtensions
                 }
 
                 options.EnableServiceProviderCaching();
-            }
+            },
+            poolSize: 128
         );
+
+        // Register deduplication service (required by repositories)
+        services.AddScoped<IDeduplicationService, DeduplicationService>();
+
+        // Register core repositories required by PostgreSqlService
+        services.AddScoped<EntryRepository>();
+        services.AddScoped<TreatmentRepository>();
 
         // Register PostgreSQL service
         services.AddScoped<IPostgreSqlService, PostgreSqlService>();

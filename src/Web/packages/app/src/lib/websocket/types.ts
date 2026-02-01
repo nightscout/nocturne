@@ -3,6 +3,7 @@ import type {
   Entry,
   Treatment,
   TrackerInstanceDto,
+  InAppNotificationDto,
   WebSocketEvents,
   WebSocketEventsMetadata
 } from '$lib/api/generated/nocturne-api-client';
@@ -72,6 +73,11 @@ export interface TrackerUpdateEvent {
   instance: TrackerInstanceDto;
 }
 
+export interface NotificationUpdateEvent {
+  action: 'created' | 'archived' | 'updated';
+  notification: InAppNotificationDto;
+}
+
 // WebSocket client statistics
 export interface WebSocketStats {
   connectedClients: number;
@@ -105,6 +111,11 @@ export interface WebSocketEventHandlers {
 
   // Tracker events
   trackerUpdate: (event: TrackerUpdateEvent) => void;
+
+  // In-app notification events
+  notificationCreated: (notification: InAppNotificationDto) => void;
+  notificationArchived: (notification: InAppNotificationDto) => void;
+  notificationUpdated: (notification: InAppNotificationDto) => void;
 
   // Admin events (for admin users subscribed to admin group)
   passwordResetRequested: () => void;

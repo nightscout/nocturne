@@ -184,10 +184,10 @@ public class DockerComposeGenerator
             config["Parameters:Connectors:Nightscout:Enabled"] = true;
             config["Parameters:Connectors:Nightscout:SourceEndpoint"] = request
                 .Migration
-                .NightscoutUrl;
+                .NightscoutUrl ?? string.Empty;
             config["Parameters:Connectors:Nightscout:SourceApiSecret"] = request
                 .Migration
-                .NightscoutApiSecret;
+                .NightscoutApiSecret ?? string.Empty;
         }
 
         var json = JsonSerializer.Serialize(

@@ -126,7 +126,7 @@
     />
     <Text
       x={chartXDomain.to.getTime() + 5 * 60 * 1000}
-      y={glucoseScale(Number(glucoseData.at(-1)?.sgv) ?? 100)}
+      y={glucoseScale(glucoseData.at(-1)?.sgv ?? 100)}
       class="text-[9px] fill-muted-foreground animate-pulse"
     >
       Loading predictions...

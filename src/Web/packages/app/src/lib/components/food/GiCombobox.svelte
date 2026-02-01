@@ -19,7 +19,7 @@
   let { value, onValueChange, class: className }: Props = $props();
 
   let open = $state(false);
-  let triggerRef = $state<HTMLButtonElement>(null!);
+  let triggerRef = $state<HTMLButtonElement | null>(null);
 
   const displayLabel = $derived(getGiLabel(value) || "Select GI...");
 

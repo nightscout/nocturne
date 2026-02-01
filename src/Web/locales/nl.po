@@ -33,16 +33,19 @@ msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Meal Bolus"
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Snack Bolus"
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Correction Bolus"
 msgstr ""
@@ -67,9 +70,11 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
-#: src/lib/components/status-pills/StatusPillBar.svelte
 msgid "Site Change"
 msgstr ""
 
@@ -77,6 +82,9 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Insulin Change"
@@ -91,6 +99,9 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
 msgid "Sensor Start"
@@ -100,9 +111,11 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
-#: src/lib/components/status-pills/StatusPillBar.svelte
 msgid "Sensor Change"
 msgstr ""
 
@@ -110,6 +123,9 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Pump Battery Change"
 msgstr ""
@@ -178,19 +194,22 @@ msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileDeleteDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+#: src/routes/clock/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -198,8 +217,6 @@ msgstr ""
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -215,9 +232,8 @@ msgstr ""
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -366,7 +382,6 @@ msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
-#: src/routes/clock/config/+page.svelte
 msgid "Blood Glucose"
 msgstr ""
 
@@ -396,6 +411,7 @@ msgid "Duration"
 msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Percent"
 msgstr ""
 
@@ -406,11 +422,13 @@ msgstr ""
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/calendar/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/profile/+page.svelte
-#: src/routes/settings/dev/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Profile"
@@ -481,7 +499,6 @@ msgstr ""
 msgid "Failed to load session"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/stores/auth-store.svelte.ts
@@ -565,8 +582,6 @@ msgid "Failed to save settings"
 msgstr ""
 
 #: src/lib/stores/settings-store.svelte.ts
-#: src/routes/settings/alarms/+page.svelte
-#: src/routes/settings/alarms/+page.svelte
 msgid "Failed to save alarm configuration"
 msgstr ""
 
@@ -577,131 +592,98 @@ msgstr ""
 msgid "Just now"
 msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Simple Clock"
-msgstr ""
+#~ msgid "Simple Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Basic clock display"
-msgstr ""
+#~ msgid "Basic clock display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "BG Clock"
-msgstr ""
+#~ msgid "BG Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Clock with blood glucose data"
-msgstr ""
+#~ msgid "Clock with blood glucose data"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Color Clock"
-msgstr ""
+#~ msgid "Color Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Colorful clock display"
-msgstr ""
+#~ msgid "Colorful clock display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Large BG"
-msgstr ""
+#~ msgid "Large BG"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Large blood glucose display"
-msgstr ""
+#~ msgid "Large blood glucose display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Detailed View"
-msgstr ""
+#~ msgid "Detailed View"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Detailed clock with all elements"
-msgstr ""
+#~ msgid "Detailed clock with all elements"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Simple Display"
-msgstr ""
+#~ msgid "Simple Display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Minimal blood glucose display"
-msgstr ""
+#~ msgid "Minimal blood glucose display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Extra Large"
-msgstr ""
+#~ msgid "Extra Large"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Very large display with time"
-msgstr ""
+#~ msgid "Very large display with time"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Faces"
-msgstr ""
+#~ msgid "Faces"
+#~ msgstr ""
 
-#. placeholder {0}: face ? ` - ${face}` : " Faces"
-#: src/routes/clock/+page.svelte
-msgid "Nightscout Clock{0}"
-msgstr ""
+#~ msgid "Nightscout Clock{0}"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Loading clock face..."
-msgstr ""
+#~ msgid "Loading clock face..."
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Nightscout Clock Faces"
-msgstr ""
+#~ msgid "Nightscout Clock Faces"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Choose a clock face to display your glucose data:"
-msgstr ""
+#~ msgid "Choose a clock face to display your glucose data:"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-#: src/routes/clock/config/+page.svelte
-msgid "Clock Builder"
-msgstr ""
+#~ msgid "Clock Builder"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "<0/> Custom"
-msgstr ""
+#~ msgid "<0/> Custom"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid ""
-"Build your own custom clock face with a visual editor. Add\n"
-"elements, adjust sizes, and see a live preview as you design."
-msgstr ""
+#~ msgid ""
+#~ "Build your own custom clock face with a visual editor. Add\n"
+#~ "elements, adjust sizes, and see a live preview as you design."
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "<0/> Open Builder"
-msgstr ""
+#~ msgid "<0/> Open Builder"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "<0/> Open Saved Clock"
-msgstr ""
+#~ msgid "<0/> Open Saved Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Quick open:"
-msgstr ""
+#~ msgid "Quick open:"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Enter face string (e.g., bn0-sg40-ar25)"
-msgstr ""
+#~ msgid "Enter face string (e.g., bn0-sg40-ar25)"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/routes/clock/+page.svelte
 msgid "Enter"
 msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Go"
-msgstr ""
+#~ msgid "Go"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Preset Clock Faces"
-msgstr ""
+#~ msgid "Preset Clock Faces"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Open Clock"
-msgstr ""
+#~ msgid "<0/> Open Clock"
+#~ msgstr ""
 
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/routes/calendar/+page.svelte
@@ -798,18 +780,18 @@ msgstr ""
 msgid "Calendar"
 msgstr ""
 
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/layout/ReportsFilterSidebar.svelte
 #: src/lib/components/ui/date-range-picker.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/+layout.svelte
-#: src/routes/reports/week-to-week/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Today"
 msgstr ""
 
-#: src/lib/components/calendar/DayStackedBar.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
@@ -823,8 +805,8 @@ msgid "In Range"
 msgstr ""
 
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
-#: src/lib/components/calendar/DayStackedBar.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
@@ -839,13 +821,12 @@ msgstr ""
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "Low"
 msgstr ""
 
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
-#: src/lib/components/calendar/DayStackedBar.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
@@ -861,21 +842,17 @@ msgstr ""
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "High"
 msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "Width = Carbs"
-msgstr ""
+#~ msgid "Width = Carbs"
+#~ msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "Height = Insulin"
-msgstr ""
+#~ msgid "Height = Insulin"
+#~ msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "<0/> Optimal ratio"
-msgstr ""
+#~ msgid "<0/> Optimal ratio"
+#~ msgstr ""
 
 #: src/routes/calendar/+page.svelte
 msgid "Click any day to view detailed report"
@@ -937,8 +914,15 @@ msgid "Carbs:"
 msgstr ""
 
 #. placeholder {0}: marker.carbs
+#. placeholder {0}: carbs
 #. placeholder {0}: totalCarbs
 #. placeholder {0}: meal.carbs ?? 0
+#. placeholder {0}: foodEntry.protein
+#. placeholder {0}: scaledProtein()
+#. placeholder {0}: foodEntry.protein
+#. placeholder {0}: foodEntry.fat
+#. placeholder {0}: scaledFat()
+#. placeholder {0}: foodEntry.fat
 #. placeholder {0}: formatCarbDisplay(averages.avgCarbs)
 #. placeholder {0}: formatCarbDisplay(averages.avgProtein)
 #. placeholder {0}: formatCarbDisplay(averages.avgFat)
@@ -948,7 +932,7 @@ msgstr ""
 #. placeholder {0}: unspecifiedCarbs
 #. placeholder {0}: totalCarbs.toFixed(0)
 #. placeholder {0}: day.totalCarbs.toFixed(0)
-#. placeholder {0}: monthSummary.carbs.toFixed(0)
+#. placeholder {0}: monthSummary.avgCarbs.toFixed(0)
 #. placeholder {0}: food.carbs
 #. placeholder {0}: formatMacro(scaledCarbs)
 #. placeholder {0}: dayTotalCarbs
@@ -958,8 +942,15 @@ msgstr ""
 #. placeholder {0}: treatment.carbs
 #. placeholder {0}: formatCarbDisplay(treatment.carbs)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/reports/PeriodAverages.svelte
 #: src/lib/components/reports/PeriodAverages.svelte
 #: src/lib/components/reports/PeriodAverages.svelte
@@ -986,7 +977,8 @@ msgid "Insulin:"
 msgstr ""
 
 #. placeholder {0}: marker.insulin.toFixed(1)
-#. placeholder {0}: ( chartData.reduce((sum, d) => sum + d.total, 0) / chartData.length ).toFixed(1)
+#. placeholder {0}: insulin.toFixed(1)
+#. placeholder {0}: averageTdd.toFixed(1)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.basal)
 #. placeholder {0}: formatInsulinDisplay((treatmentSummary?.totals?.insulin?.bolus ?? 0) + (treatmentSummary?.totals?.insulin?.basal ?? 0))
@@ -997,7 +989,7 @@ msgstr ""
 #. placeholder {0}: formatInsulinDisplay(averages.avgTotalDaily)
 #. placeholder {0}: totalInsulin.toFixed(1)
 #. placeholder {0}: day.totalInsulin.toFixed(1)
-#. placeholder {0}: monthSummary.insulin.toFixed(1)
+#. placeholder {0}: monthSummary.avgInsulin.toFixed(1)
 #. placeholder {0}: dayTotalInsulin.toFixed(1)
 #. placeholder {0}: meal.treatment.insulin.toFixed(1)
 #. placeholder {0}: treatmentStats.totalBolus.toFixed(1)
@@ -1007,6 +999,7 @@ msgstr ""
 #. placeholder {0}: treatment.insulin.toFixed(2)
 #. placeholder {0}: formatInsulinDisplay(treatment.insulin)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
@@ -1038,43 +1031,35 @@ msgstr ""
 msgid "Click to view full day report"
 msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "Partial Data"
-msgstr ""
+#~ msgid "Partial Data"
+#~ msgstr ""
 
-#. placeholder {0}: day.totalReadings
-#: src/routes/calendar/+page.svelte
-msgid "{0} of ~288 readings"
-msgstr ""
+#~ msgid "{0} of ~288 readings"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
 #: src/lib/components/reports/DailyStatistics.svelte
 #: src/lib/components/reports/DailySummaryTable.svelte
-#: src/routes/calendar/+page.svelte
 #: src/routes/reports/+page.svelte
 #: src/routes/reports/agp/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "Time in Range"
 msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "Total Readings"
-msgstr ""
+#~ msgid "Total Readings"
+#~ msgstr ""
 
-#: src/routes/calendar/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "Total Carbs"
 msgstr ""
 
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
-#: src/routes/calendar/+page.svelte
 msgid "Total Insulin"
 msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "Loading tracker data..."
-msgstr ""
+#~ msgid "Loading tracker data..."
+#~ msgstr ""
 
 #: src/routes/calendar/+page.svelte
 msgid "Could not load tracker data"
@@ -1182,6 +1167,7 @@ msgstr ""
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
@@ -1669,6 +1655,7 @@ msgid "Key Nutritional Info"
 msgstr ""
 
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -1749,6 +1736,8 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/food/FoodList.svelte
@@ -1840,6 +1829,7 @@ msgid "Total: {0}g carbs"
 msgstr ""
 
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/QuickPickItem.svelte
@@ -1884,7 +1874,6 @@ msgid "Show hidden <0/>"
 msgstr ""
 
 #: src/lib/components/entries/EntryEditDialog.svelte
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/routes/food/QuickPicksList.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -1894,7 +1883,6 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -1911,7 +1899,6 @@ msgstr ""
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/treatments/CarbBreakdownBar.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
@@ -1925,7 +1912,6 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -1941,14 +1927,12 @@ msgid "Failed"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Fell Off"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -1957,14 +1941,12 @@ msgid "Replaced Early"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Empty"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -1973,7 +1955,6 @@ msgid "Refilled"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -1981,14 +1962,12 @@ msgid "Attended"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Rescheduled"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -2004,7 +1983,6 @@ msgid "Cancelled"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
-#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -2015,35 +1993,26 @@ msgstr ""
 msgid "Failed to load notification data"
 msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/routes/notifications/+page.svelte
 msgid "Tracker active"
 msgstr ""
 
 #. placeholder {0}: thresholdHours ?? "?"
-#. placeholder {0}: thresholdHours ?? "?"
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/routes/notifications/+page.svelte
 msgid "Exceeded {0}h - change urgently!"
 msgstr ""
 
 #. placeholder {0}: thresholdHours ?? "?"
-#. placeholder {0}: thresholdHours ?? "?"
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/routes/notifications/+page.svelte
 msgid "Exceeded {0}h - change soon"
 msgstr ""
 
 #. placeholder {0}: thresholdHours ?? def.lifespanHours ?? "?"
-#. placeholder {0}: thresholdHours ?? def.lifespanHours ?? "?"
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/routes/notifications/+page.svelte
 msgid "Approaching {0}h limit"
 msgstr ""
 
 #. placeholder {0}: Math.floor(instance.ageHours ?? 0)
-#. placeholder {0}: Math.floor(instance.ageHours ?? 0)
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/routes/notifications/+page.svelte
 msgid "Active for {0}h"
 msgstr ""
@@ -2076,7 +2045,6 @@ msgstr ""
 msgid "Administrative tasks requiring your attention"
 msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/routes/notifications/+page.svelte
 msgid "Password Reset Request"
 msgstr ""
@@ -2162,12 +2130,14 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/routes/meals/+page.svelte
 msgid "Treatment updated"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 msgid "Failed to update treatment"
@@ -2298,6 +2268,7 @@ msgstr ""
 msgid "Unattributed"
 msgstr ""
 
+#: src/routes/clock/+page.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 msgid "Edit"
@@ -2557,18 +2528,17 @@ msgstr ""
 #~ msgid "Failed to load reports"
 #~ msgstr ""
 
+#: src/lib/components/reports/ResourceGuard.svelte
 #: src/routes/auth/reset-password/+page.svelte
 #: src/routes/auth/verify-email/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/+page.svelte
-#: src/routes/reports/executive-summary/+page.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Try again"
 msgstr ""
 
 #. placeholder {0}: dailyStats.readings
-#. placeholder {0}: tirData.total
+#. placeholder {0}: totalReadings.toLocaleString()
 #. placeholder {0}: entries.length.toLocaleString()
 #. placeholder {0}: readings.length
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
@@ -2856,8 +2826,10 @@ msgstr ""
 msgid "Active"
 msgstr ""
 
+#. placeholder {0}: new Date(face.createdAt).toLocaleDateString()
 #. placeholder {0}: formatDateDetailed(selectedProfile.created_at)
 #. placeholder {0}: formatDateDetailed(selectedProfile.created_at)
+#: src/routes/clock/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Created {0}"
@@ -2904,9 +2876,9 @@ msgstr ""
 msgid "DIA"
 msgstr ""
 
-#. placeholder {0}: defaultStore?.dia ?? "–"
 #. placeholder {0}: store.dia ?? "–"
 #. placeholder {0}: store.devices.cgmConfiguration?.sensorWarmupHours ?? 2
+#. placeholder {0}: store.features.display?.focusHours ?? 3
 #. placeholder {0}: store.features.display?.focusHours ?? 3
 #. placeholder {0}: defaultStore?.dia ?? "–"
 #. placeholder {0}: store.dia ?? "–"
@@ -2942,9 +2914,8 @@ msgstr ""
 msgid "Default"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+#: src/routes/clock/[id]/+page.svelte
 #: src/routes/profile/+page.svelte
-#: src/routes/settings/profile/+page.svelte
 msgid "<0/> Edit"
 msgstr ""
 
@@ -3180,16 +3151,21 @@ msgid "Configure your Nocturne experience"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Pump Mode"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 msgid "Temp Basal"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Override"
 msgstr ""
 
@@ -3225,6 +3201,8 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Automatic"
 msgstr ""
@@ -3237,11 +3215,14 @@ msgstr ""
 msgid "Manual"
 msgstr ""
 
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Suspended"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Overrides"
 msgstr ""
 
@@ -3272,9 +3253,8 @@ msgstr ""
 msgid "Need more readings to show your typical day"
 msgstr ""
 
-#: src/lib/components/calendar/DayStackedBar.svelte
-msgid "Near optimal carb/insulin ratio"
-msgstr ""
+#~ msgid "Near optimal carb/insulin ratio"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/widgets/BgDeltaWidget.svelte
@@ -3415,12 +3395,14 @@ msgid "Error loading recent treatments."
 msgstr ""
 
 #. placeholder {0}: treatment.carbs
+#. placeholder {0}: foodEntry.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: foodCarbs
-#. placeholder {0}: insulinStats.totalCarbs.toFixed(0)
+#. placeholder {0}: (insulinStats.totalCarbs ?? 0).toFixed(0)
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -3441,6 +3423,10 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
@@ -3449,15 +3435,19 @@ msgid "Bolus"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Bolus Wizard"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Combo Bolus"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Sensor Stop"
 msgstr ""
@@ -3466,6 +3456,10 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3474,12 +3468,16 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Site"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Reservoir"
@@ -3487,6 +3485,8 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3495,6 +3495,7 @@ msgid "Battery"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3502,48 +3503,62 @@ msgstr ""
 msgid "Custom"
 msgstr ""
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock/ClockFaceRenderer.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "Tracker"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Treatment"
 msgstr ""
 
 #: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/layout/SidebarGlucoseWidget.svelte
 msgid "Demo"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Blood Glucose <0/>"
 msgstr ""
 
 #: src/lib/components/charts/BasalRateTrack.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 msgid "Last pump sync"
 msgstr ""
 
 #: src/lib/components/charts/BasalRateTrack.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/reports/BasalRateChart.svelte
 msgid "BASAL"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte
 msgid "IOB/COB"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "Glucose"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -3554,11 +3569,13 @@ msgid "Basal"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "Scheduled"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -3566,6 +3583,7 @@ msgid "Very High"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -3578,20 +3596,26 @@ msgid "COB"
 msgstr ""
 
 #. placeholder {0}: systemEvents.length
+#. placeholder {0}: systemEvents.length
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Alarms ({0})"
 msgstr ""
 
 #. placeholder {0}: scheduledTrackerMarkers.length
+#. placeholder {0}: scheduledTrackerMarkers.length
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Scheduled ({0})"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Multiple Treatments"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Several treatments occurred around this time. Select one to edit."
 msgstr ""
 
@@ -3710,12 +3734,16 @@ msgid "No unit found."
 msgstr ""
 
 #. placeholder {0}: thresholds.high
+#. placeholder {0}: bgLabel()
 #: src/lib/components/glucose-chart/GlucoseChart.svelte
+#: src/routes/settings/profile/+page.svelte
 msgid "High ({0})"
 msgstr ""
 
 #. placeholder {0}: thresholds.low
+#. placeholder {0}: bgLabel()
 #: src/lib/components/glucose-chart/GlucoseChart.svelte
+#: src/routes/settings/profile/+page.svelte
 msgid "Low ({0})"
 msgstr ""
 
@@ -3763,6 +3791,7 @@ msgstr ""
 msgid "Day in Review"
 msgstr ""
 
+#: src/lib/components/dashboard/widgets/ClockWidget.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "Clock"
 msgstr ""
@@ -3859,7 +3888,6 @@ msgid "Include notes"
 msgstr ""
 
 #: src/lib/components/layout/ReportsFilterSidebar.svelte
-#: src/routes/clock/config/+page.svelte
 msgid "<0/> Reset"
 msgstr ""
 
@@ -3900,40 +3928,30 @@ msgstr ""
 msgid "No active notifications"
 msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "Set up trackers →"
-msgstr ""
+#~ msgid "Set up trackers →"
+#~ msgstr ""
 
-#. placeholder {0}: pendingResets.length
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "<0/> Admin Actions Required ({0})"
-msgstr ""
+#~ msgid "<0/> Admin Actions Required ({0})"
+#~ msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "<0/> Handle"
-msgstr ""
+#~ msgid "<0/> Handle"
+#~ msgstr ""
 
-#. placeholder {0}: trackerNotifications.length
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "<0/> Tracker Alerts ({0})"
-msgstr ""
+#~ msgid "<0/> Tracker Alerts ({0})"
+#~ msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 msgid "<0/> Snooze"
 msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "<0/> Done"
-msgstr ""
+#~ msgid "<0/> Done"
+#~ msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "Acknowledge for all devices"
-msgstr ""
+#~ msgid "Acknowledge for all devices"
+#~ msgstr ""
 
-#: src/lib/components/layout/SidebarNotifications.svelte
-msgid "Ack All"
-msgstr ""
+#~ msgid "Ack All"
+#~ msgstr ""
 
 #: src/lib/components/layout/SidebarNotifications.svelte
 msgid "View all notifications"
@@ -4541,6 +4559,7 @@ msgstr ""
 msgid "<0/> Status at {0}"
 msgstr ""
 
+#: src/lib/components/calendar/DayGlucoseProfile.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
@@ -4939,7 +4958,6 @@ msgstr ""
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
-#: src/routes/clock/config/+page.svelte
 msgid "<0/> Add"
 msgstr ""
 
@@ -5030,6 +5048,9 @@ msgid "Start another {0} after completion"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
+#: src/routes/calendar/+page.svelte
+#: src/routes/calendar/+page.svelte
+#: src/routes/calendar/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "<0/> Complete"
 msgstr ""
@@ -5110,7 +5131,11 @@ msgstr ""
 msgid "Notification Schedule (Adjusted)"
 msgstr ""
 
+#. placeholder {0}: element.hours || 3
+#. placeholder {0}: element.hours || 3
 #. placeholder {0}: preview.hours
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "{0}h"
 msgstr ""
@@ -5131,7 +5156,6 @@ msgstr ""
 #: src/lib/components/status-pills/CAGEPill.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
-#: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Overdue"
 msgstr ""
@@ -5214,12 +5238,12 @@ msgid "Basal IOB"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 msgid "Activity"
 msgstr ""
 
 #: src/lib/components/status-pills/IOBPill.svelte
-#: src/routes/settings/dev/+page.svelte
 msgid "Device"
 msgstr ""
 
@@ -5643,7 +5667,9 @@ msgstr ""
 msgid "+ Add"
 msgstr ""
 
+#. placeholder {0}: m
 #. placeholder {0}: min
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 msgid "{0} min"
 msgstr ""
@@ -6070,6 +6096,7 @@ msgstr ""
 msgid "Click \"Upload Sound\" to add your own"
 msgstr ""
 
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
 msgstr ""
@@ -6300,10 +6327,11 @@ msgid "<0/> Additional Properties <1/>"
 msgstr ""
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
+#: src/routes/clock/+page.svelte
 msgid "<0/> Delete"
 msgstr ""
 
+#: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 msgid "Medium"
 msgstr ""
@@ -7187,173 +7215,133 @@ msgstr ""
 msgid "+ Nocturne"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Current BG value"
-msgstr ""
+#~ msgid "Current BG value"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Delta"
-msgstr ""
+#~ msgid "Delta"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Change since last reading"
-msgstr ""
+#~ msgid "Change since last reading"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Arrow"
-msgstr ""
+#~ msgid "Arrow"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Trend direction arrow"
-msgstr ""
+#~ msgid "Trend direction arrow"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Reading Age"
-msgstr ""
+#~ msgid "Reading Age"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Time since last reading"
-msgstr ""
+#~ msgid "Time since last reading"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "Current Time"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Display current time"
-msgstr ""
+#~ msgid "Display current time"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-#: src/routes/clock/config/+page.svelte
-msgid "Line Break"
-msgstr ""
+#~ msgid "Line Break"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "New line separator"
-msgstr ""
+#~ msgid "New line separator"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Clock Configuration - Nightscout"
-msgstr ""
+#~ msgid "Clock Configuration - Nightscout"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Configure your Nightscout clock display settings"
-msgstr ""
+#~ msgid "Configure your Nightscout clock display settings"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Back to Clocks"
-msgstr ""
+#~ msgid "<0/> Back to Clocks"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Live Preview"
-msgstr ""
+#~ msgid "Live Preview"
+#~ msgstr ""
 
-#. placeholder {0}: bgDelta > 0 ? "+" : ""
-#. placeholder {1}: bgDelta
-#: src/routes/clock/config/+page.svelte
-msgid "{0}{1} mg/dL"
-msgstr ""
+#~ msgid "{0}{1} mg/dL"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "3m ago"
-msgstr ""
+#~ msgid "3m ago"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Generated Face String:"
-msgstr ""
+#~ msgid "Generated Face String:"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Save"
-msgstr ""
+#~ msgid "<0/> Save"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "Display Settings"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Colorful Background"
-msgstr ""
+#~ msgid "Colorful Background"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Use BG-based colored background"
-msgstr ""
+#~ msgid "Use BG-based colored background"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Always Show Reading Age"
-msgstr ""
+#~ msgid "Always Show Reading Age"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Always display when last reading was taken"
-msgstr ""
+#~ msgid "Always display when last reading was taken"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Stale Threshold (minutes)"
-msgstr ""
+#~ msgid "Stale Threshold (minutes)"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "(0 = never stale)"
-msgstr ""
+#~ msgid "(0 = never stale)"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
+#: src/lib/components/clock-builder/AddElementMenu.svelte
 msgid "Add Element"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Elements are added to the end of the display (LIFO style)"
-msgstr ""
+#~ msgid "Elements are added to the end of the display (LIFO style)"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Remove Last"
-msgstr ""
+#~ msgid "<0/> Remove Last"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Clear All"
-msgstr ""
+#~ msgid "<0/> Clear All"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Element Stack <0/>"
-msgstr ""
+#~ msgid "Element Stack <0/>"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Elements display from top to bottom"
-msgstr ""
+#~ msgid "Elements display from top to bottom"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid ""
-"No elements added yet. Add elements above to build your clock\n"
-"face."
-msgstr ""
+#~ msgid ""
+#~ "No elements added yet. Add elements above to build your clock\n"
+#~ "face."
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "New row separator"
-msgstr ""
+#~ msgid "New row separator"
+#~ msgstr ""
 
-#. placeholder {0}: element.size
-#: src/routes/clock/config/+page.svelte
+#. placeholder {0}: element.size || ELEMENT_INFO[element.type as ClockElementType]?.defaultSize || 20
+#: src/lib/components/clock-builder/TextStyleControls.svelte
 msgid "Size: {0}"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Quick Presets"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Simple BG"
-msgstr ""
+#~ msgid "Simple BG"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Color Detailed"
-msgstr ""
+#~ msgid "Color Detailed"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Large + Time"
-msgstr ""
+#~ msgid "Large + Time"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "BG + Arrow"
-msgstr ""
+#~ msgid "BG + Arrow"
+#~ msgstr ""
 
 #: src/routes/dashboard/analyses/+page.svelte
 msgid "Discrepancy Analyses - Nocturne Dashboard"
@@ -7479,11 +7467,14 @@ msgstr ""
 msgid "Clock - {0}"
 msgstr ""
 
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/clock/[id]/+page.svelte
 msgid "<0/> Back"
 msgstr ""
 
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/clock/[id]/+page.svelte
 msgid "Demo Mode"
 msgstr ""
 
@@ -7505,7 +7496,9 @@ msgid "Your time ({0})"
 msgstr ""
 
 #. placeholder {0}: timeSince
+#. placeholder {0}: timeSince
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/clock/[id]/+page.svelte
 msgid "Data is {0} old"
 msgstr ""
 
@@ -8204,9 +8197,8 @@ msgstr ""
 msgid "No treatments recorded for this day"
 msgstr ""
 
-#: src/routes/reports/battery/+page.svelte
-msgid "Failed to load battery report data"
-msgstr ""
+#~ msgid "Failed to load battery report data"
+#~ msgstr ""
 
 #: src/routes/reports/battery/+page.svelte
 msgid "Battery Report - Nocturne"
@@ -8221,9 +8213,8 @@ msgstr ""
 msgid "Battery Report"
 msgstr ""
 
-#: src/routes/reports/battery/+page.svelte
-msgid "Loading battery data..."
-msgstr ""
+#~ msgid "Loading battery data..."
+#~ msgstr ""
 
 #: src/routes/reports/battery/+page.svelte
 msgid "No Battery Data Available"
@@ -8347,9 +8338,8 @@ msgstr ""
 #~ msgid "Loading glucose distribution..."
 #~ msgstr ""
 
-#: src/routes/reports/glucose-distribution/+page.svelte
-msgid "<0/> Error Loading Data"
-msgstr ""
+#~ msgid "<0/> Error Loading Data"
+#~ msgstr ""
 
 #. placeholder {0}: dateRangeDisplay
 #. placeholder {1}: overallStats.totalReadings
@@ -8474,9 +8464,8 @@ msgstr ""
 #~ msgid "Loading executive summary..."
 #~ msgstr ""
 
-#: src/routes/reports/executive-summary/+page.svelte
-msgid "<0/> Error Loading Executive Summary"
-msgstr ""
+#~ msgid "<0/> Error Loading Executive Summary"
+#~ msgstr ""
 
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Diabetes Management Report"
@@ -8493,6 +8482,7 @@ msgid ""
 msgstr ""
 
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
+#: src/routes/calendar/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "TIR"
 msgstr ""
@@ -8742,7 +8732,7 @@ msgstr ""
 msgid "Basal Analysis <0/>"
 msgstr ""
 
-#. placeholder {0}: insulinStats.bolusCount + insulinStats.basalCount
+#. placeholder {0}: (insulinStats.bolusCount ?? 0) + (insulinStats.basalCount ?? 0)
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "{0} insulin events"
 msgstr ""
@@ -8774,8 +8764,8 @@ msgstr ""
 msgid "units/day"
 msgstr ""
 
-#. placeholder {0}: insulinStats.totalBasal.toFixed(1)
-#. placeholder {0}: insulinStats.totalBolus.toFixed(1)
+#. placeholder {0}: (insulinStats.totalBasal ?? 0).toFixed(1)
+#. placeholder {0}: (insulinStats.totalBolus ?? 0).toFixed(1)
 #: src/routes/reports/insulin-delivery/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "{0}U total"
@@ -8785,7 +8775,7 @@ msgstr ""
 msgid "Boluses/Day"
 msgstr ""
 
-#. placeholder {0}: insulinStats.avgBolus.toFixed(1)
+#. placeholder {0}: (insulinStats.avgBolus ?? 0).toFixed(1)
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "avg {0}U each"
 msgstr ""
@@ -8794,8 +8784,8 @@ msgstr ""
 msgid "Avg I:C"
 msgstr ""
 
-#. placeholder {0}: insulinStats.basalPercent.toFixed(0)
-#. placeholder {1}: insulinStats.bolusPercent.toFixed( 0 )
+#. placeholder {0}: (insulinStats.basalPercent ?? 0).toFixed(0)
+#. placeholder {1}: (insulinStats.bolusPercent ?? 0).toFixed( 0 )
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "Basal/Bolus Ratio: {0}% / {1}%"
 msgstr ""
@@ -8837,8 +8827,8 @@ msgstr ""
 msgid "Meal Boluses"
 msgstr ""
 
-#. placeholder {0}: insulinStats.bolusCount > 0 ? ( (insulinStats.mealBoluses / insulinStats.bolusCount) * 100 ).toFixed(0) : 0
-#. placeholder {0}: insulinStats.bolusCount > 0 ? ( (insulinStats.correctionBoluses / insulinStats.bolusCount) * 100 ).toFixed(0) : 0
+#. placeholder {0}: (insulinStats.bolusCount ?? 0) > 0 ? ( ((insulinStats.mealBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) * 100 ).toFixed(0) : 0
+#. placeholder {0}: (insulinStats.bolusCount ?? 0) > 0 ? ( ((insulinStats.correctionBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) * 100 ).toFixed(0) : 0
 #: src/routes/reports/insulin-delivery/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "{0}% of boluses"
@@ -8885,7 +8875,7 @@ msgstr ""
 msgid "moderate bolus sizes."
 msgstr ""
 
-#. placeholder {0}: insulinStats.avgBolus.toFixed(1)
+#. placeholder {0}: (insulinStats.avgBolus ?? 0).toFixed(1)
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "Average bolus size of {0}U — <0/>"
 msgstr ""
@@ -8904,12 +8894,12 @@ msgstr ""
 msgid "<0>Basal Rate Estimation:</0> If your TDD is accurate, your hourly basal rate should be approximately <1>{0} U/hr</1> (using 50% basal assumption)."
 msgstr ""
 
-#. placeholder {0}: insulinStats.icRatio.toFixed( 0 )
+#. placeholder {0}: (insulinStats.icRatio ?? 0).toFixed( 0 )
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "means you use about 1 unit of insulin for every {0} grams of carbs."
 msgstr ""
 
-#. placeholder {0}: insulinStats.icRatio.toFixed( 0 )
+#. placeholder {0}: (insulinStats.icRatio ?? 0).toFixed( 0 )
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "<0>I:C Ratio Check:</0> Your average insulin-to-carb ratio of 1:{0} <1/>"
 msgstr ""
@@ -8940,7 +8930,13 @@ msgstr ""
 #~ msgstr ""
 
 #. placeholder {0}: treatments.length.toLocaleString()
+#. placeholder {0}: dataSummary.treatments?.toLocaleString() ?? 0
+#. placeholder {0}: dataSummary.treatments?.toLocaleString() ?? 0
+#. placeholder {0}: deleteDataResult.treatmentsDeleted?.toLocaleString() ?? 0
 #: src/routes/reports/treatments/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "{0} treatments"
 msgstr ""
 
@@ -9442,6 +9438,7 @@ msgstr ""
 msgid "No roles available"
 msgstr ""
 
+#: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "System"
 msgstr ""
@@ -9535,6 +9532,7 @@ msgstr ""
 msgid "No access token available for this subject."
 msgstr ""
 
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/lib/components/ui/dialog/dialog-content.svelte
 #: src/lib/components/ui/sheet/sheet-content.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -9543,6 +9541,7 @@ msgstr ""
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -9810,7 +9809,7 @@ msgstr ""
 msgid "Prediction horizon"
 msgstr ""
 
-#. placeholder {0}: store.algorithm.prediction.minutes ?? 30
+#. placeholder {0}: element.minutesAhead || 30
 #: src/routes/settings/algorithm/+page.svelte
 msgid "{0} minutes"
 msgstr ""
@@ -10212,6 +10211,7 @@ msgstr ""
 msgid "12-hour (AM/PM)"
 msgstr ""
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "24-hour"
 msgstr ""
@@ -10752,7 +10752,6 @@ msgstr ""
 msgid "Failed to load services"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Failed to delete connector data"
 msgstr ""
@@ -10766,7 +10765,7 @@ msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11064,8 +11063,6 @@ msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11101,7 +11098,6 @@ msgid ""
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "<0/> Delete Data..."
@@ -11112,7 +11108,6 @@ msgstr ""
 msgid "<0/> Permanently Delete Data"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11138,13 +11133,12 @@ msgid "All device status records"
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Data deleted successfully"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11152,13 +11146,11 @@ msgid "Type <0>DELETE</0> to confirm:"
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Type DELETE"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11334,29 +11326,24 @@ msgstr ""
 msgid "<0/> Download Food Definitions"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Delete All Data from This Connector"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid ""
 "This will permanently delete all entries, treatments, and\n"
 "device status records synchronized by this connector."
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "<0/> Permanently Delete Connector Data"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "You are about to permanently delete <0>all data</0> synchronized by <1/> . This includes:"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Any treatments and device status records from this connector"
 msgstr ""
@@ -11393,6 +11380,7 @@ msgid "<0/> {0} ({1}% CV)"
 msgstr ""
 
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
 msgid "No data today"
 msgstr ""
 
@@ -11552,6 +11540,8 @@ msgstr ""
 msgid "Off - Don't show on dashboard"
 msgstr ""
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -11712,30 +11702,20 @@ msgstr ""
 msgid "Last 24h"
 msgstr ""
 
-#. placeholder {0}: tirData.severeLow.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "Severe Low: {0}%"
-msgstr ""
+#~ msgid "Severe Low: {0}%"
+#~ msgstr ""
 
-#. placeholder {0}: tirData.low.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "Low: {0}%"
-msgstr ""
+#~ msgid "Low: {0}%"
+#~ msgstr ""
 
-#. placeholder {0}: tirData.inRange.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "In Range: {0}%"
-msgstr ""
+#~ msgid "In Range: {0}%"
+#~ msgstr ""
 
-#. placeholder {0}: tirData.high.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "High: {0}%"
-msgstr ""
+#~ msgid "High: {0}%"
+#~ msgstr ""
 
-#. placeholder {0}: tirData.severeHigh.toFixed(1)
-#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-msgid "Severe High: {0}%"
-msgstr ""
+#~ msgid "Severe High: {0}%"
+#~ msgstr ""
 
 #. placeholder {0}: profile.name
 #: src/lib/components/settings/alarm-preview/AlarmActiveView.svelte
@@ -11931,13 +11911,11 @@ msgstr ""
 msgid "The responses matched perfectly with no differences detected."
 msgstr ""
 
-#: src/routes/clock/config/+page.ts
-msgid "Clock Builder - Nightscout"
-msgstr ""
+#~ msgid "Clock Builder - Nightscout"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.ts
-msgid "Build your own custom Nightscout clock display"
-msgstr ""
+#~ msgid "Build your own custom Nightscout clock display"
+#~ msgstr ""
 
 #. placeholder {0}: formatAge(instance.ageHours ?? 0)
 #. placeholder {1}: formatDate(instance.startedAt)
@@ -11963,6 +11941,96 @@ msgstr ""
 
 #: src/routes/settings/appearance/+page.svelte
 msgid "Sign in to sync your language preference across devices."
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Offline"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Has Data"
+msgstr ""
+
+#~ msgid ""
+#~ "{0} entries\n"
+#~ "• Last seen {1}"
+#~ msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Connector Not Running"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"This connector is not currently running, but data from previous\n"
+"syncs is still stored. You can delete this data below."
+msgstr ""
+
+#~ msgid "Total entries"
+#~ msgstr ""
+
+#~ msgid "Entries in last 24 hours"
+#~ msgstr ""
+
+#~ msgid "Last entry received"
+#~ msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Disabled"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "<0/> Disabled"
+msgstr ""
+
+#. placeholder {0}: entries24h.toLocaleString()
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "({0} in 24h)"
+msgstr ""
+
+#~ msgid "{0} entries <0/> • Last seen {1}"
+#~ msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Connector Disabled"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"This connector is not currently enabled, but historical data from\n"
+"previous syncs is still stored. Enable the connector in your\n"
+"server configuration to resume syncing, or delete the data below."
+msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid ""
+"Review and manage your insulin doses, carb entries, and device events. Use\n"
+"filters to find specific treatments."
 msgstr ""
 
 #: src/routes/reports/+page.svelte
@@ -12082,97 +12150,6 @@ msgid ""
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Disabled"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Offline"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "<0/> Disabled"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "<0/> Has Data"
-msgstr ""
-
-#. placeholder {0}: entries24h.toLocaleString()
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "({0} in 24h)"
-msgstr ""
-
-#~ msgid "{0} entries <0/> • Last seen {1}"
-#~ msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Connector Disabled"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"This connector is not currently enabled, but historical data from\n"
-"previous syncs is still stored. Enable the connector in your\n"
-"server configuration to resume syncing, or delete the data below."
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Connector Not Running"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"This connector is not currently running, but data from previous\n"
-"syncs is still stored. You can delete this data below."
-msgstr ""
-
-#~ msgid "Total entries"
-#~ msgstr ""
-
-#~ msgid "Entries in last 24 hours"
-#~ msgstr ""
-
-#~ msgid "Last entry received"
-#~ msgstr ""
-
-#: src/routes/reports/treatments/+page.svelte
-msgid ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Failed to start deduplication job"
 msgstr ""
@@ -12185,27 +12162,6 @@ msgstr ""
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Job failed"
-msgstr ""
-
-#. placeholder {0}: source.entriesLast24h ?? 0
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "{0} records (24h)"
-msgstr ""
-
-#. placeholder {0}: connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"{0} records\n"
-"(24h)"
-msgstr ""
-
-#. placeholder {0}: entryCount?.toLocaleString() ?? 0
-#. placeholder {1}: formatLastSeen(lastSeen)
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "{0} records <0/> • Last seen {1}"
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
@@ -12223,7 +12179,6 @@ msgstr ""
 msgid "Deduplicate Records"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid ""
 "Link records from multiple data sources that represent the same underlying event.\n"
@@ -12235,58 +12190,11 @@ msgstr ""
 msgid "<0/> Run Deduplication"
 msgstr ""
 
-#. placeholder {0}: demoDeleteResult.entriesDeleted?.toLocaleString() ?? 0
-#. placeholder {0}: deleteResult.entriesDeleted?.toLocaleString() ?? 0
-#. placeholder {0}: connectorDeleteResult.entriesDeleted?.toLocaleString() ?? 0
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Deleted {0} records"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Records (24h)"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Total Records"
-msgstr ""
-
-#. placeholder {0}: selectedDataSource.totalEntries?.toLocaleString() ?? 0
-#. placeholder {0}: selectedConnector.totalEntries?.toLocaleString() ?? 0
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "All glucose records ({0} records)"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Total records"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Records in last 24 hours"
-msgstr ""
-
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid "Last record received"
-msgstr ""
-
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "<0/> Deduplicate Records"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Link records from multiple data sources that represent the same underlying event"
 msgstr ""
@@ -12339,12 +12247,10 @@ msgstr ""
 msgid "Groups: {0}"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/services/+page.svelte
-msgid ""
-"This process will scan all your glucose records, treatments, and state spans\n"
-"to identify and link records that represent the same event from different data sources."
-msgstr ""
+#~ msgid ""
+#~ "This process will scan all your glucose entries, treatments, and state spans\n"
+#~ "to identify and link records that represent the same event from different data sources."
+#~ msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -12381,48 +12287,113 @@ msgstr ""
 msgid "<0/> Start Deduplication"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
-msgid "Zoomed view"
-msgstr ""
-
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/MiniOverviewChart.svelte
-msgid "<0/> Reset zoom"
-msgstr ""
-
+#. placeholder {0}: span.rate.toFixed(2)
 #. placeholder {0}: span.rate.toFixed(2)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 msgid "{0}U/h"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
-msgid "MODE"
+#~ msgid "Illness"
+#~ msgstr ""
+
+#~ msgid "Travel"
+#~ msgstr ""
+
+#. placeholder {0}: source.entriesLast24h ?? 0
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "{0} records (24h)"
+msgstr ""
+
+#. placeholder {0}: connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"{0} records\n"
+"(24h)"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Records (24h)"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Total Records"
+msgstr ""
+
+#. placeholder {0}: selectedDataSource.totalEntries?.toLocaleString() ?? 0
+#. placeholder {0}: selectedConnector.totalEntries?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "All glucose records ({0} records)"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Total records"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Records in last 24 hours"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Last record received"
+msgstr ""
+
+#: src/routes/settings/services/+page.svelte
+msgid ""
+"This process will scan all your glucose records, treatments, and state spans\n"
+"to identify and link records that represent the same event from different data sources."
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 msgid "OVERRIDE"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 msgid "PROFILE"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
-msgid "ACTIVITY"
-msgstr ""
+#~ msgid "SLEEP"
+#~ msgstr ""
+
+#~ msgid "EXERCISE"
+#~ msgstr ""
+
+#~ msgid "ILLNESS"
+#~ msgstr ""
+
+#~ msgid "TRAVEL"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/MiniOverviewChart.svelte
 msgid "Full Range Overview"
 msgstr ""
 
-#: src/lib/components/dashboard/MiniOverviewChart.svelte
-msgid "Viewing:"
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
+msgid "ACTIVITY"
 msgstr ""
 
-#. placeholder {0}: Math.round( (selectedXDomain[1].getTime() - selectedXDomain[0].getTime()) / (1000 * 60) )
-#: src/lib/components/dashboard/MiniOverviewChart.svelte
-msgid "({0} min)"
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+msgid "N"
 msgstr ""
+
+#~ msgid "Nocturne Portal"
+#~ msgstr ""
+
+#~ msgid "Nocturne © {0} - Open source diabetes management"
+#~ msgstr ""
 
 #~ msgid "Your Diabetes Data, <0>Your Way</0>"
 #~ msgstr ""
@@ -12556,17 +12527,6 @@ msgstr ""
 msgid "Read the Docs"
 msgstr ""
 
-#: src/lib/components/SiteFooter.svelte
-#: src/lib/components/SiteHeader.svelte
-msgid "N"
-msgstr ""
-
-#~ msgid "Nocturne Portal"
-#~ msgstr ""
-
-#~ msgid "Nocturne © {0} - Open source diabetes management"
-#~ msgstr ""
-
 #: src/lib/components/StepIndicator.svelte
 msgid "Setup"
 msgstr ""
@@ -12591,6 +12551,49 @@ msgstr ""
 
 #: src/lib/components/SiteHeader.svelte
 msgid "Toggle menu"
+msgstr ""
+
+#. placeholder {0}: entryCount?.toLocaleString() ?? 0
+#. placeholder {1}: formatLastSeen(lastSeen)
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "{0} records <0/> • Last seen {1}"
+msgstr ""
+
+#. placeholder {0}: demoDeleteResult.entriesDeleted?.toLocaleString() ?? 0
+#. placeholder {0}: deleteResult.entriesDeleted?.toLocaleString() ?? 0
+#. placeholder {0}: connectorDeleteResult.entriesDeleted?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+#: src/routes/settings/services/+page.svelte
+msgid "Deleted {0} records"
+msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ZoomIndicator.svelte
+msgid "Zoomed view"
+msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+#: src/lib/components/dashboard/glucose-chart/ZoomIndicator.svelte
+msgid "<0/> Reset zoom"
+msgstr ""
+
+#: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
+msgid "MODE"
+msgstr ""
+
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "Viewing:"
+msgstr ""
+
+#. placeholder {0}: Math.round( (selectedXDomain[1].getTime() - selectedXDomain[0].getTime()) / (1000 * 60) )
+#: src/lib/components/dashboard/MiniOverviewChart.svelte
+msgid "({0} min)"
 msgstr ""
 
 #: src/lib/components/SiteFooter.svelte
@@ -12907,6 +12910,7 @@ msgid "Failed to generate configuration"
 msgstr ""
 
 #: src/routes/download/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "<0/> Back to connectors"
 msgstr ""
 
@@ -13456,7 +13460,6 @@ msgstr ""
 msgid "Not Configured"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Click on a connector to configure credentials and settings. Changes take effect immediately."
 msgstr ""
@@ -13527,23 +13530,19 @@ msgstr ""
 msgid "Danger Zone"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Irreversible actions that affect this connector's configuration"
-msgstr ""
+#~ msgid "Irreversible actions that affect this connector's configuration"
+#~ msgstr ""
 
 #: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Delete Configuration"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Remove all configuration and credentials for this connector"
-msgstr ""
+#~ msgid "Remove all configuration and credentials for this connector"
+#~ msgstr ""
 
-#. placeholder {0}: displayName
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Delete {0} Configuration?"
-msgstr ""
+#~ msgid "Delete {0} Configuration?"
+#~ msgstr ""
 
 #~ msgid ""
 #~ "This will permanently delete all configuration and credentials for this connector.\n"
@@ -13593,9 +13592,8 @@ msgstr ""
 msgid "<0/> Update Credentials"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "<0/> Back to Services"
-msgstr ""
+#~ msgid "<0/> Back to Services"
+#~ msgstr ""
 
 #: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "No Runtime Configuration Available"
@@ -13675,228 +13673,1238 @@ msgstr ""
 msgid "Environment variable: <0/>"
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
+#~ msgid ""
+#~ "This will permanently delete all configuration and credentials for this\n"
+#~ "connector. The connector will stop syncing data. This action cannot be\n"
+#~ "undone."
+#~ msgstr ""
+
+#~ msgid "<0/> Setup Required ({0})"
+#~ msgstr ""
+
+#~ msgid "Configure notification thresholds for alerts"
+#~ msgstr ""
+
+#: src/lib/components/layout/SidebarNotifications.svelte
+msgid "Set up trackers"
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "Notification"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Missing required data"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/routes/meals/+page.svelte
+msgid "Meal match accepted"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Failed to accept meal match"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Missing food entry ID"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Meal match dismissed"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Failed to dismiss meal match"
+msgstr ""
+
+#~ msgid "Review Meal Match"
+#~ msgstr ""
+
+#~ msgid "Confirm when you ate this food and adjust the carbs if needed."
+#~ msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/routes/meals/+page.svelte
+msgid "Food entry"
+msgstr ""
+
+#~ msgid "{0} x {1}"
+#~ msgstr ""
+
+#~ msgid "· {0}g protein"
+#~ msgstr ""
+
+#~ msgid "· {0}g fat"
+#~ msgstr ""
+
+#~ msgid "{0}g carbs <0/> <1/>"
+#~ msgstr ""
+
+#. placeholder {0}: treatmentCarbs
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Treatment has {0}g total carbs"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "When did you eat?"
+msgstr ""
+
+#~ msgid "At bolus time ({0})"
+#~ msgstr ""
+
+#~ msgid "At MFP logged time ({0}) <0>({0}{1} min)</0>"
+#~ msgstr ""
+
+#~ msgid "Custom offset"
+#~ msgstr ""
+
+#~ msgid "Minutes after bolus"
+#~ msgstr ""
+
+#~ msgid "Positive = ate after bolusing, Negative = ate before bolusing"
+#~ msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/routes/meals/+page.svelte
+msgid "Dismiss"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/routes/meals/+page.svelte
+msgid "Accept"
+msgstr ""
+
+#: src/routes/meals/+page.svelte
+msgid "Failed to accept match"
+msgstr ""
+
+#: src/routes/meals/+page.svelte
+msgid "Match dismissed"
+msgstr ""
+
+#: src/routes/meals/+page.svelte
+msgid "Failed to dismiss match"
+msgstr ""
+
+#~ msgid "<0/> Suggested Matches <1/>"
+#~ msgstr ""
+
+#~ msgid "MyFitnessPal entries that may match your treatments"
+#~ msgstr ""
+
+#~ msgid "{0}g carbs at {1}"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "Matches treatment at {0} ({1}g)\n"
+#~ "· {2}% match"
+#~ msgstr ""
+
+#: src/routes/meals/+page.svelte
+msgid "Review"
+msgstr ""
+
+#. placeholder {0}: treatmentCarbs
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Scale to {0}g"
+msgstr ""
+
+#~ msgid "At logged time ({0}) <0>({0}{1} min)</0>"
+#~ msgstr ""
+
+#. placeholder {0}: foodEntry.servingDescription
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "<0/> x {0}"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "<0>{0}g</0> <1>{0}g</1> carbs"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "· <0/> protein"
+msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "· <0/> fat"
+msgstr ""
+
+#~ msgid "Custom time"
+#~ msgstr ""
+
+#~ msgid "Time you ate"
+#~ msgstr ""
+
+#. placeholder {0}: timeOffsetMinutes() > 0 ? "+" : ""
+#. placeholder {1}: timeOffsetMinutes()
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "({0}{1} min)"
+msgstr ""
+
+#~ msgid "Bolus time"
+#~ msgstr ""
+
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Logged time"
+msgstr ""
+
+#. placeholder {0}: match.carbs
+#. placeholder {1}: Math.round((match.matchScore ?? 0) * 100)
+#: src/routes/meals/+page.svelte
 msgid ""
-"This will permanently delete all configuration and credentials for this\n"
-"connector. The connector will stop syncing data. This action cannot be\n"
-"undone."
+"{0}g carbs\n"
+"· {1}% match"
 msgstr ""
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "Validation error"
+#. placeholder {0}: bolusDateDisplay
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Bolus time ({0})"
 msgstr ""
 
-#: src/lib/components/layout/AppSidebar.svelte
-#: src/routes/settings/dev/+page.svelte
-msgid "Alerts Debug"
+#. placeholder {0}: foodName
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "Confirm \"{0}\""
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Quick snapshot of alert configuration and latest glucose entry"
+#: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+msgid "When did you eat this, and how much?"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Refresh"
+#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+msgid "<0/> vs 90d"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Snapshot"
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "Total Daily Dose"
 msgstr ""
 
-#. placeholder {0}: fetchedAt
-#: src/routes/settings/dev/+page.svelte
-msgid "Server time: {0}"
+#~ msgid "<0/> Bolus"
+#~ msgstr ""
+
+#~ msgid "{0}U <0/>"
+#~ msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "<0/> Basal"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Latest Entry"
+#~ msgid "No insulin data today"
+#~ msgstr ""
+
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+msgid "Failed to load data"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "No entry found"
+#~ msgid "Bolus: {0}U ({1}%)"
+#~ msgstr ""
+
+#~ msgid "Basal: {0}U ({1}%)"
+#~ msgstr ""
+
+#. placeholder {0}: bolus.toFixed(1)
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "<0/> Bolus {0}U"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Alarm Configuration"
+#. placeholder {0}: basal.toFixed(1)
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "<0/> Basal {0}U"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "No alarm configuration found"
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "No insulin"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Fake entry created"
+#. placeholder {0}: carbs.toFixed(0)
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "<0/> Carbs {0}g"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-#: src/routes/settings/dev/+page.svelte
-msgid "Failed to create fake entry"
+#: src/lib/components/dashboard/widgets/TddWidget.svelte
+msgid "No data for 90-day average"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Select a profile first"
+#: src/lib/components/dashboard/widgets/TirChartWidget.svelte
+msgid "No 90-day data available"
 msgstr ""
 
-#. placeholder {0}: result.alarmType
-#. placeholder {1}: result.usedSgv
-#: src/routes/settings/dev/+page.svelte
-msgid "Triggered {0} with SGV {1}"
+#~ msgid "Click on a bar to view the day in detail"
+#~ msgstr ""
+
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+#: src/routes/calendar/+page.svelte
+msgid "Loading data..."
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Selected alarm type is not supported by the backend rules"
+#: src/lib/components/reports/BasalRatePercentileChart.svelte
+msgid "Loading basal data..."
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-#: src/routes/settings/dev/+page.svelte
-msgid "Failed to trigger alarm"
+#~ msgid "Connector started successfully"
+#~ msgstr ""
+
+#~ msgid "Failed to start connector"
+#~ msgstr ""
+
+#~ msgid "Connector stopped successfully"
+#~ msgstr ""
+
+#~ msgid "Failed to stop connector"
+#~ msgstr ""
+
+#~ msgid "Stopped"
+#~ msgstr ""
+
+#~ msgid "Healthy"
+#~ msgstr ""
+
+#~ msgid "Unhealthy"
+#~ msgstr ""
+
+#~ msgid "Idle"
+#~ msgstr ""
+
+#~ msgid "Container Control"
+#~ msgstr ""
+
+#~ msgid "This connector is disabled via environment configuration and cannot be started from the UI."
+#~ msgstr ""
+
+#~ msgid "Start the connector container to begin syncing data."
+#~ msgstr ""
+
+#~ msgid "Stop the connector container to pause syncing."
+#~ msgstr ""
+
+#~ msgid "Manage the connector container lifecycle."
+#~ msgstr ""
+
+#~ msgid "<0/> Starting..."
+#~ msgstr ""
+
+#~ msgid "<0/> Stopping..."
+#~ msgstr ""
+
+#~ msgid "<0/> Stop"
+#~ msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "<0/> No Source"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Quick Actions"
+#: src/routes/reports/treatments/+page.svelte
+msgid "No Source <0/>"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Manually trigger alerts and create test entries"
+#: src/routes/reports/week-to-week/+page.svelte
+msgid "Reset"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Trigger Alarm Profile"
+#: src/routes/calendar/+page.svelte
+msgid "Daily glucose profile"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "No profiles found"
+#~ msgid "Gray band = target range"
+#~ msgstr ""
+
+#: src/routes/calendar/+page.svelte
+msgid "Avg TIR"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Trigger Profile"
+#: src/routes/calendar/+page.svelte
+msgid "Avg Glucose"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Supports High, Low, UrgentHigh, UrgentLow, ForecastLow."
+#: src/routes/calendar/+page.svelte
+msgid "Avg Daily Carbs"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Create Fake Entry"
+#: src/routes/calendar/+page.svelte
+msgid "Avg Daily Insulin"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "SGV (mg/dL)"
+#: src/routes/calendar/+page.svelte
+msgid "Green band = target range"
 msgstr ""
 
-#: src/routes/settings/dev/+page.svelte
-msgid "Create Entry"
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+msgid "Auto Basal"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Webhook settings saved."
+#: src/routes/settings/connectors/+page.svelte
+msgid ""
+"Click on a connector to configure credentials and settings. Changes\n"
+"take effect immediately."
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Failed to save webhook settings."
+#: src/routes/settings/connectors/+page.svelte
+msgid ""
+"Link records from multiple data sources that represent the same\n"
+"underlying event. This improves data quality when the same glucose\n"
+"readings or treatments are uploaded from different apps."
 msgstr ""
 
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "<0/> Webhook Notifications"
+#: src/routes/settings/connectors/+page.svelte
+msgid ""
+"Link records from multiple data sources that represent the same\n"
+"underlying event"
 msgstr ""
 
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Notify external services when alarms fire"
+#: src/routes/settings/connectors/+page.svelte
+msgid ""
+"This process will scan all your glucose records, treatments, and\n"
+"state spans to identify and link records that represent the same\n"
+"event from different data sources."
 msgstr ""
 
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Enable Webhooks"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Irreversible actions that affect this connector"
 msgstr ""
 
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Send alerts to your own endpoints"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Remove this connector's configuration. The connector will need to be set up again to resume syncing."
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Webhook URLs"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "<0/> Delete Config"
 msgstr ""
 
-#: src/lib/components/settings/webhooks/WebhookSettingsCard.svelte
-msgid "Save Webhooks"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Delete Synced Data"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
-#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
-msgid "Signature Secret"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Permanently delete all data synced by this connector."
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
-#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
-msgid "Secret already configured"
+#. placeholder {0}: dataSummary.entries?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "<0/> {0} entries"
 msgstr ""
 
-#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
-msgid "Optional secret"
+#. placeholder {0}: dataSummary.deviceStatuses?.toLocaleString() ?? 0
+#. placeholder {0}: deleteDataResult.deviceStatusDeleted?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "{0} device statuses"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
-#: src/lib/components/settings/webhooks/WebhookSecurity.svelte
-msgid "The API signs each webhook with HMAC-SHA256 using this secret."
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "<0/> Delete Data"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
-#: src/lib/components/settings/webhooks/WebhookUrlList.svelte
-msgid "No webhook URLs configured."
+#. placeholder {0}: displayName
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Delete {0} Configuration"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
-#: src/lib/components/settings/webhooks/WebhookUrlList.svelte
-msgid "<0/> Add URL"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "You are about to permanently delete all configuration and credentials for this connector. The connector will stop syncing data."
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-msgid "Webhooks"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Configuration deleted successfully"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-msgid "Send alert events to external services"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Redirecting to connectors..."
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
-msgid "Webhook Settings"
+#. placeholder {0}: displayName
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Delete {0} Data"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
-msgid "Configure URLs and signature secrets for alarm notifications."
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "You are about to permanently delete all data synchronized by this connector."
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSecretReveal.svelte
-msgid "Generated Secret"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Delete All Data"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSecretReveal.svelte
-msgid "Copy this value now. It is only shown after saving."
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Data to be deleted:"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
-msgid "Secret will be generated on save"
+#. placeholder {0}: dataSummary.entries?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "{0} glucose entries"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-msgid "Test sent to all webhooks."
+#. placeholder {0}: dataSummary.deviceStatuses?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "{0} device status records"
 msgstr ""
 
-#. placeholder {0}: response.failedUrls.join(", ")
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-msgid "Failed: {0}"
+#. placeholder {0}: dataSummary.total?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Total: {0} records"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-msgid "Test failed."
+#. placeholder {0}: deleteDataResult.entriesDeleted?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "{0} entries"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
-msgid "Failed to test webhook settings."
+#. placeholder {0}: deleteDataResult.totalDeleted?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Total: {0} records deleted"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
-msgid "Send Test"
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+msgid "Confirm"
+msgstr ""
+
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+msgid "THIS ACTION CANNOT BE UNDONE"
+msgstr ""
+
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+msgid "Type <0/> to confirm:"
+msgstr ""
+
+#. placeholder {0}: confirmationPhrase
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+msgid "Type {0}"
+msgstr ""
+
+#: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+msgid "<0/> Processing..."
+msgstr ""
+
+#~ msgid "Medications"
+#~ msgstr ""
+
+#~ msgid "Treatment created"
+#~ msgstr ""
+
+#~ msgid "Failed to create treatment"
+#~ msgstr ""
+
+#~ msgid "Dose (mg)"
+#~ msgstr ""
+
+#~ msgid "<0/> Medication Type"
+#~ msgstr ""
+
+#~ msgid "Default (from profile)"
+#~ msgstr ""
+
+#~ msgid "({0}h DIA)"
+#~ msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "State Spans Timeline"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "View pump modes, profiles, temp basals, overrides, and activities over time"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "Toggle pump modes"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "<0/> Pump Modes"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "Toggle profiles"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "<0/> Profiles"
+msgstr ""
+
+#~ msgid "Toggle temp basals"
+#~ msgstr ""
+
+#~ msgid "<0/> Temp Basals"
+#~ msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "Toggle overrides"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "<0/> Overrides"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "Toggle activities"
+msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "<0/> Activities"
+msgstr ""
+
+#: src/lib/components/dashboard/state-spans-timeline/state-spans-timeline.svelte
+msgid "No tracks selected. Enable at least one category above."
+msgstr ""
+
+#. placeholder {0}: formatDuration(hoveredSpan.startTime, hoveredSpan.endTime)
+#: src/lib/components/dashboard/state-spans-timeline/state-spans-timeline.svelte
+msgid "Duration: {0}"
+msgstr ""
+
+#~ msgid "Rate: {0} U/hr"
+#~ msgstr ""
+
+#~ msgid "Percent: {0}%"
+#~ msgstr ""
+
+#~ msgid "Profile: {0}"
+#~ msgstr ""
+
+#~ msgid "{0} U/h"
+#~ msgstr ""
+
+#~ msgid "No basal data"
+#~ msgstr ""
+
+#: src/routes/time-spans/+page.svelte
+msgid "Toggle basal delivery"
+msgstr ""
+
+#: src/lib/components/reports/ResourceGuard.svelte
+#: src/lib/hooks/resource-context.svelte.ts
+#: src/lib/hooks/resource-context.svelte.ts
+msgid "Error Loading Data"
+msgstr ""
+
+#: src/lib/components/reports/ResourceGuard.svelte
+msgid "<0/> Try again"
+msgstr ""
+
+#~ msgid "Failed to load basal/bolus ratio data"
+#~ msgstr ""
+
+#~ msgid "Error Loading Ratio Data"
+#~ msgstr ""
+
+#: src/routes/reports/executive-summary/+page.svelte
+msgid "Error Loading Executive Summary"
+msgstr ""
+
+#: src/routes/reports/agp/+page.svelte
+msgid "Error Loading AGP Report"
+msgstr ""
+
+#: src/routes/reports/readings/+page.svelte
+msgid "Error Loading Readings"
+msgstr ""
+
+#: src/routes/reports/insulin-delivery/+page.svelte
+msgid "Error Loading Insulin Delivery Data"
+msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Error Loading Treatments"
+msgstr ""
+
+#: src/routes/reports/battery/+page.svelte
+msgid "Error Loading Battery Report"
+msgstr ""
+
+#: src/routes/reports/glucose-distribution/+page.svelte
+msgid "Error Loading Glucose Distribution"
+msgstr ""
+
+#: src/routes/reports/basal-analysis/+page.svelte
+msgid "Error Loading Basal Analysis"
+msgstr ""
+
+#: src/routes/reports/site-change-impact/+page.svelte
+msgid "Error Loading Site Change Data"
+msgstr ""
+
+#: src/routes/reports/day-in-review/+page.svelte
+msgid "Error Loading Day in Review"
+msgstr ""
+
+#: src/routes/reports/week-to-week/+page.svelte
+msgid "Error Loading Week Comparison"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+#: src/routes/clock/config/[id]/+page.svelte
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "My Clock Face"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Link copied to clipboard"
+msgstr ""
+
+#~ msgid "Clock face saved locally"
+#~ msgstr ""
+
+#~ msgid "Sensor: 5d"
+#~ msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Clock Builder - Nocturne"
+msgstr ""
+
+#~ msgid "Build your custom clock face for Nocturne"
+#~ msgstr ""
+
+#~ msgid "Elements"
+#~ msgstr ""
+
+#~ msgid "Click an element to add it to the selected row"
+#~ msgstr ""
+
+#~ msgid "Layout"
+#~ msgstr ""
+
+#~ msgid "<0/> Add Row"
+#~ msgstr ""
+
+#~ msgid "Click an element to edit its properties"
+#~ msgstr ""
+
+#~ msgid "No rows yet. Click \"Add Row\" to start building."
+#~ msgstr ""
+
+#~ msgid "Row {0}"
+#~ msgstr ""
+
+#~ msgid "Empty row. Add elements from the palette."
+#~ msgstr ""
+
+#~ msgid "Element Settings"
+#~ msgstr ""
+
+#~ msgid "Show Units"
+#~ msgstr ""
+
+#~ msgid "Display mg/dL or mmol/L"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Hours"
+msgstr ""
+
+#~ msgid "Time Format"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "12-hour"
+msgstr ""
+
+#~ msgid "Forecast Minutes"
+#~ msgstr ""
+
+#~ msgid "15 minutes"
+#~ msgstr ""
+
+#~ msgid "30 minutes"
+#~ msgstr ""
+
+#~ msgid "45 minutes"
+#~ msgstr ""
+
+#~ msgid "60 minutes"
+#~ msgstr ""
+
+#~ msgid "<0/> Remove Element"
+#~ msgstr ""
+
+#~ msgid "Select an element to edit its properties"
+#~ msgstr ""
+
+#~ msgid "Clock Name"
+#~ msgstr ""
+
+#~ msgid "Background color based on BG value"
+#~ msgstr ""
+
+#~ msgid "Always Show Time"
+#~ msgstr ""
+
+#~ msgid "Show current time even when data is fresh"
+#~ msgstr ""
+
+#~ msgid "Stale Threshold: {0} min"
+#~ msgstr ""
+
+#~ msgid "Data older than this is shown as stale (0 = never)"
+#~ msgstr ""
+
+#~ msgid "<0/> Reset to Default"
+#~ msgstr ""
+
+#~ msgid "Loop Data"
+#~ msgstr ""
+
+#~ msgid "Trend Arrow"
+#~ msgstr ""
+
+#~ msgid "Direction indicator"
+#~ msgstr ""
+
+#~ msgid "Sparkline"
+#~ msgstr ""
+
+#~ msgid "Mini BG chart"
+#~ msgstr ""
+
+#~ msgid "Time in range text"
+#~ msgstr ""
+
+#~ msgid "Forecast"
+#~ msgstr ""
+
+#~ msgid "Predicted BG from loop"
+#~ msgstr ""
+
+#~ msgid "Insulin on board"
+#~ msgstr ""
+
+#~ msgid "Carbs on board"
+#~ msgstr ""
+
+#~ msgid "Current basal rate"
+#~ msgstr ""
+
+#~ msgid "Single tracker status"
+#~ msgstr ""
+
+#~ msgid "All Trackers"
+#~ msgstr ""
+
+#~ msgid "Active tracker grid"
+#~ msgstr ""
+
+#~ msgid "Loop / Forecast"
+#~ msgstr ""
+
+#~ msgid "Blood glucose"
+#~ msgstr ""
+
+#~ msgid "Change"
+#~ msgstr ""
+
+#~ msgid "Trend"
+#~ msgstr ""
+
+#~ msgid "Reading age"
+#~ msgstr ""
+
+#~ msgid "Chart"
+#~ msgstr ""
+
+#~ msgid "Mini chart"
+#~ msgstr ""
+
+#~ msgid "Time in range"
+#~ msgstr ""
+
+#~ msgid "Predicted BG"
+#~ msgstr ""
+
+#~ msgid "Basal rate"
+#~ msgstr ""
+
+#~ msgid "Single tracker"
+#~ msgstr ""
+
+#~ msgid "All trackers"
+#~ msgstr ""
+
+#~ msgid "Current time"
+#~ msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Clock face saved"
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Clock name"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Drop elements here"
+msgstr ""
+
+#~ msgid "Add row"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "BG-colored background"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Background Image URL"
+msgstr ""
+
+#. placeholder {0}: settings.backgroundOpacity
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Image brightness: {0}%"
+msgstr ""
+
+#. placeholder {0}: settings.staleMinutes ?? 13
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Stale threshold: {0} min"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Always show time"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "<0/> Reset to default"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Show units"
+msgstr ""
+
+#. placeholder {0}: h
+#. placeholder {1}: h > 1 ? "s" : ""
+#. placeholder {0}: h
+#. placeholder {1}: h > 1 ? "s" : ""
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "{0} hour{1}"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Format"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Minutes ahead"
+msgstr ""
+
+#. placeholder {0}: element.minutesAhead || 30
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "{0}m"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "<0/> Remove"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Text"
+msgstr ""
+
+#~ msgid "Custom text"
+#~ msgstr ""
+
+#~ msgid "Full glucose chart"
+#~ msgstr ""
+
+#~ msgid "Display"
+#~ msgstr ""
+
+#~ msgid "Info or higher"
+#~ msgstr ""
+
+#~ msgid "Warning or higher"
+#~ msgstr ""
+
+#~ msgid "Hazard or higher"
+#~ msgstr ""
+
+#~ msgid "Urgent only"
+#~ msgstr ""
+
+#~ msgid "Time remaining"
+#~ msgstr ""
+
+#~ msgid "Urgency badge"
+#~ msgstr ""
+
+#~ msgid "Label"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Select tracker..."
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockElementPreview.svelte
+msgid "Select tracker"
+msgstr ""
+
+#~ msgid "Chart ({0}h)"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "No trackers defined"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Visibility threshold"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Show"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Categories"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "All categories"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Enter text..."
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Color"
+msgstr ""
+
+#. placeholder {0}: element.width || 400
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Width: {0}px"
+msgstr ""
+
+#. placeholder {0}: element.height || 200
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Height: {0}px"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Chart Features"
+msgstr ""
+
+#~ msgid "Bolus markers"
+#~ msgstr ""
+
+#~ msgid "Carb markers"
+#~ msgstr ""
+
+#~ msgid "IOB track"
+#~ msgstr ""
+
+#~ msgid "COB track"
+#~ msgstr ""
+
+#~ msgid "Basal track"
+#~ msgstr ""
+
+#~ msgid "Predictions"
+#~ msgstr ""
+
+#~ msgid "Device events"
+#~ msgstr ""
+
+#~ msgid "Tracker markers"
+#~ msgstr ""
+
+#~ msgid "Interaction"
+#~ msgstr ""
+
+#~ msgid "Lock toggles"
+#~ msgstr ""
+
+#~ msgid "Show legend"
+#~ msgstr ""
+
+#~ msgid "Monospace"
+#~ msgstr ""
+
+#~ msgid "Serif"
+#~ msgstr ""
+
+#~ msgid "Sans-serif"
+#~ msgstr ""
+
+#~ msgid "Semibold"
+#~ msgstr ""
+
+#~ msgid "Bold"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Text Style"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Font"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Weight"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Dynamic (BG-based)"
+msgstr ""
+
+#. placeholder {0}: Math.round((element.style?.opacity ?? 1.0) * 100)
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Opacity: {0}%"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Custom CSS"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Add custom CSS properties (e.g., text-shadow, letter-spacing)"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Use as background"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Background Chart"
+msgstr ""
+
+#~ msgid "Save the clock face first to preview it"
+#~ msgstr ""
+
+#~ msgid "Save the clock face first to copy the link"
+#~ msgstr ""
+
+#: src/routes/clock/[id]/+page.svelte
+msgid "Clock - Nocturne"
+msgstr ""
+
+#: src/routes/clock/[id]/+page.svelte
+msgid "<0/> Back to Clock Faces"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Clock Faces - Nocturne"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Clock Faces"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Create and manage your custom clock displays"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "<0/> New Clock"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "No clock faces yet"
+msgstr ""
+
+#~ msgid "Create your first custom clock face to display your glucose data exactly how you want it."
+#~ msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "<0/> Create Clock Face"
+msgstr ""
+
+#. placeholder {0}: new Date(face.updatedAt).toLocaleDateString()
+#: src/routes/clock/+page.svelte
+msgid "Updated {0}"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Open"
+msgstr ""
+
+#: src/lib/components/clock/ClockFaceRenderer.svelte
+msgid "DoubleUp"
+msgstr ""
+
+#: src/lib/components/clock/ClockFaceRenderer.svelte
+msgid "DoubleDown"
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockElementPreview.svelte
+#: src/lib/components/clock/ClockFaceRenderer.svelte
+msgid "2d 4h"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Failed to load clock face"
+msgstr ""
+
+#~ msgid "Clock face created"
+#~ msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Failed to save clock face"
+msgstr ""
+
+#~ msgid "Delete \"{0}\"?"
+#~ msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Clock face deleted"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Failed to delete clock face"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Untitled"
+msgstr ""
+
+#~ msgid "New row at top"
+#~ msgstr ""
+
+#~ msgid "New row at bottom"
+#~ msgstr ""
+
+#: src/routes/clock/config/+page.svelte
+msgid "New Clock Face - Nocturne"
+msgstr ""
+
+#: src/routes/clock/config/+page.svelte
+msgid "Creating new clock face..."
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "New Clock Face"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+#: src/routes/clock/+page.svelte
+msgid "Failed to create clock face"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid ""
+"Create your first custom clock face to display your glucose data\n"
+"exactly how you want it."
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Undo (Ctrl+Z)"
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Redo (Ctrl+Shift+Z)"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Delete Clock Face"
+msgstr ""
+
+#. placeholder {0}: clockFaceToDelete?.name
+#: src/routes/clock/+page.svelte
+msgid "Are you sure you want to delete \"{0}\"? This action cannot be undone."
+msgstr ""
+
+#~ msgid "<0/> Add new row"
+#~ msgstr ""
+
+#. placeholder {0}: position
+#: src/lib/components/clock-builder/DropZone.svelte
+msgid "New row at {0}"
 msgstr ""

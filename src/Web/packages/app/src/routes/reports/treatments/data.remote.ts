@@ -46,7 +46,7 @@ export const updateTreatmentForm = form(
 
 		try {
 			const parsedTreatment = JSON.parse(treatmentData) as Treatment;
-			const updatedTreatment = await apiClient.treatments.updateTreatment2(
+			const updatedTreatment = await apiClient.treatments.updateTreatment(
 				treatmentId,
 				parsedTreatment
 			);
@@ -75,7 +75,7 @@ export const deleteTreatmentForm = form(
 		const { apiClient } = locals;
 
 		try {
-			await apiClient.treatments.deleteTreatment2(treatmentId);
+			await apiClient.treatments.deleteTreatment(treatmentId);
 
 			return {
 				success: true,
@@ -114,7 +114,7 @@ export const bulkDeleteTreatmentsForm = form(
 		// Delete treatments sequentially to avoid overwhelming the server
 		for (const treatmentId of treatmentIds) {
 			try {
-				await apiClient.treatments.deleteTreatment2(treatmentId);
+				await apiClient.treatments.deleteTreatment(treatmentId);
 				deletedIds.push(treatmentId);
 			} catch (error) {
 				console.error(`Error deleting treatment ${treatmentId}:`, error);
@@ -168,7 +168,7 @@ export const updateTreatment = command(
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
 
-		const updatedTreatment = await apiClient.treatments.updateTreatment2(treatmentId, treatmentData);
+		const updatedTreatment = await apiClient.treatments.updateTreatment(treatmentId, treatmentData);
 
 		return {
 			message: 'Treatment updated successfully',
@@ -184,7 +184,7 @@ export const deleteTreatment = command(z.string(), async (treatmentId) => {
 	const { locals } = getRequestEvent();
 	const { apiClient } = locals;
 
-	await apiClient.treatments.deleteTreatment2(treatmentId);
+	await apiClient.treatments.deleteTreatment(treatmentId);
 
 	return {
 		message: 'Treatment deleted successfully',
@@ -204,7 +204,7 @@ export const bulkDeleteTreatments = command(z.array(z.string()), async (treatmen
 
 	for (const treatmentId of treatmentIds) {
 		try {
-			await apiClient.treatments.deleteTreatment2(treatmentId);
+			await apiClient.treatments.deleteTreatment(treatmentId);
 			deletedIds.push(treatmentId);
 		} catch (err) {
 			console.error(`Error deleting treatment ${treatmentId}:`, err);

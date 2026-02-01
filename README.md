@@ -32,12 +32,12 @@ Nocturne/
 - **High Performance** - Optimized queries with PostgreSQL and Redis caching
 - **Authentication** - JWT-based auth with API_SECRET support
 - **Real-time** - SignalR hubs for live data streaming
-- **Data Connectors** - Dexcom Share, Glooko, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout
+- **Data Connectors** - Dexcom Share, Glooko, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout, and MyLife
 - **PostgreSQL** - Modern relational database with EF Core migrations
 - **Observability** - OpenTelemetry integration for monitoring (Soon)
 - **Containerized** - Docker support for all services
 
-## Quick Start with .NET Aspire
+## Quick Start with .NET Aspire (Development)
 
 ### Prerequisites
 
@@ -45,30 +45,8 @@ Nocturne/
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [NodeJS](https://nodejs.org/)
 - [pnpm](https://pnpm.io/)
-- [Rust](https://www.rust-lang.org/) with the `wasm32-unknown-unknown` target
-
-#### Rust Setup
-
-Nocturne uses a Rust-based implementation of the [oref0](https://github.com/openaps/oref0) algorithm, compiled to WebAssembly for cross-platform compatibility. To set up Rust:
-
-```bash
-# Install Rust via rustup
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Add the WebAssembly target
-rustup target add wasm32-unknown-unknown
-
-# Build the oref.wasm module (done automatically by Aspire, but can be run manually)
-cd src/Core/oref
-cargo build --release --target wasm32-unknown-unknown
-```
-
-The compiled `oref.wasm` file is automatically copied to the API output directory during build.
-
 
 Copy the appsettings.example.json, and rename it to `appsettings.json`. Fill in the values for the connection strings, and any other settings you want to change. If you'd like to pipe in your Nightscout values into it just to test it out, do so in the `Connector.Nightscout` section, *not* the CompatibilityProxy; they are fundamentally different things.
-
-### Run with Aspire
 
 .NET Aspire orchestrates all services with a single command:
 
@@ -83,7 +61,7 @@ Aspire will automatically:
 - Start the Nocturne API
 - Launch any configured data connectors
 - Set up service discovery and health checks
-- Open the Aspire dashboard at `http://localhost:17257`
+- Click on the link in the console, which will have  Open the Aspire dashboard at `[http://localhost:17257](https://localhost:17257/)`
 
 You can then access the frontend from the port assigned to it.
 
@@ -91,8 +69,8 @@ You can then access the frontend from the port assigned to it.
 
 Once Aspire starts:
 
-- **API**: http://localhost:1612
-- **API Documentation**: http://localhost:1612/scalar
+- **API**: https://localhost:1612
+- **API Documentation**: https://localhost:1612/scalar
 - **Aspire Dashboard**: http://localhost:15888
 
 ## Configuration
@@ -115,7 +93,7 @@ The main configuration file in the solution root:
 }
 ```
 
-### Environment Variables
+#### Environment Variables
 
 Override configuration using environment variables:
 
@@ -125,7 +103,7 @@ Authentication__ApiSecret="my-secret"
 ASPNETCORE_ENVIRONMENT=Production
 ```
 
-You generally shouldn't have to do this, ever- configuration lives in the appsettings, and is automagically passed through to the frontend.
+You generally shouldn't have to do this, **ever** during development- configuration lives in the appsettings, and is automagically passed through.
 
 ## Data Connectors
 
@@ -139,22 +117,25 @@ Nocturne includes native connectors for popular diabetes platforms:
 | **MiniMed CareLink** | Medtronic pump and sensor data       | Supported |
 | **MyFitnessPal**     | Food and nutrition tracking          | Supported |
 | **Nightscout**       | Nightscout-to-Nightscout sync        | Supported |
+| **MyLife**           | Syncing for MyLife / CamAPS FX       | Supported |
 
 ### Using Connectors
 
+If you set up the connector's settings in the appsettings, then it'll automatically start when you run `aspire run`.
+
+
+## Quick Start with Docker (For prod)
+
+Run `aspire publish` anywhere within the repository. This will use the `appsettings.json` and create a `docker-compose.yml` and `.env` file within `./aspire-output` which you can then use. You may need to replace the image .env like so: 
+
 ```bash
-# Interactive setup wizard
-cd src/Tools
-dotnet run --project Nocturne.Tools.Connect init --interactive
-
-# Test connections
-dotnet run --project Nocturne.Tools.Connect test --all
-
-# Run in daemon mode
-dotnet run --project Nocturne.Tools.Connect run --daemon
+    NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne/nocturne-api:latest
+    NOCTURNE_WEB_IMAGE=ghcr.io/nightscout/nocturne/nocturne-web:latest
+    NIGHTSCOUT_CONNECTOR_IMAGE=ghcr.io/nightscout/nocturne/nightscout-connector:latest
+    GLOOKO_CONNECTOR_IMAGE=ghcr.io/nightscout/nocturne/glooko-connector:latest
 ```
 
-If you set up the connector's settings in the appsettings, then it'll automatically start.
+We're working on a tool to automate this and enable easier deployment via the web. 
 
 ## Development
 
@@ -184,14 +165,6 @@ dotnet ef database update
 
 ## Tools
 
-### Nocturne Connect
-
-Data connector management and synchronization.
-
-```bash
-dotnet run --project src/Tools/Nocturne.Tools.Connect -- --help
-```
-
 ### Migration Tool
 
 Migrate data from MongoDB or Nightscout API to PostgreSQL.
@@ -200,15 +173,6 @@ Migrate data from MongoDB or Nightscout API to PostgreSQL.
 dotnet run --project src/Tools/Nocturne.Tools.Migration -- copy \
   --source-api "https://nightscout.example.com" \
   --target-connection "Host=localhost;..."
-```
-
-### Configuration Generator
-
-Generate example configuration files.
-
-```bash
-dotnet run --project src/Tools/Nocturne.Tools.Config -- generate \
-  --format json --output appsettings.example.json
 ```
 
 ### MCP Server
@@ -246,11 +210,12 @@ docker-compose up -d
 
 ### Interactive Documentation
 
-- **Scalar UI**: http://localhost:1612/scalar
-- **Swagger UI**: http://localhost:1612/swagger
-- **OpenAPI JSON**: http://localhost:1612/openapi/v1.json
+- **Scalar UI**: https://localhost:1612/scalar
+- **OpenAPI JSON**: https://localhost:1612/openapi/v1.json
 
 ### Key Endpoints
+
+Nocturne aims to match Nightscout's API 1:1, so any Nightscout API endpoint should be usable. Nocturne-only endpoints are scoped to v4.
 
 ```
 GET    /api/v1/entries          # Glucose entries

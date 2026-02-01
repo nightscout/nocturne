@@ -451,6 +451,71 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("auth_audit_log");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ClockFaceEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}")
+                        .HasColumnName("config");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_clock_faces_created_at");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_clock_faces_user_id");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_clock_faces_user_created_at");
+
+                    b.ToTable("clock_faces");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorConfigurationEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1529,6 +1594,107 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_foods_type_name");
 
                     b.ToTable("foods");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.InAppNotificationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActionsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("actions_json");
+
+                    b.Property<string>("ArchiveReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("archive_reason");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_archived");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata_json");
+
+                    b.Property<string>("ResolutionConditionsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("resolution_conditions_json");
+
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("Subtitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("subtitle");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("type");
+
+                    b.Property<string>("Urgency")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("urgency");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_in_app_notifications_created_at");
+
+                    b.HasIndex("IsArchived")
+                        .HasDatabaseName("ix_in_app_notifications_is_archived");
+
+                    b.HasIndex("SourceId")
+                        .HasDatabaseName("ix_in_app_notifications_source_id")
+                        .HasFilter("source_id IS NOT NULL");
+
+                    b.HasIndex("Type")
+                        .HasDatabaseName("ix_in_app_notifications_type");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_in_app_notifications_user_id");
+
+                    b.HasIndex("UserId", "IsArchived")
+                        .HasDatabaseName("ix_in_app_notifications_user_archived");
+
+                    b.HasIndex("UserId", "Type", "IsArchived")
+                        .HasDatabaseName("ix_in_app_notifications_user_type_archived");
+
+                    b.ToTable("in_app_notifications");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.LinkedRecordEntity", b =>

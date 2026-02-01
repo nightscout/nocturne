@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.MyLife.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
@@ -42,11 +43,21 @@ internal sealed class BolusTreatmentHandler : IMyLifeTreatmentHandler
             carbs = matchedCarbs;
         }
 
-        var treatment = MyLifeTreatmentFactory.Create(ev, MyLifeTreatmentTypes.CorrectionBolus);
-        if (carbs is > 0)
+        // Use consistent classification logic from shared TreatmentTypes
+        // Classification rules:
+        // - Carbs > 0 AND Insulin > 0 → Meal Bolus
+        // - Carbs > 0 AND Insulin ≤ 0 → Carb Correction
+        // - Carbs ≤ 0 AND Insulin > 0 → Correction Bolus
+        var hasCarbs = carbs is > 0;
+        var hasInsulin = insulin > 0;
+        var eventType = (hasCarbs, hasInsulin) switch
         {
-            treatment.EventType = MyLifeTreatmentTypes.MealBolus;
-        }
+            (true, true) => TreatmentTypes.MealBolus,
+            (true, false) => TreatmentTypes.CarbCorrection,
+            _ => TreatmentTypes.CorrectionBolus
+        };
+
+        var treatment = MyLifeTreatmentFactory.Create(ev, eventType);
 
         treatment.Insulin = insulin;
         treatment.BolusType = ev.EventTypeId switch

@@ -268,6 +268,21 @@ public interface IPostgreSqlService
     );
 
     /// <summary>
+    /// Get treatments within a time range (by mills)
+    /// </summary>
+    /// <param name="startMills">Start time in milliseconds since Unix epoch</param>
+    /// <param name="endMills">End time in milliseconds since Unix epoch</param>
+    /// <param name="count">Maximum number of treatments to return</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Collection of treatments in the time range</returns>
+    Task<IEnumerable<Treatment>> GetTreatmentsByTimeRangeAsync(
+        long startMills,
+        long endMills,
+        int count = 10000,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Get treatments with advanced filtering options
     /// </summary>
     /// <param name="count">Maximum number of treatments to return</param>

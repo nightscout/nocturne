@@ -43,15 +43,22 @@ public class FoodController : ControllerBase
         try
         {
             var foods = await _postgreSqlService.GetFoodAsync(cancellationToken);
-            var foodArray = foods.ToArray();
+            var foodList = foods.ToList();
 
-            _logger.LogDebug("Successfully retrieved {Count} food records", foodArray.Length);
+            // Note: Nightscout V1 GET /api/v1/food DOES NOT support find query parameters
+            // It ignores any query parameters and returns all foods
+            // We match this behavior for parity
+
+            // Sort by created_at to ensure consistent ordering (Nightscout uses insertion order)
+            foodList = foodList.OrderBy(f => f.CreatedAt).ToList();
+
+            _logger.LogDebug("Successfully retrieved {Count} food records", foodList.Count);
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
             Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
 
-            return Ok(foodArray);
+            return Ok(foodList.ToArray());
         }
         catch (Exception ex)
         {
@@ -118,7 +125,8 @@ public class FoodController : ControllerBase
     }
 
     /// <summary>
-    /// Get quickpick food records only (type="quickpick")
+    /// Get quickpick food records only (type="quickpick" and hidden="false")
+    /// Matches Nightscout's listquickpicks behavior which filters by hidden='false' and sorts by position
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Array of quickpick food records ordered by position</returns>
@@ -138,7 +146,14 @@ public class FoodController : ControllerBase
         try
         {
             var foods = await _postgreSqlService.GetFoodByTypeAsync("quickpick", cancellationToken);
-            var foodArray = foods.ToArray();
+
+            // Nightscout's listquickpicks filters by hidden='false' (string in MongoDB)
+            // Since we use boolean Hidden, filter where Hidden == false
+            // Also sort by position ascending (Nightscout's sort({'position': 1}))
+            var foodArray = foods
+                .Where(f => !f.Hidden)
+                .OrderBy(f => f.Position)
+                .ToArray();
 
             _logger.LogDebug(
                 "Successfully retrieved {Count} quickpick food records",
@@ -277,11 +292,8 @@ public class FoodController : ControllerBase
                     );
                 }
 
-                // Validate required fields
-                if (string.IsNullOrWhiteSpace(food.Name))
-                {
-                    return BadRequest("Food name is required");
-                }
+                // Nightscout V1 API does NOT reject missing name - it creates the record anyway
+                // This matches legacy Nightscout behavior
 
                 // Set default unit if not provided
                 if (string.IsNullOrWhiteSpace(food.Unit))
@@ -293,6 +305,12 @@ public class FoodController : ControllerBase
                 if (food.Gi < 1 || food.Gi > 3)
                 {
                     food.Gi = 2;
+                }
+
+                // Set created_at timestamp for parity with Nightscout
+                if (string.IsNullOrWhiteSpace(food.CreatedAt))
+                {
+                    food.CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                 }
             }
 
@@ -307,7 +325,8 @@ public class FoodController : ControllerBase
             // Set response headers
             Response.Headers["Location"] = $"/api/v1/food";
 
-            return CreatedAtAction(nameof(GetFood), new { }, resultArray);
+            // Nightscout returns 200 OK for POST, not 201 Created
+            return Ok(resultArray);
         }
         catch (JsonException ex)
         {
@@ -485,5 +504,82 @@ public class FoodController : ControllerBase
             _logger.LogError(ex, "Error deleting food record with ID: {Id}", id);
             return StatusCode(500, $"Internal server error while deleting food record {id}");
         }
+    }
+
+    /// <summary>
+    /// Bulk delete food records by filter query
+    /// Compatible with Nightscout's DELETE /api/v1/food?find[field]=value
+    /// Note: Nightscout V1 API doesn't officially support bulk delete, but returns 200 {} for such requests
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Empty object for parity with Nightscout</returns>
+    [HttpDelete]
+    [NightscoutEndpoint("/api/v1/food")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> DeleteFoodByFilter(
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "Bulk delete food endpoint requested from {RemoteIpAddress}",
+            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+        );
+
+        try
+        {
+            // Parse find query from query string
+            var findQuery = ParseFindQuery();
+
+            if (string.IsNullOrEmpty(findQuery))
+            {
+                // Nightscout V1 returns 200 {} when no filter is provided
+                // This matches the legacy behavior where DELETE /api/v1/food doesn't exist
+                // but Nightscout's routing returns an empty success response
+                _logger.LogDebug("No filter query provided for bulk delete, returning empty response");
+                return Ok(new { });
+            }
+
+            var deletedCount = await _postgreSqlService.BulkDeleteFoodAsync(findQuery, cancellationToken);
+
+            _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, findQuery);
+
+            // Nightscout returns 200 {} for delete operations
+            return Ok(new { });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error bulk deleting food records");
+            return StatusCode(500, "Internal server error while deleting food records");
+        }
+    }
+
+    /// <summary>
+    /// Parse find query from query string parameters
+    /// Handles find[field]=value format
+    /// </summary>
+    /// <returns>JSON query string or null if no find parameters</returns>
+    private string? ParseFindQuery()
+    {
+        var query = HttpContext.Request.Query;
+        var findParams = new Dictionary<string, object>();
+
+        foreach (var param in query)
+        {
+            if (param.Key.StartsWith("find[") && param.Key.EndsWith("]"))
+            {
+                var field = param.Key[5..^1]; // Extract field name from find[field]
+                var value = param.Value.FirstOrDefault();
+                if (value != null)
+                {
+                    findParams[field] = value;
+                }
+            }
+        }
+
+        if (findParams.Count == 0)
+            return null;
+
+        return System.Text.Json.JsonSerializer.Serialize(findParams);
     }
 }

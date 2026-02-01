@@ -148,8 +148,8 @@ export const getInstanceHistory = query(z.number().optional(), async (limit) => 
 export const getUpcomingInstances = query(
 	z
 		.object({
-			from: z.date().optional(),
-			to: z.date().optional(),
+			from: z.coerce.date().optional(),
+			to: z.coerce.date().optional(),
 		})
 		.optional(),
 	async (params) => {
@@ -173,7 +173,7 @@ export const startInstance = command(
 		definitionId: z.string(),
 		startNotes: z.string().optional(),
 		startTreatmentId: z.string().optional(),
-		startedAt: z.date().optional(),
+		startedAt: z.coerce.date().optional(),
 	}),
 	async (request) => {
 		const { locals } = getRequestEvent();
@@ -203,7 +203,7 @@ export const completeInstance = command(
 			reason: z.enum(CompletionReason),
 			completionNotes: z.string().optional(),
 			completeTreatmentId: z.string().optional(),
-			completedAt: z.date().optional(),
+			completedAt: z.coerce.date().optional(),
 		}),
 	}),
 	async ({ id, request }) => {
@@ -284,7 +284,7 @@ export const getPresets = query(async () => {
 		return await apiClient.trackers.getPresets();
 	} catch (err) {
 		console.error('Error loading tracker presets:', err);
-		throw error(500, 'Failed to load tracker presets');
+		return [];
 	}
 });
 

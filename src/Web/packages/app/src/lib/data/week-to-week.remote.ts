@@ -87,7 +87,7 @@ export const getPointInTimeData = query(pointInTimeSchema, async ({ timestamp })
 
   const [entries, treatments] = await Promise.all([
     apiClient.entries.getEntries2(entriesQuery).catch(() => [] as Entry[]),
-    apiClient.treatments.getTreatments2(treatmentsQuery).catch(() => [] as Treatment[]),
+    apiClient.treatments.getTreatments(undefined, undefined, undefined, treatmentsQuery).catch(() => [] as Treatment[]),
   ]);
 
   // Find the closest entry to the requested timestamp

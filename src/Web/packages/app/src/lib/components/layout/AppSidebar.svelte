@@ -210,7 +210,7 @@
     }
 
     if (item.children) {
-      return item.children.some(child => isActive(child, item?.strict));
+      return item.children.some(child => isActive(child));
     }
 
     return false;
@@ -327,7 +327,9 @@
       {#if !hasLanguagePreference()}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
           <LanguageSelector
-            onLanguageChange={user ? updateLanguagePreference : undefined}
+            onLanguageChange={user
+              ? (locale: string) => updateLanguagePreference({ preferredLanguage: locale })
+              : undefined}
           />
         </Sidebar.MenuItem>
       {/if}

@@ -1,43 +1,76 @@
 <script lang="ts">
-    import type { GenerateRequest } from "$lib/data/portal.remote";
+    import type { GenerateRequest, ConnectorMetadata } from "$lib/data/portal.remote";
+    import { getConnectors } from "$lib/data/portal.remote";
     import { Button } from "@nocturne/app/ui/button";
+    import { Input } from "@nocturne/app/ui/input";
+    import { Label } from "@nocturne/app/ui/label";
     import * as Card from "@nocturne/app/ui/card";
-    import { ChevronLeft, Download, CheckCircle } from "@lucide/svelte";
-    import { useSearchParams } from "runed/kit";
-    import { z } from "zod";
+    import { ChevronLeft, Download, CheckCircle, AlertCircle, Settings, Server } from "@lucide/svelte";
+    import { page } from "$app/state";
+    import { SetupParamsSchema, setupTypeLabels } from "$lib/schemas/setup-params";
+    import ConnectorConfigDialog from "$lib/components/ConnectorConfigDialog.svelte";
+    import {
+        getConnectorConfigs,
+        setConnectorConfigs,
+    } from "$lib/stores/wizard-store.svelte";
 
-    // Same schema as setup page to read URL params
-    const DownloadParamsSchema = z.object({
-        step: z.coerce.number().default(0),
-        type: z.enum(["fresh", "migrate", "compatibility-proxy"]).optional(),
-        // Database config
-        useContainer: z.coerce.boolean().default(true),
-        connectionString: z.string().optional(),
-        // Optional services
-        watchtower: z.coerce.boolean().default(true),
-        includeDashboard: z.coerce.boolean().default(true),
-        includeScalar: z.coerce.boolean().default(true),
-        // Nightscout config (for migrate/proxy)
-        nightscoutUrl: z.string().optional(),
-        nightscoutApiSecret: z.string().optional(),
-        enableDetailedLogging: z.coerce.boolean().default(false),
-        // Migration-specific: MongoDB connection
-        migrationMode: z.enum(["Api", "MongoDb"]).default("Api"),
-        mongoConnectionString: z.string().optional(),
-        mongoDatabaseName: z.string().optional(),
-        // Connectors (comma-separated list)
-        connectors: z.string().optional(),
-    });
-
-    const params = useSearchParams(DownloadParamsSchema, {
-        updateURL: false, // Don't update URL on this page, just read
-        noScroll: true,
+    // Parse and validate URL params using the shared schema
+    const params = $derived.by(() => {
+        const searchParams = page.url.searchParams;
+        const raw = Object.fromEntries(searchParams.entries());
+        return SetupParamsSchema.parse(raw);
     });
 
     // Parse connectors from URL
     const selectedConnectors = $derived(
         params.connectors?.split(",").filter(Boolean) ?? [],
     );
+
+    // Load connector metadata
+    const connectorsQuery = getConnectors({});
+
+    // Use shared store for connector configs (sensitive data, not in URL)
+    let connectorConfigs = $state<Record<string, Record<string, string>>>(getConnectorConfigs());
+
+    // Sync local state to shared store when it changes
+    $effect(() => {
+        setConnectorConfigs(connectorConfigs);
+    });
+
+    // Local state for editable config values
+    let nightscoutUrl = $state(params.nightscoutUrl ?? "");
+    let nightscoutApiSecret = $state(params.nightscoutApiSecret ?? "");
+    let mongoConnectionString = $state(params.mongoConnectionString ?? "");
+    let mongoDatabaseName = $state(params.mongoDatabaseName ?? "");
+
+    // Sync initial values from URL params
+    $effect(() => {
+        nightscoutUrl = params.nightscoutUrl ?? "";
+        nightscoutApiSecret = params.nightscoutApiSecret ?? "";
+        mongoConnectionString = params.mongoConnectionString ?? "";
+        mongoDatabaseName = params.mongoDatabaseName ?? "";
+    });
+
+    // Connector config dialog state
+    let configuringConnector = $state<ConnectorMetadata | null>(null);
+    let isConfigDialogOpen = $state(false);
+
+    // Check if nightscout config has any values filled
+    const hasNightscoutConfig = $derived(
+        nightscoutUrl.trim() !== "" || nightscoutApiSecret.trim() !== ""
+    );
+
+    // Check if mongo config has any values filled (for migrate mode)
+    const hasMongoConfig = $derived(
+        mongoConnectionString.trim() !== "" || mongoDatabaseName.trim() !== ""
+    );
+
+    // Check if a connector has any config values filled
+    function hasConnectorConfig(connectorType: string): boolean {
+        const config = connectorConfigs[connectorType];
+        if (!config) return false;
+        return Object.values(config).some((v) => v && v.trim() !== "");
+    }
 
     let generating = $state(false);
     let error = $state<string | null>(null);
@@ -53,42 +86,39 @@
                     useContainer: params.useContainer,
                     connectionString: params.useContainer
                         ? undefined
-                        : params.connectionString,
+                        : params.connectionString ?? undefined,
                 },
                 optionalServices: {
-                    watchtower: params.watchtower,
-                    includeDashboard: params.includeDashboard,
-                    includeScalar: params.includeScalar,
+                    watchtower: { enabled: params.watchtower },
+                    aspireDashboard: { enabled: params.includeDashboard },
+                    scalar: { enabled: params.includeScalar },
                 },
                 connectors: selectedConnectors.map((type) => ({
                     type,
-                    config: {}, // Connector configs would need separate handling
+                    config: connectorConfigs[type] ?? {},
                 })),
                 migration:
                     params.type === "migrate"
                         ? {
                               mode: params.migrationMode,
-                              nightscoutUrl: params.nightscoutUrl ?? "",
-                              nightscoutApiSecret:
-                                  params.nightscoutApiSecret ?? "",
+                              nightscoutUrl: nightscoutUrl,
+                              nightscoutApiSecret: nightscoutApiSecret,
                               mongoConnectionString:
                                   params.migrationMode === "MongoDb"
-                                      ? params.mongoConnectionString
+                                      ? mongoConnectionString
                                       : undefined,
                               mongoDatabaseName:
                                   params.migrationMode === "MongoDb"
-                                      ? params.mongoDatabaseName
+                                      ? mongoDatabaseName
                                       : undefined,
                           }
                         : undefined,
                 compatibilityProxy:
                     params.type === "compatibility-proxy"
                         ? {
-                              nightscoutUrl: params.nightscoutUrl ?? "",
-                              nightscoutApiSecret:
-                                  params.nightscoutApiSecret ?? "",
-                              enableDetailedLogging:
-                                  params.enableDetailedLogging,
+                              nightscoutUrl: nightscoutUrl,
+                              nightscoutApiSecret: nightscoutApiSecret,
+                              enableDetailedLogging: params.enableDetailedLogging,
                           }
                         : undefined,
             };
@@ -127,30 +157,46 @@
         }
     }
 
-    function getSetupTypeLabel(): string {
-        switch (params.type) {
-            case "fresh":
-                return "Fresh Install";
-            case "migrate":
-                return "Migrate from Nightscout";
-            case "compatibility-proxy":
-                return "Compatibility Proxy";
-            default:
-                return params.type ?? "Unknown";
-        }
+    function openConnectorConfig(connector: ConnectorMetadata) {
+        configuringConnector = connector;
+        isConfigDialogOpen = true;
     }
 
-    function getBackUrl(): string {
+    function handleConnectorConfigSave(
+        connector: ConnectorMetadata,
+        values: Record<string, string>,
+    ) {
+        connectorConfigs = {
+            ...connectorConfigs,
+            [connector.type]: values,
+        };
+    }
+
+    const setupTypeLabel = $derived(
+        params.type ? setupTypeLabels[params.type] : "Unknown"
+    );
+
+    const backUrl = $derived.by(() => {
         // Preserve all params when going back
-        const searchParams = params.toURLSearchParams();
+        const searchParams = new URLSearchParams(page.url.searchParams);
         searchParams.set("step", "2");
         return `/setup?${searchParams.toString()}`;
-    }
+    });
+
+    // Whether nightscout config is needed (migrate or compatibility-proxy)
+    const needsNightscoutConfig = $derived(
+        params.type === "migrate" || params.type === "compatibility-proxy"
+    );
+
+    // Whether mongo config is needed (migrate with MongoDb mode)
+    const needsMongoConfig = $derived(
+        params.type === "migrate" && params.migrationMode === "MongoDb"
+    );
 </script>
 
 <div class="max-w-2xl mx-auto">
     <Button
-        href={getBackUrl()}
+        href={backUrl}
         variant="ghost"
         size="sm"
         class="mb-8 gap-1 text-muted-foreground"
@@ -172,20 +218,90 @@
             <Card.Content>
                 <div class="flex items-center gap-3">
                     <CheckCircle size={20} class="text-primary" />
-                    <span class="font-medium">{getSetupTypeLabel()}</span>
+                    <span class="font-medium">{setupTypeLabel}</span>
                 </div>
             </Card.Content>
         </Card.Root>
 
-        {#if params.type !== "fresh" && params.nightscoutUrl}
+        {#if needsNightscoutConfig}
             <Card.Root>
-                <Card.Header>
-                    <Card.Title>Nightscout Instance</Card.Title>
+                <Card.Header class="flex flex-row items-center justify-between">
+                    <Card.Title class="flex items-center gap-2">
+                        <Server size={18} />
+                        Nightscout Instance
+                    </Card.Title>
+                    {#if hasNightscoutConfig}
+                        <CheckCircle size={18} class="text-green-500" />
+                    {:else}
+                        <AlertCircle size={18} class="text-amber-500" />
+                    {/if}
                 </Card.Header>
-                <Card.Content>
-                    <p class="text-muted-foreground">
-                        ✓ {params.nightscoutUrl}
-                    </p>
+                <Card.Content class="space-y-4">
+                    {#if !hasNightscoutConfig}
+                        <p class="text-sm text-amber-600 dark:text-amber-400">
+                            You'll need to add your configuration to the .env file
+                        </p>
+                    {/if}
+                    <div class="space-y-3">
+                        <div class="space-y-1.5">
+                            <Label for="nightscoutUrl" class="text-sm">Nightscout URL</Label>
+                            <Input
+                                id="nightscoutUrl"
+                                type="url"
+                                bind:value={nightscoutUrl}
+                                placeholder="https://my-site.herokuapp.com"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="nightscoutApiSecret" class="text-sm">API Secret</Label>
+                            <Input
+                                id="nightscoutApiSecret"
+                                type="password"
+                                bind:value={nightscoutApiSecret}
+                                placeholder="Your API secret"
+                            />
+                        </div>
+                    </div>
+                </Card.Content>
+            </Card.Root>
+        {/if}
+
+        {#if needsMongoConfig}
+            <Card.Root>
+                <Card.Header class="flex flex-row items-center justify-between">
+                    <Card.Title>MongoDB Connection</Card.Title>
+                    {#if hasMongoConfig}
+                        <CheckCircle size={18} class="text-green-500" />
+                    {:else}
+                        <AlertCircle size={18} class="text-amber-500" />
+                    {/if}
+                </Card.Header>
+                <Card.Content class="space-y-4">
+                    {#if !hasMongoConfig}
+                        <p class="text-sm text-amber-600 dark:text-amber-400">
+                            You'll need to add your configuration to the .env file
+                        </p>
+                    {/if}
+                    <div class="space-y-3">
+                        <div class="space-y-1.5">
+                            <Label for="mongoConnectionString" class="text-sm">Connection String</Label>
+                            <Input
+                                id="mongoConnectionString"
+                                type="password"
+                                bind:value={mongoConnectionString}
+                                placeholder="mongodb+srv://user:pass@cluster.mongodb.net"
+                                class="font-mono text-sm"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="mongoDatabaseName" class="text-sm">Database Name</Label>
+                            <Input
+                                id="mongoDatabaseName"
+                                bind:value={mongoDatabaseName}
+                                placeholder="nightscout"
+                            />
+                        </div>
+                    </div>
                 </Card.Content>
             </Card.Root>
         {/if}
@@ -211,16 +327,54 @@
                 {#if selectedConnectors.length === 0}
                     <p class="text-muted-foreground">No connectors selected</p>
                 {:else}
-                    <ul class="space-y-2">
-                        {#each selectedConnectors as connector}
-                            <li
-                                class="flex items-center gap-2 text-muted-foreground"
-                            >
-                                <CheckCircle size={16} class="text-green-400" />
-                                {connector}
-                            </li>
-                        {/each}
-                    </ul>
+                    {#await connectorsQuery}
+                        <div class="flex justify-center py-4">
+                            <div class="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full"></div>
+                        </div>
+                    {:then allConnectors}
+                        <ul class="space-y-3">
+                            {#each selectedConnectors as connectorType}
+                                {@const connector = allConnectors.find((c) => c.type === connectorType)}
+                                <li class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        {#if hasConnectorConfig(connectorType)}
+                                            <CheckCircle size={16} class="text-green-500" />
+                                        {:else}
+                                            <AlertCircle size={16} class="text-amber-500" />
+                                        {/if}
+                                        <span class="text-muted-foreground">
+                                            {connector?.displayName ?? connectorType}
+                                        </span>
+                                        {#if !hasConnectorConfig(connectorType)}
+                                            <span class="text-xs text-amber-600 dark:text-amber-400">
+                                                (needs config)
+                                            </span>
+                                        {/if}
+                                    </div>
+                                    {#if connector && connector.fields.length > 0}
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            class="gap-1.5 h-8"
+                                            onclick={() => openConnectorConfig(connector)}
+                                        >
+                                            <Settings size={14} />
+                                            Configure
+                                        </Button>
+                                    {/if}
+                                </li>
+                            {/each}
+                        </ul>
+                    {:catch}
+                        <ul class="space-y-2">
+                            {#each selectedConnectors as connector}
+                                <li class="flex items-center gap-2 text-muted-foreground">
+                                    <AlertCircle size={16} class="text-amber-500" />
+                                    {connector}
+                                </li>
+                            {/each}
+                        </ul>
+                    {/await}
                 {/if}
             </Card.Content>
         </Card.Root>
@@ -299,3 +453,14 @@
         </Card.Content>
     </Card.Root>
 </div>
+
+<ConnectorConfigDialog
+    open={isConfigDialogOpen}
+    connector={configuringConnector}
+    initialValues={configuringConnector ? connectorConfigs[configuringConnector.type] ?? {} : {}}
+    onOpenChange={(open) => {
+        isConfigDialogOpen = open;
+        if (!open) configuringConnector = null;
+    }}
+    onSave={handleConnectorConfigSave}
+/>

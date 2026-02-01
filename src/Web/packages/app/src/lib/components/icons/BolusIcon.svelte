@@ -23,8 +23,8 @@
   }: BolusIconProps = $props();
 
   // Scale factor based on default 12px reference size
-  const scale = size / 12;
-  const radius = 6 * scale;
+  const scale = $derived(size / 12);
+  const radius = $derived(6 * scale);
 </script>
 
 <svg

@@ -69,7 +69,7 @@
     }
   });
 
-  const communityLinks = [
+  const communityLinks = $derived([
     {
       name: "GitHub Repository",
       description: "Source code, issues, and feature requests",
@@ -81,7 +81,7 @@
       name: "Discord Community",
       description: "Chat with developers and other users",
       icon: MessageCircle,
-      href: "https://discord.gg/nightscout",
+      href: "https://discord.gg/xWYz9fFWrj",
       badge: "Active",
     },
     {
@@ -97,7 +97,7 @@
       href: "https://www.nightscoutfoundation.org/",
       badge: "501(c)(3)",
     },
-  ];
+  ]);
 
   const supportOptions = [
     {

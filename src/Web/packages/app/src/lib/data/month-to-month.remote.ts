@@ -46,7 +46,7 @@ export const getPunchCardData = query(punchCardSchema, async ({
 
   const [allEntries, allTreatments] = await Promise.all([
     apiClient.entries.getEntries2(entriesQuery, 100000),
-    apiClient.treatments.getTreatments2(treatmentsQuery, 10000),
+    apiClient.treatments.getTreatments(undefined, 10000, undefined, treatmentsQuery),
   ]);
 
   // Group by month
@@ -70,6 +70,7 @@ export const getPunchCardData = query(punchCardSchema, async ({
       inRangeCount: number;
       lowCount: number;
       highCount: number;
+      entries: Array<{ mills: number; sgv: number }>;
     }>;
     maxCarbs: number;
     maxInsulin: number;
@@ -150,6 +151,12 @@ export const getPunchCardData = query(punchCardSchema, async ({
 
     const dateStr = currentDate.toISOString().split("T")[0];
 
+    // Extract raw glucose entries for profile view (sorted by time)
+    const entries = dayEntries
+      .filter((e) => e.mills != null && e.sgv != null)
+      .map((e) => ({ mills: e.mills!, sgv: e.sgv! }))
+      .sort((a, b) => a.mills - b.mills);
+
     const dayStats = {
       date: dateStr,
       timestamp: dayStart.getTime(),
@@ -166,6 +173,7 @@ export const getPunchCardData = query(punchCardSchema, async ({
       totalBolus,
       totalBasal,
       carbToInsulinRatio,
+      entries,
     };
 
     const monthData = monthsMap.get(monthKey)!;

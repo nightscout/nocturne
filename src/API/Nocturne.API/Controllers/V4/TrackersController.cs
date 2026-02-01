@@ -20,32 +20,17 @@ public class TrackersController : ControllerBase
 {
     private readonly TrackerRepository _repository;
     private readonly ISignalRBroadcastService _broadcast;
-    private readonly ITrackerSeedService _seedService;
     private readonly ILogger<TrackersController> _logger;
 
     public TrackersController(
         TrackerRepository repository,
         ISignalRBroadcastService broadcast,
-        ITrackerSeedService seedService,
         ILogger<TrackersController> logger
     )
     {
         _repository = repository;
         _broadcast = broadcast;
-        _seedService = seedService;
         _logger = logger;
-    }
-
-    /// <summary>
-    /// Seed default tracker definitions for the current user
-    /// </summary>
-    [HttpPost("seed")]
-    [Authorize]
-    public async Task<ActionResult> SeedDefaults()
-    {
-        var userId = HttpContext.GetSubjectIdString()!;
-        await _seedService.SeedDefaultDefinitionsAsync(userId, HttpContext.RequestAborted);
-        return Ok(new { message = "Default definitions seeded successfully" });
     }
 
     #region Helpers
@@ -166,21 +151,23 @@ public class TrackersController : ControllerBase
         {
             foreach (var threshold in request.NotificationThresholds)
             {
-                entity.NotificationThresholds.Add(new TrackerNotificationThresholdEntity
-                {
-                    Urgency = threshold.Urgency,
-                    Hours = threshold.Hours,
-                    Description = threshold.Description,
-                    DisplayOrder = threshold.DisplayOrder,
-                    // Alert configuration
-                    PushEnabled = threshold.PushEnabled,
-                    AudioEnabled = threshold.AudioEnabled,
-                    AudioSound = threshold.AudioSound,
-                    VibrateEnabled = threshold.VibrateEnabled,
-                    RepeatIntervalMins = threshold.RepeatIntervalMins,
-                    MaxRepeats = threshold.MaxRepeats,
-                    RespectQuietHours = threshold.RespectQuietHours,
-                });
+                entity.NotificationThresholds.Add(
+                    new TrackerNotificationThresholdEntity
+                    {
+                        Urgency = threshold.Urgency,
+                        Hours = threshold.Hours,
+                        Description = threshold.Description,
+                        DisplayOrder = threshold.DisplayOrder,
+                        // Alert configuration
+                        PushEnabled = threshold.PushEnabled,
+                        AudioEnabled = threshold.AudioEnabled,
+                        AudioSound = threshold.AudioSound,
+                        VibrateEnabled = threshold.VibrateEnabled,
+                        RepeatIntervalMins = threshold.RepeatIntervalMins,
+                        MaxRepeats = threshold.MaxRepeats,
+                        RespectQuietHours = threshold.RespectQuietHours,
+                    }
+                );
             }
         }
 
@@ -221,10 +208,12 @@ public class TrackersController : ControllerBase
         existing.Description = request.Description ?? existing.Description;
         existing.Category = request.Category ?? existing.Category;
         existing.Icon = request.Icon ?? existing.Icon;
-        existing.TriggerEventTypes = request.TriggerEventTypes != null
-            ? JsonSerializer.Serialize(request.TriggerEventTypes)
-            : existing.TriggerEventTypes;
-        existing.TriggerNotesContains = request.TriggerNotesContains ?? existing.TriggerNotesContains;
+        existing.TriggerEventTypes =
+            request.TriggerEventTypes != null
+                ? JsonSerializer.Serialize(request.TriggerEventTypes)
+                : existing.TriggerEventTypes;
+        existing.TriggerNotesContains =
+            request.TriggerNotesContains ?? existing.TriggerNotesContains;
         existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
         existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
         existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
@@ -237,27 +226,33 @@ public class TrackersController : ControllerBase
         {
             await _repository.UpdateNotificationThresholdsAsync(
                 id,
-                request.NotificationThresholds.Select(t => new TrackerNotificationThresholdEntity
-                {
-                    TrackerDefinitionId = id,
-                    Urgency = t.Urgency,
-                    Hours = t.Hours,
-                    Description = t.Description,
-                    DisplayOrder = t.DisplayOrder,
-                    // Alert configuration
-                    PushEnabled = t.PushEnabled,
-                    AudioEnabled = t.AudioEnabled,
-                    AudioSound = t.AudioSound,
-                    VibrateEnabled = t.VibrateEnabled,
-                    RepeatIntervalMins = t.RepeatIntervalMins,
-                    MaxRepeats = t.MaxRepeats,
-                    RespectQuietHours = t.RespectQuietHours,
-                }).ToList(),
+                request
+                    .NotificationThresholds.Select(t => new TrackerNotificationThresholdEntity
+                    {
+                        TrackerDefinitionId = id,
+                        Urgency = t.Urgency,
+                        Hours = t.Hours,
+                        Description = t.Description,
+                        DisplayOrder = t.DisplayOrder,
+                        // Alert configuration
+                        PushEnabled = t.PushEnabled,
+                        AudioEnabled = t.AudioEnabled,
+                        AudioSound = t.AudioSound,
+                        VibrateEnabled = t.VibrateEnabled,
+                        RepeatIntervalMins = t.RepeatIntervalMins,
+                        MaxRepeats = t.MaxRepeats,
+                        RespectQuietHours = t.RespectQuietHours,
+                    })
+                    .ToList(),
                 HttpContext.RequestAborted
             );
         }
 
-        var updated = await _repository.UpdateDefinitionAsync(id, existing, HttpContext.RequestAborted);
+        var updated = await _repository.UpdateDefinitionAsync(
+            id,
+            existing,
+            HttpContext.RequestAborted
+        );
 
         return Ok(TrackerDefinitionDto.FromEntity(updated!));
     }
@@ -296,7 +291,10 @@ public class TrackersController : ControllerBase
     public async Task<ActionResult<TrackerInstanceDto[]>> GetActiveInstances()
     {
         var userId = HttpContext.GetSubjectIdString();
-        var instances = await _repository.GetActiveInstancesAsync(userId, HttpContext.RequestAborted);
+        var instances = await _repository.GetActiveInstancesAsync(
+            userId,
+            HttpContext.RequestAborted
+        );
 
         return Ok(instances.Select(TrackerInstanceDto.FromEntity).ToArray());
     }
@@ -383,14 +381,13 @@ public class TrackersController : ControllerBase
         );
 
         // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync("create", TrackerInstanceDto.FromEntity(instance));
-
-        return CreatedAtAction(
-            nameof(GetActiveInstances),
+        await _broadcast.BroadcastTrackerUpdateAsync(
+            "create",
             TrackerInstanceDto.FromEntity(instance)
         );
-    }
 
+        return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.FromEntity(instance));
+    }
 
     /// <summary>
     /// Complete a tracker instance
@@ -429,7 +426,10 @@ public class TrackersController : ControllerBase
         );
 
         // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync("complete", TrackerInstanceDto.FromEntity(completed!));
+        await _broadcast.BroadcastTrackerUpdateAsync(
+            "complete",
+            TrackerInstanceDto.FromEntity(completed!)
+        );
 
         return Ok(TrackerInstanceDto.FromEntity(completed!));
     }
@@ -457,7 +457,10 @@ public class TrackersController : ControllerBase
             var updated = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
             if (updated != null)
             {
-                await _broadcast.BroadcastTrackerUpdateAsync("ack", TrackerInstanceDto.FromEntity(updated));
+                await _broadcast.BroadcastTrackerUpdateAsync(
+                    "ack",
+                    TrackerInstanceDto.FromEntity(updated)
+                );
             }
         }
 
@@ -541,7 +544,10 @@ public class TrackersController : ControllerBase
 
         _logger.LogInformation("Created tracker preset {Id} for user {UserId}", created.Id, userId);
 
-        return Created($"/api/v4/trackers/presets/{created.Id}", TrackerPresetDto.FromEntity(created));
+        return Created(
+            $"/api/v4/trackers/presets/{created.Id}",
+            TrackerPresetDto.FromEntity(created)
+        );
     }
 
     /// <summary>
@@ -566,7 +572,11 @@ public class TrackersController : ControllerBase
         if (instance == null)
             return NotFound();
 
-        _logger.LogInformation("Applied preset {PresetId}, created instance {InstanceId}", id, instance.Id);
+        _logger.LogInformation(
+            "Applied preset {PresetId}, created instance {InstanceId}",
+            id,
+            instance.Id
+        );
 
         return Ok(TrackerInstanceDto.FromEntity(instance));
     }
@@ -679,14 +689,16 @@ public class TrackerDefinitionDto
             Description = entity.Description,
             Category = entity.Category,
             Icon = entity.Icon,
-            TriggerEventTypes = JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [],
+            TriggerEventTypes =
+                JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [],
             TriggerNotesContains = entity.TriggerNotesContains,
             LifespanHours = entity.LifespanHours,
             // Notification thresholds
-            NotificationThresholds = entity.NotificationThresholds?
-                .OrderBy(t => t.DisplayOrder)
-                .Select(NotificationThresholdDto.FromEntity)
-                .ToList() ?? [],
+            NotificationThresholds =
+                entity
+                    .NotificationThresholds?.OrderBy(t => t.DisplayOrder)
+                    .Select(NotificationThresholdDto.FromEntity)
+                    .ToList() ?? [],
             IsFavorite = entity.IsFavorite,
             DashboardVisibility = entity.DashboardVisibility,
             Visibility = entity.Visibility,
@@ -696,7 +708,6 @@ public class TrackerDefinitionDto
             UpdatedAt = entity.UpdatedAt,
         };
 }
-
 
 public class TrackerInstanceDto
 {
@@ -772,21 +783,26 @@ public class CreateTrackerDefinitionRequest
     public List<string>? TriggerEventTypes { get; set; }
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
+
     // Notification thresholds (many-to-one relationship)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool IsFavorite { get; set; }
+
     /// <summary>
     /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
     /// </summary>
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
+
     /// <summary>
     /// Visibility level for this tracker (Public, Private, RoleRestricted)
     /// </summary>
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
     /// </summary>
     public string? StartEventType { get; set; }
+
     /// <summary>
     /// Event type to create when tracker is completed (for Nightscout compatibility)
     /// </summary>
@@ -802,21 +818,26 @@ public class UpdateTrackerDefinitionRequest
     public List<string>? TriggerEventTypes { get; set; }
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
+
     // Notification thresholds (if provided, replaces all existing thresholds)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool? IsFavorite { get; set; }
+
     /// <summary>
     /// Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent
     /// </summary>
     public DashboardVisibility? DashboardVisibility { get; set; }
+
     /// <summary>
     /// Visibility level for this tracker (Public, Private, RoleRestricted)
     /// </summary>
     public TrackerVisibility? Visibility { get; set; }
+
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
     /// </summary>
     public string? StartEventType { get; set; }
+
     /// <summary>
     /// Event type to create when tracker is completed (for Nightscout compatibility)
     /// </summary>
@@ -846,6 +867,7 @@ public class StartTrackerInstanceRequest
     public Guid DefinitionId { get; set; }
     public string? StartNotes { get; set; }
     public string? StartTreatmentId { get; set; }
+
     /// <summary>
     /// Optional custom start time for backdating. Defaults to now if not provided.
     /// </summary>
@@ -858,6 +880,7 @@ public class CompleteTrackerInstanceRequest
     public CompletionReason Reason { get; set; }
     public string? CompletionNotes { get; set; }
     public string? CompleteTreatmentId { get; set; }
+
     /// <summary>
     /// Optional custom completion time for backdating. Defaults to now if not provided.
     /// </summary>
@@ -874,6 +897,7 @@ public class CreateTrackerPresetRequest
 {
     [Required]
     public string Name { get; set; } = string.Empty;
+
     [Required]
     public Guid DefinitionId { get; set; }
     public string? DefaultStartNotes { get; set; }

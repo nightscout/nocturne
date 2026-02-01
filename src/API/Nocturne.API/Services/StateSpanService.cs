@@ -87,7 +87,7 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Treatment>> GetTempBasalsAsTreatmentsAsync(
+    public async Task<IEnumerable<Treatment>> GetBasalDeliveriesAsTreatmentsAsync(
         long? from = null,
         long? to = null,
         int count = 100,
@@ -95,12 +95,12 @@ public class StateSpanService : IStateSpanService
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
-            "Getting temp basals as treatments with from: {From}, to: {To}, count: {Count}, skip: {Skip}",
+            "Getting basal deliveries as treatments with from: {From}, to: {To}, count: {Count}, skip: {Skip}",
             from, to, count, skip);
 
-        // Get TempBasal StateSpans from repository
+        // Get BasalDelivery StateSpans from repository
         var stateSpans = await _repository.GetStateSpansAsync(
-            category: StateSpanCategory.TempBasal,
+            category: StateSpanCategory.BasalDelivery,
             from: from,
             to: to,
             count: count,
@@ -108,28 +108,24 @@ public class StateSpanService : IStateSpanService
             cancellationToken: cancellationToken);
 
         // Convert each StateSpan to a Treatment using the mapper
-        var treatments = stateSpans
-            .Select(TreatmentStateSpanMapper.ToTreatment)
-            .Where(t => t != null)
-            .Cast<Treatment>()
-            .ToList();
+        var treatments = BasalDeliveryStateSpanToTreatmentMapper.ToTreatments(stateSpans).ToList();
 
-        _logger.LogDebug("Converted {Count} temp basal state spans to treatments", treatments.Count);
+        _logger.LogDebug("Converted {Count} basal delivery state spans to treatments", treatments.Count);
 
         return treatments;
     }
 
     /// <inheritdoc />
-    public async Task<StateSpan> CreateTempBasalFromTreatmentAsync(
+    public async Task<StateSpan> CreateBasalDeliveryFromTreatmentAsync(
         Treatment treatment,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
-            "Creating temp basal from treatment with ID: {Id}, EventType: {EventType}",
+            "Creating basal delivery from treatment with ID: {Id}, EventType: {EventType}",
             treatment.Id, treatment.EventType);
 
         // Convert Treatment to StateSpan using the mapper
-        var stateSpan = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var stateSpan = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         if (stateSpan == null)
         {
@@ -146,7 +142,7 @@ public class StateSpanService : IStateSpanService
         var result = await _repository.UpsertStateSpanAsync(stateSpan, cancellationToken);
 
         _logger.LogDebug(
-            "Created temp basal state span with ID: {Id} from treatment",
+            "Created basal delivery state span with ID: {Id} from treatment",
             result.Id);
 
         return result;

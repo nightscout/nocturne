@@ -15,6 +15,11 @@ public static class ProfileMapper
     /// </summary>
     public static ProfileEntity ToEntity(Profile profile)
     {
+        // Set created_at to now if not provided (Nightscout behavior)
+        var createdAt = string.IsNullOrEmpty(profile.CreatedAt)
+            ? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            : profile.CreatedAt;
+
         return new ProfileEntity
         {
             Id = string.IsNullOrEmpty(profile.Id)
@@ -24,7 +29,7 @@ public static class ProfileMapper
             DefaultProfile = profile.DefaultProfile,
             StartDate = profile.StartDate,
             Mills = profile.Mills,
-            CreatedAt = profile.CreatedAt,
+            CreatedAt = createdAt,
             Units = profile.Units,
             StoreJson = profile.Store != null ? JsonSerializer.Serialize(profile.Store) : "{}",
             EnteredBy = profile.EnteredBy,

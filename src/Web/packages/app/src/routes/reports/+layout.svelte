@@ -2,9 +2,10 @@
     import {page} from "$app/state";
     import Button from "$lib/components/ui/button/button.svelte";
     import {ReportsFilterSidebar} from "$lib/components/layout";
-    import * as Sidebar from "$lib/components/ui/sidebar";
-    import {ArrowLeftIcon, Filter, Calendar} from "lucide-svelte";
+    import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
+    import {Filter, Calendar} from "lucide-svelte";
     import {useDateParams, setDateParamsContext} from "$lib/hooks/date-params.svelte";
+    import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
     let {children} = $props();
 
@@ -15,6 +16,12 @@
     // This is the SINGLE source of truth for all report components
     const params = useDateParams();
     setDateParamsContext(params);
+
+    // Create resource context for layout-level loading/error handling
+    const resourceCtx = createResourceContext();
+
+    // Whether to use the ResourceGuard (skip for main reports page which has custom design)
+    const useResourceGuard = $derived(page.url.pathname !== "/reports");
 
     // Extract report name from the URL
     const reportName = $derived.by(() => {
@@ -98,7 +105,19 @@
 
     <!-- Main Content -->
     <main class="relative px-6 py-6">
-        {@render children()}
+        {#if useResourceGuard}
+            <ResourceGuard
+                loading={resourceCtx.loading}
+                error={resourceCtx.error}
+                hasData={resourceCtx.hasData}
+                errorTitle={resourceCtx.errorTitle}
+                onRetry={resourceCtx.refetch}
+            >
+                {@render children()}
+            </ResourceGuard>
+        {:else}
+            {@render children()}
+        {/if}
     </main>
 
     <!-- Filter Sidebar -->

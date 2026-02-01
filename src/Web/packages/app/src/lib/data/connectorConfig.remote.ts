@@ -4,10 +4,6 @@
 import { getRequestEvent, query, command } from '$app/server';
 import { z } from 'zod';
 import { error } from '@sveltejs/kit';
-import type {
-	ConnectorConfigurationResponse,
-	ConnectorStatusInfo,
-} from '$lib/api/generated/nocturne-api-client';
 
 /**
  * JSON Schema types for connector configuration
@@ -231,6 +227,28 @@ export const deleteConnectorConfiguration = command(z.string(), async (connector
 		return {
 			success: false,
 			error: err instanceof Error ? err.message : 'Failed to delete configuration',
+		};
+	}
+});
+
+/**
+ * Get data summary for a connector (counts of entries, treatments, device statuses)
+ */
+export const getConnectorDataSummary = query(z.string(), async (connectorName) => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		return await apiClient.services.getConnectorDataSummary(connectorName);
+	} catch (err) {
+		console.error('Error getting connector data summary:', err);
+		// Return empty summary on error
+		return {
+			connectorId: connectorName,
+			entries: 0,
+			treatments: 0,
+			deviceStatuses: 0,
+			total: 0,
 		};
 	}
 });

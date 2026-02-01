@@ -31,6 +31,7 @@
     onSave: (treatment: Treatment) => void;
     onCancel: () => void;
   } = $props();
+  // svelte-ignore state_referenced_locally
   let editedTreatment = $state<Treatment>({ ...treatment });
   let isSubmitting = $state(false);
 

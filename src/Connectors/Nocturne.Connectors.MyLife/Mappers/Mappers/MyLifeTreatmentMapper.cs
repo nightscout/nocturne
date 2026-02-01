@@ -15,11 +15,9 @@ internal sealed class MyLifeTreatmentMapper
         new BolusTreatmentHandler(),
         new AlertTreatmentHandler(),
         new CarbCorrectionTreatmentHandler(),
-        new BasalRateTreatmentHandler(),
         new ProfileSwitchTreatmentHandler(),
         new IndicationTreatmentHandler(),
         new PrimingTreatmentHandler(),
-        new BasalAmountTreatmentHandler(),
         new SimpleMappedTreatmentHandler(
             new Dictionary<int, string>
             {
@@ -32,8 +30,9 @@ internal sealed class MyLifeTreatmentMapper
                 { MyLifeEventTypeIds.SiteChange, MyLifeTreatmentTypes.SiteChange },
                 { MyLifeEventTypeIds.Rewind, MyLifeTreatmentTypes.Rewind },
                 { MyLifeEventTypeIds.BolusMaxChanged, MyLifeTreatmentTypes.BolusMaxChanged },
-                { MyLifeEventTypeIds.BasalMaxChanged, MyLifeTreatmentTypes.BasalMaxChanged }
-            })
+                { MyLifeEventTypeIds.BasalMaxChanged, MyLifeTreatmentTypes.BasalMaxChanged },
+            }
+        ),
     ];
 
     internal static IEnumerable<Treatment> MapTreatments(
@@ -41,14 +40,16 @@ internal sealed class MyLifeTreatmentMapper
         bool enableManualBgSync,
         bool enableMealCarbConsolidation,
         bool enableTempBasalConsolidation,
-        int tempBasalConsolidationWindowMinutes)
+        int tempBasalConsolidationWindowMinutes
+    )
     {
         var context = MyLifeTreatmentContext.Create(
             events,
             enableManualBgSync,
             enableMealCarbConsolidation,
             enableTempBasalConsolidation,
-            tempBasalConsolidationWindowMinutes);
+            tempBasalConsolidationWindowMinutes
+        );
         var list = new List<Treatment>();
         foreach (var ev in events)
         {

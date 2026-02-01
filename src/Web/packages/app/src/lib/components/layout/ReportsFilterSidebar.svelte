@@ -43,7 +43,7 @@
   $effect(() => {
     if (open) {
       // Reset draft to current params when opening
-      draftDays = params.days;
+      draftDays = params.days ?? undefined;
       draftMode = params.days ? "preset" : "calendar";
 
       if (params.from && params.to) {

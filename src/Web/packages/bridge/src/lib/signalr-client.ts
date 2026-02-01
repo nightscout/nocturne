@@ -151,6 +151,22 @@ class SignalRClient {
       logger.debug("Received delete from SignalR:", data);
       this.messageHandler.handleStorageDelete(data);
     });
+
+    // Handle in-app notification events
+    this.dataConnection.on("notificationCreated", (data: any) => {
+      logger.debug("Received notificationCreated from SignalR:", data);
+      this.messageHandler.handleNotificationCreated(data);
+    });
+
+    this.dataConnection.on("notificationArchived", (data: any) => {
+      logger.debug("Received notificationArchived from SignalR:", data);
+      this.messageHandler.handleNotificationArchived(data);
+    });
+
+    this.dataConnection.on("notificationUpdated", (data: any) => {
+      logger.debug("Received notificationUpdated from SignalR:", data);
+      this.messageHandler.handleNotificationUpdated(data);
+    });
   }
 
   private setupAlarmEventHandlers(): void {

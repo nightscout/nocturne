@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -33,6 +34,7 @@ namespace Nocturne.Connectors.Glooko.Services
         private readonly IRetryDelayStrategy _retryDelayStrategy;
         private readonly IConnectorFileService<GlookoBatchData>? _fileService;
         private readonly GlookoAuthTokenProvider _tokenProvider;
+        private readonly ITreatmentClassificationService _classificationService;
 
         public override string ServiceName => "Glooko";
         public override string ConnectorSource => DataSources.GlookoConnector;
@@ -52,6 +54,7 @@ namespace Nocturne.Connectors.Glooko.Services
             IRetryDelayStrategy retryDelayStrategy,
             IRateLimitingStrategy rateLimitingStrategy,
             GlookoAuthTokenProvider tokenProvider,
+            ITreatmentClassificationService classificationService,
             IConnectorFileService<GlookoBatchData>? fileService = null,
             IApiDataSubmitter? apiDataSubmitter = null,
             IConnectorMetricsTracker? metricsTracker = null,
@@ -68,6 +71,8 @@ namespace Nocturne.Connectors.Glooko.Services
             _fileService = fileService;
             _tokenProvider =
                 tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+            _classificationService =
+                classificationService ?? throw new ArgumentNullException(nameof(classificationService));
         }
 
         public override async Task<bool> AuthenticateAsync()
@@ -635,8 +640,6 @@ namespace Nocturne.Connectors.Glooko.Services
 
             try
             {
-                // Apply timezone offset
-                var timestampDelta = TimeSpan.FromHours(_config.TimezoneOffset);
                 // Process foods (carb entries)
                 if (batchData.Foods != null)
                 {
@@ -644,45 +647,49 @@ namespace Nocturne.Connectors.Glooko.Services
                     {
                         var treatment = new Treatment();
                         var foodDate = GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
+                        var carbs = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
 
                         // Look for matching insulin within 45 minutes
                         var matchingInsulin = FindMatchingInsulin(batchData.Insulins, foodDate);
 
                         if (matchingInsulin != null)
-                            if (matchingInsulin != null)
-                            {
-                                var insulinDate = GetRawGlookoDate(
-                                    matchingInsulin.Timestamp,
-                                    matchingInsulin.PumpTimestamp
-                                );
-                                treatment.EventType = "Meal Bolus";
-                                var correctedInsulinTime = GetCorrectedGlookoTime(insulinDate)
-                                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                                treatment.CreatedAt = correctedInsulinTime;
-                                treatment.EventTime = correctedInsulinTime;
-                                treatment.Insulin = matchingInsulin.Value;
-                                treatment.PreBolus = (foodDate - insulinDate).TotalMinutes;
-                                treatment.Id = GenerateTreatmentId(
-                                    "Meal Bolus",
-                                    insulinDate,
-                                    $"carbs:{food.Carbs}_insulin:{matchingInsulin.Value}"
-                                );
-                            }
-                            else
-                            {
-                                treatment.EventType = "Carb Correction";
-                                var correctedFoodTime = GetCorrectedGlookoTime(foodDate)
-                                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                                treatment.CreatedAt = correctedFoodTime;
-                                treatment.EventTime = correctedFoodTime;
-                                treatment.Id = GenerateTreatmentId(
-                                    "Carb Correction",
-                                    foodDate,
-                                    $"carbs:{food.Carbs}"
-                                );
-                            }
+                        {
+                            var insulinDate = GetRawGlookoDate(
+                                matchingInsulin.Timestamp,
+                                matchingInsulin.PumpTimestamp
+                            );
+                            // Use classification service for consistent categorization
+                            var eventType = _classificationService.ClassifyTreatment(carbs, matchingInsulin.Value);
+                            treatment.EventType = eventType;
+                            var correctedInsulinTime = GetCorrectedGlookoTime(insulinDate)
+                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                            treatment.CreatedAt = correctedInsulinTime;
+                            treatment.EventTime = correctedInsulinTime;
+                            treatment.Insulin = matchingInsulin.Value;
+                            treatment.PreBolus = (foodDate - insulinDate).TotalMinutes;
+                            treatment.Id = GenerateTreatmentId(
+                                eventType,
+                                insulinDate,
+                                $"carbs:{carbs}_insulin:{matchingInsulin.Value}"
+                            );
+                        }
+                        else
+                        {
+                            // No matching insulin - use classification service (will return Carb Correction)
+                            var eventType = _classificationService.ClassifyTreatment(carbs, null);
+                            treatment.EventType = eventType;
+                            var correctedFoodTime = GetCorrectedGlookoTime(foodDate)
+                                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                            treatment.CreatedAt = correctedFoodTime;
+                            treatment.EventTime = correctedFoodTime;
+                            treatment.Id = GenerateTreatmentId(
+                                eventType,
+                                foodDate,
+                                $"carbs:{carbs}"
+                            );
+                        }
 
-                        treatment.Carbs = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
+                        treatment.Carbs = carbs;
                         treatment.AdditionalProperties = JsonSerializer.Deserialize<
                             Dictionary<string, object>
                         >(JsonSerializer.Serialize(food));
@@ -695,6 +702,10 @@ namespace Nocturne.Connectors.Glooko.Services
                 {
                     foreach (var insulin in batchData.Insulins)
                     {
+                        // Skip 0-unit insulin entries
+                        if (insulin.Value <= 0)
+                            continue;
+
                         var insulinDate = GetRawGlookoDate(
                             insulin.Timestamp,
                             insulin.PumpTimestamp
@@ -704,14 +715,16 @@ namespace Nocturne.Connectors.Glooko.Services
                         var matchingFood = FindMatchingFood(batchData.Foods, insulinDate);
                         if (matchingFood == null)
                         {
+                            // Use classification service (will return Correction Bolus for insulin-only)
+                            var eventType = _classificationService.ClassifyTreatment(null, insulin.Value);
                             var treatment = new Treatment
                             {
                                 Id = GenerateTreatmentId(
-                                    "Correction Bolus",
+                                    eventType,
                                     insulinDate,
                                     $"insulin:{insulin.Value}"
                                 ),
-                                EventType = "Correction Bolus",
+                                EventType = eventType,
                                 CreatedAt = GetCorrectedGlookoTime(insulinDate)
                                     .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                                 Insulin = insulin.Value,
@@ -721,25 +734,31 @@ namespace Nocturne.Connectors.Glooko.Services
                         }
                     }
                 }
-                // Process pump boluses
+                // Process pump boluses - use classification service for proper categorization
                 if (batchData.NormalBoluses != null)
                 {
                     foreach (var bolus in batchData.NormalBoluses)
                     {
                         var bolusDate = GetRawGlookoDate(bolus.Timestamp, bolus.PumpTimestamp);
+                        var carbs = bolus.CarbsInput > 0 ? bolus.CarbsInput : (double?)null;
+                        var insulin = bolus.InsulinDelivered > 0 ? bolus.InsulinDelivered : (double?)null;
+
+                        // Use classification service - this fixes the bug where 0u insulin was
+                        // incorrectly classified as Meal Bolus instead of Carb Correction
+                        var eventType = _classificationService.ClassifyTreatment(carbs, insulin);
 
                         var treatment = new Treatment
                         {
                             Id = GenerateTreatmentId(
-                                "Meal Bolus",
+                                eventType,
                                 bolusDate,
                                 $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"
                             ),
-                            EventType = "Meal Bolus",
+                            EventType = eventType,
                             CreatedAt = GetCorrectedGlookoTime(bolusDate)
                                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                            Insulin = bolus.InsulinDelivered,
-                            Carbs = bolus.CarbsInput > 0 ? bolus.CarbsInput : null,
+                            Insulin = insulin,
+                            Carbs = carbs,
                             AdditionalProperties = JsonSerializer.Deserialize<
                                 Dictionary<string, object>
                             >(JsonSerializer.Serialize(bolus)),
@@ -1530,28 +1549,27 @@ namespace Nocturne.Connectors.Glooko.Services
 
             var series = graphData.Series;
 
-            // Process Suspend Basals as pump mode state spans
+            // Process Suspend Basals as pump mode state spans and BasalDelivery spans
             if (series.SuspendBasal != null)
             {
                 foreach (var suspend in series.SuspendBasal)
                 {
                     var startTimestamp = GetCorrectedGlookoTime(suspend.X);
                     var durationSeconds = suspend.Duration ?? 0;
+                    var startMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds();
                     var endMills =
                         durationSeconds > 0
-                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
-                                + (durationSeconds * 1000)
+                            ? startMills + (durationSeconds * 1000)
                             : (long?)null;
 
+                    // PumpMode StateSpan for suspend state tracking
                     stateSpans.Add(
                         new StateSpan
                         {
                             OriginalId = $"glooko_suspend_{suspend.X}",
                             Category = StateSpanCategory.PumpMode,
                             State = PumpModeState.Suspended.ToString(),
-                            StartMills = new DateTimeOffset(
-                                startTimestamp
-                            ).ToUnixTimeMilliseconds(),
+                            StartMills = startMills,
                             EndMills = endMills,
                             Source = ConnectorSource,
                             Metadata = new Dictionary<string, object>
@@ -1561,20 +1579,39 @@ namespace Nocturne.Connectors.Glooko.Services
                             },
                         }
                     );
+
+                    // BasalDelivery StateSpan for suspended basal visualization
+                    stateSpans.Add(
+                        new StateSpan
+                        {
+                            OriginalId = $"glooko_suspend_basal_{suspend.X}",
+                            Category = StateSpanCategory.BasalDelivery,
+                            State = BasalDeliveryState.Active.ToString(),
+                            StartMills = startMills,
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "rate", 0.0 },
+                                { "origin", BasalDeliveryOrigin.Suspended.ToString() },
+                                { "durationSeconds", durationSeconds },
+                            },
+                        }
+                    );
                 }
             }
 
-            // Process LGS/PLGS events as pump mode state spans
+            // Process LGS/PLGS events as pump mode state spans and BasalDelivery spans
             if (series.LgsPlgs != null)
             {
                 foreach (var lgsEvent in series.LgsPlgs)
                 {
                     var startTimestamp = GetCorrectedGlookoTime(lgsEvent.X);
                     var durationSeconds = lgsEvent.Duration ?? 0;
+                    var startMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds();
                     var endMills =
                         durationSeconds > 0
-                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
-                                + (durationSeconds * 1000)
+                            ? startMills + (durationSeconds * 1000)
                             : (long?)null;
 
                     // Map LGS/PLGS event types to pump mode states
@@ -1586,20 +1623,44 @@ namespace Nocturne.Connectors.Glooko.Services
                         _ => PumpModeState.Limited.ToString(),
                     };
 
+                    // PumpMode StateSpan for LGS/PLGS state tracking
                     stateSpans.Add(
                         new StateSpan
                         {
                             OriginalId = $"glooko_lgsplgs_{lgsEvent.X}",
                             Category = StateSpanCategory.PumpMode,
                             State = stateValue,
-                            StartMills = new DateTimeOffset(
-                                startTimestamp
-                            ).ToUnixTimeMilliseconds(),
+                            StartMills = startMills,
                             EndMills = endMills,
                             Source = ConnectorSource,
                             Metadata = new Dictionary<string, object>
                             {
                                 { "label", lgsEvent.Label ?? lgsEvent.EventType ?? "LGS/PLGS" },
+                                { "eventType", lgsEvent.EventType ?? "unknown" },
+                                { "durationSeconds", durationSeconds },
+                            },
+                        }
+                    );
+
+                    // BasalDelivery StateSpan for algorithm-controlled basal (LGS/PLGS = suspended by algorithm)
+                    // LGS/PLGS are algorithm-initiated suspensions, so rate is 0 with Algorithm origin
+                    var basalOrigin = lgsEvent.EventType?.ToUpperInvariant() == "SUSPEND"
+                        ? BasalDeliveryOrigin.Suspended
+                        : BasalDeliveryOrigin.Algorithm;
+
+                    stateSpans.Add(
+                        new StateSpan
+                        {
+                            OriginalId = $"glooko_lgsplgs_basal_{lgsEvent.X}",
+                            Category = StateSpanCategory.BasalDelivery,
+                            State = BasalDeliveryState.Active.ToString(),
+                            StartMills = startMills,
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "rate", 0.0 },
+                                { "origin", basalOrigin.ToString() },
                                 { "eventType", lgsEvent.EventType ?? "unknown" },
                                 { "durationSeconds", durationSeconds },
                             },
@@ -1646,17 +1707,17 @@ namespace Nocturne.Connectors.Glooko.Services
                 }
             }
 
-            // Process Temporary Basals as TempBasal state spans
+            // Process Temporary Basals as BasalDelivery spans
             if (series.TemporaryBasal != null)
             {
                 foreach (var tempBasal in series.TemporaryBasal)
                 {
                     var startTimestamp = GetCorrectedGlookoTime(tempBasal.X);
                     var durationSeconds = tempBasal.Duration ?? 0;
+                    var startMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds();
                     var endMills =
                         durationSeconds > 0
-                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
-                                + (durationSeconds * 1000)
+                            ? startMills + (durationSeconds * 1000)
                             : (long?)null;
 
                     // Rate is stored in Y field (U/hr)
@@ -1665,24 +1726,23 @@ namespace Nocturne.Connectors.Glooko.Services
                     // Calculate total insulin delivered: rate (U/hr) × duration (seconds) / 3600 (seconds/hr)
                     var calculatedInsulin = rate * durationSeconds / 3600.0;
 
+                    // BasalDelivery StateSpan for temp basal visualization
+                    // Temp basals from Glooko are user-initiated (Manual origin)
                     stateSpans.Add(
                         new StateSpan
                         {
                             OriginalId = $"glooko_tempbasal_{tempBasal.X}",
-                            Category = StateSpanCategory.TempBasal,
-                            State = TempBasalState.Active.ToString(),
-                            StartMills = new DateTimeOffset(
-                                startTimestamp
-                            ).ToUnixTimeMilliseconds(),
+                            Category = StateSpanCategory.BasalDelivery,
+                            State = BasalDeliveryState.Active.ToString(),
+                            StartMills = startMills,
                             EndMills = endMills,
                             Source = ConnectorSource,
                             Metadata = new Dictionary<string, object>
                             {
                                 { "rate", rate },
+                                { "origin", BasalDeliveryOrigin.Manual.ToString() },
                                 { "durationSeconds", durationSeconds },
-                                { "durationMinutes", durationSeconds / 60.0 },
                                 { "calculatedInsulin", calculatedInsulin },
-                                { "label", tempBasal.Label ?? "Temp Basal" },
                             },
                         }
                     );
@@ -1708,7 +1768,7 @@ namespace Nocturne.Connectors.Glooko.Services
             if (batchData == null)
                 return stateSpans;
 
-            // Process Temporary Basals as TempBasal state spans
+            // Process Temporary Basals as BasalDelivery spans
             if (batchData.TempBasals != null)
             {
                 foreach (var tempBasal in batchData.TempBasals)
@@ -1720,10 +1780,10 @@ namespace Nocturne.Connectors.Glooko.Services
                     );
                     var startTimestamp = GetCorrectedGlookoTime(rawTimestamp);
                     var durationSeconds = tempBasal.Duration;
+                    var startMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds();
                     var endMills =
                         durationSeconds > 0
-                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
-                                + (durationSeconds * 1000)
+                            ? startMills + (durationSeconds * 1000)
                             : (long?)null;
 
                     // Rate is U/hr
@@ -1732,32 +1792,29 @@ namespace Nocturne.Connectors.Glooko.Services
                     // Calculate total insulin delivered: rate (U/hr) × duration (seconds) / 3600 (seconds/hr)
                     var calculatedInsulin = rate * durationSeconds / 3600.0;
 
+                    // BasalDelivery StateSpan for temp basal visualization
                     stateSpans.Add(
                         new StateSpan
                         {
                             OriginalId = $"glooko_v2_tempbasal_{rawTimestamp.Ticks}",
-                            Category = StateSpanCategory.TempBasal,
-                            State = TempBasalState.Active.ToString(),
-                            StartMills = new DateTimeOffset(
-                                startTimestamp
-                            ).ToUnixTimeMilliseconds(),
+                            Category = StateSpanCategory.BasalDelivery,
+                            State = BasalDeliveryState.Active.ToString(),
+                            StartMills = startMills,
                             EndMills = endMills,
                             Source = ConnectorSource,
                             Metadata = new Dictionary<string, object>
                             {
                                 { "rate", rate },
+                                { "origin", BasalDeliveryOrigin.Manual.ToString() },
                                 { "durationSeconds", durationSeconds },
-                                { "durationMinutes", durationSeconds / 60.0 },
                                 { "calculatedInsulin", calculatedInsulin },
-                                { "percent", tempBasal.Percent ?? 100 },
-                                { "tempBasalType", tempBasal.TempBasalType ?? "unknown" },
                             },
                         }
                     );
                 }
             }
 
-            // Process Suspend Basals as PumpMode state spans
+            // Process Suspend Basals as PumpMode state spans and BasalDelivery spans
             if (batchData.SuspendBasals != null)
             {
                 foreach (var suspend in batchData.SuspendBasals)
@@ -1769,25 +1826,44 @@ namespace Nocturne.Connectors.Glooko.Services
                     );
                     var startTimestamp = GetCorrectedGlookoTime(rawTimestamp);
                     var durationSeconds = suspend.Duration;
+                    var startMills = new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds();
                     var endMills =
                         durationSeconds > 0
-                            ? new DateTimeOffset(startTimestamp).ToUnixTimeMilliseconds()
-                                + (durationSeconds * 1000)
+                            ? startMills + (durationSeconds * 1000)
                             : (long?)null;
 
+                    // PumpMode StateSpan for suspend state tracking
                     stateSpans.Add(
                         new StateSpan
                         {
                             OriginalId = $"glooko_v2_suspend_{rawTimestamp.Ticks}",
                             Category = StateSpanCategory.PumpMode,
                             State = PumpModeState.Suspended.ToString(),
-                            StartMills = new DateTimeOffset(
-                                startTimestamp
-                            ).ToUnixTimeMilliseconds(),
+                            StartMills = startMills,
                             EndMills = endMills,
                             Source = ConnectorSource,
                             Metadata = new Dictionary<string, object>
                             {
+                                { "suspendReason", suspend.SuspendReason ?? "unknown" },
+                                { "durationSeconds", durationSeconds },
+                            },
+                        }
+                    );
+
+                    // BasalDelivery StateSpan for suspended basal visualization
+                    stateSpans.Add(
+                        new StateSpan
+                        {
+                            OriginalId = $"glooko_v2_suspend_basal_{rawTimestamp.Ticks}",
+                            Category = StateSpanCategory.BasalDelivery,
+                            State = BasalDeliveryState.Active.ToString(),
+                            StartMills = startMills,
+                            EndMills = endMills,
+                            Source = ConnectorSource,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                { "rate", 0.0 },
+                                { "origin", BasalDeliveryOrigin.Suspended.ToString() },
                                 { "suspendReason", suspend.SuspendReason ?? "unknown" },
                                 { "durationSeconds", durationSeconds },
                             },

@@ -64,6 +64,8 @@ public static class FoodMapper
             HideAfterUse = entity.HideAfterUse,
             Hidden = entity.Hidden,
             Position = entity.Position,
+            // Map SysCreatedAt to created_at for Nightscout parity
+            CreatedAt = entity.SysCreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
         };
     }
 

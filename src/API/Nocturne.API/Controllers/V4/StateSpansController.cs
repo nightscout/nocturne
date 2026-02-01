@@ -93,15 +93,15 @@ public class StateSpansController : ControllerBase
     }
 
     /// <summary>
-    /// Get temp basal state spans
+    /// Get basal delivery state spans (pump-confirmed basal rates)
     /// </summary>
-    [HttpGet("temp-basals")]
-    public async Task<ActionResult<IEnumerable<StateSpan>>> GetTempBasals(
+    [HttpGet("basal-delivery")]
+    public async Task<ActionResult<IEnumerable<StateSpan>>> GetBasalDelivery(
         [FromQuery] long? from = null,
         [FromQuery] long? to = null,
         CancellationToken cancellationToken = default)
     {
-        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.TempBasal, from: from, to: to, cancellationToken: cancellationToken);
+        var spans = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.BasalDelivery, from: from, to: to, cancellationToken: cancellationToken);
         return Ok(spans);
     }
 

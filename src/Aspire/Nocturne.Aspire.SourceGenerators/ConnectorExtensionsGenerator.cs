@@ -257,6 +257,7 @@ namespace Nocturne.Aspire.SourceGenerators
             sb.AppendLine("using System.IO;"); // Added for Path.Combine
             sb.AppendLine("using Aspire.Hosting;");
             sb.AppendLine("using Aspire.Hosting.ApplicationModel;");
+            sb.AppendLine("using Aspire.Hosting.Publishing;");
             sb.AppendLine("using Microsoft.Extensions.Configuration;");
             sb.AppendLine("using Nocturne.Core.Constants;");
             sb.AppendLine("using Nocturne.Connectors.Core.Models;");
@@ -419,6 +420,12 @@ namespace Nocturne.Aspire.SourceGenerators
 
             // Publish as Docker Compose service (called after all other configuration)
             sb.AppendLine("            connector.PublishAsDockerComposeService((_,_) => { });");
+
+            // Configure multi-arch container build for amd64 and arm64 (supports Mac Apple Silicon)
+            sb.AppendLine("            connector.WithContainerBuildOptions(options =>");
+            sb.AppendLine("            {");
+            sb.AppendLine("                options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;");
+            sb.AppendLine("            });");
 
             // Configure remote image from GitHub Container Registry
             sb.AppendLine($"            connector.WithRemoteImageName(\"ghcr.io/nightscout/nocturne/{connectorNameLower}\");");

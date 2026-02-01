@@ -99,6 +99,7 @@ public static class TreatmentMapper
         return new Treatment
         {
             Id = entity.OriginalId ?? entity.Id.ToString(),
+            DbId = entity.Id,
             EventType = entity.EventType,
             Reason = entity.Reason,
             Glucose = entity.Glucose,

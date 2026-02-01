@@ -162,17 +162,11 @@ public class ConnectorHealthService : IConnectorHealthService
             liveStatus.State = "Not Configured";
         }
 
-        // Prefer live stats if available, fall back to DB stats
-        // (live stats should be accurate, but DB stats provide backup)
-        if (liveStatus.TotalEntries == 0 && dbStats.TotalItems > 0)
-        {
-            liveStatus.TotalEntries = dbStats.TotalItems;
-            liveStatus.LastEntryTime ??= dbStats.LastItemTime;
-            liveStatus.EntriesLast24Hours = Math.Max(
-                liveStatus.EntriesLast24Hours,
-                dbStats.ItemsLast24Hours
-            );
-        }
+        // ALWAYS use database stats for entry counts - sidecar stats may be stale/cached
+        // DB is the single source of truth for how much data exists
+        liveStatus.TotalEntries = dbStats.TotalItems;
+        liveStatus.LastEntryTime = dbStats.LastItemTime;
+        liveStatus.EntriesLast24Hours = dbStats.ItemsLast24Hours;
 
         return liveStatus;
     }
@@ -180,22 +174,35 @@ public class ConnectorHealthService : IConnectorHealthService
     /// <summary>
     /// Gets the connector enabled configuration.
     /// Checks both environment configuration and database-stored runtime configuration.
-    /// Database config takes precedence over environment config.
+    /// Environment config (appsettings) is checked first as the source of truth for whether a connector
+    /// should be running at all. Database config can only enable a connector that is available in the environment.
     /// Returns true if explicitly enabled, false if explicitly disabled, null if not configured.
     /// </summary>
     private async Task<bool?> GetConnectorEnabledConfigAsync(string connectorId, string configKey, CancellationToken cancellationToken)
     {
-        // First check database-stored runtime configuration (takes precedence)
+        // First check environment configuration: Parameters:Connectors:{ConfigKey}:Enabled
+        // This determines if the connector is even available/running in Aspire
+        var envEnabled = _configuration.GetValue<bool?>($"Parameters:Connectors:{configKey}:Enabled");
+
+        // If environment config explicitly disables the connector, it's not running in Aspire
+        // so we shouldn't try to reach it regardless of DB config
+        if (envEnabled == false)
+        {
+            return false;
+        }
+
+        // Now check database-stored runtime configuration
         // This is where the UI stores the enabled state
         var dbConfig = await _connectorConfigService.GetConfigurationAsync(connectorId, cancellationToken);
         if (dbConfig != null)
         {
             // If we have a database config, use its IsActive state
+            // But only if the connector is available in the environment (envEnabled != false)
             return dbConfig.IsActive;
         }
 
-        // Fall back to environment configuration: Parameters:Connectors:{ConfigKey}:Enabled
-        return _configuration.GetValue<bool?>($"Parameters:Connectors:{configKey}:Enabled");
+        // Fall back to environment configuration
+        return envEnabled;
     }
 
     private async Task<ConnectorStatusDto> CheckConnectorStatusAsync(

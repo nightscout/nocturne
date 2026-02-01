@@ -13,18 +13,22 @@ namespace Nocturne.API.Services;
 public class ConnectorFoodEntryService : IConnectorFoodEntryService
 {
     private readonly NocturneDbContext _context;
+    private readonly IMealMatchingService _mealMatchingService;
     private readonly ILogger<ConnectorFoodEntryService> _logger;
 
     public ConnectorFoodEntryService(
         NocturneDbContext context,
+        IMealMatchingService mealMatchingService,
         ILogger<ConnectorFoodEntryService> logger
     )
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _mealMatchingService = mealMatchingService ?? throw new ArgumentNullException(nameof(mealMatchingService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<IReadOnlyList<ConnectorFoodEntry>> ImportAsync(
+        string userId,
         IEnumerable<ConnectorFoodEntryImport> imports,
         CancellationToken cancellationToken = default
     )
@@ -166,6 +170,26 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Process new entries for meal matching
+        var newEntryIds = results
+            .Where(r => r.Status == ConnectorFoodEntryStatus.Pending)
+            .Select(r => r.Id)
+            .ToList();
+
+        if (newEntryIds.Count > 0)
+        {
+            try
+            {
+                await _mealMatchingService.ProcessNewFoodEntriesAsync(userId, newEntryIds, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process food entries for meal matching");
+                // Don't fail the import if matching fails
+            }
+        }
+
         return results;
     }
 

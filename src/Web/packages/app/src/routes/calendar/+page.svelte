@@ -11,6 +11,7 @@
     Play,
     CheckCircle,
     CalendarClock,
+    Check,
   } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
   import { getPunchCardData } from "$lib/data/month-to-month.remote";
@@ -30,11 +31,30 @@
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
   import CalendarSkeleton from "$lib/components/calendar/CalendarSkeleton.svelte";
   import DayStackedBar from "$lib/components/calendar/DayStackedBar.svelte";
+  import DayGlucoseProfile from "$lib/components/calendar/DayGlucoseProfile.svelte";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import { TrackerCompletionDialog } from "$lib/components/trackers";
 
   // Infer DayStats type from the query result
   type DayStats = NonNullable<
     Awaited<ReturnType<typeof getPunchCardData>>
   >["months"][number]["days"][number];
+
+  // View mode: 'tir' for Time in Range bars, 'profile' for glucose line charts
+  type ViewMode = "tir" | "profile";
+  let viewMode = $state<ViewMode>(
+    (typeof localStorage !== "undefined" &&
+      (localStorage.getItem("calendar-view-mode") as ViewMode)) ||
+      "tir"
+  );
+
+  // Persist view mode preference
+  function setViewMode(mode: ViewMode) {
+    viewMode = mode;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("calendar-view-mode", mode);
+    }
+  }
 
   // Initialize viewDate from URL params or use current date
   let viewDate = $state(
@@ -128,11 +148,6 @@
   const unitLabel = $derived(getUnitLabel(units));
 
   // Colors for glucose distribution (using CSS variables for theme support)
-  const GLUCOSE_COLORS = {
-    low: "var(--glucose-low)",
-    inRange: "var(--glucose-in-range)",
-    high: "var(--glucose-high)",
-  };
 
   // Day of week names
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -222,14 +237,6 @@
     return grid;
   });
 
-  // Check if a day is complete (has full day of data)
-  function isDayComplete(day: DayStats): boolean {
-    // Consider a day "complete" if we have a reasonable amount of readings
-    // 288 readings = 1 reading per 5 minutes for 24 hours
-    // We'll consider 70% coverage as "complete"
-    return day.totalReadings >= 200; // ~70% of 288
-  }
-
   // Check if a day is today
   function isToday(date: string): boolean {
     return date === new Date().toISOString().split("T")[0];
@@ -259,7 +266,10 @@
   // Calculate month summary from backend data
   const monthSummary = $derived.by(() => {
     const days = Array.from(daysData.days.values());
-    return days.reduce(
+    const daysWithData = days.filter((d) => d.totalReadings > 0);
+    const dayCount = daysWithData.length;
+
+    const totals = days.reduce(
       (acc, d) => ({
         readings: acc.readings + d.totalReadings,
         inRange: acc.inRange + d.inRangeCount,
@@ -267,9 +277,35 @@
         high: acc.high + d.highCount,
         carbs: acc.carbs + d.totalCarbs,
         insulin: acc.insulin + d.totalInsulin,
+        glucose: acc.glucose + (d.averageGlucose > 0 ? d.averageGlucose : 0),
+        glucoseDays: acc.glucoseDays + (d.averageGlucose > 0 ? 1 : 0),
       }),
-      { readings: 0, inRange: 0, low: 0, high: 0, carbs: 0, insulin: 0 }
+      {
+        readings: 0,
+        inRange: 0,
+        low: 0,
+        high: 0,
+        carbs: 0,
+        insulin: 0,
+        glucose: 0,
+        glucoseDays: 0,
+      }
     );
+
+    return {
+      ...totals,
+      dayCount,
+      avgCarbs: dayCount > 0 ? totals.carbs / dayCount : 0,
+      avgInsulin: dayCount > 0 ? totals.insulin / dayCount : 0,
+      avgGlucose:
+        totals.glucoseDays > 0 ? totals.glucose / totals.glucoseDays : 0,
+      inRangePercent:
+        totals.readings > 0 ? (totals.inRange / totals.readings) * 100 : 0,
+      lowPercent:
+        totals.readings > 0 ? (totals.low / totals.readings) * 100 : 0,
+      highPercent:
+        totals.readings > 0 ? (totals.high / totals.readings) * 100 : 0,
+    };
   });
 
   // Tracker helpers
@@ -396,6 +432,44 @@
       minute: "2-digit",
     });
   }
+
+  // Completion dialog state
+  let isCompletionDialogOpen = $state(false);
+  let completingInstance = $state<TrackerInstanceDto | null>(null);
+  let completingDefinition = $state<TrackerDefinitionDto | null>(null);
+  let completingDefaultDate = $state<string | null>(null);
+
+  // Track which popover is open (by instance ID + date)
+  let openPopoverId = $state<string | null>(null);
+
+  function openCompletionDialog(
+    instance: TrackerInstanceDto,
+    def: TrackerDefinitionDto | undefined,
+    defaultDate: string
+  ) {
+    // Close any open popover first
+    openPopoverId = null;
+    completingInstance = instance;
+    completingDefinition = def ?? null;
+    completingDefaultDate = defaultDate;
+    isCompletionDialogOpen = true;
+  }
+
+  function handleCompletionDialogClose() {
+    isCompletionDialogOpen = false;
+    completingInstance = null;
+    completingDefinition = null;
+    completingDefaultDate = null;
+  }
+
+  function handleCompletionComplete() {
+    isCompletionDialogOpen = false;
+    completingInstance = null;
+    completingDefinition = null;
+    completingDefaultDate = null;
+    // Refresh tracker data by invalidating the page
+    goto(page.url.toString(), { invalidateAll: true });
+  }
 </script>
 
 {#await punchCardQuery}
@@ -432,49 +506,50 @@
         </div>
       </div>
 
-      <!-- Legend -->
+      <!-- Legend and View Toggle -->
       <div class="flex items-center justify-between px-4 pb-3">
         <div class="flex items-center gap-6">
+          <!-- View Mode Toggle -->
+          <ToggleGroup.Root
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => value && setViewMode(value as ViewMode)}
+            class="border rounded-md"
+          >
+            <ToggleGroup.Item value="tir" class="text-xs px-3">
+              TIR
+            </ToggleGroup.Item>
+            <ToggleGroup.Item value="profile" class="text-xs px-3">
+              Profile
+            </ToggleGroup.Item>
+          </ToggleGroup.Root>
+
           <!-- Glucose colors -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-1.5">
-              <div
-                class="h-3 w-3 rounded"
-                style="background-color: {GLUCOSE_COLORS.inRange}"
-              ></div>
+              <div class="h-3 w-3 rounded bg-glucose-in-range"></div>
               <span class="text-sm">In Range</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <div
-                class="h-3 w-3 rounded"
-                style="background-color: {GLUCOSE_COLORS.low}"
-              ></div>
+              <div class="h-3 w-3 rounded bg-glucose-low"></div>
               <span class="text-sm">Low</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <div
-                class="h-3 w-3 rounded"
-                style="background-color: {GLUCOSE_COLORS.high}"
-              ></div>
+              <div class="h-3 w-3 rounded bg-glucose-high"></div>
               <span class="text-sm">High</span>
             </div>
           </div>
-          <!-- Size explanation -->
-          <div
-            class="flex items-center gap-3 text-xs text-muted-foreground border-l pl-4"
-          >
-            <span>Width = Carbs</span>
-            <span>·</span>
-            <span>Height = Insulin</span>
-            <span>·</span>
-            <span class="flex items-center gap-1">
-              <span
-                class="w-2 h-2 rounded-full"
-                style="background: oklch(0.75 0.15 85);"
-              ></span>
-              Optimal ratio
-            </span>
-          </div>
+
+          <!-- Mode-specific explanation -->
+          {#if viewMode === "profile"}
+            <div
+              class="flex items-center gap-3 text-xs text-muted-foreground border-l pl-4"
+            >
+              <span>Daily glucose profile</span>
+              <span>·</span>
+              <span>Green band = target range</span>
+            </div>
+          {/if}
         </div>
         <div class="text-sm text-muted-foreground">
           Click any day to view detailed report
@@ -487,7 +562,7 @@
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex items-center justify-center">
-            <div class="text-muted-foreground">Loading tracker data...</div>
+            <div class="text-muted-foreground">Loading data...</div>
           </Card.Content>
         </Card.Root>
       </div>
@@ -526,18 +601,16 @@
                       : []}
                     <div class={getCellClasses(day)}>
                       {#if day && "date" in day && day.totalReadings > 0}
-                        {@const complete = isDayComplete(day)}
-
                         <!-- Day number in corner -->
                         <span
-                          class="absolute top-1 left-2 text-xs text-muted-foreground font-medium"
+                          class="absolute top-1 left-2 text-xs text-muted-foreground font-medium z-10"
                         >
                           {new Date(day.date).getDate()}
                         </span>
 
                         <!-- Tracker icons in top-right corner -->
                         {#if dayTrackerEvents.length > 0}
-                          <div class="absolute top-1 right-1 flex gap-0.5">
+                          <div class="absolute top-1 right-1 flex gap-0.5 z-10">
                             {#each dayTrackerEvents as event}
                               {@const def = getDefinition(
                                 event.instance,
@@ -552,7 +625,12 @@
                               {@const startTime = formatTrackerStartTime(
                                 event.instance.startedAt
                               )}
-                              <Popover.Root>
+                              {@const popoverId = `${event.instance.id}-${event.date}`}
+                              <Popover.Root
+                                open={openPopoverId === popoverId}
+                                onOpenChange={(open) =>
+                                  (openPopoverId = open ? popoverId : null)}
+                              >
                                 <Popover.Trigger>
                                   {#snippet child({ props })}
                                     <button
@@ -635,6 +713,20 @@
                                             event.instance.ageHours
                                           )}
                                         </div>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          class="mt-2 w-full h-7 text-xs"
+                                          onclick={() =>
+                                            openCompletionDialog(
+                                              event.instance,
+                                              def,
+                                              event.date
+                                            )}
+                                        >
+                                          <Check class="h-3 w-3 mr-1" />
+                                          Complete
+                                        </Button>
                                       {/if}
                                     </div>
                                   </div>
@@ -644,145 +736,118 @@
                           </div>
                         {/if}
 
-                        {#if complete}
-                          <!-- Show stacked bar chart for complete days -->
-                          <Tooltip.Root>
-                            <Tooltip.Trigger>
-                              {#snippet child({ props })}
-                                <div {...props}>
+                        <!-- Show chart based on view mode -->
+                        <Tooltip.Root>
+                          <Tooltip.Trigger>
+                            {#snippet child({ props })}
+                              {#if viewMode === "tir"}
+                                <div
+                                  {...props}
+                                  class="absolute inset-0 p-2 pt-6"
+                                >
                                   <DayStackedBar
                                     lowPercent={day.lowPercent}
                                     inRangePercent={day.inRangePercent}
                                     highPercent={day.highPercent}
-                                    totalCarbs={day.totalCarbs}
-                                    totalInsulin={day.totalInsulin}
-                                    maxCarbs={daysData.maxCarbs}
-                                    maxInsulin={daysData.maxInsulin}
                                     onclick={() => handleDayClick(day)}
                                   />
                                 </div>
-                              {/snippet}
-                            </Tooltip.Trigger>
-                            <Tooltip.Content
-                              side="top"
-                              class="bg-card text-card-foreground border shadow-lg p-3"
-                            >
-                              <div class="space-y-1.5">
-                                <div class="font-medium text-sm">
-                                  {new Date(day.date).toLocaleDateString(
-                                    undefined,
-                                    {
-                                      weekday: "long",
-                                      month: "short",
-                                      day: "numeric",
-                                    }
+                              {:else}
+                                <div {...props} class="absolute inset-0">
+                                  <DayGlucoseProfile
+                                    entries={day.entries}
+                                    onclick={() => handleDayClick(day)}
+                                  />
+                                </div>
+                              {/if}
+                            {/snippet}
+                          </Tooltip.Trigger>
+                          <Tooltip.Content
+                            side="top"
+                            class="bg-card text-card-foreground border shadow-lg p-3"
+                          >
+                            <div class="space-y-1.5">
+                              <div class="font-medium text-sm">
+                                {new Date(day.date).toLocaleDateString(
+                                  undefined,
+                                  {
+                                    weekday: "long",
+                                    month: "short",
+                                    day: "numeric",
+                                  }
+                                )}
+                              </div>
+                              <div
+                                class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs"
+                              >
+                                <div class="flex items-center gap-1.5">
+                                  <span
+                                    class="w-2 h-2 rounded-full bg-glucose-in-range"
+                                  ></span>
+                                  <span class="text-muted-foreground">
+                                    In Range:
+                                  </span>
+                                </div>
+                                <span class="font-medium">
+                                  {day.inRangePercent.toFixed(1)}%
+                                </span>
+                                <div class="flex items-center gap-1.5">
+                                  <span
+                                    class="w-2 h-2 rounded-full bg-glucose-low"
+                                  ></span>
+                                  <span class="text-muted-foreground">
+                                    Low:
+                                  </span>
+                                </div>
+                                <span class="font-medium">
+                                  {day.lowPercent.toFixed(1)}%
+                                </span>
+                                <div class="flex items-center gap-1.5">
+                                  <span
+                                    class="w-2 h-2 rounded-full bg-glucose-high"
+                                  ></span>
+                                  <span class="text-muted-foreground">
+                                    High:
+                                  </span>
+                                </div>
+                                <span class="font-medium">
+                                  {day.highPercent.toFixed(1)}%
+                                </span>
+                              </div>
+                              <div
+                                class="border-t pt-1.5 mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs"
+                              >
+                                <span class="text-muted-foreground">
+                                  Carbs:
+                                </span>
+                                <span class="font-medium">
+                                  {day.totalCarbs.toFixed(0)}g
+                                </span>
+                                <span class="text-muted-foreground">
+                                  Insulin:
+                                </span>
+                                <span class="font-medium">
+                                  {day.totalInsulin.toFixed(1)}U
+                                </span>
+                                <span class="text-muted-foreground">
+                                  Avg Glucose:
+                                </span>
+                                <span class="font-medium">
+                                  {formatGlucoseValue(
+                                    day.averageGlucose,
+                                    units
                                   )}
-                                </div>
-                                <div
-                                  class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs"
-                                >
-                                  <div class="flex items-center gap-1.5">
-                                    <span
-                                      class="w-2 h-2 rounded-full"
-                                      style="background-color: {GLUCOSE_COLORS.inRange}"
-                                    ></span>
-                                    <span class="text-muted-foreground">
-                                      In Range:
-                                    </span>
-                                  </div>
-                                  <span class="font-medium">
-                                    {day.inRangePercent.toFixed(1)}%
-                                  </span>
-                                  <div class="flex items-center gap-1.5">
-                                    <span
-                                      class="w-2 h-2 rounded-full"
-                                      style="background-color: {GLUCOSE_COLORS.low}"
-                                    ></span>
-                                    <span class="text-muted-foreground">
-                                      Low:
-                                    </span>
-                                  </div>
-                                  <span class="font-medium">
-                                    {day.lowPercent.toFixed(1)}%
-                                  </span>
-                                  <div class="flex items-center gap-1.5">
-                                    <span
-                                      class="w-2 h-2 rounded-full"
-                                      style="background-color: {GLUCOSE_COLORS.high}"
-                                    ></span>
-                                    <span class="text-muted-foreground">
-                                      High:
-                                    </span>
-                                  </div>
-                                  <span class="font-medium">
-                                    {day.highPercent.toFixed(1)}%
-                                  </span>
-                                </div>
-                                <div
-                                  class="border-t pt-1.5 mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs"
-                                >
-                                  <span class="text-muted-foreground">
-                                    Carbs:
-                                  </span>
-                                  <span class="font-medium">
-                                    {day.totalCarbs.toFixed(0)}g
-                                  </span>
-                                  <span class="text-muted-foreground">
-                                    Insulin:
-                                  </span>
-                                  <span class="font-medium">
-                                    {day.totalInsulin.toFixed(1)}U
-                                  </span>
-                                  <span class="text-muted-foreground">
-                                    Avg Glucose:
-                                  </span>
-                                  <span class="font-medium">
-                                    {formatGlucoseValue(
-                                      day.averageGlucose,
-                                      units
-                                    )}
-                                    {unitLabel}
-                                  </span>
-                                </div>
-                                <div
-                                  class="text-xs text-muted-foreground italic pt-1"
-                                >
-                                  Click to view full day report
-                                </div>
+                                  {unitLabel}
+                                </span>
                               </div>
-                            </Tooltip.Content>
-                          </Tooltip.Root>
-                        {:else}
-                          <!-- Partial day - show small indicator -->
-                          <Tooltip.Root>
-                            <Tooltip.Trigger>
-                              {#snippet child({ props })}
-                                <button
-                                  {...props}
-                                  class="cursor-pointer hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-primary rounded-full opacity-60"
-                                  onclick={() => handleDayClick(day)}
-                                >
-                                  <div
-                                    class="w-8 h-8 rounded-full border-2 border-dashed flex items-center justify-center text-xs text-muted-foreground"
-                                    style="border-color: {GLUCOSE_COLORS.inRange}"
-                                  >
-                                    {Math.round(
-                                      (day.totalReadings / 288) * 100
-                                    )}%
-                                  </div>
-                                </button>
-                              {/snippet}
-                            </Tooltip.Trigger>
-                            <Tooltip.Content side="top">
-                              <div class="text-sm">
-                                <div class="font-medium">Partial Data</div>
-                                <div class="text-muted-foreground">
-                                  {day.totalReadings} of ~288 readings
-                                </div>
+                              <div
+                                class="text-xs text-muted-foreground italic pt-1"
+                              >
+                                Click to view full day report
                               </div>
-                            </Tooltip.Content>
-                          </Tooltip.Root>
-                        {/if}
+                            </div>
+                          </Tooltip.Content>
+                        </Tooltip.Root>
                       {:else if day && "empty" in day}
                         <!-- Day with no data -->
                         <span
@@ -807,7 +872,12 @@
                               {@const startTime = formatTrackerStartTime(
                                 event.instance.startedAt
                               )}
-                              <Popover.Root>
+                              {@const popoverId = `${event.instance.id}-${event.date}`}
+                              <Popover.Root
+                                open={openPopoverId === popoverId}
+                                onOpenChange={(open) =>
+                                  (openPopoverId = open ? popoverId : null)}
+                              >
                                 <Popover.Trigger>
                                   {#snippet child({ props })}
                                     <button
@@ -862,6 +932,20 @@
                                         >
                                           Due on this day
                                         </span>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          class="mt-2 w-full h-7 text-xs"
+                                          onclick={() =>
+                                            openCompletionDialog(
+                                              event.instance,
+                                              def,
+                                              event.date
+                                            )}
+                                        >
+                                          <Check class="h-3 w-3 mr-1" />
+                                          Complete
+                                        </Button>
                                       {/if}
                                     </div>
                                   </div>
@@ -897,7 +981,12 @@
                               {@const startTime = formatTrackerStartTime(
                                 event.instance.startedAt
                               )}
-                              <Popover.Root>
+                              {@const popoverId = `${event.instance.id}-${event.date}`}
+                              <Popover.Root
+                                open={openPopoverId === popoverId}
+                                onOpenChange={(open) =>
+                                  (openPopoverId = open ? popoverId : null)}
+                              >
                                 <Popover.Trigger>
                                   {#snippet child({ props })}
                                     <button
@@ -952,6 +1041,20 @@
                                         >
                                           Due on this day
                                         </span>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          class="mt-2 w-full h-7 text-xs"
+                                          onclick={() =>
+                                            openCompletionDialog(
+                                              event.instance,
+                                              def,
+                                              event.date
+                                            )}
+                                        >
+                                          <Check class="h-3 w-3 mr-1" />
+                                          Complete
+                                        </Button>
                                       {/if}
                                     </div>
                                   </div>
@@ -978,35 +1081,35 @@
                 class="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4"
               >
                 <div class="text-center">
-                  <div class="text-2xl font-bold text-green-600">
-                    {monthSummary.readings > 0
-                      ? (
-                          (monthSummary.inRange / monthSummary.readings) *
-                          100
-                        ).toFixed(1)
-                      : 0}%
+                  <div class="text-2xl font-bold text-glucose-in-range">
+                    {monthSummary.inRangePercent.toFixed(1)}%
                   </div>
-                  <div class="text-sm text-muted-foreground">Time in Range</div>
+                  <div class="text-sm text-muted-foreground">Avg TIR</div>
                 </div>
                 <div class="text-center">
                   <div class="text-2xl font-bold">
-                    {monthSummary.readings.toLocaleString()}
+                    {formatGlucoseValue(monthSummary.avgGlucose, units)}
+                    <span class="text-sm font-normal text-muted-foreground">
+                      {unitLabel}
+                    </span>
+                  </div>
+                  <div class="text-sm text-muted-foreground">Avg Glucose</div>
+                </div>
+                <div class="text-center">
+                  <div class="text-2xl font-bold">
+                    {monthSummary.avgCarbs.toFixed(0)}g
                   </div>
                   <div class="text-sm text-muted-foreground">
-                    Total Readings
+                    Avg Daily Carbs
                   </div>
                 </div>
                 <div class="text-center">
                   <div class="text-2xl font-bold">
-                    {monthSummary.carbs.toFixed(0)}g
+                    {monthSummary.avgInsulin.toFixed(1)}U
                   </div>
-                  <div class="text-sm text-muted-foreground">Total Carbs</div>
-                </div>
-                <div class="text-center">
-                  <div class="text-2xl font-bold">
-                    {monthSummary.insulin.toFixed(1)}U
+                  <div class="text-sm text-muted-foreground">
+                    Avg Daily Insulin
                   </div>
-                  <div class="text-sm text-muted-foreground">Total Insulin</div>
                 </div>
               </div>
             {/if}
@@ -1055,3 +1158,15 @@
     </Card.Root>
   </div>
 {/await}
+
+<TrackerCompletionDialog
+  bind:open={isCompletionDialogOpen}
+  instanceId={completingInstance?.id ?? null}
+  instanceName={completingInstance?.definitionName ?? "tracker"}
+  category={completingDefinition?.category}
+  definitionId={completingInstance?.definitionId}
+  completionEventType={completingDefinition?.completionEventType}
+  defaultCompletedAt={completingDefaultDate ?? undefined}
+  onClose={handleCompletionDialogClose}
+  onComplete={handleCompletionComplete}
+/>

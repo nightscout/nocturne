@@ -39,7 +39,7 @@ export const getTreatments = query(entriesSchema, async (props) => {
       $lte: to.toISOString(),
     },
   });
-  const treatments: Treatment[] = await apiClient.treatments.getTreatments2(treatmentsQuery);
+  const treatments: Treatment[] = await apiClient.treatments.getTreatments(undefined, undefined, undefined, treatmentsQuery);
   return treatments;
 });
 
@@ -65,7 +65,7 @@ export const getStats = query(entriesSchema, async (props) => {
 
   const [entries, treatments] = await Promise.all([
     apiClient.entries.getEntries2(entriesQuery),
-    apiClient.treatments.getTreatments2(treatmentsQuery),
+    apiClient.treatments.getTreatments(undefined, undefined, undefined, treatmentsQuery),
   ]);
 
   const stats = apiClient.statistics.analyzeGlucoseData({

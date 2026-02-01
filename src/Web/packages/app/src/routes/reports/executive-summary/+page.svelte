@@ -25,25 +25,19 @@
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 14 days is standard for executive summary reports
+  const reportsParams = requireDateParamsContext(14);
 
-  // Use resource for controlled reactivity - prevents excessive re-fetches
-  const reportsResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getReportsData(dateRangeInput);
-    },
-    { debounce: 100 }
+  // Create resource with automatic layout registration
+  const reportsResource = contextResource(
+    () => getReportsData(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading Executive Summary" }
   );
-
-  // Loading state
-  const isLoading = $derived(reportsResource.loading);
 
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
@@ -148,32 +142,7 @@
   />
 </svelte:head>
 
-{#if isLoading && !reportsResource.current}
-  <ReportsSkeleton />
-{:else if reportsResource.error}
-  <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
-    <Card class="border-2 border-destructive">
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2 text-destructive">
-          <AlertTriangle class="w-5 h-5" />
-          Error Loading Executive Summary
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p class="text-destructive-foreground">
-          {reportsResource.error instanceof Error ? reportsResource.error.message : String(reportsResource.error)}
-        </p>
-        <Button
-          variant="outline"
-          class="mt-4"
-          onclick={() => reportsResource.refetch()}
-        >
-          Try again
-        </Button>
-      </CardContent>
-    </Card>
-  </div>
-{:else}
+{#if reportsResource.current}
   <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
     <!-- Print-Friendly Header -->
     <div class="print:block hidden text-center mb-8">

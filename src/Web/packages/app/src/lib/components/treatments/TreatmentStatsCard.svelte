@@ -37,7 +37,6 @@
   );
 
   // Calculate daily averages
-  let dailyAvgInsulin = $derived(totalInsulin / daysInRange);
   let dailyAvgCarbs = $derived(totalCarbs / daysInRange);
   let dailyAvgBoluses = $derived(bolusCount / daysInRange);
 

@@ -62,15 +62,16 @@ public interface IStateSpanService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get temp basals as Treatments for v1-v3 API compatibility
+    /// Get basal deliveries as Treatments for v1-v3 API compatibility.
+    /// Converts BasalDelivery StateSpans to Treatment objects with "Temp Basal" event type.
     /// </summary>
     /// <param name="from">Optional start time in milliseconds since Unix epoch</param>
     /// <param name="to">Optional end time in milliseconds since Unix epoch</param>
     /// <param name="count">Maximum number of treatments to return</param>
     /// <param name="skip">Number of treatments to skip for pagination</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of treatments representing temp basals</returns>
-    Task<IEnumerable<Treatment>> GetTempBasalsAsTreatmentsAsync(
+    /// <returns>Collection of treatments representing basal deliveries</returns>
+    Task<IEnumerable<Treatment>> GetBasalDeliveriesAsTreatmentsAsync(
         long? from = null,
         long? to = null,
         int count = 100,
@@ -78,12 +79,12 @@ public interface IStateSpanService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Create a temp basal from a Treatment (v1-v3 API ingest)
+    /// Create a basal delivery from a Treatment (v1-v3 API ingest)
     /// </summary>
-    /// <param name="treatment">Treatment to convert to a temp basal state span</param>
+    /// <param name="treatment">Treatment to convert to a basal delivery state span</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created state span</returns>
-    Task<StateSpan> CreateTempBasalFromTreatmentAsync(
+    Task<StateSpan> CreateBasalDeliveryFromTreatmentAsync(
         Treatment treatment,
         CancellationToken cancellationToken = default);
 

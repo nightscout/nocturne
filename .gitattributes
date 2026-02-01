@@ -1,3 +1,6 @@
 * text=auto eol=lf
 *.{cmd,[cC][mM][dD]} text eol=crlf
 *.{bat,[bB][aA][tT]} text eol=crlf
+
+# Mark generated API client as generated (collapses diffs in GitHub PRs)
+src/Web/packages/app/src/lib/api/generated/** linguist-generated=true

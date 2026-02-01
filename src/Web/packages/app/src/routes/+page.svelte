@@ -8,29 +8,22 @@
   } from "$lib/components/dashboard";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
-  import {
-    WidgetId,
-    WidgetPlacement,
-  } from "$lib/api/generated/nocturne-api-client";
-  import {
-    isWidgetEnabled,
-    getEnabledWidgetsByPlacement,
-  } from "$lib/types/dashboard-widgets";
+  import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
+  import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+  import { isWidgetEnabled } from "$lib/types/dashboard-widgets";
 
   const realtimeStore = getRealtimeStore();
   const settingsStore = getSettingsStore();
 
-  // Get widgets array from settings
+  // Get widgets array from settings (for main section visibility)
   const widgets = $derived(settingsStore.features?.widgets);
 
   // Helper to check if a main section is enabled
   const isMainEnabled = (id: (typeof WidgetId)[keyof typeof WidgetId]) =>
     isWidgetEnabled(widgets, id);
 
-  // Get enabled top widgets for the widget grid
-  const topWidgets = $derived(
-    getEnabledWidgetsByPlacement(widgets, WidgetPlacement.Top)
-  );
+  // Get enabled top widgets from persisted appearance store
+  const topWidgets = $derived(dashboardTopWidgets.current);
 
   // Get focusHours setting for chart default time range
   const focusHours = $derived(settingsStore.features?.display?.focusHours ?? 3);

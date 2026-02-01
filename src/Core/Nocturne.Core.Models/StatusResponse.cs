@@ -80,6 +80,26 @@ public class StatusResponse
     public bool? CareportalEnabled { get; set; }
 
     /// <summary>
+    /// Bolus calculator enabled status
+    /// </summary>
+    [JsonPropertyName("boluscalcEnabled")]
+    public bool? BoluscalcEnabled { get; set; }
+
+    /// <summary>
+    /// Authorized status (null when unauthenticated).
+    /// Always serialized for Nightscout compatibility.
+    /// </summary>
+    [JsonPropertyName("authorized")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public object? Authorized { get; set; }
+
+    /// <summary>
+    /// Runtime state of the server
+    /// </summary>
+    [JsonPropertyName("runtimeState")]
+    public string? RuntimeState { get; set; }
+
+    /// <summary>
     /// Server head/git info
     /// </summary>
     [JsonPropertyName("head")]

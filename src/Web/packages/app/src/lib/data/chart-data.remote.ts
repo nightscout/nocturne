@@ -5,6 +5,7 @@
 import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod';
 import { error } from '@sveltejs/kit';
+import { type BasalPoint } from '$lib/api';
 
 /**
  * Input schema for chart data queries
@@ -23,18 +24,6 @@ export type ChartDataInput = z.infer<typeof chartDataSchema>;
 export interface TimeSeriesPoint {
 	time: Date;
 	value: number;
-}
-
-/**
- * Basal rate point with temp indicator
- */
-export interface BasalPoint {
-	time: Date;
-	/** Effective basal rate (includes temp basals and combo bolus) */
-	rate: number;
-	/** Scheduled basal rate from profile (without temp basal modifications) */
-	scheduledRate: number;
-	isTemp: boolean;
 }
 
 /**
@@ -75,12 +64,7 @@ export const getChartData = query(chartDataSchema, async ({ startTime, endTime, 
 				time: new Date(p.timestamp ?? 0),
 				value: p.value ?? 0,
 			})) ?? [],
-			basalSeries: data.basalSeries?.map((p) => ({
-				time: new Date(p.timestamp ?? 0),
-				rate: p.rate ?? 0,
-				scheduledRate: p.scheduledRate ?? p.rate ?? 0,
-				isTemp: p.isTemp ?? false,
-			})) ?? [],
+			basalSeries: data.basalSeries ?? [],
 			defaultBasalRate: data.defaultBasalRate ?? 1.0,
 			maxBasalRate: data.maxBasalRate ?? 3.0,
 			maxIob: data.maxIob ?? 5.0,

@@ -18,7 +18,7 @@
 
   <!-- Overall Status Cards Skeleton (4-card grid) -->
   <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-    {#each Array(4) as _}
+    {#each Array(4) as _, i (i)}
       <Card>
         <CardHeader
           class="flex flex-row items-center justify-between space-y-0 pb-2"
@@ -43,7 +43,7 @@
         <Skeleton class="h-4 w-64" />
       </CardHeader>
       <CardContent class="space-y-4">
-        {#each Array(4) as _}
+        {#each Array(4) as _, i (i)}
           <div class="flex justify-between items-center">
             <Skeleton class="h-4 w-28" />
             <Skeleton class="h-6 w-20 rounded-full" />
@@ -59,7 +59,7 @@
         <Skeleton class="h-4 w-56" />
       </CardHeader>
       <CardContent class="space-y-3">
-        {#each Array(5) as _}
+        {#each Array(5) as _, i (i)}
           <div class="flex items-center justify-between p-2 rounded-lg border">
             <div class="flex-1 space-y-2">
               <Skeleton class="h-4 w-40" />
@@ -85,7 +85,7 @@
       <Skeleton class="h-4 w-48" />
     </CardHeader>
     <CardContent class="space-y-3">
-      {#each Array(5) as _}
+      {#each Array(5) as _, i (i)}
         <div class="flex items-center justify-between p-3 rounded-lg border">
           <div class="flex-1 space-y-2">
             <div class="flex items-center gap-2">

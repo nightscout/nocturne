@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -21,14 +22,23 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class DebugControllerTests
 {
     private readonly Mock<IPostgreSqlService> _mockPostgreSqlService;
+    private readonly Mock<IInAppNotificationService> _mockNotificationService;
+    private readonly Mock<IWebHostEnvironment> _mockEnvironment;
     private readonly Mock<ILogger<DebugController>> _mockLogger;
     private readonly DebugController _controller;
 
     public DebugControllerTests()
     {
         _mockPostgreSqlService = new Mock<IPostgreSqlService>();
+        _mockNotificationService = new Mock<IInAppNotificationService>();
+        _mockEnvironment = new Mock<IWebHostEnvironment>();
         _mockLogger = new Mock<ILogger<DebugController>>();
-        _controller = new DebugController(_mockPostgreSqlService.Object, _mockLogger.Object);
+        _controller = new DebugController(
+            _mockPostgreSqlService.Object,
+            _mockNotificationService.Object,
+            _mockEnvironment.Object,
+            _mockLogger.Object
+        );
 
         // Set up HttpContext for the controller
         var httpContext = new DefaultHttpContext();

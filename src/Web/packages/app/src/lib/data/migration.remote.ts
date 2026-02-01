@@ -34,7 +34,7 @@ export const startMigration = command(StartMigrationRequestSchema, async (reques
 
   try {
     const result = await apiClient.migration.startMigration(request as StartMigrationRequest);
-    await getMigrationHistory.refresh();
+    // Note: query refresh is handled by the caller
     return result;
   } catch (err) {
     console.error("Error starting migration:", err);
@@ -71,7 +71,7 @@ export const cancelMigration = command(
 
     try {
       await apiClient.migration.cancelMigration(jobId);
-      await getMigrationHistory.refresh();
+      // Note: query refresh is handled by the caller
     } catch (err) {
       console.error("Error cancelling migration:", err);
       throw error(500, "Failed to cancel migration");

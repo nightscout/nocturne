@@ -22,52 +22,49 @@
     AlertTriangle,
     RefreshCw,
   } from "lucide-svelte";
-  import {
-    type BatteryStatistics,
-    type ChargeCycle,
-    type BatteryReading,
-  } from "$lib/api";
+  import type { BatteryStatistics, ChargeCycle, DeviceStatus } from "$lib/api";
   import { getBatteryReportData } from "$lib/data/battery.remote";
-  import { onMount } from "svelte";
+  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
-  // State
-  let statistics = $state<BatteryStatistics[]>([]);
-  let cycles = $state<ChargeCycle[]>([]);
-  let readings = $state<BatteryReading[]>([]);
-  let loading = $state(true);
-  let error = $state<string | null>(null);
+  // Get shared date params from context (set by reports layout)
+  // Default: 7 days is good for battery analysis (typical charge cycle period)
+  const reportsParams = requireDateParamsContext(7);
+
+  // State for device selection
   let selectedDevice = $state<string | null>(null);
-  let dateRange = $state({
-    from: Date.now() - 7 * 24 * 60 * 60 * 1000, // 7 days ago
-    to: Date.now(),
+
+  // Calculate date range in milliseconds from the params
+  const dateRangeMillis = $derived({
+    from: new Date(reportsParams.dateRangeInput.from ?? new Date().toISOString()).getTime(),
+    to: new Date(reportsParams.dateRangeInput.to ?? new Date().toISOString()).getTime(),
   });
 
-  async function fetchData() {
-    loading = true;
-    error = null;
+  // Create resource with automatic layout registration
+  const batteryResource = contextResource(
+    () => getBatteryReportData({
+      device: selectedDevice,
+      from: dateRangeMillis.from,
+      to: dateRangeMillis.to,
+      cycleLimit: 50,
+    }),
+    { errorTitle: "Error Loading Battery Report" }
+  );
 
-    try {
-      const result = await getBatteryReportData({
-        device: selectedDevice,
-        from: dateRange.from,
-        to: dateRange.to,
-        cycleLimit: 50,
-      });
+  // Derived state from resource with explicit types
+  const statistics = $derived<BatteryStatistics[]>(batteryResource.current?.statistics ?? []);
+  const cycles = $derived<ChargeCycle[]>(batteryResource.current?.cycles ?? []);
+  const readings = $derived<DeviceStatus[]>(batteryResource.current?.readings ?? []);
 
-      statistics = result.statistics;
-      cycles = result.cycles;
-      readings = result.readings;
-    } catch (e) {
-      console.error("Failed to fetch battery data:", e);
-      error = "Failed to load battery report data";
-    } finally {
-      loading = false;
-    }
+  // Helper for date range display
+  const dateRange = $derived({
+    from: dateRangeMillis.from,
+    to: dateRangeMillis.to,
+  });
+
+  function fetchData() {
+    batteryResource.refetch();
   }
-
-  onMount(() => {
-    fetchData();
-  });
 
   // Helper functions
   function formatDuration(minutes?: number | null): string {
@@ -139,6 +136,7 @@
   />
 </svelte:head>
 
+{#if batteryResource.current}
 <div class="container mx-auto space-y-6 px-4 py-6">
   <!-- Header -->
   <div class="flex items-center justify-between">
@@ -148,8 +146,8 @@
         Device battery statistics and charge cycle history
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={fetchData} disabled={loading}>
-      <RefreshCw class="h-4 w-4 mr-2 {loading ? 'animate-spin' : ''}" />
+    <Button variant="outline" size="sm" onclick={fetchData}>
+      <RefreshCw class="h-4 w-4 mr-2" />
       Refresh
     </Button>
   </div>
@@ -166,25 +164,7 @@
     <span>{readings.length} readings</span>
   </div>
 
-  {#if loading}
-    <div class="flex items-center justify-center h-64">
-      <div class="text-center space-y-4">
-        <div
-          class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"
-        ></div>
-        <p class="text-muted-foreground">Loading battery data...</p>
-      </div>
-    </div>
-  {:else if error}
-    <Card class="border-destructive/50">
-      <CardContent class="pt-6">
-        <div class="flex items-center gap-2 text-destructive">
-          <AlertTriangle class="h-5 w-5" />
-          <span>{error}</span>
-        </div>
-      </CardContent>
-    </Card>
-  {:else if statistics.length === 0}
+  {#if statistics.length === 0}
     <Card>
       <CardContent class="pt-6">
         <div class="text-center py-8">
@@ -483,3 +463,4 @@
     </div>
   {/if}
 </div>
+{/if}

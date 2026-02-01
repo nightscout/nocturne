@@ -101,8 +101,10 @@ public class DeviceStatusServiceTests
             },
         };
 
+        // When find is provided, GetDeviceStatusWithAdvancedFilterAsync is called
         _mockPostgreSqlService
-            .Setup(x => x.GetDeviceStatusAsync(count, skip, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetDeviceStatusWithAdvancedFilterAsync(
+                count, skip, find, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedDeviceStatus);
 
         // Act

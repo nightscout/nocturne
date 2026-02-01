@@ -1,5 +1,8 @@
 using System.Data.Common;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Nocturne.Core.Contracts;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
@@ -14,9 +17,13 @@ public class EntryRepositoryTests : IDisposable
 {
     private readonly DbConnection _connection;
     private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly Mock<IDeduplicationService> _mockDeduplicationService;
+    private readonly Mock<ILogger<EntryRepository>> _mockLogger;
 
     public EntryRepositoryTests()
     {
+        _mockDeduplicationService = new Mock<IDeduplicationService>();
+        _mockLogger = new Mock<ILogger<EntryRepository>>();
         // Create in-memory SQLite database for testing
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
@@ -29,6 +36,43 @@ public class EntryRepositoryTests : IDisposable
         // Create the database schema
         using var context = new NocturneDbContext(_contextOptions);
         context.Database.EnsureCreated();
+
+        // Setup mocks for repository dependencies
+        _mockDeduplicationService = new Mock<IDeduplicationService>();
+        _mockDeduplicationService
+            .Setup(d =>
+                d.GetOrCreateCanonicalIdAsync(
+                    It.IsAny<RecordType>(),
+                    It.IsAny<long>(),
+                    It.IsAny<MatchCriteria>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(Guid.NewGuid());
+        _mockDeduplicationService
+            .Setup(d =>
+                d.LinkRecordAsync(
+                    It.IsAny<Guid>(),
+                    It.IsAny<RecordType>(),
+                    It.IsAny<Guid>(),
+                    It.IsAny<long>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .Returns(Task.CompletedTask);
+
+        _mockLogger = new Mock<ILogger<EntryRepository>>();
+    }
+
+    private EntryRepository CreateRepository(NocturneDbContext context, IQueryParser queryParser)
+    {
+        return new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
     }
 
     #region CRUD Operations Tests
@@ -39,7 +83,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 120.5, type: "sgv");
         var entries = new[] { entry };
@@ -61,7 +110,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -97,7 +151,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 125.0);
         await repository.CreateEntriesAsync(new[] { entry });
@@ -117,13 +176,19 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 130.0);
         await repository.CreateEntriesAsync(new[] { entry });
 
-        // Get the actual entity to check the GUID
-        var entity = await context.Entries.FirstAsync(e => e.OriginalId == entry.Id);
+        // Get the actual entity from the database - when entry.Id is a GUID string,
+        // it becomes the entity's Id but OriginalId is null (only set for MongoDB ObjectIds)
+        var entity = await context.Entries.FirstAsync(e => e.Mgdl == 130.0);
         var guidId = entity.Id.ToString();
 
         // Act
@@ -140,7 +205,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var nonExistentId = Guid.NewGuid().ToString();
 
@@ -157,7 +227,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 120.0);
         await repository.CreateEntriesAsync(new[] { entry });
@@ -194,7 +269,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var nonExistentId = Guid.NewGuid().ToString();
         var entry = CreateTestEntry();
@@ -212,7 +292,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 140.0);
         await repository.CreateEntriesAsync(new[] { entry });
@@ -234,7 +319,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var nonExistentId = Guid.NewGuid().ToString();
 
@@ -255,7 +345,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var entries = new[]
@@ -283,7 +378,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -313,7 +413,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var entries = Enumerable
@@ -348,7 +453,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var entries = new[]
@@ -375,7 +485,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         // Act
         var result = await repository.GetCurrentEntryAsync();
@@ -394,7 +509,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var filterTime = baseTime.AddHours(-1);
@@ -425,7 +545,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var entries = new[]
@@ -459,7 +584,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -486,7 +616,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -514,7 +649,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -541,7 +681,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -568,7 +713,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -595,7 +745,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -613,7 +768,9 @@ public class EntryRepositoryTests : IDisposable
 
         // Assert
         result.Should().HaveCount(3);
-        result.Should().OnlyContain(e => e.Type == "sgv" && (e.Device == "dexcom" || e.Device == "libre"));
+        result
+            .Should()
+            .OnlyContain(e => e.Type == "sgv" && (e.Device == "dexcom" || e.Device == "libre"));
     }
 
     [Fact]
@@ -622,7 +779,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -648,7 +810,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -672,7 +839,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
@@ -704,7 +876,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -730,7 +907,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         // Act
         var count = await repository.CountEntriesAsync();
@@ -749,7 +931,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -776,7 +963,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -810,7 +1002,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         // Act
         var result = await repository.CreateEntriesAsync(Array.Empty<Entry>());
@@ -825,7 +1022,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 120.0);
         entry.Direction = null;
@@ -851,7 +1053,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = new[]
         {
@@ -875,7 +1082,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entry = CreateTestEntry(sgv: 120.0);
         await repository.CreateEntriesAsync(new[] { entry });
@@ -902,7 +1114,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var entries = Enumerable
             .Range(1, 20)
@@ -940,7 +1157,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var largeEntrySet = Enumerable
@@ -982,7 +1204,12 @@ public class EntryRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new EntryRepository(context, queryParser);
+        var repository = new EntryRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var batchSize = 100;
         var entries = Enumerable

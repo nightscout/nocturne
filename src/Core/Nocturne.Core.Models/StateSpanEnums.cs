@@ -29,9 +29,10 @@ public enum StateSpanCategory
     Profile,
 
     /// <summary>
-    /// Temporary basal rate override
+    /// Pump-confirmed basal delivery rate.
+    /// Use metadata.origin to distinguish between Algorithm, Scheduled, Manual, and Suspended.
     /// </summary>
-    TempBasal,
+    BasalDelivery,
 
     /// <summary>
     /// User-annotated sleep period
@@ -163,18 +164,45 @@ public enum ProfileState
 }
 
 /// <summary>
-/// Temp basal states - the actual rate is stored in metadata
+/// Basal delivery states
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<TempBasalState>))]
-public enum TempBasalState
+[JsonConverter(typeof(JsonStringEnumConverter<BasalDeliveryState>))]
+public enum BasalDeliveryState
 {
     /// <summary>
-    /// Temporary basal rate is active (rate in metadata)
+    /// Basal rate is being delivered
     /// </summary>
-    Active,
+    Active
+}
+
+/// <summary>
+/// What initiated the basal delivery rate
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<BasalDeliveryOrigin>))]
+public enum BasalDeliveryOrigin
+{
+    /// <summary>
+    /// Closed-loop algorithm adjusted (CamAPS, Control-IQ, Loop)
+    /// </summary>
+    Algorithm,
 
     /// <summary>
-    /// Temp basal was cancelled early
+    /// Pump's programmed basal schedule
     /// </summary>
-    Cancelled
+    Scheduled,
+
+    /// <summary>
+    /// User-initiated temporary rate
+    /// </summary>
+    Manual,
+
+    /// <summary>
+    /// Delivery suspended (rate = 0)
+    /// </summary>
+    Suspended,
+
+    /// <summary>
+    /// Derived from profile when no pump data available
+    /// </summary>
+    Inferred
 }

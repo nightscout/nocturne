@@ -8,6 +8,8 @@
   import TrackersWidget from "./widgets/TrackersWidget.svelte";
   import TirChartWidget from "./widgets/TirChartWidget.svelte";
   import DailySummaryWidget from "./widgets/DailySummaryWidget.svelte";
+  import ClockWidget from "./widgets/ClockWidget.svelte";
+  import TddWidget from "./widgets/TddWidget.svelte";
 
   interface Props {
     /** Ordered list of widget IDs to display */
@@ -31,12 +33,14 @@
     [WidgetId.Trackers]: TrackersWidget,
     [WidgetId.TirChart]: TirChartWidget,
     [WidgetId.DailySummary]: DailySummaryWidget,
+    [WidgetId.Clock]: ClockWidget,
+    [WidgetId.Tdd]: TddWidget,
   };
 </script>
 
 <div class="@container grid grid-cols-1 @md:grid-cols-3 gap-2 @md:gap-4">
   {#each displayWidgets as widgetId (widgetId)}
-    {@const WidgetComponent = widgetComponents[widgetId]}
+    {@const WidgetComponent = widgetComponents[widgetId] as typeof BgDeltaWidget | undefined}
     {#if WidgetComponent}
       <WidgetComponent />
     {/if}

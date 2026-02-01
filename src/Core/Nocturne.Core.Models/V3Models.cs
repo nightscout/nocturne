@@ -28,9 +28,14 @@ public class V3QueryParameters
     public string? Sort { get; set; }
 
     /// <summary>
-    /// Filter criteria as JsonElement
+    /// Filter criteria as JsonElement (legacy)
     /// </summary>
     public JsonElement? Filter { get; set; }
+
+    /// <summary>
+    /// Parsed filter criteria in Nightscout V3 format (field$operator=value)
+    /// </summary>
+    public List<V3FilterCriteria> FilterCriteria { get; set; } = new();
 
     /// <summary>
     /// If-Modified-Since header value
@@ -41,6 +46,27 @@ public class V3QueryParameters
     /// If-None-Match header value (ETag)
     /// </summary>
     public string? IfNoneMatch { get; set; }
+}
+
+/// <summary>
+/// V3 API filter criteria (field$operator=value format)
+/// </summary>
+public class V3FilterCriteria
+{
+    /// <summary>
+    /// Field name to filter on
+    /// </summary>
+    public string Field { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Filter operator (eq, ne, gt, gte, lt, lte, in, nin, re)
+    /// </summary>
+    public string Operator { get; set; } = "eq";
+
+    /// <summary>
+    /// Value to compare against
+    /// </summary>
+    public object? Value { get; set; }
 }
 
 /// <summary>

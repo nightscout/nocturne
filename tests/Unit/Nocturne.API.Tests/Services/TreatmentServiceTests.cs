@@ -40,7 +40,7 @@ public class TreatmentServiceTests
         _mockCacheConfig.Setup(x => x.Value).Returns(new CacheConfiguration());
         _mockDemoModeService.Setup(x => x.IsEnabled).Returns(false);
         _mockStateSpanService
-            .Setup(x => x.GetTempBasalsAsTreatmentsAsync(
+            .Setup(x => x.GetBasalDeliveriesAsTreatmentsAsync(
                 It.IsAny<long?>(),
                 It.IsAny<long?>(),
                 It.IsAny<int>(),

@@ -5,7 +5,7 @@
 import { randomUUID } from "$lib/utils";
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
-import { StateSpanCategory, type StateSpan, type Entry } from "$lib/api";
+import { StateSpanCategory, BasalDeliveryOrigin, type StateSpan } from "$lib/api";
 
 /**
  * Input schema for time spans data queries - supports date range
@@ -34,6 +34,8 @@ export interface ProcessedSpan {
   percent?: number | null;
   /** Profile name if applicable */
   profileName?: string | null;
+  /** Basal delivery origin if applicable */
+  origin?: BasalDeliveryOrigin | null;
 }
 
 /**
@@ -45,7 +47,6 @@ export interface TimeSpansPageData {
   tempBasalSpans: ProcessedSpan[];
   overrideSpans: ProcessedSpan[];
   activitySpans: ProcessedSpan[];
-  entries: Entry[];
   dateRange: { from: Date; to: Date };
 }
 
@@ -128,19 +129,81 @@ function processSpans(
       const spanEnd = span.endMills ?? rangeEnd;
       return spanEnd > rangeStart && spanStart < rangeEnd;
     })
+    .map((span) => {
+      const profileName = span.metadata?.profileName ?? span.metadata?.name;
+      return {
+        id: span.id ?? randomUUID(),
+        category: span.category ?? StateSpanCategory.PumpMode,
+        state: span.state ?? "Unknown",
+        startTime: new Date(Math.max(span.startMills ?? 0, rangeStart)),
+        endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
+        color: colorFn(span.state ?? ""),
+        metadata: span.metadata,
+        rate: null,
+        percent: null,
+        profileName: typeof profileName === "string" ? profileName : null,
+        origin: null,
+      };
+    });
+}
+
+/**
+ * Parse a numeric value from metadata (handles various JSON types)
+ */
+function parseMetadataNumber(value: unknown): number | null {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+/**
+ * Parse origin string from metadata to BasalDeliveryOrigin enum
+ */
+function parseBasalOrigin(value: unknown): BasalDeliveryOrigin {
+  if (typeof value === "string") {
+    if (value === BasalDeliveryOrigin.Algorithm) return BasalDeliveryOrigin.Algorithm;
+    if (value === BasalDeliveryOrigin.Manual) return BasalDeliveryOrigin.Manual;
+    if (value === BasalDeliveryOrigin.Suspended) return BasalDeliveryOrigin.Suspended;
+    if (value === BasalDeliveryOrigin.Scheduled) return BasalDeliveryOrigin.Scheduled;
+  }
+  return BasalDeliveryOrigin.Scheduled;
+}
+
+/**
+ * Process basal delivery spans - extracts rate and origin from metadata
+ */
+function processBasalSpans(
+  spans: StateSpan[] | null | undefined,
+  rangeStart: number,
+  rangeEnd: number,
+  colorFn: (state: string) => string
+): ProcessedSpan[] {
+  // Handle null/undefined/non-array input
+  if (!spans || !Array.isArray(spans)) {
+    return [];
+  }
+
+  return spans
+    .filter((span) => {
+      const spanStart = span.startMills ?? 0;
+      const spanEnd = span.endMills ?? rangeEnd;
+      return spanEnd > rangeStart && spanStart < rangeEnd;
+    })
     .map((span) => ({
       id: span.id ?? randomUUID(),
-      category: span.category ?? StateSpanCategory.PumpMode,
+      category: span.category ?? StateSpanCategory.BasalDelivery,
       state: span.state ?? "Unknown",
       startTime: new Date(Math.max(span.startMills ?? 0, rangeStart)),
       endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
       color: colorFn(span.state ?? ""),
       metadata: span.metadata,
-      // Extract temp basal rate/percent from metadata
-      rate: (span.metadata?.rate as number) ?? (span.metadata?.absolute as number) ?? null,
-      percent: (span.metadata?.percent as number) ?? null,
-      // Extract profile name from metadata
-      profileName: (span.metadata?.profileName as string) ?? (span.metadata?.name as string) ?? null,
+      rate: parseMetadataNumber(span.metadata?.rate) ?? parseMetadataNumber(span.metadata?.absolute),
+      percent: parseMetadataNumber(span.metadata?.percent),
+      profileName: null,
+      origin: parseBasalOrigin(span.metadata?.origin),
     }));
 }
 
@@ -179,21 +242,13 @@ export const getTimeSpansData = query(
 
     try {
       // Fetch all state span categories in parallel
-      const [pumpModeSpans, profileSpans, tempBasalSpans, overrideSpans, activitySpans, entries] =
+      const [pumpModeSpans, profileSpans, tempBasalSpans, overrideSpans, activitySpans] =
         await Promise.all([
           apiClient.stateSpans.getPumpModes(startTime, endTime),
           apiClient.stateSpans.getProfiles(startTime, endTime),
-          apiClient.stateSpans.getTempBasals(startTime, endTime),
+          apiClient.stateSpans.getBasalDelivery(startTime, endTime),
           apiClient.stateSpans.getOverrides(startTime, endTime),
           apiClient.stateSpans.getActivities(startTime, endTime),
-          apiClient.entries.getEntries2(
-            JSON.stringify({
-              date: {
-                $gte: startOfRange.toISOString(),
-                $lte: endOfRange.toISOString(),
-              },
-            })
-          ),
         ]);
 
       return {
@@ -209,7 +264,7 @@ export const getTimeSpansData = query(
           endTime,
           getProfileColor
         ),
-        tempBasalSpans: processSpans(
+        tempBasalSpans: processBasalSpans(
           tempBasalSpans ?? [],
           startTime,
           endTime,
@@ -222,12 +277,12 @@ export const getTimeSpansData = query(
           getOverrideColor
         ),
         activitySpans: (activitySpans ?? [])
-          .filter((span) => {
+          .filter((span: StateSpan) => {
             const spanStart = span.startMills ?? 0;
             const spanEnd = span.endMills ?? endTime;
             return spanEnd > startTime && spanStart < endTime;
           })
-          .map((span) => ({
+          .map((span: StateSpan) => ({
             id: span.id ?? randomUUID(),
             category: span.category ?? StateSpanCategory.Sleep,
             state: span.state ?? "Unknown",
@@ -239,7 +294,6 @@ export const getTimeSpansData = query(
             percent: null,
             profileName: null,
           })),
-        entries: Array.isArray(entries) ? entries : [],
         dateRange: { from: startOfRange, to: endOfRange },
       };
     } catch (err) {
@@ -251,7 +305,6 @@ export const getTimeSpansData = query(
         tempBasalSpans: [],
         overrideSpans: [],
         activitySpans: [],
-        entries: [],
         dateRange: { from: startOfRange, to: endOfRange },
       };
     }

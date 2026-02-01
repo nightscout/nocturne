@@ -3,7 +3,7 @@ using Nocturne.Core.Models;
 namespace Nocturne.Infrastructure.Data.Mappers;
 
 /// <summary>
-/// Mapper for converting between Treatment and StateSpan for temp basal compatibility.
+/// Mapper for converting between Treatment and StateSpan for basal delivery compatibility.
 /// Enables v1-v3 API compatibility during migration from Treatment to StateSpan storage.
 /// </summary>
 public static class TreatmentStateSpanMapper
@@ -34,47 +34,53 @@ public static class TreatmentStateSpanMapper
     }
 
     /// <summary>
-    /// Converts a temp basal Treatment to a StateSpan
+    /// Converts a temp basal Treatment to a BasalDelivery StateSpan
     /// </summary>
     /// <param name="treatment">The treatment to convert</param>
-    /// <returns>A StateSpan representation of the temp basal, or null if not a temp basal</returns>
-    public static StateSpan? ToStateSpan(Treatment treatment)
+    /// <returns>A StateSpan representation of the basal delivery, or null if not a temp basal</returns>
+    public static StateSpan? ToBasalDeliveryStateSpan(Treatment treatment)
     {
         if (treatment == null || !IsTempBasalTreatment(treatment))
             return null;
 
         var stateSpan = new StateSpan
         {
-            Category = StateSpanCategory.TempBasal,
-            State = "Active",
+            Category = StateSpanCategory.BasalDelivery,
+            State = BasalDeliveryState.Active.ToString(),
             StartMills = treatment.Mills,
             EndMills = CalculateEndMills(treatment),
             Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
             OriginalId = treatment.Id,
-            Metadata = BuildMetadata(treatment)
+            Metadata = BuildBasalDeliveryMetadata(treatment)
         };
 
         return stateSpan;
     }
 
     /// <summary>
-    /// Converts a StateSpan back to a Treatment
+    /// Converts a BasalDelivery StateSpan back to a Treatment
     /// </summary>
     /// <param name="stateSpan">The StateSpan to convert</param>
-    /// <returns>A Treatment representation of the StateSpan, or null if not a TempBasal category</returns>
+    /// <returns>A Treatment representation of the StateSpan, or null if not a BasalDelivery category</returns>
     public static Treatment? ToTreatment(StateSpan stateSpan)
     {
-        if (stateSpan == null || stateSpan.Category != StateSpanCategory.TempBasal)
+        if (stateSpan == null || stateSpan.Category != StateSpanCategory.BasalDelivery)
             return null;
+
+        // Compute Created_at from Mills
+        var createdAt = DateTimeOffset.FromUnixTimeMilliseconds(stateSpan.StartMills)
+            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
         var treatment = new Treatment
         {
             Id = stateSpan.OriginalId ?? stateSpan.Id,
             EventType = "Temp Basal",
             Mills = stateSpan.StartMills,
+            Created_at = createdAt,
             EndMills = stateSpan.EndMills,
             Duration = CalculateDuration(stateSpan),
-            DataSource = stateSpan.Source
+            DataSource = stateSpan.Source,
+            UtcOffset = 0 // Default to UTC, matching Nightscout behavior
         };
 
         // Extract metadata values
@@ -85,6 +91,7 @@ public static class TreatmentStateSpanMapper
             treatment.Percent = GetMetadataDouble(stateSpan.Metadata, "percent");
             treatment.Temp = GetMetadataString(stateSpan.Metadata, "temp");
             treatment.EnteredBy = GetMetadataString(stateSpan.Metadata, "enteredBy");
+            treatment.UtcOffset = GetMetadataInt(stateSpan.Metadata, "utcOffset") ?? 0;
         }
 
         return treatment;
@@ -119,9 +126,9 @@ public static class TreatmentStateSpanMapper
     }
 
     /// <summary>
-    /// Builds the metadata dictionary from treatment properties
+    /// Builds the metadata dictionary from treatment properties for BasalDelivery
     /// </summary>
-    private static Dictionary<string, object>? BuildMetadata(Treatment treatment)
+    private static Dictionary<string, object>? BuildBasalDeliveryMetadata(Treatment treatment)
     {
         var metadata = new Dictionary<string, object>();
 
@@ -139,6 +146,12 @@ public static class TreatmentStateSpanMapper
 
         if (!string.IsNullOrEmpty(treatment.EnteredBy))
             metadata["enteredBy"] = treatment.EnteredBy;
+
+        // Store utcOffset for restoration
+        metadata["utcOffset"] = treatment.UtcOffset ?? 0;
+
+        // Mark origin as Manual (user-initiated temp basal from v1-v3 API)
+        metadata["origin"] = BasalDeliveryOrigin.Manual.ToString();
 
         return metadata.Count > 0 ? metadata : null;
     }
@@ -177,6 +190,27 @@ public static class TreatmentStateSpanMapper
             string s => s,
             System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.String => je.GetString(),
             _ => value?.ToString()
+        };
+    }
+
+    /// <summary>
+    /// Safely extracts an int value from metadata
+    /// </summary>
+    private static int? GetMetadataInt(Dictionary<string, object> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value))
+            return null;
+
+        return value switch
+        {
+            int i => i,
+            long l => (int)l,
+            double d => (int)d,
+            float f => (int)f,
+            decimal dec => (int)dec,
+            System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.Number => je.GetInt32(),
+            string s when int.TryParse(s, out var parsed) => parsed,
+            _ => null
         };
     }
 }

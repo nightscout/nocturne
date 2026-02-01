@@ -1335,6 +1335,48 @@
         }
       }
     },
+    "/api/Metadata/state-span-types": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Get state span types metadata\nThis endpoint exposes all available state span categories and their states for type-safe usage in frontend clients",
+        "operationId": "Metadata_GetStateSpanTypes",
+        "responses": {
+          "200": {
+            "description": "State span types metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateSpanTypesMetadata"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Metadata/statistics-types": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Get statistics metadata for type generation\nThis endpoint exists primarily to ensure NSwag generates TypeScript types for statistics models",
+        "operationId": "Metadata_GetStatisticsTypes",
+        "responses": {
+          "200": {
+            "description": "Statistics types metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatisticsTypesMetadata"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Metadata/widget-definitions": {
       "get": {
         "tags": [
@@ -2450,6 +2492,135 @@
         }
       }
     },
+    "/api/v1/Statistics/daily-basal-bolus-ratios": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Calculate daily basal/bolus ratio statistics for a date range",
+        "operationId": "Statistics_GetDailyBasalBolusRatios",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily basal/bolus ratio breakdown with averages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyBasalBolusRatioResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Statistics/insulin-delivery-stats": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Calculate comprehensive insulin delivery statistics for a date range",
+        "operationId": "Statistics_GetInsulinDeliveryStatistics",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comprehensive insulin delivery statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsulinDeliveryStatistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Statistics/basal-analysis": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Calculate comprehensive basal analysis statistics for a date range",
+        "operationId": "Statistics_GetBasalAnalysis",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End date of the analysis period",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comprehensive basal analysis with stats, temp basal info, and hourly percentiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasalAnalysisResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Versions": {
       "get": {
         "tags": [
@@ -2855,6 +3026,206 @@
           },
           "500": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/clockfaces/{id}": {
+      "get": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Get a clock face configuration by ID (public, no authentication required)",
+        "operationId": "ClockFaces_GetById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clock face configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFacePublicDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Update an existing clock face (owner only)",
+        "operationId": "ClockFaces_Update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Update request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClockFaceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "Updated clock face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFace"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Delete a clock face (owner only)",
+        "operationId": "ClockFaces_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success status"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/clockfaces": {
+      "get": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "List all clock faces for the current user",
+        "operationId": "ClockFaces_List",
+        "responses": {
+          "200": {
+            "description": "List of clock faces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClockFaceListItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Create a new clock face",
+        "operationId": "ClockFaces_Create",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Clock face creation request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClockFaceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "Created clock face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -3397,6 +3768,70 @@
         }
       }
     },
+    "/api/v4/debug/test/inappnotification": {
+      "post": {
+        "tags": [
+          "V4 Debug"
+        ],
+        "summary": "Test endpoint for creating in-app notifications (development only)\nCreates a test notification for the current user to verify the notification system",
+        "operationId": "Debug_CreateTestNotification",
+        "requestBody": {
+          "x-name": "request",
+          "description": "The test notification parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestNotificationRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "Notification created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InAppNotificationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "User not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Endpoint only available in development",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/admin/deduplication/run": {
       "post": {
         "tags": [
@@ -3648,6 +4083,304 @@
             }
           },
           "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/deviceage/cannula": {
+      "get": {
+        "tags": [
+          "V4 Device Age"
+        ],
+        "summary": "Get cannula/site age (CAGE)",
+        "operationId": "DeviceAge_GetCannulaAge",
+        "parameters": [
+          {
+            "name": "info",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "warn",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "urgent",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "display",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "enableAlerts",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 5
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAgeInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/deviceage/sensor": {
+      "get": {
+        "tags": [
+          "V4 Device Age"
+        ],
+        "summary": "Get sensor age (SAGE)\nReturns both Sensor Start and Sensor Change events",
+        "operationId": "DeviceAge_GetSensorAge",
+        "parameters": [
+          {
+            "name": "info",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "warn",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "urgent",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "display",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "enableAlerts",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 5
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorAgeInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/deviceage/insulin": {
+      "get": {
+        "tags": [
+          "V4 Device Age"
+        ],
+        "summary": "Get insulin reservoir age (IAGE)",
+        "operationId": "DeviceAge_GetInsulinAge",
+        "parameters": [
+          {
+            "name": "info",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "warn",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "urgent",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "display",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "enableAlerts",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 5
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAgeInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/deviceage/battery": {
+      "get": {
+        "tags": [
+          "V4 Device Age"
+        ],
+        "summary": "Get pump battery age (BAGE)",
+        "operationId": "DeviceAge_GetBatteryAge",
+        "parameters": [
+          {
+            "name": "info",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "warn",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "urgent",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "display",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "enableAlerts",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 5
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAgeInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/deviceage/all": {
+      "get": {
+        "tags": [
+          "V4 Device Age"
+        ],
+        "summary": "Get all device ages in a single call",
+        "operationId": "DeviceAge_GetAllDeviceAges",
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -4461,6 +5194,157 @@
         }
       }
     },
+    "/api/v4/meal-matching/food-entries/{id}": {
+      "get": {
+        "tags": [
+          "V4 Meal Matching"
+        ],
+        "summary": "Get a food entry for review",
+        "operationId": "MealMatching_GetFoodEntry",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorFoodEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/meal-matching/suggestions": {
+      "get": {
+        "tags": [
+          "V4 Meal Matching"
+        ],
+        "summary": "Get suggested meal matches for a date range",
+        "operationId": "MealMatching_GetSuggestions",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SuggestedMealMatch"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/meal-matching/accept": {
+      "post": {
+        "tags": [
+          "V4 Meal Matching"
+        ],
+        "summary": "Accept a meal match",
+        "operationId": "MealMatching_AcceptMatch",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptMatchRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/meal-matching/dismiss": {
+      "post": {
+        "tags": [
+          "V4 Meal Matching"
+        ],
+        "summary": "Dismiss a meal match",
+        "operationId": "MealMatching_DismissMatch",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissMatchRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v4/migration/test": {
       "post": {
         "tags": [
@@ -4740,6 +5624,144 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MyFitnessPalMatchingSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notifications": {
+      "get": {
+        "tags": [
+          "V4 Notifications"
+        ],
+        "summary": "Get all active notifications for the current user",
+        "operationId": "Notifications_GetNotifications",
+        "responses": {
+          "200": {
+            "description": "List of active notifications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InAppNotificationDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notifications/{id}/actions/{actionId}": {
+      "post": {
+        "tags": [
+          "V4 Notifications"
+        ],
+        "summary": "Execute an action on a notification",
+        "operationId": "Notifications_ExecuteAction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The notification ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "description": "The action ID to execute",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content if successful"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notifications/{id}": {
+      "delete": {
+        "tags": [
+          "V4 Notifications"
+        ],
+        "summary": "Dismiss a notification (archive with dismissed reason)",
+        "operationId": "Notifications_DismissNotification",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The notification ID to dismiss",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content if successful"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -5373,6 +6395,42 @@
         }
       }
     },
+    "/api/v4/services/connectors/{id}/data-summary": {
+      "get": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Get a summary of data counts for a specific connector.\nReturns the number of entries, treatments, and device statuses synced by this connector.",
+        "operationId": "Services_GetConnectorDataSummary",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Connector ID (e.g., \"dexcom\")",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Data summary with counts by type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorDataSummary"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v4/services/connectors/{id}/data": {
       "delete": {
         "tags": [
@@ -5908,13 +6966,13 @@
         }
       }
     },
-    "/api/v4/state-spans/temp-basals": {
+    "/api/v4/state-spans/basal-delivery": {
       "get": {
         "tags": [
           "StateSpans"
         ],
-        "summary": "Get temp basal state spans",
-        "operationId": "StateSpans_GetTempBasals",
+        "summary": "Get basal delivery state spans (pump-confirmed basal rates)",
+        "operationId": "StateSpans_GetBasalDelivery",
         "parameters": [
           {
             "name": "from",
@@ -6573,28 +7631,6 @@
                   "items": {
                     "type": "string"
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/trackers/seed": {
-      "post": {
-        "tags": [
-          "V4 Trackers"
-        ],
-        "summary": "Seed default tracker definitions for the current user",
-        "operationId": "Trackers_SeedDefaults",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
                 }
               }
             }
@@ -7402,6 +8438,302 @@
         }
       }
     },
+    "/api/v4/treatments": {
+      "get": {
+        "tags": [
+          "V4 Treatments"
+        ],
+        "summary": "Get treatments with optional filtering and pagination.\nUnlike V1-V3 endpoints, this does NOT include StateSpan-derived basal data.\nFor basal delivery, query /api/v4/state-spans?category=BasalDelivery instead.",
+        "operationId": "Treatments_GetTreatments",
+        "parameters": [
+          {
+            "name": "eventType",
+            "in": "query",
+            "description": "Optional filter by event type",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "Maximum number of treatments to return (default: 100)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 2
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "description": "Number of treatments to skip for pagination (default: 0)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 3
+          },
+          {
+            "name": "find",
+            "x-originalName": "findQuery",
+            "in": "query",
+            "description": "Optional MongoDB-style query filter for advanced filtering",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 4
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of treatments ordered by most recent first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Treatment"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Treatments"
+        ],
+        "summary": "Create a treatment with tracker integration.\nIf the treatment's event type matches a tracker's trigger event types,\nthe tracker instance will be automatically started/restarted.",
+        "operationId": "Treatments_CreateTreatment",
+        "requestBody": {
+          "x-name": "treatment",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Treatment"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Treatment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/treatments/bulk": {
+      "post": {
+        "tags": [
+          "V4 Treatments"
+        ],
+        "summary": "Create multiple treatments with tracker integration.",
+        "operationId": "Treatments_CreateTreatments",
+        "requestBody": {
+          "x-name": "treatments",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Treatment"
+                }
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Treatment"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/treatments/{id}": {
+      "get": {
+        "tags": [
+          "V4 Treatments"
+        ],
+        "summary": "Get a specific treatment by ID",
+        "operationId": "Treatments_GetTreatment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Treatment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Treatments"
+        ],
+        "summary": "Update an existing treatment by ID",
+        "operationId": "Treatments_UpdateTreatment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "treatment",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Treatment"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Treatment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Treatments"
+        ],
+        "summary": "Delete a treatment by ID",
+        "operationId": "Treatments_DeleteTreatment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/ui-settings": {
       "get": {
         "tags": [
@@ -8060,13 +9392,11 @@
           }
         ],
         "requestBody": {
-          "x-name": "deviceStatus",
+          "x-name": "request",
           "description": "Updated device status data",
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeviceStatus"
-              }
+              "schema": {}
             }
           },
           "required": true,
@@ -8078,17 +9408,8 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeviceStatus"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/V3ErrorResponse"
+                  "type": "object",
+                  "additionalProperties": {}
                 }
               }
             }
@@ -8103,8 +9424,15 @@
               }
             }
           },
-          "500": {
-            "description": ""
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V3ErrorResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -8471,7 +9799,7 @@
         "tags": [
           "Food"
         ],
-        "summary": "Create new food records with V3 format and deduplication support",
+        "summary": "Create new food records with V3 format and deduplication support\nNightscout V3 API requires date field validation before processing",
         "operationId": "Food_CreateFood",
         "requestBody": {
           "x-name": "foodData",
@@ -8563,7 +9891,7 @@
         "tags": [
           "Food"
         ],
-        "summary": "Update a food record by ID with V3 format",
+        "summary": "Update a food record by ID with V3 format\nNightscout V3 API requires date field validation before checking document existence",
         "operationId": "Food_UpdateFood",
         "parameters": [
           {
@@ -8578,13 +9906,11 @@
           }
         ],
         "requestBody": {
-          "x-name": "food",
-          "description": "Updated food data",
+          "x-name": "foodData",
+          "description": "Updated food data as JSON",
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Food"
-              }
+              "schema": {}
             }
           },
           "required": true,
@@ -9228,7 +10554,7 @@
           "Treatments"
         ],
         "summary": "Get treatments with V3 API features including pagination, field selection, and advanced filtering",
-        "operationId": "Treatments_GetTreatments",
+        "operationId": "Treatments_GetTreatments2",
         "responses": {
           "200": {
             "description": "V3 treatments collection response",
@@ -9263,7 +10589,7 @@
           "Treatments"
         ],
         "summary": "Create a new treatment via V3 API",
-        "operationId": "Treatments_CreateTreatment",
+        "operationId": "Treatments_CreateTreatment2",
         "requestBody": {
           "x-name": "treatment",
           "description": "Treatment to create",
@@ -9310,7 +10636,7 @@
           "Treatments"
         ],
         "summary": "Get a specific treatment by ID with V3 format",
-        "operationId": "Treatments_GetTreatment",
+        "operationId": "Treatments_GetTreatment2",
         "parameters": [
           {
             "name": "id",
@@ -9354,7 +10680,7 @@
           "Treatments"
         ],
         "summary": "Update a treatment via V3 API",
-        "operationId": "Treatments_UpdateTreatment",
+        "operationId": "Treatments_UpdateTreatment2",
         "parameters": [
           {
             "name": "id",
@@ -9421,7 +10747,7 @@
           "Treatments"
         ],
         "summary": "Delete a treatment via V3 API",
-        "operationId": "Treatments_DeleteTreatment",
+        "operationId": "Treatments_DeleteTreatment2",
         "parameters": [
           {
             "name": "id",
@@ -9460,7 +10786,7 @@
           "Treatments"
         ],
         "summary": "Create multiple treatments via V3 API (bulk operation)",
-        "operationId": "Treatments_CreateTreatments",
+        "operationId": "Treatments_CreateTreatments2",
         "requestBody": {
           "x-name": "treatments",
           "description": "Treatments to create",
@@ -10056,8 +11382,8 @@
           "x-position": 1
         },
         "responses": {
-          "201": {
-            "description": "Activities created successfully",
+          "200": {
+            "description": "Activities created successfully (Nightscout compatibility)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10621,23 +11947,18 @@
         "summary": "Create new device status entries",
         "operationId": "DeviceStatus_CreateDeviceStatus2",
         "requestBody": {
-          "x-name": "deviceStatusEntries",
-          "description": "Device status entries to create",
+          "x-name": "body",
+          "description": "Device status entry or array of entries to create (accepts both single object and array)",
           "content": {
             "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/DeviceStatus"
-                }
-              }
+              "schema": {}
             }
           },
           "required": true,
           "x-position": 1
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Created device status entries with assigned IDs",
             "content": {
               "application/json": {
@@ -11000,7 +12321,7 @@
           "x-position": 1
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Created entries with assigned IDs",
             "content": {
               "application/json": {
@@ -11374,6 +12695,26 @@
             "description": ""
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Food"
+        ],
+        "summary": "Bulk delete food records by filter query\nCompatible with Nightscout's DELETE /api/v1/food?find[field]=value\nNote: Nightscout V1 API doesn't officially support bulk delete, but returns 200 {} for such requests",
+        "operationId": "Food_DeleteFoodByFilter",
+        "responses": {
+          "200": {
+            "description": "Empty object for parity with Nightscout",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/v1/food.json": {
@@ -11435,7 +12776,7 @@
         "tags": [
           "Food"
         ],
-        "summary": "Get quickpick food records only (type=\"quickpick\")",
+        "summary": "Get quickpick food records only (type=\"quickpick\" and hidden=\"false\")\nMatches Nightscout's listquickpicks behavior which filters by hidden='false' and sorts by position",
         "operationId": "Food_GetQuickPickFood",
         "responses": {
           "200": {
@@ -11770,304 +13111,6 @@
         }
       }
     },
-    "/api/v1/deviceage/cannula": {
-      "get": {
-        "tags": [
-          "V1 Device Age (Legacy)"
-        ],
-        "summary": "Get cannula/site age (CAGE) - equivalent to LegacyApp cage plugin",
-        "operationId": "LegacyDeviceAge_GetCannulaAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/deviceage/sensor": {
-      "get": {
-        "tags": [
-          "V1 Device Age (Legacy)"
-        ],
-        "summary": "Get sensor age (SAGE) - equivalent to LegacyApp sage plugin\nReturns both Sensor Start and Sensor Change events",
-        "operationId": "LegacyDeviceAge_GetSensorAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SensorAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/deviceage/insulin": {
-      "get": {
-        "tags": [
-          "V1 Device Age (Legacy)"
-        ],
-        "summary": "Get insulin reservoir age (IAGE) - equivalent to LegacyApp iage plugin",
-        "operationId": "LegacyDeviceAge_GetInsulinAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/deviceage/battery": {
-      "get": {
-        "tags": [
-          "V1 Device Age (Legacy)"
-        ],
-        "summary": "Get pump battery age (BAGE) - equivalent to LegacyApp bage plugin",
-        "operationId": "LegacyDeviceAge_GetBatteryAge",
-        "parameters": [
-          {
-            "name": "info",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "warn",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "urgent",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "nullable": true
-            },
-            "x-position": 3
-          },
-          {
-            "name": "display",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          },
-          {
-            "name": "enableAlerts",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 5
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceAgeInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/deviceage/all": {
-      "get": {
-        "tags": [
-          "V1 Device Age (Legacy)"
-        ],
-        "summary": "Get all device ages in a single call",
-        "operationId": "LegacyDeviceAge_GetAllDeviceAges",
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        }
-      }
-    },
     "/api/v1/notifications/ack": {
       "post": {
         "tags": [
@@ -12388,19 +13431,14 @@
         "tags": [
           "Profile"
         ],
-        "summary": "Create or update profiles",
+        "summary": "Create or update a profile.\nNightscout accepts either a single profile object or an array of profiles.",
         "operationId": "Profile_CreateProfiles",
         "requestBody": {
-          "x-name": "profiles",
-          "description": "Profiles to create or update",
+          "x-name": "body",
+          "description": "Profile(s) to create or update (single object or array)",
           "content": {
             "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Profile"
-                }
-              }
+              "schema": {}
             }
           },
           "required": true,
@@ -12408,7 +13446,7 @@
         },
         "responses": {
           "200": {
-            "description": "Created profiles with assigned IDs",
+            "description": "Created profiles with assigned IDs as an array",
             "content": {
               "application/json": {
                 "schema": {
@@ -12442,7 +13480,7 @@
         "operationId": "Profile_GetCurrentProfile",
         "responses": {
           "200": {
-            "description": "The current active profile, or empty array if no profiles exist",
+            "description": "The current active profile as a single object (Nightscout format), or empty array if no profiles exist",
             "content": {
               "application/json": {
                 "schema": {
@@ -12519,16 +13557,16 @@
         }
       }
     },
-    "/api/v1/Status": {
+    "/api/v1/status.json": {
       "get": {
         "tags": [
           "Status"
         ],
-        "summary": "Get the current system status.\nReturns HTML by default for Nightscout compatibility, or JSON if Accept header requests it.",
-        "operationId": "Status_GetStatus22",
+        "summary": "Get the current system status as JSON.\nThis is the .json suffix variant that always returns JSON (Nightscout compatibility).",
+        "operationId": "Status_GetStatusJson",
         "responses": {
           "200": {
-            "description": "Status response in HTML or JSON format",
+            "description": "Status response in JSON format",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -12541,62 +13579,24 @@
         }
       }
     },
-    "/api/v1/times": {
+    "/api/v1/Status": {
       "get": {
         "tags": [
-          "TimeQuery"
+          "Status"
         ],
-        "summary": "Complex time pattern matching with bash-style brace expansion",
-        "operationId": "TimeQuery_GetTimeBasedEntries",
-        "parameters": [
-          {
-            "name": "count",
-            "in": "query",
-            "description": "Maximum number of entries to return (default: 10)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 10
-            },
-            "x-position": 1
-          },
-          {
-            "name": "format",
-            "in": "query",
-            "description": "Output format (json, csv, tsv, txt)",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 2
-          }
-        ],
+        "summary": "Get the current system status.\nReturns JSON when Accept header includes application/json (Nightscout client behavior),\notherwise returns HTML for browser access.",
+        "operationId": "Status_GetStatus22",
         "responses": {
           "200": {
-            "description": "Entries matching the time patterns",
+            "description": "Status response in HTML or JSON format",
             "content": {
-              "application/json": {
+              "application/octet-stream": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Entry"
-                  }
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": ""
           }
         }
       }
@@ -13335,7 +14335,7 @@
           "Treatments"
         ],
         "summary": "Get treatments with optional filtering and pagination",
-        "operationId": "Treatments_GetTreatments2",
+        "operationId": "Treatments_GetTreatments2All",
         "parameters": [
           {
             "name": "find",
@@ -13414,7 +14414,7 @@
           "Treatments"
         ],
         "summary": "Create new treatments",
-        "operationId": "Treatments_CreateTreatments2",
+        "operationId": "Treatments_CreateTreatments22",
         "requestBody": {
           "x-name": "treatments",
           "description": "Treatments to create (can be single object or array)",
@@ -13427,7 +14427,7 @@
           "x-position": 1
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Created treatments with assigned IDs",
             "content": {
               "application/json": {
@@ -13546,7 +14546,7 @@
           "Treatments"
         ],
         "summary": "Update an existing treatment by ID",
-        "operationId": "Treatments_UpdateTreatment2",
+        "operationId": "Treatments_UpdateTreatment22",
         "parameters": [
           {
             "name": "id",
@@ -13613,7 +14613,7 @@
           "Treatments"
         ],
         "summary": "Delete a treatment by ID",
-        "operationId": "Treatments_DeleteTreatment2",
+        "operationId": "Treatments_DeleteTreatment22",
         "parameters": [
           {
             "name": "id",
@@ -15043,6 +16043,458 @@
           }
         }
       },
+      "StateSpanTypesMetadata": {
+        "type": "object",
+        "description": "Metadata about state span types for NSwag generation",
+        "additionalProperties": false,
+        "properties": {
+          "availableCategories": {
+            "type": "array",
+            "description": "Array of all available state span categories",
+            "items": {
+              "$ref": "#/components/schemas/StateSpanCategory"
+            }
+          },
+          "basalDeliveryStates": {
+            "type": "array",
+            "description": "Array of all basal delivery states",
+            "items": {
+              "$ref": "#/components/schemas/BasalDeliveryState"
+            }
+          },
+          "basalDeliveryOrigins": {
+            "type": "array",
+            "description": "Array of all basal delivery origin values",
+            "items": {
+              "$ref": "#/components/schemas/BasalDeliveryOrigin"
+            }
+          },
+          "pumpModeStates": {
+            "type": "array",
+            "description": "Array of all pump mode states",
+            "items": {
+              "$ref": "#/components/schemas/PumpModeState"
+            }
+          },
+          "pumpConnectivityStates": {
+            "type": "array",
+            "description": "Array of all pump connectivity states",
+            "items": {
+              "$ref": "#/components/schemas/PumpConnectivityState"
+            }
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the state span types"
+          }
+        }
+      },
+      "StateSpanCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "BasalDelivery",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel"
+        ],
+        "enum": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "BasalDelivery",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel"
+        ]
+      },
+      "BasalDeliveryState": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Active"
+        ],
+        "enum": [
+          "Active"
+        ]
+      },
+      "BasalDeliveryOrigin": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Algorithm",
+          "Scheduled",
+          "Manual",
+          "Suspended",
+          "Inferred"
+        ],
+        "enum": [
+          "Algorithm",
+          "Scheduled",
+          "Manual",
+          "Suspended",
+          "Inferred"
+        ]
+      },
+      "PumpModeState": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Automatic",
+          "Limited",
+          "Manual",
+          "Boost",
+          "EaseOff",
+          "Sleep",
+          "Exercise",
+          "Suspended",
+          "Off"
+        ],
+        "enum": [
+          "Automatic",
+          "Limited",
+          "Manual",
+          "Boost",
+          "EaseOff",
+          "Sleep",
+          "Exercise",
+          "Suspended",
+          "Off"
+        ]
+      },
+      "PumpConnectivityState": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Connected",
+          "Disconnected",
+          "Removed",
+          "BluetoothOff"
+        ],
+        "enum": [
+          "Connected",
+          "Disconnected",
+          "Removed",
+          "BluetoothOff"
+        ]
+      },
+      "StatisticsTypesMetadata": {
+        "type": "object",
+        "description": "Metadata about statistics types for NSwag generation",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Description of the statistics types"
+          },
+          "sampleBasalAnalysis": {
+            "description": "Sample basal analysis response (for type generation)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BasalAnalysisResponse"
+              }
+            ]
+          },
+          "sampleDailyBasalBolusRatio": {
+            "description": "Sample daily basal/bolus ratio response (for type generation)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DailyBasalBolusRatioResponse"
+              }
+            ]
+          },
+          "sampleHourlyPercentile": {
+            "description": "Sample hourly basal percentile data (for type generation)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HourlyBasalPercentileData"
+              }
+            ]
+          },
+          "sampleDailyData": {
+            "description": "Sample daily basal/bolus ratio data (for type generation)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DailyBasalBolusRatioData"
+              }
+            ]
+          },
+          "sampleInsulinDelivery": {
+            "description": "Sample insulin delivery statistics (for type generation)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InsulinDeliveryStatistics"
+              }
+            ]
+          }
+        }
+      },
+      "BasalAnalysisResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/BasalStats"
+          },
+          "tempBasalInfo": {
+            "$ref": "#/components/schemas/TempBasalInfo"
+          },
+          "hourlyPercentiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HourlyBasalPercentileData"
+            }
+          },
+          "dayCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string"
+          }
+        }
+      },
+      "BasalStats": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "avgRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "minRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalDelivered": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TempBasalInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "perDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "highTemps": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lowTemps": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "zeroTemps": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "HourlyBasalPercentileData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "p10": {
+            "type": "number",
+            "format": "double"
+          },
+          "p25": {
+            "type": "number",
+            "format": "double"
+          },
+          "median": {
+            "type": "number",
+            "format": "double"
+          },
+          "p75": {
+            "type": "number",
+            "format": "double"
+          },
+          "p90": {
+            "type": "number",
+            "format": "double"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DailyBasalBolusRatioResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dailyData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyBasalBolusRatioData"
+            }
+          },
+          "averageBasalPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageBolusPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageTdd": {
+            "type": "number",
+            "format": "double"
+          },
+          "dayCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DailyBasalBolusRatioData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "displayDate": {
+            "type": "string"
+          },
+          "basal": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "basalPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusPercent": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "InsulinDeliveryStatistics": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "totalBolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalBasal": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalInsulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalCarbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "basalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "basalPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "tdd": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgBolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "mealBoluses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "correctionBoluses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "icRatio": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusesPerDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "dayCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string"
+          },
+          "carbCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "carbBolusCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "WidgetDefinitionsMetadata": {
         "type": "object",
         "description": "Metadata about available widget definitions",
@@ -15120,6 +16572,8 @@
           "Trackers",
           "TirChart",
           "DailySummary",
+          "Clock",
+          "Tdd",
           "GlucoseChart",
           "Statistics",
           "Treatments",
@@ -15136,6 +16590,8 @@
           "Trackers",
           "TirChart",
           "DailySummary",
+          "Clock",
+          "Tdd",
           "GlucoseChart",
           "Statistics",
           "Treatments",
@@ -16249,6 +17705,20 @@
                 "type": "string",
                 "nullable": true
               },
+              "identifier": {
+                "type": "string",
+                "nullable": true
+              },
+              "srvModified": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "srvCreated": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
               "eventType": {
                 "type": "string",
                 "nullable": true
@@ -16603,6 +18073,11 @@
                 "additionalProperties": {}
               },
               "canonicalId": {
+                "type": "string",
+                "format": "guid",
+                "nullable": true
+              },
+              "dbId": {
                 "type": "string",
                 "format": "guid",
                 "nullable": true
@@ -17700,6 +19175,14 @@
               }
             ]
           },
+          "insulinDelivery": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InsulinDeliveryStatistics"
+              }
+            ]
+          },
           "hasSufficientData": {
             "type": "boolean"
           },
@@ -18405,9 +19888,9 @@
               "$ref": "#/components/schemas/StateSpan"
             }
           },
-          "tempBasalSpans": {
+          "basalDeliverySpans": {
             "type": "array",
-            "description": "Temp basal state spans with rate and duration metadata",
+            "description": "Basal delivery state spans (pump-confirmed delivery data)",
             "items": {
               "$ref": "#/components/schemas/StateSpan"
             }
@@ -18450,17 +19933,21 @@
           },
           "rate": {
             "type": "number",
-            "description": "Effective basal rate in U/hr (includes temp basals and combo bolus)",
+            "description": "Effective basal rate in U/hr",
             "format": "double"
           },
           "scheduledRate": {
             "type": "number",
-            "description": "Scheduled basal rate from profile in U/hr (without temp basal modifications)",
+            "description": "Scheduled basal rate from profile in U/hr",
             "format": "double"
           },
-          "isTemp": {
-            "type": "boolean",
-            "description": "Whether this is a temporary basal rate"
+          "origin": {
+            "description": "Origin of this basal rate - where it came from",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BasalDeliveryOrigin"
+              }
+            ]
           }
         }
       },
@@ -18525,31 +20012,306 @@
           }
         }
       },
-      "StateSpanCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile",
-          "TempBasal",
-          "Sleep",
-          "Exercise",
-          "Illness",
-          "Travel"
-        ],
-        "enum": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile",
-          "TempBasal",
-          "Sleep",
-          "Exercise",
-          "Illness",
-          "Travel"
-        ]
+      "ClockFacePublicDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          }
+        }
+      },
+      "ClockFaceConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockRow"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ClockSettings"
+          }
+        }
+      },
+      "ClockRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockElement"
+            }
+          }
+        }
+      },
+      "ClockElement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "showUnits": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "minutesAhead": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "show": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibilityThreshold": {
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "style": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockElementStyle"
+              }
+            ]
+          },
+          "chartConfig": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockChartConfig"
+              }
+            ]
+          }
+        }
+      },
+      "ClockElementStyle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "font": {
+            "type": "string",
+            "nullable": true
+          },
+          "fontWeight": {
+            "type": "string",
+            "nullable": true
+          },
+          "opacity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "custom": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ClockChartConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "showIob": {
+            "type": "boolean"
+          },
+          "showCob": {
+            "type": "boolean"
+          },
+          "showBasal": {
+            "type": "boolean"
+          },
+          "showBolus": {
+            "type": "boolean"
+          },
+          "showCarbs": {
+            "type": "boolean"
+          },
+          "showDeviceEvents": {
+            "type": "boolean"
+          },
+          "showAlarms": {
+            "type": "boolean"
+          },
+          "showTrackers": {
+            "type": "boolean"
+          },
+          "showPredictions": {
+            "type": "boolean"
+          },
+          "lockToggles": {
+            "type": "boolean"
+          },
+          "showLegend": {
+            "type": "boolean"
+          },
+          "asBackground": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ClockSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bgColor": {
+            "type": "boolean"
+          },
+          "staleMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "alwaysShowTime": {
+            "type": "boolean"
+          },
+          "backgroundImage": {
+            "type": "string",
+            "nullable": true
+          },
+          "backgroundOpacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ClockFaceListItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ClockFace": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "CreateClockFaceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          }
+        }
+      },
+      "UpdateClockFaceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "config": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockFaceConfig"
+              }
+            ]
+          }
+        }
       },
       "ProxyConfigurationDto": {
         "type": "object",
@@ -19171,6 +20933,10 @@
           "position": {
             "type": "integer",
             "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -19309,6 +21075,215 @@
           },
           "unit": {
             "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "InAppNotificationDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/InAppNotificationType"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/NotificationUrgency"
+          },
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationActionDto"
+            }
+          }
+        }
+      },
+      "InAppNotificationType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PasswordResetRequest",
+          "UnconfiguredTracker",
+          "TrackerAlert",
+          "StatisticsSummary",
+          "HelpResponse",
+          "AnonymousLoginRequest",
+          "PredictedLow",
+          "SuggestedMealMatch",
+          "SuggestedTrackerMatch"
+        ],
+        "enum": [
+          "PasswordResetRequest",
+          "UnconfiguredTracker",
+          "TrackerAlert",
+          "StatisticsSummary",
+          "HelpResponse",
+          "AnonymousLoginRequest",
+          "PredictedLow",
+          "SuggestedMealMatch",
+          "SuggestedTrackerMatch"
+        ]
+      },
+      "NotificationUrgency": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Info",
+          "Warn",
+          "Hazard",
+          "Urgent"
+        ],
+        "enum": [
+          "Info",
+          "Warn",
+          "Hazard",
+          "Urgent"
+        ]
+      },
+      "NotificationActionDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "variant": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "TestNotificationRequest": {
+        "type": "object",
+        "description": "Request model for creating test notifications",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "description": "Type of notification to create",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InAppNotificationType"
+              }
+            ]
+          },
+          "urgency": {
+            "description": "Urgency level for the notification",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotificationUrgency"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional title (defaults to \"Test {Type} Notification\")",
+            "nullable": true
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Optional subtitle",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Optional source ID for grouping",
+            "nullable": true
+          },
+          "actions": {
+            "type": "array",
+            "description": "Optional actions for the notification",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/NotificationActionDto"
+            }
+          },
+          "resolutionConditions": {
+            "description": "Optional resolution conditions",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ResolutionConditions"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional metadata",
+            "nullable": true,
+            "additionalProperties": {}
+          }
+        }
+      },
+      "ResolutionConditions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sourceDeletedType": {
+            "type": "string",
+            "nullable": true
+          },
+          "glucose": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseCondition"
+              }
+            ]
+          }
+        }
+      },
+      "GlucoseCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "aboveMgDl": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "belowMgDl": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "sustainedMinutes": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         }
@@ -19543,6 +21518,92 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DeviceAgeInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "age": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "treatmentDate": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "minFractions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "display": {
+            "type": "string"
+          },
+          "notification": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceAgeNotification"
+              }
+            ]
+          }
+        }
+      },
+      "DeviceAgeNotification": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "pushoverSound": {
+            "type": "string"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "group": {
+            "type": "string"
+          }
+        }
+      },
+      "SensorAgeInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "Sensor Start": {
+            "$ref": "#/components/schemas/DeviceAgeInfo"
+          },
+          "Sensor Change": {
+            "$ref": "#/components/schemas/DeviceAgeInfo"
+          },
+          "min": {
+            "type": "string"
           }
         }
       },
@@ -20105,6 +22166,83 @@
           }
         }
       },
+      "SuggestedMealMatch": {
+        "type": "object",
+        "description": "A suggested meal match between a food entry and treatment",
+        "additionalProperties": false,
+        "properties": {
+          "foodEntryId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "foodName": {
+            "type": "string",
+            "nullable": true
+          },
+          "mealName": {
+            "type": "string",
+            "nullable": true
+          },
+          "carbs": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "consumedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "treatmentId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "treatmentCarbs": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "treatmentMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matchScore": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "AcceptMatchRequest": {
+        "type": "object",
+        "description": "Request to accept a meal match",
+        "additionalProperties": false,
+        "properties": {
+          "foodEntryId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "treatmentId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "carbs": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "timeOffsetMinutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DismissMatchRequest": {
+        "type": "object",
+        "description": "Request to dismiss a meal match",
+        "additionalProperties": false,
+        "properties": {
+          "foodEntryId": {
+            "type": "string",
+            "format": "guid"
+          }
+        }
+      },
       "TestMigrationConnectionResult": {
         "type": "object",
         "description": "Result of testing a migration connection",
@@ -20466,34 +22604,10 @@
             "type": "integer",
             "format": "int32"
           },
-          "unmatchedTimeoutHours": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "unmatchedBehavior": {
-            "$ref": "#/components/schemas/UnmatchedBehavior"
-          },
           "enableMatchNotifications": {
-            "type": "boolean"
-          },
-          "enableUnmatchedNotifications": {
             "type": "boolean"
           }
         }
-      },
-      "UnmatchedBehavior": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Prompt",
-          "AutoStandalone",
-          "AutoDelete"
-        ],
-        "enum": [
-          "Prompt",
-          "AutoStandalone",
-          "AutoDelete"
-        ]
       },
       "GlucosePredictionResponse": {
         "type": "object",
@@ -21348,6 +23462,31 @@
           }
         }
       },
+      "ConnectorDataSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "connectorId": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "treatments": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deviceStatuses": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "SyncResult": {
         "type": "object",
         "additionalProperties": false,
@@ -21632,6 +23771,17 @@
             "type": "boolean",
             "nullable": true
           },
+          "boluscalcEnabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "authorized": {
+            "nullable": true
+          },
+          "runtimeState": {
+            "type": "string",
+            "nullable": true
+          },
           "head": {
             "type": "string",
             "nullable": true
@@ -21791,22 +23941,6 @@
             "type": "boolean"
           }
         }
-      },
-      "NotificationUrgency": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Info",
-          "Warn",
-          "Hazard",
-          "Urgent"
-        ],
-        "enum": [
-          "Info",
-          "Warn",
-          "Hazard",
-          "Urgent"
-        ]
       },
       "TrackerDefinitionDto": {
         "type": "object",
@@ -23701,6 +25835,11 @@
                 "nullable": true
               },
               "utcOffset": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "uploaderBattery": {
                 "type": "integer",
                 "format": "int32",
                 "nullable": true
@@ -26037,92 +28176,6 @@
           "basalIOB": {
             "type": "number",
             "format": "double"
-          }
-        }
-      },
-      "DeviceAgeInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "found": {
-            "type": "boolean"
-          },
-          "age": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "days": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "hours": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "treatmentDate": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
-          },
-          "minFractions": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "level": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "display": {
-            "type": "string"
-          },
-          "notification": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/DeviceAgeNotification"
-              }
-            ]
-          }
-        }
-      },
-      "DeviceAgeNotification": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "pushoverSound": {
-            "type": "string"
-          },
-          "level": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "group": {
-            "type": "string"
-          }
-        }
-      },
-      "SensorAgeInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "Sensor Start": {
-            "$ref": "#/components/schemas/DeviceAgeInfo"
-          },
-          "Sensor Change": {
-            "$ref": "#/components/schemas/DeviceAgeInfo"
-          },
-          "min": {
-            "type": "string"
           }
         }
       },

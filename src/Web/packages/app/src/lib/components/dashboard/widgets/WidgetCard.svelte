@@ -5,8 +5,10 @@
   interface Props {
     /** Widget title displayed in header */
     title: string;
-    /** Optional subtitle/description */
+    /** Optional subtitle/description (text) */
     subtitle?: string;
+    /** Optional custom subtitle snippet (takes precedence over subtitle text) */
+    subtitleSnippet?: Snippet;
     /** Primary value to display (large text) */
     children: Snippet;
     /** Additional CSS classes for the card */
@@ -18,6 +20,7 @@
   let {
     title,
     subtitle,
+    subtitleSnippet,
     children,
     class: className = "",
     compact = false,
@@ -27,7 +30,9 @@
 <Card class="h-full {className}">
   <CardHeader class={compact ? "pb-1 pt-3" : "pb-2"}>
     <CardTitle class="text-sm font-medium">{title}</CardTitle>
-    {#if subtitle}
+    {#if subtitleSnippet}
+      {@render subtitleSnippet()}
+    {:else if subtitle}
       <p class="text-xs text-muted-foreground">{subtitle}</p>
     {/if}
   </CardHeader>

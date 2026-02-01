@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -17,17 +19,29 @@ namespace Nocturne.API.Controllers.V4;
 public class DebugController : ControllerBase
 {
     private readonly IPostgreSqlService _postgreSqlService;
+    private readonly IInAppNotificationService _notificationService;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<DebugController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the DebugController
     /// </summary>
     /// <param name="postgreSqlService">PostgreSQL service for data operations</param>
+    /// <param name="notificationService">In-app notification service</param>
+    /// <param name="environment">Web host environment</param>
     /// <param name="logger">Logger instance</param>
-    public DebugController(IPostgreSqlService postgreSqlService, ILogger<DebugController> logger)
+    public DebugController(
+        IPostgreSqlService postgreSqlService,
+        IInAppNotificationService notificationService,
+        IWebHostEnvironment environment,
+        ILogger<DebugController> logger
+    )
     {
         _postgreSqlService =
             postgreSqlService ?? throw new ArgumentNullException(nameof(postgreSqlService));
+        _notificationService =
+            notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -477,4 +491,109 @@ public class DebugController : ControllerBase
             count++;
         return count;
     }
+
+    /// <summary>
+    /// Test endpoint for creating in-app notifications (development only)
+    /// Creates a test notification for the current user to verify the notification system
+    /// </summary>
+    /// <param name="request">The test notification parameters</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The created notification</returns>
+    /// <response code="200">Notification created successfully</response>
+    /// <response code="400">Invalid request parameters</response>
+    /// <response code="401">User not authenticated</response>
+    /// <response code="403">Endpoint only available in development</response>
+    [HttpPost("test/inappnotification")]
+    [Authorize]
+    [ProducesResponseType(typeof(InAppNotificationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<InAppNotificationDto>> CreateTestNotification(
+        [FromBody] TestNotificationRequest request,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // if (!_environment.IsDevelopment())
+        // {
+        //     return StatusCode(
+        //         StatusCodes.Status403Forbidden,
+        //         new { error = "This endpoint is only available in development mode" }
+        //     );
+        // }
+
+        var userId = HttpContext.GetSubjectIdString();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        _logger.LogInformation(
+            "Creating test notification of type {Type} with urgency {Urgency} for user {UserId}",
+            request.Type,
+            request.Urgency,
+            userId
+        );
+
+        var notification = await _notificationService.CreateNotificationAsync(
+            userId,
+            request.Type,
+            request.Urgency,
+            request.Title ?? $"Test {request.Type} Notification",
+            request.Subtitle,
+            request.SourceId,
+            request.Actions,
+            request.ResolutionConditions,
+            request.Metadata,
+            cancellationToken
+        );
+
+        return Ok(notification);
+    }
+}
+
+/// <summary>
+/// Request model for creating test notifications
+/// </summary>
+public class TestNotificationRequest
+{
+    /// <summary>
+    /// Type of notification to create
+    /// </summary>
+    public InAppNotificationType Type { get; set; } = InAppNotificationType.TrackerAlert;
+
+    /// <summary>
+    /// Urgency level for the notification
+    /// </summary>
+    public NotificationUrgency Urgency { get; set; } = NotificationUrgency.Info;
+
+    /// <summary>
+    /// Optional title (defaults to "Test {Type} Notification")
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Optional subtitle
+    /// </summary>
+    public string? Subtitle { get; set; }
+
+    /// <summary>
+    /// Optional source ID for grouping
+    /// </summary>
+    public string? SourceId { get; set; }
+
+    /// <summary>
+    /// Optional actions for the notification
+    /// </summary>
+    public List<NotificationActionDto>? Actions { get; set; }
+
+    /// <summary>
+    /// Optional resolution conditions
+    /// </summary>
+    public ResolutionConditions? ResolutionConditions { get; set; }
+
+    /// <summary>
+    /// Optional metadata
+    /// </summary>
+    public Dictionary<string, object>? Metadata { get; set; }
 }

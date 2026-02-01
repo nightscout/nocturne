@@ -7,11 +7,18 @@
 
     let { children } = $props();
 
-    // Determine current step from URL path (wizard pages)
+    // Determine current step from URL path and query params
+    // Setup page has internal steps: 0 (type selection), 1 (config), 2 (connectors)
+    // Map these to indicator steps: 1 (Setup), 2 (Connectors), 3 (Download)
     const currentStep = $derived.by(() => {
         const pathname = page.url.pathname;
-        if (pathname.startsWith("/setup")) return 1;
-        if (pathname.startsWith("/connectors")) return 2;
+        if (pathname.startsWith("/setup")) {
+            const stepParam = page.url.searchParams.get("step");
+            const step = stepParam ? parseInt(stepParam, 10) : 0;
+            // step 0 or 1 = Setup (indicator step 1)
+            // step 2 = Connectors (indicator step 2)
+            return step >= 2 ? 2 : 1;
+        }
         if (pathname.startsWith("/download")) return 3;
         return 0; // Not in wizard
     });

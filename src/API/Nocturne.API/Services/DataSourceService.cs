@@ -873,6 +873,50 @@ public class DataSourceService : IDataSourceService
 
 
     /// <inheritdoc />
+    public async Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
+        string connectorId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug("Getting data summary for connector: {ConnectorId}", connectorId);
+
+        // Resolve the connector metadata to find the correct data source ID
+        var metadata = ConnectorMetadataService.GetByConnectorId(connectorId);
+        if (metadata == null)
+        {
+            return new ConnectorDataSummary
+            {
+                ConnectorId = connectorId,
+                Entries = 0,
+                Treatments = 0,
+                DeviceStatuses = 0,
+            };
+        }
+
+        var deviceId = metadata.DataSourceId;
+
+        var entriesCount = await _context
+            .Entries.Where(e => e.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
+
+        var treatmentsCount = await _context
+            .Treatments.Where(t => t.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
+
+        var deviceStatusCount = await _context
+            .DeviceStatuses.Where(ds => ds.Device == deviceId)
+            .LongCountAsync(cancellationToken);
+
+        return new ConnectorDataSummary
+        {
+            ConnectorId = connectorId,
+            Entries = entriesCount,
+            Treatments = treatmentsCount,
+            DeviceStatuses = deviceStatusCount,
+        };
+    }
+
+    /// <inheritdoc />
     public async Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
         string connectorId,
         CancellationToken cancellationToken = default
@@ -903,14 +947,15 @@ public class DataSourceService : IDataSourceService
                 deviceId
             );
 
-            // Delete directly using the connector's device ID
+            // Delete using the connector's data source ID
             // This avoids the 30-day lookback window limitation in GetActiveDataSourcesAsync
+            // Use DataSource field which is what connectors use to identify their data
             var entriesDeleted = await _context
-                .Entries.Where(e => e.Device == deviceId)
+                .Entries.Where(e => e.DataSource == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var treatmentsDeleted = await _context
-                .Treatments.Where(t => t.EnteredBy == deviceId)
+                .Treatments.Where(t => t.DataSource == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deviceStatusDeleted = await _context

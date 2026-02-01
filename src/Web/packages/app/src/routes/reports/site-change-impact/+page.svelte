@@ -23,18 +23,16 @@
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
   import { getSiteChangeImpact } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 30 days to capture multiple site changes for meaningful analysis
+  const reportsParams = requireDateParamsContext(30);
 
-  // Use resource for controlled reactivity - prevents flickering by avoiding query recreation
-  const siteChangeResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getSiteChangeImpact(dateRangeInput);
-    },
-    { debounce: 100 }
+  // Create resource with automatic layout registration
+  const siteChangeResource = contextResource(
+    () => getSiteChangeImpact(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading Site Change Data" }
   );
 
   const isLoading = $derived(siteChangeResource.loading);
@@ -77,6 +75,7 @@
   />
 </svelte:head>
 
+{#if siteChangeResource.current}
 <div class="container mx-auto max-w-7xl space-y-8 px-4 py-6">
   <!-- Header -->
   <div class="space-y-4">
@@ -291,3 +290,4 @@
     </Card>
   {/if}
 </div>
+{/if}

@@ -90,6 +90,56 @@ public class TreatmentRepository
     }
 
     /// <summary>
+    /// Get treatments that are meal-related within a time range
+    /// </summary>
+    public async Task<IReadOnlyList<Treatment>> GetMealTreatmentsInTimeRangeAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default)
+    {
+        var fromMills = from.ToUnixTimeMilliseconds();
+        var toMills = to.ToUnixTimeMilliseconds();
+
+        var entities = await _context.Treatments
+            .Where(t => t.Mills >= fromMills && t.Mills <= toMills)
+            .Where(t => t.Carbs > 0 || (t.EventType != null && t.EventType.Contains("Meal")))
+            .OrderBy(t => t.Mills)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(TreatmentMapper.ToDomainModel).ToList();
+    }
+
+    /// <summary>
+    /// Get all treatments within a time range
+    /// </summary>
+    public async Task<IEnumerable<Treatment>> GetTreatmentsByTimeRangeAsync(
+        long startMills,
+        long endMills,
+        int count = 10000,
+        CancellationToken cancellationToken = default)
+    {
+        var entities = await _context.Treatments
+            .Where(t => t.Mills >= startMills && t.Mills <= endMills)
+            .OrderByDescending(t => t.Mills)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(TreatmentMapper.ToDomainModel);
+    }
+
+    /// <summary>
+    /// Create a single treatment and link to canonical groups for deduplication
+    /// </summary>
+    public async Task<Treatment?> CreateTreatmentAsync(
+        Treatment treatment,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var results = await CreateTreatmentsAsync([treatment], cancellationToken);
+        return results.FirstOrDefault();
+    }
+
+    /// <summary>
     /// Create new treatments and link to canonical groups for deduplication
     /// </summary>
     public async Task<IEnumerable<Treatment>> CreateTreatmentsAsync(

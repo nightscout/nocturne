@@ -10,7 +10,7 @@ import type {
   AlarmEvent,
   TrackerUpdateEvent,
 } from "$lib/websocket/types";
-import type { DeviceStatus, Profile, TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
+import type { DeviceStatus, Profile, TrackerInstanceDto, TrackerDefinitionDto, InAppNotificationDto } from "$lib/api";
 import { NotificationUrgency } from "$lib/api";
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
@@ -49,6 +49,7 @@ export class RealtimeStore {
   profile = $state<Profile | null>(null);
   trackerInstances = $state.raw<TrackerInstanceDto[]>([]);
   trackerDefinitions = $state.raw<TrackerDefinitionDto[]>([]);
+  inAppNotifications = $state.raw<InAppNotificationDto[]>([]);
 
   /** Password reset request counter - increments on each request to trigger refreshes */
   passwordResetRequestCount = $state(0);
@@ -212,13 +213,14 @@ export class RealtimeStore {
     try {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
-      const [historicalEntries, historicalTreatments, deviceStatusData, profileData, trackerDefs, trackerActive] = await Promise.all([
+      const [historicalEntries, historicalTreatments, deviceStatusData, profileData, trackerDefs, trackerActive, notifications] = await Promise.all([
         apiClient.entries.getEntries2(undefined, 1000),
-        apiClient.treatments.getTreatments2(undefined, 500),
+        apiClient.treatments.getTreatments(undefined, 500),
         apiClient.deviceStatus.getDeviceStatus2(undefined, 100).catch(() => []),
         apiClient.profile.getProfiles2(1).catch(() => []),
         apiClient.trackers.getDefinitions().catch(() => []),
         apiClient.trackers.getActiveInstances().catch(() => []),
+        apiClient.v2Notifications.getNotifications().catch(() => []),
       ]);
 
       // Defer all state updates to a microtask to completely break out of the
@@ -253,6 +255,10 @@ export class RealtimeStore {
 
         if (trackerActive && trackerActive.length > 0) {
           this.trackerInstances = trackerActive;
+        }
+
+        if (notifications && notifications.length > 0) {
+          this.inAppNotifications = notifications;
         }
 
         this.isReady = true;
@@ -313,6 +319,19 @@ export class RealtimeStore {
 
     this.websocketClient.on("trackerUpdate", (event: TrackerUpdateEvent) => {
       this.handleTrackerUpdate(event);
+    });
+
+    // In-app notification events
+    this.websocketClient.on("notificationCreated", (notification: InAppNotificationDto) => {
+      this.handleNotificationCreated(notification);
+    });
+
+    this.websocketClient.on("notificationArchived", (notification: InAppNotificationDto) => {
+      this.handleNotificationArchived(notification);
+    });
+
+    this.websocketClient.on("notificationUpdated", (notification: InAppNotificationDto) => {
+      this.handleNotificationUpdated(notification);
     });
 
     // Admin events - password reset requests
@@ -504,6 +523,35 @@ export class RealtimeStore {
     }
   }
 
+  /** Handle new in-app notification from SignalR */
+  private handleNotificationCreated(notification: InAppNotificationDto): void {
+    // Add if not already present
+    if (!this.inAppNotifications.some((n) => n.id === notification.id)) {
+      this.inAppNotifications = [notification, ...this.inAppNotifications];
+    }
+  }
+
+  /** Handle notification archived from SignalR */
+  private handleNotificationArchived(notification: InAppNotificationDto): void {
+    // Remove from active notifications
+    this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== notification.id);
+  }
+
+  /** Handle notification updated from SignalR */
+  private handleNotificationUpdated(notification: InAppNotificationDto): void {
+    const index = this.inAppNotifications.findIndex((n) => n.id === notification.id);
+    if (index !== -1) {
+      this.inAppNotifications = [
+        ...this.inAppNotifications.slice(0, index),
+        notification,
+        ...this.inAppNotifications.slice(index + 1),
+      ];
+    } else {
+      // If not found, treat as create
+      this.handleNotificationCreated(notification);
+    }
+  }
+
   /* Type guards for runtime type checking */
   private isEntry(obj: any): obj is Entry {
     return (
@@ -610,7 +658,7 @@ export class RealtimeStore {
       // Note: getDeviceStatus2 doesn't support find queries, so we fetch recent and filter client-side
       const [entries, treatments, deviceStatuses] = await Promise.all([
         apiClient.entries.getEntries2(findQuery, 1000).catch(() => []),
-        apiClient.treatments.getTreatments2(findQuery, 500).catch(() => []),
+        apiClient.treatments.getTreatments(undefined, 500, undefined, findQuery).catch(() => []),
         apiClient.deviceStatus.getDeviceStatus2(100).catch(() => []),
       ]);
 

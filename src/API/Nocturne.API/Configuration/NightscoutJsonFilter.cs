@@ -1,10 +1,6 @@
-using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Nocturne.Core.Models.Attributes;
 
 namespace Nocturne.API.Configuration;
 
@@ -16,40 +12,7 @@ namespace Nocturne.API.Configuration;
 /// </summary>
 public class NightscoutJsonFilter : IAsyncResultFilter
 {
-    private static readonly JsonSerializerOptions NightscoutOptions = CreateNightscoutOptions();
-
-    private static JsonSerializerOptions CreateNightscoutOptions()
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = false,
-            TypeInfoResolver = new DefaultJsonTypeInfoResolver
-            {
-                Modifiers = { ExcludeNocturneOnlyProperties }
-            }
-        };
-
-        return options;
-    }
-
-    private static void ExcludeNocturneOnlyProperties(JsonTypeInfo typeInfo)
-    {
-        if (typeInfo.Kind != JsonTypeInfoKind.Object)
-            return;
-
-        foreach (var property in typeInfo.Properties)
-        {
-            var propertyInfo = typeInfo.Type.GetProperty(property.Name,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-
-            if (propertyInfo?.GetCustomAttribute<NocturneOnlyAttribute>() != null)
-            {
-                property.ShouldSerialize = (_, _) => false;
-            }
-        }
-    }
+    private static readonly JsonSerializerOptions NightscoutOptions = NightscoutJsonOptions.Create();
 
     public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
     {

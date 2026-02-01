@@ -75,11 +75,12 @@
   async function handleDelete(entry: TreatmentFood) {
     if (!treatmentId || !entry.id) return;
     try {
-      const updated = await deleteTreatmentFood({
+      await deleteTreatmentFood({
         treatmentId,
         entryId: entry.id,
       });
-      breakdown = updated;
+      // Reload the breakdown after deletion
+      await loadBreakdown(treatmentId);
     } catch (err) {
       console.error("Failed to delete food entry:", err);
     }

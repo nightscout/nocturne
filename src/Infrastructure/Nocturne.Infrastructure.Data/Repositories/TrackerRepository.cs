@@ -217,6 +217,21 @@ public class TrackerRepository
     }
 
     /// <summary>
+    /// Get active (not completed) tracker instances for a specific definition
+    /// </summary>
+    public virtual async Task<List<TrackerInstanceEntity>> GetActiveInstancesForDefinitionAsync(
+        Guid definitionId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await _context
+            .TrackerInstances.Include(i => i.Definition)
+            .Where(i => i.DefinitionId == definitionId && i.CompletedAt == null)
+            .OrderByDescending(i => i.StartedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Get completed tracker instances for history
     /// </summary>
     public virtual async Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(

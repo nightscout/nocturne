@@ -75,6 +75,28 @@ public interface ISignalRBroadcastService
     /// Broadcast configuration change event to subscribers via ConfigHub
     /// </summary>
     Task BroadcastConfigChangeAsync(ConfigurationChangeEvent change);
+
+    /// <summary>
+    /// Broadcast notification created event to a specific user
+    /// </summary>
+    /// <param name="userId">The user ID to broadcast to</param>
+    /// <param name="notification">The notification that was created</param>
+    Task BroadcastNotificationCreatedAsync(string userId, InAppNotificationDto notification);
+
+    /// <summary>
+    /// Broadcast notification archived event to a specific user
+    /// </summary>
+    /// <param name="userId">The user ID to broadcast to</param>
+    /// <param name="notification">The notification that was archived</param>
+    /// <param name="archiveReason">The reason the notification was archived</param>
+    Task BroadcastNotificationArchivedAsync(string userId, InAppNotificationDto notification, NotificationArchiveReason archiveReason);
+
+    /// <summary>
+    /// Broadcast notification updated event to a specific user
+    /// </summary>
+    /// <param name="userId">The user ID to broadcast to</param>
+    /// <param name="notification">The notification that was updated</param>
+    Task BroadcastNotificationUpdatedAsync(string userId, InAppNotificationDto notification);
 }
 
 /// <summary>
@@ -352,6 +374,92 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 ex,
                 "Error broadcasting config change for {ConnectorName}",
                 change.ConnectorName
+            );
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastNotificationCreatedAsync(string userId, InAppNotificationDto notification)
+    {
+        try
+        {
+            _logger.LogDebug(
+                "Broadcasting notification created to user {UserId}: {NotificationId}",
+                userId,
+                notification.Id
+            );
+
+            var userGroup = $"user-{userId}";
+            await _dataHubContext
+                .Clients.Group(userGroup)
+                .SendCoreAsync("notificationCreated", new object[] { notification });
+
+            _logger.LogDebug("Notification created broadcast completed for user {UserId}", userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error broadcasting notification created to user {UserId}",
+                userId
+            );
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastNotificationArchivedAsync(string userId, InAppNotificationDto notification, NotificationArchiveReason archiveReason)
+    {
+        try
+        {
+            _logger.LogDebug(
+                "Broadcasting notification archived to user {UserId}: {NotificationId}, reason: {Reason}",
+                userId,
+                notification.Id,
+                archiveReason
+            );
+
+            var userGroup = $"user-{userId}";
+            var payload = new { notification, archiveReason };
+            await _dataHubContext
+                .Clients.Group(userGroup)
+                .SendCoreAsync("notificationArchived", new object[] { payload });
+
+            _logger.LogDebug("Notification archived broadcast completed for user {UserId}", userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error broadcasting notification archived to user {UserId}",
+                userId
+            );
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastNotificationUpdatedAsync(string userId, InAppNotificationDto notification)
+    {
+        try
+        {
+            _logger.LogDebug(
+                "Broadcasting notification updated to user {UserId}: {NotificationId}",
+                userId,
+                notification.Id
+            );
+
+            var userGroup = $"user-{userId}";
+            await _dataHubContext
+                .Clients.Group(userGroup)
+                .SendCoreAsync("notificationUpdated", new object[] { notification });
+
+            _logger.LogDebug("Notification updated broadcast completed for user {UserId}", userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error broadcasting notification updated to user {UserId}",
+                userId
             );
         }
     }

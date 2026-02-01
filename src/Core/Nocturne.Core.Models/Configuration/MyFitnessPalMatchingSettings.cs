@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Models.Configuration;
 
@@ -17,15 +16,6 @@ public class MyFitnessPalMatchingSettings
     [JsonPropertyName("matchCarbToleranceGrams")]
     public int MatchCarbToleranceGrams { get; set; } = 10;
 
-    [JsonPropertyName("unmatchedTimeoutHours")]
-    public int UnmatchedTimeoutHours { get; set; } = 12;
-
-    [JsonPropertyName("unmatchedBehavior")]
-    public UnmatchedBehavior UnmatchedBehavior { get; set; } = UnmatchedBehavior.Prompt;
-
     [JsonPropertyName("enableMatchNotifications")]
     public bool EnableMatchNotifications { get; set; } = true;
-
-    [JsonPropertyName("enableUnmatchedNotifications")]
-    public bool EnableUnmatchedNotifications { get; set; } = true;
 }

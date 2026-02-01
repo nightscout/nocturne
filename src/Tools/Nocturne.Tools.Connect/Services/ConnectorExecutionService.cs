@@ -355,9 +355,6 @@ public class ConnectorExecutionService(
                     GlookoPassword = config.GlookoPassword ?? string.Empty,
                     GlookoServer = config.GlookoServer,
                     TimezoneOffset = config.GlookoTimezoneOffset,
-                    Mode = ConnectorMode.Standalone,
-                    NightscoutUrl = config.NightscoutUrl,
-                    NightscoutApiSecret = config.NightscoutApiSecret,
                 },
                 "minimedcarelink" or "carelink" => new CareLinkConnectorConfiguration
                 {
@@ -365,9 +362,6 @@ public class ConnectorExecutionService(
                     CareLinkUsername = config.CarelinkUsername ?? string.Empty,
                     CareLinkPassword = config.CarelinkPassword ?? string.Empty,
                     CareLinkCountry = config.CarelinkRegion ?? "US",
-                    Mode = ConnectorMode.Standalone,
-                    NightscoutUrl = config.NightscoutUrl,
-                    NightscoutApiSecret = config.NightscoutApiSecret,
                 },
                 "dexcomshare" or "dexcom" => new DexcomConnectorConfiguration
                 {
@@ -375,9 +369,6 @@ public class ConnectorExecutionService(
                     DexcomUsername = config.DexcomUsername ?? string.Empty,
                     DexcomPassword = config.DexcomPassword ?? string.Empty,
                     DexcomServer = config.DexcomRegion ?? "US",
-                    Mode = ConnectorMode.Standalone,
-                    NightscoutUrl = config.NightscoutUrl,
-                    NightscoutApiSecret = config.NightscoutApiSecret,
                 },
                 "linkup" or "librelinkup" => new LibreLinkUpConnectorConfiguration
                 {
@@ -385,18 +376,12 @@ public class ConnectorExecutionService(
                     LibreUsername = config.LibreUsername ?? string.Empty,
                     LibrePassword = config.LibrePassword ?? string.Empty,
                     LibreRegion = config.LibreRegion,
-                    Mode = ConnectorMode.Standalone,
-                    NightscoutUrl = config.NightscoutUrl,
-                    NightscoutApiSecret = config.NightscoutApiSecret,
                 },
                 "nightscout" => new NightscoutConnectorConfiguration
                 {
                     ConnectSource = ConnectSource.Nightscout,
                     SourceEndpoint = config.SourceEndpoint ?? string.Empty,
                     SourceApiSecret = config.SourceApiSecret ?? string.Empty,
-                    Mode = ConnectorMode.Standalone,
-                    NightscoutUrl = config.NightscoutUrl,
-                    NightscoutApiSecret = config.NightscoutApiSecret,
                 },
                 "mylife" => new MyLifeConnectorConfiguration
                 {
@@ -409,9 +394,6 @@ public class ConnectorExecutionService(
                     EnableMealCarbConsolidation = config.MyLifeEnableMealCarbConsolidation,
                     EnableTempBasalConsolidation = config.MyLifeEnableTempBasalConsolidation,
                     TempBasalConsolidationWindowMinutes = config.MyLifeTempBasalConsolidationWindowMinutes,
-                    Mode = ConnectorMode.Standalone,
-                    NightscoutUrl = config.NightscoutUrl,
-                    NightscoutApiSecret = config.NightscoutApiSecret,
                 },
                 _ => null,
             };

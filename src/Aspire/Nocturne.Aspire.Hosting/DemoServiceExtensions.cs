@@ -1,5 +1,8 @@
+#pragma warning disable ASPIREPIPELINES003 // Experimental container image APIs
+
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Publishing;
 using Microsoft.Extensions.Configuration;
 
 namespace Nocturne.Aspire.Hosting;
@@ -125,6 +128,12 @@ public static class DemoServiceExtensions
         // API should reference demo service for health monitoring
         api.WithEnvironment("DemoService__Url", demoService.GetEndpoint("http"))
            .WithEnvironment("DemoService__Enabled", "true");
+
+        // Configure multi-arch container build for amd64 and arm64 (supports Mac Apple Silicon)
+        demoService.WithContainerBuildOptions(options =>
+        {
+            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+        });
 
         return demoService;
     }

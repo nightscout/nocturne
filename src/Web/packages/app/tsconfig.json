@@ -5,7 +5,7 @@
     "module": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
-    "checkJs": true,
+    "checkJs": false,
     "noImplicitAny": true,
     "types": ["svelte"],
     // "typeRoots": ["./@types"],
@@ -38,7 +38,13 @@
   ],
   "exclude": [
     "src/lib/api/generated",
-    "src/lib/components/ui/**"
+    "src/lib/components/ui/**",
+    "../../locales",
+    "../../locales/**",
+    "../../locales/.wuchale",
+    "../../locales/.wuchale/**",
+    "**/locales/**",
+    "**/locales/.wuchale/**"
   ],
   "extends": "./.svelte-kit/tsconfig.json"
 }

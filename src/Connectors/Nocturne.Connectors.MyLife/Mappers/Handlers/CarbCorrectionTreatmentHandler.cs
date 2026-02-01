@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Connectors.MyLife.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
@@ -19,7 +20,8 @@ internal sealed class CarbCorrectionTreatmentHandler : IMyLifeTreatmentHandler
             return [];
         }
 
-        var treatment = MyLifeTreatmentFactory.Create(ev, MyLifeTreatmentTypes.CarbCorrection);
+        // Use shared TreatmentTypes constant for consistency across connectors
+        var treatment = MyLifeTreatmentFactory.Create(ev, TreatmentTypes.CarbCorrection);
         treatment.Carbs = carbs;
 
         if (context.EnableMealCarbConsolidation &&

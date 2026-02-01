@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -28,11 +29,13 @@ public class PostgreSqlService : IPostgreSqlService
     /// <param name="context">The database context for PostgreSQL operations</param>
     /// <param name="entryRepository">Repository for entry operations</param>
     /// <param name="treatmentRepository">Repository for treatment operations</param>
+    /// <param name="queryParser">MongoDB query parser for advanced filtering</param>
     /// <param name="logger">Logger instance for this service</param>
     public PostgreSqlService(
         NocturneDbContext context,
         EntryRepository entryRepository,
         TreatmentRepository treatmentRepository,
+        IQueryParser queryParser,
         ILogger<PostgreSqlService> logger
     )
     {
@@ -41,7 +44,7 @@ public class PostgreSqlService : IPostgreSqlService
         _treatmentRepository = treatmentRepository;
         _foodRepository = new FoodRepository(context);
         _settingsRepository = new SettingsRepository(context);
-        _deviceStatusRepository = new DeviceStatusRepository(context);
+        _deviceStatusRepository = new DeviceStatusRepository(context, queryParser);
         _profileRepository = new ProfileRepository(context);
         _activityRepository = new ActivityRepository(context);
         _logger = logger;
@@ -291,8 +294,26 @@ public class PostgreSqlService : IPostgreSqlService
     )
     {
         _logger.LogDebug("Bulk deleting treatments with query: {FindQuery}", findQuery);
-        // For now, treat findQuery as an eventType filter - this could be expanded later
-        return await _treatmentRepository.DeleteTreatmentsAsync(findQuery, cancellationToken);
+
+        // Parse eventType from the find query (supports find[eventType]=Value format)
+        string? eventType = null;
+        if (!string.IsNullOrEmpty(findQuery))
+        {
+            // Handle URL-encoded brackets: find%5BeventType%5D=Value or find[eventType]=Value
+            var decodedQuery = System.Web.HttpUtility.UrlDecode(findQuery);
+            var match = System.Text.RegularExpressions.Regex.Match(
+                decodedQuery,
+                @"find\[eventType\]=([^&]+)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (match.Success)
+            {
+                eventType = match.Groups[1].Value;
+                _logger.LogDebug("Parsed eventType from find query: {EventType}", eventType);
+            }
+        }
+
+        return await _treatmentRepository.DeleteTreatmentsAsync(eventType, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -435,6 +456,18 @@ public class PostgreSqlService : IPostgreSqlService
     {
         _logger.LogDebug("Getting treatments with count: {Count}, skip: {Skip}", count, skip);
         return await _treatmentRepository.GetTreatmentsAsync(null, count, skip, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Treatment>> GetTreatmentsByTimeRangeAsync(
+        long startMills,
+        long endMills,
+        int count = 10000,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug("Getting treatments by time range: {Start} to {End}", startMills, endMills);
+        return await _treatmentRepository.GetTreatmentsByTimeRangeAsync(startMills, endMills, count, cancellationToken);
     }
 
     /// <summary>

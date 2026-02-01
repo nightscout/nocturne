@@ -1,5 +1,4 @@
 import { getRequestEvent, query, form } from "$app/server";
-import { invalid } from "@sveltejs/kit";
 import type { Profile } from "$lib/api";
 import { z } from "zod";
 
@@ -152,7 +151,7 @@ export const createProfileForm = form(createProfileSchema, async (data, issue) =
     };
   } catch (error) {
     console.error("Error creating profile:", error);
-    invalid(issue("Failed to create profile. Please try again."));
+    return issue("Failed to create profile. Please try again.");
   }
 });
 
@@ -182,7 +181,7 @@ export const updateProfileForm = form(updateProfileSchema, async (data, issue) =
     };
   } catch (error) {
     console.error("Error updating profile:", error);
-    invalid(issue("Failed to update profile. Please try again."));
+    return issue("Failed to update profile. Please try again.");
   }
 });
 
@@ -208,7 +207,7 @@ export const deleteProfileForm = form(deleteProfileSchema, async (data, issue) =
     };
   } catch (error) {
     console.error("Error deleting profile:", error);
-    invalid(issue("Failed to delete profile. Please try again."));
+    return issue("Failed to delete profile. Please try again.");
   }
 });
 

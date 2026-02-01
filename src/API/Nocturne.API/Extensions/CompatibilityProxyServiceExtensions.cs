@@ -1,8 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Compatibility;
@@ -22,9 +20,8 @@ public static class CompatibilityProxyServiceExtensions
         IConfiguration configuration
     )
     {
-        // Add the DbContext
-        services.AddDbContext<NocturneDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("nocturne")));
+        // Note: NocturneDbContext is already registered via AddPostgreSqlInfrastructure()
+        // Do not register it again here as it causes DI conflicts
 
         // Configure compatibility proxy options
         services.Configure<CompatibilityProxyConfiguration>(

@@ -25,6 +25,7 @@ import {
   Syringe,
   Activity,
   Battery,
+  PieChart,
 } from "lucide-svelte";
 import type { ComponentType } from "svelte";
 
@@ -46,6 +47,8 @@ export const WIDGET_ICONS: Partial<Record<WidgetId, ComponentType>> = {
   [WidgetId.Treatments]: Syringe,
   [WidgetId.Agp]: Activity,
   [WidgetId.BatteryStatus]: Battery,
+  [WidgetId.Clock]: Clock,
+  [WidgetId.Tdd]: PieChart,
 };
 
 /**
@@ -57,11 +60,12 @@ export function getWidgetIcon(id: WidgetId): ComponentType | undefined {
 
 /**
  * Default top widgets (for when no user config exists)
+ * BgDelta includes connection status + last updated info
  */
 export const DEFAULT_TOP_WIDGETS: WidgetId[] = [
   WidgetId.BgDelta,
-  WidgetId.LastUpdated,
-  WidgetId.ConnectionStatus,
+  WidgetId.TirChart,
+  WidgetId.Tdd,
 ];
 
 /**

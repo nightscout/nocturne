@@ -98,6 +98,19 @@ public interface IStatisticsService
     double GetBasalPercentage(TreatmentSummary treatmentSummary);
     bool IsBolusTreatment(Treatment treatment);
 
+    /// <summary>
+    /// Calculate comprehensive insulin delivery statistics for a date range
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze</param>
+    /// <param name="startDate">Start of the analysis period</param>
+    /// <param name="endDate">End of the analysis period</param>
+    /// <returns>Comprehensive insulin delivery statistics</returns>
+    InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
+        IEnumerable<Treatment> treatments,
+        DateTime startDate,
+        DateTime endDate
+    );
+
     // Formatting Utilities
     string FormatInsulinDisplay(double value);
     string FormatCarbDisplay(double value);
@@ -138,4 +151,42 @@ public interface IStatisticsService
         int hoursAfterChange = 24,
         int bucketSizeMinutes = 30
     );
+
+    /// <summary>
+    /// Calculate daily basal/bolus ratio breakdown for chart rendering
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze (for bolus data)</param>
+    /// <returns>Daily breakdown with averages and summary statistics</returns>
+    DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(IEnumerable<Treatment> treatments);
+
+    /// <summary>
+    /// Calculate daily basal/bolus ratio breakdown using StateSpans for basal data
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze (for bolus data)</param>
+    /// <param name="basalStateSpans">Collection of BasalDelivery StateSpans for basal data</param>
+    /// <returns>Daily breakdown with averages and summary statistics</returns>
+    DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
+        IEnumerable<Treatment> treatments,
+        IEnumerable<StateSpan> basalStateSpans);
+
+    /// <summary>
+    /// Calculate comprehensive basal analysis statistics including percentiles
+    /// </summary>
+    /// <param name="treatments">Collection of treatments to analyze</param>
+    /// <param name="startDate">Start date of the analysis period</param>
+    /// <param name="endDate">End date of the analysis period</param>
+    /// <returns>Comprehensive basal analysis with stats, temp basal info, and hourly percentiles</returns>
+    BasalAnalysisResponse CalculateBasalAnalysis(IEnumerable<Treatment> treatments, DateTime startDate, DateTime endDate);
+
+    /// <summary>
+    /// Calculate comprehensive basal analysis statistics using StateSpans
+    /// </summary>
+    /// <param name="basalStateSpans">Collection of BasalDelivery StateSpans</param>
+    /// <param name="startDate">Start date of the analysis period</param>
+    /// <param name="endDate">End date of the analysis period</param>
+    /// <returns>Comprehensive basal analysis with stats, temp basal info, and hourly percentiles</returns>
+    BasalAnalysisResponse CalculateBasalAnalysis(
+        IEnumerable<StateSpan> basalStateSpans,
+        DateTime startDate,
+        DateTime endDate);
 }

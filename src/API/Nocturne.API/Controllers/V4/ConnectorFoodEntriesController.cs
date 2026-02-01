@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -35,7 +36,10 @@ public class ConnectorFoodEntriesController : ControllerBase
             return Ok(Array.Empty<ConnectorFoodEntry>());
         }
 
+        var userId = HttpContext.GetSubjectIdString() ?? "default";
+
         var results = await _connectorFoodEntryService.ImportAsync(
+            userId,
             imports,
             HttpContext.RequestAborted
         );

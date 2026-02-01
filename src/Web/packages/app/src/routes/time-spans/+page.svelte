@@ -3,9 +3,10 @@
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import Button from "$lib/components/ui/button/button.svelte";
+  import Toggle from "$lib/components/ui/toggle/toggle.svelte";
   import DateRangePicker from "$lib/components/ui/date-range-picker.svelte";
   import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-svelte";
-  import GlucoseChartCard from "$lib/components/dashboard/GlucoseChartCard.svelte";
+  import { StateSpansTimeline } from "$lib/components/dashboard/state-spans-timeline";
   import { getTimeSpansData } from "./data.remote";
 
   // Get date range from URL search params
@@ -42,6 +43,13 @@
     from: data?.dateRange.from ?? fromDate,
     to: data?.dateRange.to ?? toDate,
   });
+
+  // Toggle states for each category (all enabled by default)
+  let showPumpModes = $state(true);
+  let showProfiles = $state(true);
+  let showTempBasals = $state(true);
+  let showOverrides = $state(true);
+  let showActivities = $state(true);
 
   // Date navigation - shift by the current range duration
   function goToPreviousPeriod() {
@@ -123,13 +131,93 @@
   <!-- Date Range Picker -->
   <DateRangePicker showDaysPresets={true} defaultDays={7} />
 
-  <!-- Use GlucoseChartCard with date range and all spans enabled by default -->
-  <GlucoseChartCard
-    entries={data?.entries ?? []}
-    {dateRange}
-    showPredictions={false}
-    initialShowOverrideSpans={true}
-    initialShowProfileSpans={true}
-    initialShowActivitySpans={true}
-  />
+  <!-- Timeline Card -->
+  <Card.Root>
+    <Card.Header class="pb-2">
+      <Card.Title>State Spans Timeline</Card.Title>
+      <Card.Description>
+        View pump modes, profiles, temp basals, overrides, and activities over time
+      </Card.Description>
+    </Card.Header>
+    <Card.Content>
+      <!-- Category toggles -->
+      <div class="flex flex-wrap gap-2 mb-4">
+        <Toggle
+          variant="outline"
+          size="sm"
+          bind:pressed={showPumpModes}
+          aria-label="Toggle pump modes"
+        >
+          <span
+            class="w-2 h-2 rounded-full mr-2"
+            style="background-color: var(--pump-mode-automatic);"
+          ></span>
+          Pump Modes
+        </Toggle>
+        <Toggle
+          variant="outline"
+          size="sm"
+          bind:pressed={showProfiles}
+          aria-label="Toggle profiles"
+        >
+          <span
+            class="w-2 h-2 rounded-full mr-2"
+            style="background-color: var(--chart-1);"
+          ></span>
+          Profiles
+        </Toggle>
+        <Toggle
+          variant="outline"
+          size="sm"
+          bind:pressed={showTempBasals}
+          aria-label="Toggle basal delivery"
+        >
+          <span
+            class="w-2 h-2 rounded-full mr-2"
+            style="background-color: var(--insulin-basal);"
+          ></span>
+          Basal
+        </Toggle>
+        <Toggle
+          variant="outline"
+          size="sm"
+          bind:pressed={showOverrides}
+          aria-label="Toggle overrides"
+        >
+          <span
+            class="w-2 h-2 rounded-full mr-2"
+            style="background-color: var(--chart-2);"
+          ></span>
+          Overrides
+        </Toggle>
+        <Toggle
+          variant="outline"
+          size="sm"
+          bind:pressed={showActivities}
+          aria-label="Toggle activities"
+        >
+          <span
+            class="w-2 h-2 rounded-full mr-2"
+            style="background-color: var(--pump-mode-sleep);"
+          ></span>
+          Activities
+        </Toggle>
+      </div>
+
+      <!-- Timeline visualization -->
+      <StateSpansTimeline
+        pumpModeSpans={data?.pumpModeSpans ?? []}
+        profileSpans={data?.profileSpans ?? []}
+        tempBasalSpans={data?.tempBasalSpans ?? []}
+        overrideSpans={data?.overrideSpans ?? []}
+        activitySpans={data?.activitySpans ?? []}
+        {dateRange}
+        {showPumpModes}
+        {showProfiles}
+        {showTempBasals}
+        {showOverrides}
+        {showActivities}
+      />
+    </Card.Content>
+  </Card.Root>
 </div>

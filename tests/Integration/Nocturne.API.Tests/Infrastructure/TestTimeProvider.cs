@@ -1,16 +1,18 @@
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
 /// <summary>
-/// Provides consistent, predictable time values for integration tests
-/// Eliminates time-dependent test brittleness by using fixed base times
+/// Provides consistent, predictable time values for integration tests.
+/// Uses current time as base to ensure Nightscout returns entries (it has a time window filter).
+/// Time is captured once at test collection start to maintain consistency within a test run.
 /// </summary>
 public static class TestTimeProvider
 {
     /// <summary>
-    /// Fixed base time for consistent test behavior
-    /// All test times are derived from this to ensure reproducibility
+    /// Base time for consistent test behavior.
+    /// Uses current UTC time (captured once) to ensure Nightscout returns entries
+    /// in default queries, which filter out old data.
     /// </summary>
-    public static readonly DateTimeOffset BaseTestTime = new(2024, 1, 15, 12, 0, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset BaseTestTime = DateTimeOffset.UtcNow;
 
     /// <summary>
     /// Gets a test time with optional offset from base time

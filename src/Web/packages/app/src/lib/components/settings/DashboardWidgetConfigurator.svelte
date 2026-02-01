@@ -143,7 +143,7 @@
 
       <!-- Selected widgets (draggable) -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Active Widgets</label>
+        <span class="text-sm font-medium">Active Widgets</span>
         <div class="space-y-2">
           {#each selectedWidgets as widget, index (widget.id)}
             {@const Icon = getIcon(widget.id!)}
@@ -203,9 +203,9 @@
       <!-- Available widgets to add -->
       {#if availableWidgets.length > 0}
         <div class="space-y-2">
-          <label class="text-sm font-medium text-muted-foreground">
+          <span class="text-sm font-medium text-muted-foreground">
             Available Widgets {#if !canAddMore}(max {maxWidgets} reached){/if}
-          </label>
+          </span>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {#each availableWidgets as widget (widget.id)}
               {@const Icon = getIcon(widget.id!)}

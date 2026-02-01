@@ -42,8 +42,8 @@
   // Combobox state
   let comboboxOpen = $state(false);
   let categorySelectionOpen = $state(false);
-  let comboboxTriggerRef = $state<HTMLButtonElement>(null!);
-  let categorySelectionTriggerRef = $state<HTMLButtonElement>(null!);
+  let comboboxTriggerRef = $state<HTMLButtonElement | null>(null);
+  let categorySelectionTriggerRef = $state<HTMLButtonElement | null>(null);
 
   // Search values
   let searchValue = $state("");

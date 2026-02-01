@@ -26,8 +26,6 @@ public class BaseConnectorServiceTests
         var config = new TestConnectorConfiguration
         {
             ConnectSource = ConnectSource.Dexcom,
-            NightscoutUrl = "https://test.nightscout.com",
-            ApiSecret = "test-secret",
         };
 
         // Assert
@@ -49,8 +47,6 @@ public class BaseConnectorServiceTests
         var config = new TestConnectorConfiguration
         {
             ConnectSource = ConnectSource.Dexcom,
-            NightscoutUrl = "https://test.nightscout.com",
-            ApiSecret = "test-secret",
             UseAsyncProcessing = true,
         };
 
@@ -102,8 +98,6 @@ public class BaseConnectorServiceTests
         var config = new TestConnectorConfiguration
         {
             ConnectSource = ConnectSource.Dexcom,
-            NightscoutUrl = "https://test.nightscout.com",
-            ApiSecret = "test-secret",
             UseAsyncProcessing = false, // Direct API mode
         };
 

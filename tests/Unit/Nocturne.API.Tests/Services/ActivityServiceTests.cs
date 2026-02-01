@@ -3,7 +3,6 @@ using Moq;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services;
@@ -13,7 +12,7 @@ namespace Nocturne.API.Tests.Services;
 /// </summary>
 public class ActivityServiceTests
 {
-    private readonly Mock<IPostgreSqlService> _mockPostgreSqlService;
+    private readonly Mock<IStateSpanService> _mockStateSpanService;
     private readonly Mock<IDocumentProcessingService> _mockDocumentProcessingService;
     private readonly Mock<ISignalRBroadcastService> _mockSignalRBroadcastService;
     private readonly Mock<ILogger<ActivityService>> _mockLogger;
@@ -21,13 +20,13 @@ public class ActivityServiceTests
 
     public ActivityServiceTests()
     {
-        _mockPostgreSqlService = new Mock<IPostgreSqlService>();
+        _mockStateSpanService = new Mock<IStateSpanService>();
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
         _mockSignalRBroadcastService = new Mock<ISignalRBroadcastService>();
         _mockLogger = new Mock<ILogger<ActivityService>>();
 
         _activityService = new ActivityService(
-            _mockPostgreSqlService.Object,
+            _mockStateSpanService.Object,
             _mockDocumentProcessingService.Object,
             _mockSignalRBroadcastService.Object,
             _mockLogger.Object
@@ -60,8 +59,10 @@ public class ActivityServiceTests
             },
         };
 
-        _mockPostgreSqlService
-            .Setup(x => x.GetActivitiesAsync(10, 0, It.IsAny<CancellationToken>()))
+        _mockStateSpanService
+            .Setup(x =>
+                x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>())
+            )
             .ReturnsAsync(expectedActivities);
 
         // Act
@@ -96,8 +97,15 @@ public class ActivityServiceTests
             },
         };
 
-        _mockPostgreSqlService
-            .Setup(x => x.GetActivitiesAsync(count, skip, It.IsAny<CancellationToken>()))
+        _mockStateSpanService
+            .Setup(x =>
+                x.GetActivitiesAsync(
+                    It.IsAny<string?>(),
+                    count,
+                    skip,
+                    It.IsAny<CancellationToken>()
+                )
+            )
             .ReturnsAsync(expectedActivities);
 
         // Act
@@ -120,9 +128,10 @@ public class ActivityServiceTests
     public async Task GetActivitiesAsync_WithException_ThrowsException()
     {
         // Arrange
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.GetActivitiesAsync(
+                    It.IsAny<string?>(),
                     It.IsAny<int>(),
                     It.IsAny<int>(),
                     It.IsAny<CancellationToken>()
@@ -152,7 +161,7 @@ public class ActivityServiceTests
             Mills = 1234567890,
         };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedActivity);
 
@@ -175,7 +184,7 @@ public class ActivityServiceTests
         // Arrange
         var activityId = "invalidid";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Activity?)null);
 
@@ -197,7 +206,7 @@ public class ActivityServiceTests
         // Arrange
         var activityId = "test-id";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Database error"));
 
@@ -248,7 +257,7 @@ public class ActivityServiceTests
             .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()))
             .Returns(processedActivities);
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.CreateActivitiesAsync(
                     It.IsAny<IEnumerable<Activity>>(),
@@ -270,7 +279,7 @@ public class ActivityServiceTests
             x => x.ProcessDocuments(It.IsAny<IEnumerable<Activity>>()),
             Times.Once
         );
-        _mockPostgreSqlService.Verify(
+        _mockStateSpanService.Verify(
             x =>
                 x.CreateActivitiesAsync(
                     It.IsAny<IEnumerable<Activity>>(),
@@ -335,7 +344,7 @@ public class ActivityServiceTests
             Mills = 1234567890,
         };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.UpdateActivityAsync(activityId, activity, It.IsAny<CancellationToken>()))
             .ReturnsAsync(updatedActivity);
 
@@ -351,7 +360,7 @@ public class ActivityServiceTests
         Assert.Equal(activityId, result.Id);
         Assert.Equal("Jogging", result.Description);
         Assert.Equal(45, result.Duration);
-        _mockPostgreSqlService.Verify(
+        _mockStateSpanService.Verify(
             x => x.UpdateActivityAsync(activityId, activity, It.IsAny<CancellationToken>()),
             Times.Once
         );
@@ -376,7 +385,7 @@ public class ActivityServiceTests
             Mills = 1234567890,
         };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.UpdateActivityAsync(activityId, activity, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Activity?)null);
 
@@ -389,7 +398,7 @@ public class ActivityServiceTests
 
         // Assert
         Assert.Null(result);
-        _mockPostgreSqlService.Verify(
+        _mockStateSpanService.Verify(
             x => x.UpdateActivityAsync(activityId, activity, It.IsAny<CancellationToken>()),
             Times.Once
         );
@@ -414,7 +423,7 @@ public class ActivityServiceTests
             Mills = 1234567890,
         };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.UpdateActivityAsync(activityId, activity, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Database error"));
 
@@ -432,7 +441,7 @@ public class ActivityServiceTests
         // Arrange
         var activityId = "60a1b2c3d4e5f6789012345";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -441,7 +450,7 @@ public class ActivityServiceTests
 
         // Assert
         Assert.True(result);
-        _mockPostgreSqlService.Verify(
+        _mockStateSpanService.Verify(
             x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()),
             Times.Once
         );
@@ -459,7 +468,7 @@ public class ActivityServiceTests
         // Arrange
         var activityId = "invalidid";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
@@ -468,7 +477,7 @@ public class ActivityServiceTests
 
         // Assert
         Assert.False(result);
-        _mockPostgreSqlService.Verify(
+        _mockStateSpanService.Verify(
             x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()),
             Times.Once
         );
@@ -486,7 +495,7 @@ public class ActivityServiceTests
         // Arrange
         var activityId = "test-id";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Database error"));
 
@@ -573,7 +582,7 @@ public class ActivityServiceTests
         // Arrange & Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new ActivityService(
-                _mockPostgreSqlService.Object,
+                _mockStateSpanService.Object,
                 null!,
                 _mockSignalRBroadcastService.Object,
                 _mockLogger.Object
@@ -589,7 +598,7 @@ public class ActivityServiceTests
         // Arrange & Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new ActivityService(
-                _mockPostgreSqlService.Object,
+                _mockStateSpanService.Object,
                 _mockDocumentProcessingService.Object,
                 null!,
                 _mockLogger.Object
@@ -605,7 +614,7 @@ public class ActivityServiceTests
         // Arrange & Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new ActivityService(
-                _mockPostgreSqlService.Object,
+                _mockStateSpanService.Object,
                 _mockDocumentProcessingService.Object,
                 _mockSignalRBroadcastService.Object,
                 null!

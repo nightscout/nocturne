@@ -37,20 +37,37 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// Parse V3 query parameters from the request
     /// </summary>
     /// <returns>Parsed V3 query parameters</returns>
+    /// <exception cref="ArgumentException">Thrown when limit is out of tolerance (negative)</exception>
     protected V3QueryParameters ParseV3QueryParameters()
     {
         var query = HttpContext.Request.Query;
 
+        var rawLimit = ParseIntParameter(query, "limit", 100);
+
+        // Nightscout V3 API returns 400 for negative limit with "Parameter limit out of tolerance"
+        if (rawLimit < 0)
+        {
+            throw new V3ParameterOutOfToleranceException("limit");
+        }
+
         var parameters = new V3QueryParameters
         {
-            Limit = ParseIntParameter(query, "limit", 100),
+            Limit = rawLimit,
             Offset = ParseIntParameter(query, "offset", 0),
             Fields = ParseStringArrayParameter(query, "fields"),
             Sort = ParseStringParameter(query, "sort"),
             Filter = ParseJsonParameter(query, "filter"),
             IfModifiedSince = ParseDateTimeParameter(query, "if-modified-since"),
             IfNoneMatch = ParseStringParameter(query, "if-none-match"),
+            FilterCriteria = ParseV3FilterCriteria(query),
         };
+
+        // Handle skip as alias for offset
+        var skip = ParseIntParameter(query, "skip", -1);
+        if (skip >= 0)
+        {
+            parameters.Offset = skip;
+        }
 
         // Validate limits to prevent abuse
         const int MaxEntriesLimit = 1_000; // Align with Nightscout API v3 legacy limit
@@ -65,16 +82,139 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Exception thrown when a V3 API parameter is out of tolerance
+    /// </summary>
+    public class V3ParameterOutOfToleranceException : Exception
+    {
+        public string ParameterName { get; }
+
+        public V3ParameterOutOfToleranceException(string parameterName)
+            : base($"Parameter {parameterName} out of tolerance")
+        {
+            ParameterName = parameterName;
+        }
+    }
+
+    /// <summary>
+    /// Parse Nightscout V3 filter criteria from query parameters
+    /// Format: field$operator=value (e.g., category$eq=Fruit, carbs$gte=15)
+    /// </summary>
+    /// <param name="query">Query collection</param>
+    /// <returns>List of parsed filter criteria</returns>
+    private List<V3FilterCriteria> ParseV3FilterCriteria(IQueryCollection query)
+    {
+        var filterCriteria = new List<V3FilterCriteria>();
+        var reservedParams = new HashSet<string>
+        {
+            "token",
+            "sort",
+            "sort$desc",
+            "limit",
+            "skip",
+            "offset",
+            "fields",
+            "now",
+            "filter",
+            "if-modified-since",
+            "if-none-match",
+        };
+        var validOperators = new HashSet<string>
+        {
+            "eq",
+            "ne",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "in",
+            "nin",
+            "re",
+        };
+        var filterRegex = new System.Text.RegularExpressions.Regex(@"^(.+)\$([a-zA-Z]+)$");
+
+        foreach (var param in query)
+        {
+            if (reservedParams.Contains(param.Key.ToLower()))
+                continue;
+
+            var field = param.Key;
+            var op = "eq";
+
+            var match = filterRegex.Match(param.Key);
+            if (match.Success)
+            {
+                field = match.Groups[1].Value;
+                op = match.Groups[2].Value.ToLower();
+
+                if (!validOperators.Contains(op))
+                {
+                    _logger.LogWarning("Unsupported filter operator: {Operator}", op);
+                    continue;
+                }
+            }
+
+            var rawValue = param.Value.FirstOrDefault();
+            var value = ParseFilterValue(field, rawValue);
+
+            filterCriteria.Add(
+                new V3FilterCriteria
+                {
+                    Field = field,
+                    Operator = op,
+                    Value = value,
+                }
+            );
+        }
+
+        return filterCriteria;
+    }
+
+    /// <summary>
+    /// Parse and convert filter value to appropriate type
+    /// </summary>
+    private object? ParseFilterValue(string field, string? rawValue)
+    {
+        if (string.IsNullOrEmpty(rawValue))
+            return null;
+
+        // Try to parse as number
+        if (double.TryParse(rawValue, out var numValue))
+            return numValue;
+
+        // Parse boolean strings
+        if (rawValue.Equals("true", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (rawValue.Equals("false", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Unwrap string in single quotes
+        if (rawValue.StartsWith('\'') && rawValue.EndsWith('\'') && rawValue.Length >= 2)
+            return rawValue[1..^1];
+
+        // Parse date fields
+        var dateFields = new HashSet<string> { "date", "srvModified", "srvCreated", "created_at" };
+        if (dateFields.Contains(field) && DateTimeOffset.TryParse(rawValue, out var dateValue))
+        {
+            return dateValue.ToUnixTimeMilliseconds();
+        }
+
+        return rawValue;
+    }
+
+    /// <summary>
     /// Apply field selection to a collection of objects
     /// </summary>
     /// <param name="data">Data to filter</param>
     /// <param name="fields">Fields to include</param>
     /// <returns>Filtered data with only selected fields</returns>
-    protected IEnumerable<object> ApplyFieldSelection(IEnumerable<T> data, string[]? fields)
+    protected IEnumerable<object> ApplyFieldSelection<TItem>(
+        IEnumerable<TItem> data,
+        string[]? fields
+    )
     {
         if (fields == null || fields.Length == 0)
         {
-            return data;
+            return data.Cast<object>();
         }
 
         return data.Select(item =>
@@ -100,7 +240,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <param name="data">Data to generate ETag for</param>
     /// <returns>ETag value</returns>
-    protected string GenerateETag(IEnumerable<T> data)
+    protected string GenerateETag<TItem>(IEnumerable<TItem> data)
     {
         var json = JsonSerializer.Serialize(data);
         var hash = System.Security.Cryptography.SHA256.HashData(
@@ -115,8 +255,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="data">Response data</param>
     /// <param name="parameters">Query parameters</param>
     /// <param name="totalCount">Total count of items (for pagination)</param>
-    protected void SetV3ResponseHeaders(
-        IEnumerable<T> data,
+    protected void SetV3ResponseHeaders<TItem>(
+        IEnumerable<TItem> data,
         V3QueryParameters parameters,
         long totalCount
     )
@@ -193,29 +333,34 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
-    /// Create a standardized V3 error response
+    /// Create a standardized V3 error response (Nightscout compatible)
+    /// Nightscout V3 API returns simple {"status": STATUS_CODE} for errors
     /// </summary>
     /// <param name="statusCode">HTTP status code</param>
-    /// <param name="message">Error message</param>
-    /// <param name="details">Additional error details</param>
-    /// <returns>Standardized error response</returns>
+    /// <param name="message">Error message (unused in Nightscout format, kept for logging)</param>
+    /// <param name="details">Additional error details (unused in Nightscout format)</param>
+    /// <returns>Nightscout-compatible error response</returns>
     protected ActionResult CreateV3ErrorResponse(
         int statusCode,
         string message,
         object? details = null
     )
     {
-        var error = new V3ErrorResponse
-        {
-            Status = "error",
-            Code = statusCode.ToString(),
-            Message = message,
-            Timestamp = DateTimeOffset.UtcNow,
-            Path = Request.Path,
-            Details = details as Dictionary<string, object>,
-        };
+        _logger.LogDebug("V3 error response: {StatusCode} - {Message}", statusCode, message);
 
-        return StatusCode(statusCode, error);
+        // Nightscout V3 API returns {"status": STATUS_CODE, "message": "..."} for errors
+        return StatusCode(statusCode, new { status = statusCode, message });
+    }
+
+    /// <summary>
+    /// Create a Nightscout V3-compatible success response
+    /// Nightscout V3 API returns {"status": 200, "result": DATA} for success
+    /// </summary>
+    /// <param name="result">Result data</param>
+    /// <returns>Nightscout-compatible success response</returns>
+    protected ActionResult CreateV3SuccessResponse(object result)
+    {
+        return Ok(new { status = 200, result });
     }
 
     /// <summary>
@@ -225,8 +370,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="parameters">Query parameters</param>
     /// <param name="totalCount">Total count for pagination</param>
     /// <returns>Standardized success response</returns>
-    protected ActionResult<V3CollectionResponse<object>> CreateV3CollectionResponse(
-        IEnumerable<T> data,
+    protected IActionResult CreateV3CollectionResponse<TItem>(
+        IEnumerable<TItem> data,
         V3QueryParameters parameters,
         long totalCount
     )
@@ -253,7 +398,10 @@ public abstract class BaseV3Controller<T> : ControllerBase
         // Set response headers
         SetV3ResponseHeaders(data, parameters, totalCount);
 
-        return Ok(response);
+        // Nightscout V3 API returns {"status": 200, "result": [...]}
+        return Ok(
+            new Dictionary<string, object> { ["status"] = 200, ["result"] = responseData.ToList() }
+        );
     }
 
     #region Parameter Parsing Helpers
@@ -370,10 +518,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     protected bool ExtractSortDirection(string? sort)
     {
         if (string.IsNullOrEmpty(sort))
-            return false;
+            return true; // Nightscout defaults to Ascending (Oldest first)
 
-        // Check if sort starts with '-' (descending) or '+' (ascending)
-        return sort.StartsWith('+') || sort.StartsWith("asc", StringComparison.OrdinalIgnoreCase);
+        // Check if sort starts with '-' (descending) or 'desc' (descending)
+        if (sort.StartsWith('-') || sort.StartsWith("desc", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Default to ascending (true) if just field name is provided
+        return true;
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 #pragma warning disable ASPIREPIPELINES003 // Experimental container image APIs
 
 using Aspire.Hosting;
+using Aspire.Hosting.Publishing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host.Extensions;
@@ -189,6 +190,11 @@ class Program
             .WithHttpsEndpoint(port: 1613, name: "api")
             .WithHttpsDeveloperCertificate()
             .PublishAsDockerComposeService((_, _) => { })
+            .WithContainerBuildOptions(options =>
+            {
+                options.TargetPlatform =
+                    ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+            })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/api")
             .WithRemoteImageTag("latest");
 #pragma warning restore ASPIRECERTIFICATES001
@@ -333,6 +339,12 @@ class Program
                 builder.Configuration["Oidc:Cookie:RefreshTokenName"] ?? ".Nocturne.RefreshToken"
             )
             .PublishAsDockerComposeService((_, _) => { })
+            .WithContainerBuildOptions(options =>
+            {
+                // TargetPlatform for both amd64 and arm64 architectures
+                options.TargetPlatform =
+                    ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+            })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/web")
             .WithRemoteImageTag("latest");
 

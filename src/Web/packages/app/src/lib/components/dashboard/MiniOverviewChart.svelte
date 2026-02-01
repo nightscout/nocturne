@@ -5,7 +5,6 @@
     Area,
     Spline,
     Axis,
-    Text,
     BrushContext,
     ChartClipPath,
   } from "layerchart";
@@ -62,7 +61,9 @@
   }: Props = $props();
 
   // Reserved for future threshold coloring
+  // svelte-ignore state_referenced_locally
   void _highThreshold;
+  // svelte-ignore state_referenced_locally
   void _lowThreshold;
 
   // Track brush context for handle labels

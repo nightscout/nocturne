@@ -111,13 +111,17 @@ public class StatusService : IStatusService
         var response = new StatusResponse
         {
             Status = "ok",
-            Name = _configuration[ServiceNames.ConfigKeys.NightscoutSiteName] ?? "Nocturne",
+            Name = _configuration[ServiceNames.ConfigKeys.NightscoutSiteName] ?? "nightscout",
             Version = version,
             ServerTime = serverTime,
             ApiEnabled = true,
             CareportalEnabled = _configuration.GetValue<bool>("Features:CareportalEnabled", true),
+            BoluscalcEnabled = _configuration.GetValue<bool>("Features:BoluscalcEnabled", false),
             Head = GetGitCommitHash(),
             Settings = settings,
+            ExtendedSettings = GetExtendedSettings(),
+            Authorized = null, // Nightscout returns null for unauthenticated requests
+            RuntimeState = _demoModeService.IsEnabled ? "demo" : "loaded",
         };
 
         _logger.LogDebug(
@@ -285,37 +289,44 @@ public class StatusService : IStatusService
         // Core display settings
         settings["units"] = _configuration[ServiceNames.ConfigKeys.DisplayUnits] ?? "mg/dl";
         settings["timeFormat"] = _configuration.GetValue<int>("Display:TimeFormat", 12);
+        settings["dayStart"] = _configuration.GetValue<int>("Display:DayStart", 7);
+        settings["dayEnd"] = _configuration.GetValue<int>("Display:DayEnd", 21);
         settings["nightMode"] = _configuration.GetValue<bool>("Display:NightMode", false);
         settings["editMode"] = _configuration.GetValue<bool>("Display:EditMode", true);
         settings["showRawbg"] = _configuration[ServiceNames.ConfigKeys.DisplayShowRawBG] ?? "never";
-        settings["customTitle"] = _configuration[ServiceNames.ConfigKeys.DisplayCustomTitle] ?? "";
+        settings["customTitle"] = _configuration[ServiceNames.ConfigKeys.DisplayCustomTitle] ?? "Nightscout";
         settings["theme"] = _configuration[ServiceNames.ConfigKeys.DisplayTheme] ?? "default";
 
-        // Feature enablement
-        settings["enable"] = GetEnabledFeatures();
-        settings["showPlugins"] = _configuration[ServiceNames.ConfigKeys.DisplayShowPlugins] ?? "";
-        settings["showForecast"] =
-            _configuration[ServiceNames.ConfigKeys.DisplayShowForecast] ?? "";
-
-        // Alarm settings (public subset)
-        settings["alarmUrgentHigh"] = _configuration.GetValue<bool>(
-            "Alarms:UrgentHigh:Enabled",
-            true
-        );
+        // Alarm boolean settings
+        settings["alarmUrgentHigh"] = _configuration.GetValue<bool>("Alarms:UrgentHigh:Enabled", true);
         settings["alarmHigh"] = _configuration.GetValue<bool>("Alarms:High:Enabled", true);
         settings["alarmLow"] = _configuration.GetValue<bool>("Alarms:Low:Enabled", true);
-        settings["alarmUrgentLow"] = _configuration.GetValue<bool>(
-            "Alarms:UrgentLow:Enabled",
-            true
-        );
-        settings["alarmTimeagoWarn"] = _configuration.GetValue<bool>(
-            "Alarms:TimeAgoWarn:Enabled",
-            true
-        );
-        settings["alarmTimeagoUrgent"] = _configuration.GetValue<bool>(
-            "Alarms:TimeAgoUrgent:Enabled",
-            true
-        );
+        settings["alarmUrgentLow"] = _configuration.GetValue<bool>("Alarms:UrgentLow:Enabled", true);
+        settings["alarmTimeagoWarn"] = _configuration.GetValue<bool>("Alarms:TimeAgoWarn:Enabled", true);
+        settings["alarmTimeagoUrgent"] = _configuration.GetValue<bool>("Alarms:TimeAgoUrgent:Enabled", true);
+        settings["alarmPumpBatteryLow"] = _configuration.GetValue<bool>("Alarms:PumpBatteryLow", false);
+
+        // Alarm minute arrays - Nightscout defaults
+        settings["alarmUrgentHighMins"] = _configuration.GetSection("Alarms:UrgentHighMins").Get<int[]>() ?? new[] { 30, 60, 90, 120 };
+        settings["alarmHighMins"] = _configuration.GetSection("Alarms:HighMins").Get<int[]>() ?? new[] { 30, 60, 90, 120 };
+        settings["alarmLowMins"] = _configuration.GetSection("Alarms:LowMins").Get<int[]>() ?? new[] { 15, 30, 45, 60 };
+        settings["alarmUrgentLowMins"] = _configuration.GetSection("Alarms:UrgentLowMins").Get<int[]>() ?? new[] { 15, 30, 45 };
+        settings["alarmUrgentMins"] = _configuration.GetSection("Alarms:UrgentMins").Get<int[]>() ?? new[] { 30, 60, 90, 120 };
+        settings["alarmWarnMins"] = _configuration.GetSection("Alarms:WarnMins").Get<int[]>() ?? new[] { 30, 60, 90, 120 };
+        settings["alarmTimeagoWarnMins"] = _configuration.GetValue<int>("Alarms:TimeAgoWarnMins", 15);
+        settings["alarmTimeagoUrgentMins"] = _configuration.GetValue<int>("Alarms:TimeAgoUrgentMins", 30);
+
+        // Language and display settings
+        settings["language"] = _configuration[ServiceNames.ConfigKeys.LocalizationLanguage] ?? "en";
+        settings["scaleY"] = _configuration[ServiceNames.ConfigKeys.DisplayScaleY] ?? "log";
+        settings["showPlugins"] = _configuration[ServiceNames.ConfigKeys.DisplayShowPlugins] ?? "dbsize delta direction upbat";
+        settings["showForecast"] = _configuration[ServiceNames.ConfigKeys.DisplayShowForecast] ?? "ar2";
+        settings["focusHours"] = _configuration.GetValue<int>("Display:FocusHours", 3);
+        settings["heartbeat"] = _configuration.GetValue<int>("Server:Heartbeat", 60);
+        settings["baseURL"] = _configuration["Server:BaseURL"] ?? "";
+
+        // Auth settings
+        settings["authDefaultRoles"] = _configuration["Auth:DefaultRoles"] ?? "readable";
 
         // Threshold values
         settings["thresholds"] = new Dictionary<string, object>
@@ -326,16 +337,32 @@ public class StatusService : IStatusService
             ["bgLow"] = _configuration.GetValue<int>("Thresholds:BgLow", 55),
         };
 
-        // Language and localization
-        settings["language"] = _configuration[ServiceNames.ConfigKeys.LocalizationLanguage] ?? "en";
-        settings["scaleY"] = _configuration[ServiceNames.ConfigKeys.DisplayScaleY] ?? "log";
+        // Security settings
+        settings["insecureUseHttp"] = _configuration.GetValue<bool>("Security:InsecureUseHttp", true);
+        settings["secureHstsHeader"] = _configuration.GetValue<bool>("Security:SecureHstsHeader", false);
+        settings["secureHstsHeaderIncludeSubdomains"] = _configuration.GetValue<bool>("Security:SecureHstsHeaderIncludeSubdomains", false);
+        settings["secureHstsHeaderPreload"] = _configuration.GetValue<bool>("Security:SecureHstsHeaderPreload", false);
+        settings["secureCsp"] = _configuration.GetValue<bool>("Security:SecureCsp", false);
 
-        // Default features that are typically enabled
-        if (!settings.ContainsKey("enable") || string.IsNullOrEmpty(settings["enable"]?.ToString()))
+        // Misc settings
+        settings["deNormalizeDates"] = _configuration.GetValue<bool>("Display:DeNormalizeDates", false);
+        settings["showClockDelta"] = _configuration.GetValue<bool>("Display:ShowClockDelta", false);
+        settings["showClockLastTime"] = _configuration.GetValue<bool>("Display:ShowClockLastTime", false);
+        settings["authFailDelay"] = _configuration.GetValue<int>("Auth:FailDelay", 5000);
+        settings["adminNotifiesEnabled"] = _configuration.GetValue<bool>("Notifications:AdminNotifiesEnabled", true);
+        settings["authenticationPromptOnLoad"] = _configuration.GetValue<bool>("Auth:PromptOnLoad", false);
+
+        // Frame URLs (for Nightscout's multi-frame display feature)
+        for (int i = 1; i <= 8; i++)
         {
-            settings["enable"] =
-                "careportal basal dbsize rawbg iob maker bridge cob bwp cage iage sage boluscalc pushover treatmentnotify mmconnect loop pump profile food openaps bage alexa override cors";
+            settings[$"frameUrl{i}"] = _configuration[$"Display:FrameUrl{i}"] ?? "";
+            settings[$"frameName{i}"] = _configuration[$"Display:FrameName{i}"] ?? "";
         }
+
+        // Default features
+        settings["DEFAULT_FEATURES"] = GetDefaultFeatures();
+        settings["alarmTypes"] = _configuration.GetSection("Alarms:Types").Get<string[]>() ?? new[] { "predict" };
+        settings["enable"] = GetEnabledFeaturesArray();
 
         await Task.CompletedTask; // For future async operations
 
@@ -343,7 +370,34 @@ public class StatusService : IStatusService
     }
 
     /// <summary>
-    /// Get the list of enabled features/plugins
+    /// Get default features array
+    /// </summary>
+    private static string[] GetDefaultFeatures()
+    {
+        return new[]
+        {
+            "bgnow", "delta", "direction", "timeago", "devicestatus", "upbat",
+            "errorcodes", "profile", "bolus", "dbsize", "runtimestate", "basal", "careportal"
+        };
+    }
+
+    /// <summary>
+    /// Get extended settings (Nightscout compatibility)
+    /// </summary>
+    private Dictionary<string, object> GetExtendedSettings()
+    {
+        return new Dictionary<string, object>
+        {
+            ["devicestatus"] = new Dictionary<string, object>
+            {
+                ["advanced"] = _configuration.GetValue<bool>("ExtendedSettings:DeviceStatus:Advanced", true),
+                ["days"] = _configuration.GetValue<int>("ExtendedSettings:DeviceStatus:Days", 1)
+            }
+        };
+    }
+
+    /// <summary>
+    /// Get the list of enabled features/plugins as a space-separated string
     /// </summary>
     private string GetEnabledFeatures()
     {
@@ -355,6 +409,27 @@ public class StatusService : IStatusService
 
         // Default enabled features to match Nightscout behavior
         return "careportal basal dbsize rawbg iob maker bridge cob bwp cage iage sage boluscalc pushover treatmentnotify mmconnect loop pump profile food openaps bage alexa override cors";
+    }
+
+    /// <summary>
+    /// Get the list of enabled features/plugins as an array (Nightscout compatibility)
+    /// </summary>
+    private string[] GetEnabledFeaturesArray()
+    {
+        var enabledFeatures = _configuration[ServiceNames.ConfigKeys.FeaturesEnable];
+        if (!string.IsNullOrEmpty(enabledFeatures))
+        {
+            return enabledFeatures.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        // Default enabled features to match Nightscout behavior
+        return new[]
+        {
+            "careportal", "basal", "iob", "cob", "bwp", "cage", "sage", "iage", "bage",
+            "pump", "openaps", "loop", "treatmentnotify", "bgnow", "delta", "direction",
+            "timeago", "devicestatus", "upbat", "errorcodes", "profile", "bolus", "dbsize",
+            "runtimestate", "ar2"
+        };
     }
 
     /// <summary>

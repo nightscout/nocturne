@@ -22,24 +22,24 @@
   } from "lucide-svelte";
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import type { Treatment } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
+  import { getBasalAnalysis } from "$lib/data/statistics.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 14 days for basal pattern analysis
+  const reportsParams = requireDateParamsContext(14);
 
-  // Use resource for controlled reactivity - prevents excessive re-fetches
-  const reportsResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getReportsData(dateRangeInput);
-    },
-    { debounce: 100 }
+  // Use contextResource - it syncs to layout's ResourceGuard automatically
+  const reportsResource = contextResource(
+    () => getReportsData(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading Basal Analysis" }
   );
 
+  // Derived data from reportsResource
   const treatments = $derived(reportsResource.current?.treatments ?? []);
+  const basalSeries = $derived(reportsResource.current?.basalSeries ?? []);
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
@@ -59,77 +59,37 @@
     )
   );
 
-  // Calculate basal statistics
-  const basalStats = $derived.by(() => {
-    const basalTreatments = treatments.filter((t: Treatment) => {
-      const eventType = t.eventType?.toLowerCase() || "";
-      return (
-        eventType.includes("basal") ||
-        eventType === "tempbasal" ||
-        eventType === "temp basal" ||
-        t.rate !== undefined ||
-        t.absolute !== undefined
-      );
-    });
+  // Secondary query for basal analysis
+  const basalAnalysisQuery = $derived(
+    getBasalAnalysis({
+      startDate: dateRange.from,
+      endDate: dateRange.to,
+    })
+  );
 
-    const rates = basalTreatments
-      .map((t: Treatment) => t.rate ?? t.absolute ?? 0)
-      .filter((r: number) => r > 0);
-
-    if (rates.length === 0) {
-      return {
-        count: 0,
-        avgRate: 0,
-        minRate: 0,
-        maxRate: 0,
-        totalDelivered: 0,
-      };
-    }
-
-    const totalDelivered = basalTreatments.reduce(
-      (sum: number, t: Treatment) => {
-        const rate = t.rate ?? t.absolute ?? 0;
-        const duration = t.duration ?? 0;
-        return sum + (rate * duration) / 60;
-      },
-      0
-    );
-
-    return {
-      count: basalTreatments.length,
-      avgRate: rates.reduce((a: number, b: number) => a + b, 0) / rates.length,
-      minRate: Math.min(...rates),
-      maxRate: Math.max(...rates),
-      totalDelivered,
-    };
+  // Get stats and tempBasalInfo from backend response with explicit defaults
+  const basalStats = $derived({
+    count: basalAnalysisQuery.current?.stats?.count ?? 0,
+    avgRate: basalAnalysisQuery.current?.stats?.avgRate ?? 0,
+    minRate: basalAnalysisQuery.current?.stats?.minRate ?? 0,
+    maxRate: basalAnalysisQuery.current?.stats?.maxRate ?? 0,
+    totalDelivered: basalAnalysisQuery.current?.stats?.totalDelivered ?? 0,
   });
 
-  // Calculate temp basal frequency
-  const tempBasalInfo = $derived.by(() => {
-    const tempBasals = treatments.filter((t: Treatment) => {
-      const eventType = t.eventType?.toLowerCase() || "";
-      return eventType.includes("temp") || eventType === "tempbasal";
-    });
-
-    const highTemps = tempBasals.filter(
-      (t: Treatment) => (t.percent ?? 100) > 100
-    );
-    const lowTemps = tempBasals.filter(
-      (t: Treatment) => (t.percent ?? 100) < 100
-    );
-    const zeroTemps = tempBasals.filter(
-      (t: Treatment) =>
-        (t.rate ?? t.absolute ?? 0) === 0 || (t.percent ?? 100) === 0
-    );
-
-    return {
-      total: tempBasals.length,
-      perDay: tempBasals.length / Math.max(1, dayCount),
-      highTemps: highTemps.length,
-      lowTemps: lowTemps.length,
-      zeroTemps: zeroTemps.length,
-    };
+  const tempBasalInfo = $derived({
+    total: basalAnalysisQuery.current?.tempBasalInfo?.total ?? 0,
+    perDay: basalAnalysisQuery.current?.tempBasalInfo?.perDay ?? 0,
+    highTemps: basalAnalysisQuery.current?.tempBasalInfo?.highTemps ?? 0,
+    lowTemps: basalAnalysisQuery.current?.tempBasalInfo?.lowTemps ?? 0,
+    zeroTemps: basalAnalysisQuery.current?.tempBasalInfo?.zeroTemps ?? 0,
   });
+
+  const hourlyPercentiles = $derived(
+    basalAnalysisQuery.current?.hourlyPercentiles ?? []
+  );
+
+  // Loading state for child components
+  const isLoading = $derived(reportsResource.loading || basalAnalysisQuery.loading);
 </script>
 
 <svelte:head>
@@ -140,6 +100,7 @@
   />
 </svelte:head>
 
+{#if reportsResource.current}
 <div class="container mx-auto max-w-7xl space-y-8 px-4 py-6">
   <!-- Header -->
   <div class="space-y-4">
@@ -282,7 +243,7 @@
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <BasalRatePercentileChart {treatments} />
+      <BasalRatePercentileChart data={hourlyPercentiles} loading={isLoading} />
     </CardContent>
   </Card>
 
@@ -298,7 +259,7 @@
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InsulinDeliveryChart {treatments} showStacked={false} />
+      <InsulinDeliveryChart {treatments} {basalSeries} showStacked={false} />
     </CardContent>
   </Card>
 
@@ -437,3 +398,4 @@
     </p>
   </div>
 </div>
+{/if}

@@ -44,16 +44,23 @@ public class FoodController : BaseV3Controller<Food>
         {
             var parameters = ParseV3QueryParameters();
 
-            // Convert V3 parameters to backend query for compatibility
-            var type = ExtractTypeFromFilter(parameters.Filter); // Extract type filter for food/quickpick
-            var findQuery = ConvertV3FilterToV1Find(parameters.Filter);
-            var reverseResults = ExtractSortDirection(parameters.Sort);
+            // Extract type filter from V3 filter criteria (type$eq=food or type$eq=quickpick)
+            var typeFilter = parameters.FilterCriteria.FirstOrDefault(f =>
+                f.Field.Equals("type", StringComparison.OrdinalIgnoreCase) && f.Operator == "eq"
+            );
+            var type = typeFilter?.Value?.ToString();
 
-            // Get food records using existing backend with V3 parameters
+            // Determine sort direction from sort$desc query parameter
+            // Nightscout V3: sort$desc=field means descending (newest first)
+            // reverseResults=false means descending, reverseResults=true means ascending
+            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
+            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
+
+            // Get all food records - we'll apply V3 filtering in memory
             var foodRecords = await _postgreSqlService.GetFoodWithAdvancedFilterAsync(
-                count: parameters.Limit,
-                skip: parameters.Offset,
-                findQuery: findQuery,
+                count: int.MaxValue, // Get all, filter later
+                skip: 0,
+                findQuery: null,
                 type: type,
                 reverseResults: reverseResults,
                 cancellationToken: cancellationToken
@@ -61,23 +68,36 @@ public class FoodController : BaseV3Controller<Food>
 
             var foodList = foodRecords.ToList();
 
-            // Get total count for pagination (approximation for performance)
-            var totalCount = await GetTotalCountAsync(type, findQuery, cancellationToken, "food"); // Check for conditional requests (304 Not Modified)
+            // Apply V3 filter criteria
+            foodList = ApplyV3FilterCriteria(foodList, parameters.FilterCriteria);
+
+            // Get total count before pagination
+            var totalCount = foodList.Count;
+
+            // Apply pagination
+            foodList = foodList.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+
+            // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(foodList.Cast<object>());
             var etag = GenerateETag(foodList);
 
             if (lastModified.HasValue && ShouldReturn304(etag, lastModified.Value, parameters))
             {
                 return StatusCode(304);
-            } // Create V3 response
-            var response = CreateV3CollectionResponse(foodList, parameters, totalCount);
+            }
 
             _logger.LogDebug(
                 "Successfully returned {Count} food records with V3 format",
                 foodList.Count
             );
 
-            return Ok(response);
+            // CreateV3CollectionResponse returns the properly formatted IActionResult
+            return (ActionResult)CreateV3CollectionResponse(foodList, parameters, totalCount);
+        }
+        catch (V3ParameterOutOfToleranceException ex)
+        {
+            _logger.LogWarning(ex, "V3 parameter out of tolerance: {Parameter}", ex.ParameterName);
+            return CreateV3ErrorResponse(400, $"Parameter {ex.ParameterName} out of tolerance");
         }
         catch (ArgumentException ex)
         {
@@ -89,6 +109,106 @@ public class FoodController : BaseV3Controller<Food>
             _logger.LogError(ex, "Error retrieving V3 food");
             return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Apply V3 filter criteria to a list of food records
+    /// </summary>
+    private List<Food> ApplyV3FilterCriteria(List<Food> foods, List<V3FilterCriteria> criteria)
+    {
+        if (criteria == null || criteria.Count == 0)
+            return foods;
+
+        foreach (var filter in criteria)
+        {
+            // Skip type filter as it's already applied at the database level
+            if (filter.Field.Equals("type", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foods = foods.Where(f => MatchesFilter(f, filter)).ToList();
+        }
+
+        return foods;
+    }
+
+    /// <summary>
+    /// Check if a food record matches a filter criterion
+    /// </summary>
+    private bool MatchesFilter(Food food, V3FilterCriteria filter)
+    {
+        var fieldValue = GetFieldValue(food, filter.Field);
+        if (fieldValue == null && filter.Value == null)
+            return true;
+        if (fieldValue == null || filter.Value == null)
+            return false;
+
+        return filter.Operator switch
+        {
+            "eq" => CompareValues(fieldValue, filter.Value) == 0,
+            "ne" => CompareValues(fieldValue, filter.Value) != 0,
+            "gt" => CompareValues(fieldValue, filter.Value) > 0,
+            "gte" => CompareValues(fieldValue, filter.Value) >= 0,
+            "lt" => CompareValues(fieldValue, filter.Value) < 0,
+            "lte" => CompareValues(fieldValue, filter.Value) <= 0,
+            "in" => filter.Value is string s && s.Split(',').Contains(fieldValue.ToString()),
+            "nin" => filter.Value is string s2 && !s2.Split(',').Contains(fieldValue.ToString()),
+            "re" => filter.Value is string pattern
+                && System.Text.RegularExpressions.Regex.IsMatch(
+                    fieldValue.ToString() ?? "",
+                    pattern
+                ),
+            _ => true,
+        };
+    }
+
+    /// <summary>
+    /// Get field value from a food object using reflection
+    /// </summary>
+    private object? GetFieldValue(Food food, string fieldName)
+    {
+        // Map lowercase field names to property names
+        var propertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["_id"] = "Id",
+            ["type"] = "Type",
+            ["category"] = "Category",
+            ["subcategory"] = "Subcategory",
+            ["name"] = "Name",
+            ["portion"] = "Portion",
+            ["carbs"] = "Carbs",
+            ["fat"] = "Fat",
+            ["protein"] = "Protein",
+            ["energy"] = "Energy",
+            ["gi"] = "Gi",
+            ["unit"] = "Unit",
+            ["hidden"] = "Hidden",
+            ["hideafteruse"] = "HideAfterUse",
+            ["position"] = "Position",
+        };
+
+        if (!propertyMap.TryGetValue(fieldName, out var propName))
+            propName = fieldName;
+
+        var prop = typeof(Food).GetProperty(propName);
+        return prop?.GetValue(food);
+    }
+
+    /// <summary>
+    /// Compare two values for filtering
+    /// </summary>
+    private int CompareValues(object a, object b)
+    {
+        // Try numeric comparison
+        if (
+            double.TryParse(a.ToString(), out var numA)
+            && double.TryParse(b.ToString(), out var numB)
+        )
+        {
+            return numA.CompareTo(numB);
+        }
+
+        // String comparison (case-insensitive)
+        return string.Compare(a.ToString(), b.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -142,6 +262,7 @@ public class FoodController : BaseV3Controller<Food>
 
     /// <summary>
     /// Create new food records with V3 format and deduplication support
+    /// Nightscout V3 API requires date field validation before processing
     /// </summary>
     /// <param name="foodData">Food data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -162,6 +283,34 @@ public class FoodController : BaseV3Controller<Food>
         );
         try
         {
+            // Check for empty request body first (Nightscout returns "Bad or missing request body")
+            if (IsEmptyRequestBody(foodData))
+            {
+                return CreateV3ErrorResponse(400, "Bad or missing request body");
+            }
+
+            // Nightscout V3 API validates common fields (including date) before processing
+            // For arrays, validate each element; for single objects, validate directly
+            if (foodData.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var element in foodData.EnumerateArray())
+                {
+                    var validationError = ValidateV3CommonFields(element);
+                    if (validationError != null)
+                    {
+                        return validationError;
+                    }
+                }
+            }
+            else if (foodData.ValueKind == JsonValueKind.Object)
+            {
+                var validationError = ValidateV3CommonFields(foodData);
+                if (validationError != null)
+                {
+                    return validationError;
+                }
+            }
+
             var foodRecords = ParseCreateRequestFromJsonElement(foodData);
 
             if (!foodRecords.Any())
@@ -203,9 +352,10 @@ public class FoodController : BaseV3Controller<Food>
 
     /// <summary>
     /// Update a food record by ID with V3 format
+    /// Nightscout V3 API requires date field validation before checking document existence
     /// </summary>
     /// <param name="id">Food ID to update</param>
-    /// <param name="food">Updated food data</param>
+    /// <param name="foodData">Updated food data as JSON</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Updated food record</returns>
     [HttpPut("{id}")]
@@ -216,7 +366,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(500)]
     public async Task<ActionResult> UpdateFood(
         string id,
-        [FromBody] Food food,
+        [FromBody] JsonElement foodData,
         CancellationToken cancellationToken = default
     )
     {
@@ -228,6 +378,19 @@ public class FoodController : BaseV3Controller<Food>
 
         try
         {
+            // Nightscout V3 API validates common fields before checking if document exists
+            // This includes the 'date' field which must be a number > MIN_TIMESTAMP (946684800000)
+            var validationError = ValidateV3CommonFields(foodData);
+            if (validationError != null)
+            {
+                return validationError;
+            }
+
+            var food = JsonSerializer.Deserialize<Food>(
+                foodData.GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            );
+
             if (food == null)
             {
                 return CreateV3ErrorResponse(
@@ -264,6 +427,65 @@ public class FoodController : BaseV3Controller<Food>
             _logger.LogError(ex, "Error updating food with ID {Id}", id);
             return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Check if the request body is empty (Nightscout returns specific error for this)
+    /// </summary>
+    /// <param name="jsonData">The JSON data to check</param>
+    /// <returns>True if the request body is empty</returns>
+    private bool IsEmptyRequestBody(JsonElement jsonData)
+    {
+        if (jsonData.ValueKind == JsonValueKind.Undefined)
+            return true;
+
+        if (jsonData.ValueKind == JsonValueKind.Null)
+            return true;
+
+        if (jsonData.ValueKind == JsonValueKind.Object)
+        {
+            // Empty object {} is considered empty
+            using var enumerator = jsonData.EnumerateObject();
+            return !enumerator.MoveNext();
+        }
+
+        if (jsonData.ValueKind == JsonValueKind.Array)
+        {
+            // Empty array [] is considered empty
+            return jsonData.GetArrayLength() == 0;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Validates common V3 fields as per Nightscout API behavior.
+    /// Nightscout validates these fields before checking if the document exists.
+    /// </summary>
+    /// <param name="jsonData">The JSON data to validate</param>
+    /// <returns>ActionResult with error if validation fails, null if validation passes</returns>
+    private ActionResult? ValidateV3CommonFields(JsonElement jsonData)
+    {
+        const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
+
+        // Check for 'date' field - Nightscout requires this for all V3 operations
+        if (!jsonData.TryGetProperty("date", out var dateProperty))
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        // Date must be a number greater than MIN_TIMESTAMP
+        if (dateProperty.ValueKind != JsonValueKind.Number)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        if (!dateProperty.TryGetInt64(out var dateValue) || dateValue <= MinTimestamp)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        return null; // Validation passed
     }
 
     /// <summary>

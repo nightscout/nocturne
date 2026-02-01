@@ -210,3 +210,82 @@ public enum CalculationType
     /// </summary>
     Automatic
 }
+
+/// <summary>
+/// Type of in-app notification for the unified notification system
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<InAppNotificationType>))]
+public enum InAppNotificationType
+{
+    /// <summary>
+    /// Admin notification for pending password reset request
+    /// </summary>
+    PasswordResetRequest,
+
+    /// <summary>
+    /// Notification that a tracker has not been configured/started
+    /// </summary>
+    UnconfiguredTracker,
+
+    /// <summary>
+    /// Alert triggered by a tracker reaching a notification threshold
+    /// </summary>
+    TrackerAlert,
+
+    /// <summary>
+    /// Daily or periodic statistics summary notification
+    /// </summary>
+    StatisticsSummary,
+
+    /// <summary>
+    /// Response to a user help or feedback request
+    /// </summary>
+    HelpResponse,
+
+    /// <summary>
+    /// Admin notification for pending anonymous login request
+    /// </summary>
+    AnonymousLoginRequest,
+
+    /// <summary>
+    /// Prediction of upcoming low glucose event
+    /// </summary>
+    PredictedLow,
+
+    /// <summary>
+    /// Suggested meal match from connector food entries
+    /// </summary>
+    SuggestedMealMatch,
+
+    /// <summary>
+    /// Suggested tracker reset based on detected events (Site Change treatment or sensor warmup)
+    /// </summary>
+    SuggestedTrackerMatch
+}
+
+/// <summary>
+/// Reason why a notification was archived
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<NotificationArchiveReason>))]
+public enum NotificationArchiveReason
+{
+    /// <summary>
+    /// User completed the action associated with the notification
+    /// </summary>
+    Completed,
+
+    /// <summary>
+    /// User dismissed the notification without completing the action
+    /// </summary>
+    Dismissed,
+
+    /// <summary>
+    /// Automatic resolution condition was met (e.g., glucose returned to range)
+    /// </summary>
+    ConditionMet,
+
+    /// <summary>
+    /// Notification expired based on its configured expiration time
+    /// </summary>
+    Expired
+}

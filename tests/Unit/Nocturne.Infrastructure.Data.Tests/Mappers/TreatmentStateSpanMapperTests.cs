@@ -8,11 +8,11 @@ namespace Nocturne.Infrastructure.Data.Tests.Mappers;
 [Trait("Category", "Unit")]
 public class TreatmentStateSpanMapperTests
 {
-    #region ToStateSpan Tests
+    #region ToBasalDeliveryStateSpan Tests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TempBasalTreatment_MapsCorrectly()
+    public void ToBasalDeliveryStateSpan_TempBasalTreatment_MapsCorrectly()
     {
         // Arrange
         var treatment = new Treatment
@@ -30,11 +30,11 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().NotBeNull();
-        result!.Category.Should().Be(StateSpanCategory.TempBasal);
+        result!.Category.Should().Be(StateSpanCategory.BasalDelivery);
         result.State.Should().Be("Active");
         result.StartMills.Should().Be(1700000000000);
         result.EndMills.Should().Be(1700000000000 + (30 * 60 * 1000)); // 30 minutes in ms
@@ -52,7 +52,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TempBasalTreatment_UsesEnteredByWhenNoDataSource()
+    public void ToBasalDeliveryStateSpan_TempBasalTreatment_UsesEnteredByWhenNoDataSource()
     {
         // Arrange
         var treatment = new Treatment
@@ -67,7 +67,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().NotBeNull();
@@ -76,7 +76,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TempBasalTreatment_UsesDefaultSourceWhenNoDataSourceOrEnteredBy()
+    public void ToBasalDeliveryStateSpan_TempBasalTreatment_UsesDefaultSourceWhenNoDataSourceOrEnteredBy()
     {
         // Arrange
         var treatment = new Treatment
@@ -91,7 +91,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().NotBeNull();
@@ -100,7 +100,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TempBasalTreatment_NoEndMillsWhenNoDuration()
+    public void ToBasalDeliveryStateSpan_TempBasalTreatment_NoEndMillsWhenNoDuration()
     {
         // Arrange
         var treatment = new Treatment
@@ -113,7 +113,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().NotBeNull();
@@ -122,7 +122,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TempBasalTreatment_NoEndMillsWhenZeroDuration()
+    public void ToBasalDeliveryStateSpan_TempBasalTreatment_NoEndMillsWhenZeroDuration()
     {
         // Arrange
         var treatment = new Treatment
@@ -135,7 +135,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().NotBeNull();
@@ -144,7 +144,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_NonTempBasalTreatment_ReturnsNull()
+    public void ToBasalDeliveryStateSpan_NonTempBasalTreatment_ReturnsNull()
     {
         // Arrange
         var treatment = new Treatment
@@ -157,7 +157,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().BeNull();
@@ -165,10 +165,10 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_NullTreatment_ReturnsNull()
+    public void ToBasalDeliveryStateSpan_NullTreatment_ReturnsNull()
     {
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(null!);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(null!);
 
         // Assert
         result.Should().BeNull();
@@ -176,7 +176,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TreatmentWithNullEventType_ReturnsNull()
+    public void ToBasalDeliveryStateSpan_TreatmentWithNullEventType_ReturnsNull()
     {
         // Arrange
         var treatment = new Treatment
@@ -187,7 +187,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
         // Assert
         result.Should().BeNull();
@@ -195,7 +195,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToStateSpan_TreatmentWithMinimalMetadata_HasNullMetadata()
+    public void ToBasalDeliveryStateSpan_TreatmentWithMinimalMetadata_HasOnlyOriginAndUtcOffsetMetadata()
     {
         // Arrange
         var treatment = new Treatment
@@ -211,11 +211,16 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var result = TreatmentStateSpanMapper.ToStateSpan(treatment);
+        var result = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(treatment);
 
-        // Assert
+        // Assert - utcOffset and origin are always stored
         result.Should().NotBeNull();
-        result!.Metadata.Should().BeNull();
+        result!.Metadata.Should().NotBeNull();
+        result.Metadata.Should().ContainKey("utcOffset");
+        result.Metadata!["utcOffset"].Should().Be(0);
+        result.Metadata.Should().ContainKey("origin");
+        result.Metadata["origin"].Should().Be("Manual");
+        result.Metadata.Should().HaveCount(2); // utcOffset and origin
     }
 
     #endregion
@@ -224,13 +229,13 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToTreatment_TempBasalStateSpan_MapsCorrectly()
+    public void ToTreatment_BasalDeliveryStateSpan_MapsCorrectly()
     {
         // Arrange
         var stateSpan = new StateSpan
         {
             Id = "span-123",
-            Category = StateSpanCategory.TempBasal,
+            Category = StateSpanCategory.BasalDelivery,
             State = "Active",
             StartMills = 1700000000000,
             EndMills = 1700000000000 + (30 * 60 * 1000), // 30 minutes later
@@ -272,7 +277,7 @@ public class TreatmentStateSpanMapperTests
         var stateSpan = new StateSpan
         {
             Id = "span-456",
-            Category = StateSpanCategory.TempBasal,
+            Category = StateSpanCategory.BasalDelivery,
             State = "Active",
             StartMills = 1700000000000,
             EndMills = 1700001800000, // 30 minutes later
@@ -294,13 +299,13 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToTreatment_StateSpanWithNoEndMills_HasNullDuration()
+    public void ToTreatment_StateSpanWithNoEndMills_HasZeroDuration()
     {
         // Arrange
         var stateSpan = new StateSpan
         {
             Id = "span-no-end",
-            Category = StateSpanCategory.TempBasal,
+            Category = StateSpanCategory.BasalDelivery,
             State = "Active",
             StartMills = 1700000000000,
             EndMills = null,
@@ -312,7 +317,8 @@ public class TreatmentStateSpanMapperTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.Duration.Should().BeNull();
+        // Duration defaults to 0 when EndMills is null (Nightscout behavior)
+        result!.Duration.Should().Be(0);
         result.EndMills.Should().BeNull();
     }
 
@@ -324,7 +330,7 @@ public class TreatmentStateSpanMapperTests
         var stateSpan = new StateSpan
         {
             Id = "span-no-meta",
-            Category = StateSpanCategory.TempBasal,
+            Category = StateSpanCategory.BasalDelivery,
             State = "Active",
             StartMills = 1700000000000,
             EndMills = 1700001800000,
@@ -346,7 +352,7 @@ public class TreatmentStateSpanMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToTreatment_NonTempBasalStateSpan_ReturnsNull()
+    public void ToTreatment_NonBasalDeliveryStateSpan_ReturnsNull()
     {
         // Arrange
         var stateSpan = new StateSpan
@@ -478,7 +484,7 @@ public class TreatmentStateSpanMapperTests
         };
 
         // Act
-        var stateSpan = TreatmentStateSpanMapper.ToStateSpan(originalTreatment);
+        var stateSpan = TreatmentStateSpanMapper.ToBasalDeliveryStateSpan(originalTreatment);
         var roundTripTreatment = TreatmentStateSpanMapper.ToTreatment(stateSpan!);
 
         // Assert
@@ -507,7 +513,7 @@ public class TreatmentStateSpanMapperTests
         var stateSpan = new StateSpan
         {
             Id = "span-int",
-            Category = StateSpanCategory.TempBasal,
+            Category = StateSpanCategory.BasalDelivery,
             State = "Active",
             StartMills = 1700000000000,
             EndMills = 1700001800000,
@@ -536,7 +542,7 @@ public class TreatmentStateSpanMapperTests
         var stateSpan = new StateSpan
         {
             Id = "span-string",
-            Category = StateSpanCategory.TempBasal,
+            Category = StateSpanCategory.BasalDelivery,
             State = "Active",
             StartMills = 1700000000000,
             EndMills = 1700001800000,

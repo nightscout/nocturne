@@ -1,5 +1,8 @@
 using System.Data.Common;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Nocturne.Core.Contracts;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
@@ -14,9 +17,13 @@ public class TreatmentRepositoryTests : IDisposable
 {
     private readonly DbConnection _connection;
     private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly Mock<IDeduplicationService> _mockDeduplicationService;
+    private readonly Mock<ILogger<TreatmentRepository>> _mockLogger;
 
     public TreatmentRepositoryTests()
     {
+        _mockDeduplicationService = new Mock<IDeduplicationService>();
+        _mockLogger = new Mock<ILogger<TreatmentRepository>>();
         // Create in-memory SQLite database for testing
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
@@ -29,6 +36,46 @@ public class TreatmentRepositoryTests : IDisposable
         // Create the database schema
         using var context = new NocturneDbContext(_contextOptions);
         context.Database.EnsureCreated();
+
+        // Setup mocks for repository dependencies
+        _mockDeduplicationService = new Mock<IDeduplicationService>();
+        _mockDeduplicationService
+            .Setup(d =>
+                d.GetOrCreateCanonicalIdAsync(
+                    It.IsAny<RecordType>(),
+                    It.IsAny<long>(),
+                    It.IsAny<MatchCriteria>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(Guid.NewGuid());
+        _mockDeduplicationService
+            .Setup(d =>
+                d.LinkRecordAsync(
+                    It.IsAny<Guid>(),
+                    It.IsAny<RecordType>(),
+                    It.IsAny<Guid>(),
+                    It.IsAny<long>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .Returns(Task.CompletedTask);
+
+        _mockLogger = new Mock<ILogger<TreatmentRepository>>();
+    }
+
+    private TreatmentRepository CreateRepository(
+        NocturneDbContext context,
+        IQueryParser queryParser
+    )
+    {
+        return new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
     }
 
     #region CRUD Operations Tests
@@ -39,7 +86,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 2.5, eventType: "Correction Bolus");
         var treatments = new[] { treatment };
@@ -60,7 +112,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var treatments = new[]
@@ -100,7 +157,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 4.0, eventType: "Meal Bolus");
         await repository.CreateTreatmentsAsync(new[] { treatment });
@@ -121,13 +183,21 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 2.0, eventType: "Correction Bolus");
         await repository.CreateTreatmentsAsync(new[] { treatment });
 
-        // Get the actual entity to check the GUID
-        var entity = await context.Treatments.FirstAsync(t => t.OriginalId == treatment.Id);
+        // Get the actual entity from the database - when treatment.Id is a GUID string,
+        // it becomes the entity's Id but OriginalId is null (only set for MongoDB ObjectIds)
+        var entity = await context.Treatments.FirstAsync(t =>
+            t.Insulin == 2.0 && t.EventType == "Correction Bolus"
+        );
         var guidId = entity.Id.ToString();
 
         // Act
@@ -145,7 +215,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var nonExistentId = Guid.NewGuid().ToString();
 
@@ -162,7 +237,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 2.0, eventType: "Correction Bolus");
         await repository.CreateTreatmentsAsync(new[] { treatment });
@@ -195,7 +275,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var nonExistentId = Guid.NewGuid().ToString();
         var treatment = CreateTestTreatment();
@@ -213,7 +298,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 1.5);
         await repository.CreateTreatmentsAsync(new[] { treatment });
@@ -235,7 +325,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var nonExistentId = Guid.NewGuid().ToString();
 
@@ -256,7 +351,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var treatments = new[]
@@ -290,7 +390,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -320,7 +425,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var treatments = Enumerable
@@ -359,7 +469,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var filterTime = baseTime.AddHours(-1);
@@ -396,7 +511,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var treatments = new[]
@@ -438,7 +558,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -465,7 +590,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -493,7 +623,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -520,7 +655,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -538,7 +678,9 @@ public class TreatmentRepositoryTests : IDisposable
 
         // Assert
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(t => t.EventType == "Meal Bolus" || t.EventType == "Correction Bolus");
+        result
+            .Should()
+            .OnlyContain(t => t.EventType == "Meal Bolus" || t.EventType == "Correction Bolus");
     }
 
     [Fact]
@@ -547,7 +689,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -575,7 +722,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -601,7 +753,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -625,7 +782,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -655,7 +817,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -679,7 +846,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         // Act
         var count = await repository.CountTreatmentsAsync();
@@ -698,7 +870,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -725,7 +902,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = new[]
         {
@@ -759,7 +941,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         // Act
         var result = await repository.CreateTreatmentsAsync(Array.Empty<Treatment>());
@@ -774,7 +961,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 2.0);
         treatment.EventType = null;
@@ -800,7 +992,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment();
         treatment.Insulin = 4.75;
@@ -837,7 +1034,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment = CreateTestTreatment(insulin: 2.0);
         await repository.CreateTreatmentsAsync(new[] { treatment });
@@ -864,7 +1066,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatments = Enumerable
             .Range(1, 20)
@@ -902,7 +1109,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var baseTime = DateTimeOffset.UtcNow;
         var eventTypes = new[] { "Meal Bolus", "Correction Bolus", "Carb Correction", "BG Check" };
@@ -949,7 +1161,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var batchSize = 100;
         var treatments = Enumerable
@@ -977,7 +1194,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var treatment1 = CreateTestTreatment();
         treatment1.EventType = "Meal Bolus";
@@ -1034,7 +1256,12 @@ public class TreatmentRepositoryTests : IDisposable
         // Arrange
         await using var context = new NocturneDbContext(_contextOptions);
         var queryParser = new Nocturne.Infrastructure.Data.Services.QueryParser();
-        var repository = new TreatmentRepository(context, queryParser);
+        var repository = new TreatmentRepository(
+            context,
+            queryParser,
+            _mockDeduplicationService.Object,
+            _mockLogger.Object
+        );
 
         var testTime = DateTimeOffset.UtcNow.AddHours(-1);
         var treatment = CreateTestTreatment();

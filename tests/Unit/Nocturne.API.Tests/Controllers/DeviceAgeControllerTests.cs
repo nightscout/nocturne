@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Nocturne.API.Controllers.V1;
+using Nocturne.API.Controllers.V4;
 using Nocturne.API.Services;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -10,18 +10,18 @@ using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
 
-public class LegacyDeviceAgeControllerTests
+public class DeviceAgeControllerTests
 {
     private readonly Guid _subjectId = Guid.NewGuid();
     private readonly Mock<ILegacyDeviceAgeService> _deviceAgeServiceMock;
-    private readonly LegacyDeviceAgeController _controller;
+    private readonly DeviceAgeController _controller;
 
-    public LegacyDeviceAgeControllerTests()
+    public DeviceAgeControllerTests()
     {
         _deviceAgeServiceMock = new Mock<ILegacyDeviceAgeService>();
-        _controller = new LegacyDeviceAgeController(
+        _controller = new DeviceAgeController(
             _deviceAgeServiceMock.Object,
-            Mock.Of<ILogger<LegacyDeviceAgeController>>()
+            Mock.Of<ILogger<DeviceAgeController>>()
         );
 
         var httpContext = new DefaultHttpContext();

@@ -26,7 +26,6 @@
     Filter,
     X,
     ChevronDown,
-    AlertTriangle,
   } from "lucide-svelte";
   import {
     formatInsulinDisplay,
@@ -36,7 +35,7 @@
   import { toast } from "svelte-sonner";
   import { getReportsData } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Import remote function forms and commands
   import {
@@ -44,21 +43,18 @@
     updateTreatment,
     bulkDeleteTreatments,
   } from "./data.remote";
-  import { invalidateAll } from "$app/navigation";
-
+  
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 7 days for treatment log view
+  const reportsParams = requireDateParamsContext(7);
 
-  // Use resource for controlled reactivity - prevents excessive re-fetches
-  const reportsResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getReportsData(dateRangeInput);
-    },
-    { debounce: 100 }
+  // Create resource with automatic layout registration
+  const reportsResource = contextResource(
+    () => getReportsData(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading Treatments" }
   );
 
-  const treatments = $derived(reportsResource.current?.treatments ?? []);
+  const treatments = $derived<Treatment[]>(reportsResource.current?.treatments ?? []);
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
@@ -81,6 +77,7 @@
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
   const initialEventTypes = page.url.searchParams.get("eventTypes");
+  const initialNoSource = page.url.searchParams.get("noSource") === "true";
 
   // State - initialized from URL params
   let activeCategory = $state<TreatmentCategoryId | "all">(
@@ -90,6 +87,7 @@
   let selectedEventTypes = $state<string[]>(
     initialEventTypes ? initialEventTypes.split(",") : []
   );
+  let filterNoSource = $state(initialNoSource);
 
   // Modal states
   let showDeleteConfirm = $state(false);
@@ -143,6 +141,11 @@
       );
     }
 
+    // Apply no source filter
+    if (filterNoSource) {
+      filtered = filtered.filter((t) => !t.enteredBy && !t.data_source);
+    }
+
     return filtered;
   });
 
@@ -191,6 +194,7 @@
     searchQuery = "";
     selectedEventTypes = [];
     activeCategory = "all";
+    filterNoSource = false;
   }
 
   function confirmDelete(treatment: Treatment) {
@@ -226,7 +230,7 @@
       showEditDialog = false;
       treatmentToEdit = null;
       // Trigger data reload
-      invalidateAll();
+      reportsResource.refetch();
     } catch (error) {
       console.error("Update error:", error);
       toast.error("Failed to update treatment");
@@ -239,8 +243,10 @@
   let hasActiveFilters = $derived(
     searchQuery.trim() !== "" ||
       selectedEventTypes.length > 0 ||
-      activeCategory !== "all"
+      activeCategory !== "all" ||
+      filterNoSource
   );
+
 </script>
 
 <svelte:head>
@@ -251,6 +257,7 @@
   />
 </svelte:head>
 
+{#if reportsResource.current}
 <div class="container mx-auto space-y-6 px-4 py-6">
   <!-- Header -->
   <div class="space-y-2">
@@ -337,6 +344,16 @@
               </div>
             </Popover.Content>
           </Popover.Root>
+
+          <!-- No Source Filter -->
+          <Button
+            variant={filterNoSource ? "default" : "outline"}
+            class="gap-2"
+            onclick={() => (filterNoSource = !filterNoSource)}
+          >
+            <Filter class="h-4 w-4" />
+            No Source
+          </Button>
         </div>
 
         <!-- Right side: Clear filters -->
@@ -389,6 +406,18 @@
               "{searchQuery}"
               <button
                 onclick={() => (searchQuery = "")}
+                class="ml-1 hover:text-foreground"
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </Badge>
+          {/if}
+
+          {#if filterNoSource}
+            <Badge variant="secondary" class="gap-1">
+              No Source
+              <button
+                onclick={() => (filterNoSource = false)}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />
@@ -502,7 +531,7 @@
                 toast.success("Treatment deleted successfully");
                 showDeleteConfirm = false;
                 treatmentToDelete = null;
-                invalidateAll();
+                reportsResource.refetch();
               } catch (error) {
                 console.error("Delete error:", error);
                 toast.error("Failed to delete treatment");
@@ -615,7 +644,7 @@
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;
                 treatmentsToDelete = [];
-                invalidateAll();
+                reportsResource.refetch();
               } else {
                 toast.error(result.message);
               }
@@ -634,4 +663,5 @@
       </Card.Footer>
     </Card.Root>
   </div>
+{/if}
 {/if}

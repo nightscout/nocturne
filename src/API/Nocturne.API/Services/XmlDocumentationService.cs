@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Xml;
 using Nocturne.Core.Contracts;
@@ -18,17 +19,19 @@ public interface IXmlDocumentationService
 }
 
 /// <summary>
-/// Implementation of XML documentation service
+/// Implementation of XML documentation service with lazy loading.
+/// XML documentation is only loaded when first requested for a specific assembly,
+/// reducing startup memory overhead.
 /// </summary>
 public class XmlDocumentationService : IXmlDocumentationService
 {
-    private readonly Dictionary<string, XmlDocument> _xmlDocuments = new();
+    // Use ConcurrentDictionary for thread-safe lazy loading
+    private readonly ConcurrentDictionary<string, Lazy<XmlDocument?>> _xmlDocuments = new();
     private readonly ILogger<XmlDocumentationService> _logger;
 
     public XmlDocumentationService(ILogger<XmlDocumentationService> logger)
     {
         _logger = logger;
-        LoadXmlDocumentation();
     }
 
     /// <summary>
@@ -43,13 +46,16 @@ public class XmlDocumentationService : IXmlDocumentationService
 
         try
         {
-            var assemblyName = methodInfo.DeclaringType.Assembly.GetName().Name;
-            if (assemblyName == null || !_xmlDocuments.ContainsKey(assemblyName))
+            var assembly = methodInfo.DeclaringType.Assembly;
+            var assemblyName = assembly.GetName().Name;
+            if (assemblyName == null)
                 return null;
 
-            var xmlDoc = _xmlDocuments[assemblyName];
-            var memberName = GetMemberName(methodInfo);
+            var xmlDoc = GetOrLoadXmlDocument(assembly, assemblyName);
+            if (xmlDoc == null)
+                return null;
 
+            var memberName = GetMemberName(methodInfo);
             var memberNode = xmlDoc.SelectSingleNode($"//member[@name='{memberName}']");
             var summaryNode = memberNode?.SelectSingleNode("summary");
 
@@ -77,47 +83,52 @@ public class XmlDocumentationService : IXmlDocumentationService
     }
 
     /// <summary>
-    /// Load XML documentation files for all loaded assemblies
+    /// Get or lazily load the XML documentation for a specific assembly
     /// </summary>
-    private void LoadXmlDocumentation()
+    private XmlDocument? GetOrLoadXmlDocument(Assembly assembly, string assemblyName)
     {
-        var loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
+        var lazyDoc = _xmlDocuments.GetOrAdd(
+            assemblyName,
+            _ => new Lazy<XmlDocument?>(
+                () => LoadXmlDocumentForAssembly(assembly, assemblyName),
+                LazyThreadSafetyMode.ExecutionAndPublication
+            )
+        );
 
-        foreach (var assembly in loadedAssemblies)
+        return lazyDoc.Value;
+    }
+
+    /// <summary>
+    /// Load XML documentation file for a specific assembly
+    /// </summary>
+    private XmlDocument? LoadXmlDocumentForAssembly(Assembly assembly, string assemblyName)
+    {
+        try
         {
-            try
-            {
-                var assemblyName = assembly.GetName().Name;
-                if (string.IsNullOrEmpty(assemblyName))
-                    continue;
+            var assemblyLocation = assembly.Location;
+            if (string.IsNullOrEmpty(assemblyLocation))
+                return null;
 
-                // Look for XML documentation file next to the assembly
-                var assemblyLocation = assembly.Location;
-                if (string.IsNullOrEmpty(assemblyLocation))
-                    continue;
+            var xmlPath = Path.ChangeExtension(assemblyLocation, ".xml");
 
-                var xmlPath = Path.ChangeExtension(assemblyLocation, ".xml");
+            if (!File.Exists(xmlPath))
+                return null;
 
-                if (File.Exists(xmlPath))
-                {
-                    var xmlDoc = new XmlDocument();
-                    xmlDoc.Load(xmlPath);
-                    _xmlDocuments[assemblyName] = xmlDoc;
+            var xmlDoc = new XmlDocument();
+            xmlDoc.Load(xmlPath);
 
-                    _logger.LogDebug(
-                        "Loaded XML documentation for assembly: {AssemblyName}",
-                        assemblyName
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(
-                    ex,
-                    "Could not load XML documentation for assembly {Assembly}",
-                    assembly.GetName().Name
-                );
-            }
+            _logger.LogDebug("Loaded XML documentation for assembly: {AssemblyName}", assemblyName);
+
+            return xmlDoc;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Could not load XML documentation for assembly {Assembly}",
+                assemblyName
+            );
+            return null;
         }
     }
 

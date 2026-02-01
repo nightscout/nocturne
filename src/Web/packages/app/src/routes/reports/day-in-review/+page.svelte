@@ -30,16 +30,21 @@
   import { TreatmentEditDialog } from "$lib/components/treatments";
   import { getEventTypeStyle } from "$lib/constants/treatment-categories";
   import InsulinDonutChart from "$lib/components/reports/InsulinDonutChart.svelte";
-  import GlucoseChartCard from "$lib/components/dashboard/GlucoseChartCard.svelte";
+  import { GlucoseChartCard } from "$lib/components/dashboard/glucose-chart";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Get date from URL search params
   const dateParam = $derived(
     page.url.searchParams.get("date") ?? new Date().toISOString().split("T")[0]
   );
 
-  // Fetch data using remote function
-  const dayDataQuery = $derived(getDayInReviewData(dateParam));
-  const dayData = $derived(dayDataQuery.current);
+  // Create resource with automatic layout registration
+  const dayDataResource = contextResource(
+    () => getDayInReviewData(dateParam),
+    { errorTitle: "Error Loading Day in Review" }
+  );
+
+  const dayData = $derived(dayDataResource.current);
 
   // Parse current date from URL
   const currentDate = $derived(new Date(dateParam));
@@ -302,6 +307,7 @@
   }
 </script>
 
+{#if dayDataResource.current}
 <div class="space-y-6 p-4">
   <!-- Header with Navigation -->
   <Card.Root>
@@ -795,6 +801,7 @@
     </Card.Content>
   </Card.Root>
 </div>
+{/if}
 
 <!-- Treatment Edit Dialog -->
 <TreatmentEditDialog

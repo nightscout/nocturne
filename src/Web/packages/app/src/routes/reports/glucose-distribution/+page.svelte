@@ -3,27 +3,19 @@
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { AlertTriangle } from "lucide-svelte";
-  import { Button } from "$lib/components/ui/button";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Get shared date params from context (set by reports layout)
-  const reportsParams = requireDateParamsContext();
+  // Default: 14 days is standard for glucose distribution analysis
+  const reportsParams = requireDateParamsContext(14);
 
-  // Use resource for controlled reactivity - prevents excessive re-fetches
-  const reportsResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getReportsData(dateRangeInput);
-    },
-    { debounce: 100 }
+  // Create resource with automatic layout registration
+  const reportsResource = contextResource(
+    () => getReportsData(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading Glucose Distribution" }
   );
-
-  // Loading state
-  const isLoading = $derived(reportsResource.loading);
 
   // Unwrap the data from the resource with null safety
   const data = $derived({
@@ -157,32 +149,7 @@
   });
 </script>
 
-{#if isLoading && !reportsResource.current}
-  <ReportsSkeleton />
-{:else if reportsResource.error}
-  <div class="space-y-6 p-4">
-    <Card.Root class="border-2 border-destructive">
-      <Card.Header>
-        <Card.Title class="flex items-center gap-2 text-destructive">
-          <AlertTriangle class="w-5 h-5" />
-          Error Loading Data
-        </Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <p class="text-destructive-foreground">
-          {reportsResource.error instanceof Error ? reportsResource.error.message : String(reportsResource.error)}
-        </p>
-        <Button
-          variant="outline"
-          class="mt-4"
-          onclick={() => reportsResource.refetch()}
-        >
-          Try again
-        </Button>
-      </Card.Content>
-    </Card.Root>
-  </div>
-{:else}
+{#if reportsResource.current}
   <div class="space-y-6 p-4">
     <!-- Header -->
     <Card.Root>

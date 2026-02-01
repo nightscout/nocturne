@@ -60,19 +60,22 @@ public class ConnectorTestService
                 GlookoUsername = config.GlookoEmail,
                 GlookoPassword = config.GlookoPassword,
                 GlookoServer = config.GlookoServer,
-                Mode = ConnectorMode.Standalone,
-                NightscoutUrl = config.NightscoutUrl,
-                NightscoutApiSecret = config.NightscoutApiSecret,
             };
 
+            var httpClient = new HttpClient();
+            var tokenProvider = new GlookoAuthTokenProvider(
+                Options.Create(glookoConfig),
+                httpClient,
+                _loggerFactory.CreateLogger<GlookoAuthTokenProvider>()
+            );
             using var connector = new GlookoConnectorService(
-                new HttpClient(),
+                httpClient,
                 Options.Create(glookoConfig),
                 _loggerFactory.CreateLogger<GlookoConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-                null, // IConnectorFileService
-                null  // IApiDataSubmitter
+                tokenProvider,
+                new TreatmentClassificationService(_loggerFactory.CreateLogger<TreatmentClassificationService>())
             );
 
             _logger.LogInformation(
@@ -141,18 +144,22 @@ public class ConnectorTestService
                 CareLinkUsername = config.CarelinkUsername,
                 CareLinkPassword = config.CarelinkPassword,
                 CareLinkCountry = config.CarelinkRegion,
-                Mode = ConnectorMode.Standalone,
-                NightscoutUrl = config.NightscoutUrl,
-                NightscoutApiSecret = config.NightscoutApiSecret,
             };
 
+            var carelinkHttpClient = new HttpClient();
+            var carelinkTokenProvider = new CareLinkAuthTokenProvider(
+                Options.Create(carelinkConfig),
+                carelinkHttpClient,
+                _loggerFactory.CreateLogger<CareLinkAuthTokenProvider>(),
+                new ProductionRetryDelayStrategy()
+            );
             using var connector = new CareLinkConnectorService(
-                new HttpClient(),
+                carelinkHttpClient,
                 Options.Create(carelinkConfig),
                 _loggerFactory.CreateLogger<CareLinkConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-                null  // IApiDataSubmitter
+                carelinkTokenProvider
             );
 
             _logger.LogInformation(
@@ -221,18 +228,22 @@ public class ConnectorTestService
                 DexcomUsername = config.DexcomUsername,
                 DexcomPassword = config.DexcomPassword,
                 DexcomServer = config.DexcomRegion,
-                Mode = ConnectorMode.Standalone,
-                NightscoutUrl = config.NightscoutUrl,
-                NightscoutApiSecret = config.NightscoutApiSecret,
             };
 
+            var dexcomHttpClient = new HttpClient();
+            var dexcomTokenProvider = new DexcomAuthTokenProvider(
+                Options.Create(dexcomConfig),
+                dexcomHttpClient,
+                _loggerFactory.CreateLogger<DexcomAuthTokenProvider>(),
+                new ProductionRetryDelayStrategy()
+            );
             using var connector = new DexcomConnectorService(
-                new HttpClient(),
+                dexcomHttpClient,
                 Options.Create(dexcomConfig),
                 _loggerFactory.CreateLogger<DexcomConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-                null  // IApiDataSubmitter
+                dexcomTokenProvider
             );
 
             _logger.LogInformation(
@@ -301,18 +312,22 @@ public class ConnectorTestService
                 LibreUsername = config.LibreUsername,
                 LibrePassword = config.LibrePassword,
                 LibreRegion = config.LibreRegion,
-                Mode = ConnectorMode.Standalone,
-                NightscoutUrl = config.NightscoutUrl,
-                NightscoutApiSecret = config.NightscoutApiSecret,
             };
 
+            var libreHttpClient = new HttpClient();
+            var libreTokenProvider = new LibreLinkAuthTokenProvider(
+                Options.Create(libreConfig),
+                libreHttpClient,
+                _loggerFactory.CreateLogger<LibreLinkAuthTokenProvider>(),
+                new ProductionRetryDelayStrategy()
+            );
             using var connector = new LibreConnectorService(
-                new HttpClient(),
+                libreHttpClient,
                 Options.Create(libreConfig),
                 _loggerFactory.CreateLogger<LibreConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
-                null  // IApiDataSubmitter
+                libreTokenProvider
             );
 
             _logger.LogInformation(

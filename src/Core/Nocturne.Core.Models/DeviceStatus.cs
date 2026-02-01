@@ -30,7 +30,26 @@ public class DeviceStatus : ProcessableDocumentBase
     /// Gets or sets the UTC offset in minutes
     /// </summary>
     [JsonPropertyName("utcOffset")]
-    public override int? UtcOffset { get; set; }
+    public override int? UtcOffset { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the uploader battery level (for compatibility with Nightscout flattened format)
+    /// Maps to/from Uploader.Battery
+    /// </summary>
+    [JsonPropertyName("uploaderBattery")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public int? UploaderBattery
+    {
+        get => Uploader?.Battery;
+        set
+        {
+            if (value.HasValue)
+            {
+                Uploader ??= new UploaderStatus();
+                Uploader.Battery = value;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the device name that submitted this status

@@ -107,28 +107,54 @@ public class ProfileController : ControllerBase
     }
 
     /// <summary>
-    /// Create or update profiles
+    /// Create or update a profile.
+    /// Nightscout accepts either a single profile object or an array of profiles.
     /// </summary>
-    /// <param name="profiles">Profiles to create or update</param>
+    /// <param name="body">Profile(s) to create or update (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created profiles with assigned IDs</returns>
+    /// <returns>Created profiles with assigned IDs as an array</returns>
     [HttpPost]
     [NightscoutEndpoint("/api/v1/profile")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(400)]
     public async Task<ActionResult<Profile[]>> CreateProfiles(
-        [FromBody] Profile[] profiles,
+        [FromBody] System.Text.Json.JsonElement body,
         CancellationToken cancellationToken = default
     )
     {
         _logger.LogDebug(
-            "Profile POST endpoint requested with {Count} profiles from {RemoteIpAddress}",
-            profiles.Length,
+            "Profile POST endpoint requested from {RemoteIpAddress}",
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
         try
         {
+            Profile[] profiles;
+
+            // Handle both single profile and array of profiles (Nightscout compatibility)
+            if (body.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                profiles = System.Text.Json.JsonSerializer.Deserialize<Profile[]>(
+                    body.GetRawText(),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                ) ?? Array.Empty<Profile>();
+            }
+            else if (body.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                var profile = System.Text.Json.JsonSerializer.Deserialize<Profile>(
+                    body.GetRawText(),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+                profiles = profile != null ? new[] { profile } : Array.Empty<Profile>();
+            }
+            else
+            {
+                _logger.LogDebug("Invalid profile data format");
+                return BadRequest("Invalid profile data format");
+            }
+
+            _logger.LogDebug("Processing {Count} profiles", profiles.Length);
+
             if (profiles.Length == 0)
             {
                 _logger.LogDebug("No profiles provided in request body");
@@ -155,12 +181,13 @@ public class ProfileController : ControllerBase
     /// Get the current active profile
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The current active profile, or empty array if no profiles exist</returns>
+    /// <returns>The current active profile as a single object (Nightscout format), or empty array if no profiles exist</returns>
     [HttpGet("current")]
     [NightscoutEndpoint("/api/v1/profile/current")]
-    [ProducesResponseType(typeof(Profile[]), 200)]
+    [ProducesResponseType(typeof(Profile), 200)]
+    [ProducesResponseType(typeof(Profile[]), 200)] // Empty array when no profile
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
-    public async Task<ActionResult<Profile[]>> GetCurrentProfile(
+    public async Task<ActionResult> GetCurrentProfile(
         CancellationToken cancellationToken = default
     )
     {
@@ -202,7 +229,8 @@ public class ProfileController : ControllerBase
             }
 
             _logger.LogDebug("Returning current profile with ID: {ProfileId}", profile.Id);
-            return Ok(new[] { profile });
+            // Nightscout returns a single object, not an array
+            return Ok(profile);
         }
         catch (Exception ex)
         {

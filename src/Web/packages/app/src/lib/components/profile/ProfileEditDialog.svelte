@@ -25,6 +25,7 @@
     open: boolean;
     profile: Profile | null;
     storeName: string | null;
+    initialTab?: "general" | "basal" | "carbratio" | "sens" | "targets";
     isLoading?: boolean;
     onClose: () => void;
     onSave: (profile: Profile) => void;
@@ -34,6 +35,7 @@
     open = $bindable(),
     profile,
     storeName,
+    initialTab = "general",
     isLoading = false,
     onClose,
     onSave,
@@ -61,6 +63,7 @@
       // Deep clone the profile
       editedProfile = JSON.parse(JSON.stringify(profile));
       editedStoreName = storeName ?? profile.defaultProfile ?? null;
+      activeTab = initialTab;
 
       if (profile.isExternallyManaged) {
         showExternalWarning = true;

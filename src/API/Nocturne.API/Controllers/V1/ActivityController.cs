@@ -139,11 +139,11 @@ public class ActivityController : ControllerBase
     /// <param name="activities">Activity data (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created activities with assigned IDs</returns>
-    /// <response code="201">Activities created successfully</response>
+    /// <response code="200">Activities created successfully (Nightscout compatibility)</response>
     /// <response code="400">Invalid activity data</response>
     /// <response code="500">Internal server error</response>
     [HttpPost]
-    [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<Activity>>> CreateActivities(
@@ -205,7 +205,8 @@ public class ActivityController : ControllerBase
             var result = createdActivities.ToList();
 
             _logger.LogDebug("Created {Count} activities", result.Count);
-            return CreatedAtAction(nameof(GetActivities), new { count = result.Count }, result);
+            // Nightscout returns 200 OK for POST, not 201 Created
+            return Ok(result);
         }
         catch (Exception ex)
         {

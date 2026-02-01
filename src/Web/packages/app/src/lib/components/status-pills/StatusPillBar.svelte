@@ -1,15 +1,11 @@
 <script lang="ts">
   import IOBPill from "./IOBPill.svelte";
   import COBPill from "./COBPill.svelte";
-  import CAGEPill from "./CAGEPill.svelte";
-  import SAGEPill from "./SAGEPill.svelte";
   import BasalPill from "./BasalPill.svelte";
   import LoopPill from "./LoopPill.svelte";
   import type {
     IOBPillData,
     COBPillData,
-    CAGEPillData,
-    SAGEPillData,
     BasalPillData,
     LoopPillData,
     StatusPillsConfig,
@@ -21,10 +17,6 @@
     iob?: IOBPillData | null;
     /** COB data */
     cob?: COBPillData | null;
-    /** CAGE data */
-    cage?: CAGEPillData | null;
-    /** SAGE data */
-    sage?: SAGEPillData | null;
     /** Basal data */
     basal?: BasalPillData | null;
     /** Loop data */
@@ -35,44 +27,26 @@
     units?: string;
     /** Additional CSS classes */
     class?: string;
-    /** Callback for adding a treatment from a pill */
-    onAddTreatment?: (
-      type: "Site Change" | "Sensor Change" | "Sensor Start"
-    ) => void;
   }
 
   let {
     iob = null,
     cob = null,
-    cage = null,
-    sage = null,
     basal = null,
     loop = null,
     config = {},
     units = "mmol/L",
     class: className,
-    onAddTreatment,
   }: StatusPillBarProps = $props();
 
-  // Merge with defaults
+  // Merge with defaults (CAGE/SAGE now handled by TrackerPillBar)
   const mergedConfig = $derived({
-    enabledPills: config.enabledPills ?? [
-      "iob",
-      "cob",
-      "cage",
-      "sage",
-      "basal",
-      "loop",
-    ],
-    cage: { ...{ urgentThreshold: 72 }, ...config.cage },
-    sage: { ...{ urgentThreshold: 240 }, ...config.sage },
+    enabledPills: config.enabledPills ?? ["iob", "cob", "basal", "loop"],
   });
 
   // Check which pills should be shown
   const showIob = $derived(mergedConfig.enabledPills.includes("iob"));
   const showCob = $derived(mergedConfig.enabledPills.includes("cob"));
-  const showCage = $derived(mergedConfig.enabledPills.includes("cage"));
-  const showSage = $derived(mergedConfig.enabledPills.includes("sage"));
   const showBasal = $derived(mergedConfig.enabledPills.includes("basal"));
   const showLoop = $derived(mergedConfig.enabledPills.includes("loop"));
 
@@ -80,8 +54,6 @@
   const hasAnyData = $derived(
     (showIob && iob) ||
       (showCob && cob) ||
-      (showCage && cage) ||
-      (showSage && sage) ||
       (showBasal && basal) ||
       (showLoop && loop)
   );
@@ -99,22 +71,6 @@
 
     {#if showCob && cob}
       <COBPill data={cob} />
-    {/if}
-
-    {#if showCage && cage}
-      <CAGEPill
-        data={cage}
-        maxLifeHours={mergedConfig.cage.urgentThreshold}
-        onAddTreatment={() => onAddTreatment?.("Site Change")}
-      />
-    {/if}
-
-    {#if showSage && sage}
-      <SAGEPill
-        data={sage}
-        maxLifeHours={mergedConfig.sage.urgentThreshold}
-        onAddTreatment={() => onAddTreatment?.("Sensor Change")}
-      />
     {/if}
 
     {#if showBasal && basal}

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models;
 
 /// <summary>
@@ -8,6 +10,7 @@ public interface IProcessableDocument
     /// <summary>
     /// Gets or sets the MongoDB ObjectId
     /// </summary>
+    [JsonPropertyName("_id")]
     string? Id { get; set; }
 
     /// <summary>

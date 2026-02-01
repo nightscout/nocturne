@@ -13,7 +13,8 @@
   import { curveStepAfter } from "d3";
   import { scaleLinear } from "d3-scale";
   import { PumpModeIcon } from "$lib/components/icons";
-  import type { StateSpanChartData } from "$lib/data/state-spans.remote";
+  import type { StateSpanChartData, BasalDeliveryChartData } from "$lib/data/state-spans.remote";
+  import { BasalDeliveryOrigin } from "$lib/api";
 
   interface BasalDataPoint {
     time: Date;
@@ -22,20 +23,27 @@
     isTemp?: boolean;
   }
 
+  interface BasalDeliverySpanWithDisplay extends BasalDeliveryChartData {
+    displayStart: Date;
+    displayEnd: Date;
+  }
+
   interface Props {
-    /** Basal rate data series */
-    basalData: BasalDataPoint[];
+    /** Basal rate data series (legacy - used when basalDeliverySpans not provided) */
+    basalData?: BasalDataPoint[];
     /** Scheduled basal data series (profile baseline) */
-    scheduledBasalData: { time: Date; rate: number }[];
+    scheduledBasalData?: { time: Date; rate: number }[];
     /** Maximum basal rate for Y-axis scaling */
     maxBasalRate: number;
     /** Pump mode spans for background coloring */
-    pumpModeSpans: (StateSpanChartData & {
+    pumpModeSpans?: (StateSpanChartData & {
       displayStart: Date;
       displayEnd: Date;
     })[];
+    /** Basal delivery spans from StateSpans API */
+    basalDeliverySpans?: BasalDeliverySpanWithDisplay[];
     /** Stale basal data indicator */
-    staleBasalData: { start: Date; end: Date } | null;
+    staleBasalData?: { start: Date; end: Date } | null;
     /** Track height in pixels */
     trackHeight: number;
     /** Track top position in pixels (from chart top) */
@@ -56,11 +64,12 @@
   }
 
   let {
-    basalData,
-    scheduledBasalData,
+    basalData = [],
+    scheduledBasalData = [],
     maxBasalRate,
-    pumpModeSpans,
-    staleBasalData,
+    pumpModeSpans = [],
+    basalDeliverySpans = [],
+    staleBasalData = null,
     trackHeight,
     trackTop,
     chartHeight,
@@ -69,6 +78,23 @@
     showAxis = true,
     showLabel = true,
   }: Props = $props();
+
+  // Group basal delivery spans by origin for layered rendering
+  const scheduledDeliverySpans = $derived(
+    basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Scheduled)
+  );
+  const algorithmDeliverySpans = $derived(
+    basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Algorithm)
+  );
+  const manualDeliverySpans = $derived(
+    basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Manual)
+  );
+  const suspendedDeliverySpans = $derived(
+    basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Suspended)
+  );
+
+  // Check if we're using new StateSpans-based basal data
+  const useStateSpans = $derived(basalDeliverySpans.length > 0);
 
   // Track positions
   const trackBottom = $derived(trackTop + trackHeight);
@@ -175,8 +201,49 @@
   </Text>
 {/if}
 
-<!-- Effective basal area (drips down from top of basal track) -->
-{#if basalData.length > 0}
+<!-- Effective basal area - StateSpans-based rendering -->
+{#if useStateSpans}
+  <!-- Render scheduled basal as background layer -->
+  {#each scheduledDeliverySpans as span (span.id)}
+    <AnnotationRange
+      x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+      y={[basalScale(span.rate), basalZero]}
+      fill={span.color}
+      class="opacity-60"
+    />
+  {/each}
+
+  <!-- Render algorithm-adjusted basal (overlay on scheduled) -->
+  {#each algorithmDeliverySpans as span (span.id)}
+    <AnnotationRange
+      x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+      y={[basalScale(span.rate), basalZero]}
+      fill={span.color}
+      class="opacity-80"
+    />
+  {/each}
+
+  <!-- Render manual temp basal (distinct overlay) -->
+  {#each manualDeliverySpans as span (span.id)}
+    <AnnotationRange
+      x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+      y={[basalScale(span.rate), basalZero]}
+      fill={span.color}
+      class="opacity-90"
+    />
+  {/each}
+
+  <!-- Render suspended periods (show as minimal/zero) -->
+  {#each suspendedDeliverySpans as span (span.id)}
+    <AnnotationRange
+      x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+      y={[basalScale(maxBasalRate * 0.05), basalZero]}
+      fill={span.color}
+      class="opacity-50"
+    />
+  {/each}
+{:else if basalData.length > 0}
+  <!-- Legacy: Effective basal area (drips down from top of basal track) -->
   <Area
     data={basalData}
     x={(d) => d.time}

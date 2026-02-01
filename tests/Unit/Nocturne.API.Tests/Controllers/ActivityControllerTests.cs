@@ -8,7 +8,6 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Abstractions;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -20,7 +19,7 @@ namespace Nocturne.API.Tests.Controllers;
 [Trait("Category", "Unit")]
 public class ActivityControllerTests
 {
-    private readonly Mock<IPostgreSqlService> _mockPostgreSqlService;
+    private readonly Mock<IStateSpanService> _mockStateSpanService;
     private readonly Mock<ILogger<ActivityController>> _mockLogger;
     private readonly ActivityController _controller;
     private readonly IDocumentProcessingService _documentProcessingService =
@@ -28,10 +27,10 @@ public class ActivityControllerTests
 
     public ActivityControllerTests()
     {
-        _mockPostgreSqlService = new Mock<IPostgreSqlService>();
+        _mockStateSpanService = new Mock<IStateSpanService>();
         _mockLogger = new Mock<ILogger<ActivityController>>();
         _controller = new ActivityController(
-            _mockPostgreSqlService.Object,
+            _mockStateSpanService.Object,
             _documentProcessingService,
             _mockLogger.Object
         );
@@ -67,8 +66,10 @@ public class ActivityControllerTests
             },
         };
 
-        _mockPostgreSqlService
-            .Setup(x => x.GetActivitiesAsync(10, 0, It.IsAny<CancellationToken>()))
+        _mockStateSpanService
+            .Setup(x =>
+                x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>())
+            )
             .ReturnsAsync(expectedActivities);
 
         // Act
@@ -85,8 +86,10 @@ public class ActivityControllerTests
     public async Task GetActivities_WhenNoActivitiesExist_ShouldReturnEmptyList()
     {
         // Arrange
-        _mockPostgreSqlService
-            .Setup(x => x.GetActivitiesAsync(10, 0, It.IsAny<CancellationToken>()))
+        _mockStateSpanService
+            .Setup(x =>
+                x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>())
+            )
             .ReturnsAsync(new List<Activity>());
 
         // Act
@@ -108,16 +111,29 @@ public class ActivityControllerTests
         var skip = 10;
         var expectedActivities = new List<Activity>();
 
-        _mockPostgreSqlService
-            .Setup(x => x.GetActivitiesAsync(count, skip, It.IsAny<CancellationToken>()))
+        _mockStateSpanService
+            .Setup(x =>
+                x.GetActivitiesAsync(
+                    It.IsAny<string?>(),
+                    count,
+                    skip,
+                    It.IsAny<CancellationToken>()
+                )
+            )
             .ReturnsAsync(expectedActivities);
 
         // Act
         await _controller.GetActivities(count, skip, CancellationToken.None);
 
         // Assert
-        _mockPostgreSqlService.Verify(
-            x => x.GetActivitiesAsync(count, skip, It.IsAny<CancellationToken>()),
+        _mockStateSpanService.Verify(
+            x =>
+                x.GetActivitiesAsync(
+                    It.IsAny<string?>(),
+                    count,
+                    skip,
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Once
         );
     }
@@ -137,7 +153,7 @@ public class ActivityControllerTests
             CreatedAt = "2024-01-01T10:00:00.000Z",
         };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedActivity);
 
@@ -157,7 +173,7 @@ public class ActivityControllerTests
         // Arrange
         var activityId = "507f1f77bcf86cd799439011";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Activity?)null);
 
@@ -193,7 +209,7 @@ public class ActivityControllerTests
 
         var jsonElement = JsonSerializer.SerializeToElement(inputActivity);
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.CreateActivitiesAsync(
                     It.IsAny<IEnumerable<Activity>>(),
@@ -256,7 +272,7 @@ public class ActivityControllerTests
 
         var jsonElement = JsonSerializer.SerializeToElement(inputActivities);
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.CreateActivitiesAsync(
                     It.IsAny<IEnumerable<Activity>>(),
@@ -311,7 +327,7 @@ public class ActivityControllerTests
             CreatedAt = "2024-01-01T10:00:00.000Z",
         };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.UpdateActivityAsync(activityId, inputActivity, It.IsAny<CancellationToken>())
             )
@@ -338,7 +354,7 @@ public class ActivityControllerTests
         var activityId = "507f1f77bcf86cd799439011";
         var inputActivity = new Activity { Type = "Exercise", Description = "Test" };
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.UpdateActivityAsync(activityId, inputActivity, It.IsAny<CancellationToken>())
             )
@@ -376,7 +392,7 @@ public class ActivityControllerTests
         // Arrange
         var activityId = "507f1f77bcf86cd799439011";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -397,7 +413,7 @@ public class ActivityControllerTests
         // Arrange
         var activityId = "507f1f77bcf86cd799439011";
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
@@ -413,9 +429,10 @@ public class ActivityControllerTests
     public async Task GetActivities_WhenServiceThrowsException_ShouldReturnInternalServerError()
     {
         // Arrange
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.GetActivitiesAsync(
+                    It.IsAny<string?>(),
                     It.IsAny<int>(),
                     It.IsAny<int>(),
                     It.IsAny<CancellationToken>()
@@ -440,7 +457,7 @@ public class ActivityControllerTests
         var inputActivity = new Activity { Type = "Exercise", Description = "Test" };
         var jsonElement = JsonSerializer.SerializeToElement(inputActivity);
 
-        _mockPostgreSqlService
+        _mockStateSpanService
             .Setup(x =>
                 x.CreateActivitiesAsync(
                     It.IsAny<IEnumerable<Activity>>(),

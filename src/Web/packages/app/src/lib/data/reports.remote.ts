@@ -6,15 +6,17 @@ import { z } from 'zod';
 import { DiabetesPopulationSchema } from '$lib/api/generated/schemas';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { DiabetesPopulation } from '$lib/api';
+import { DiabetesPopulation, type BasalPoint } from '$lib/api';
 
 /**
- * Input schema for date range queries
+ * Input schema for date range queries.
+ * Uses nullish() to accept both null and undefined, matching the date-params hook
+ * which uses nullable defaults for runed compatibility.
  */
 const DateRangeSchema = z.object({
-	days: z.number().optional(),
-	from: z.string().optional(),
-	to: z.string().optional(),
+	days: z.number().nullish(),
+	from: z.string().nullish(),
+	to: z.string().nullish(),
 });
 
 export type DateRangeInput = z.infer<typeof DateRangeSchema>;
@@ -98,13 +100,13 @@ export const getTreatments = query(
 		});
 		const pageSize = 1000;
 
-		// Fetch all treatments by paginating through results
-		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments2>> = [];
+		// Fetch all treatments by paginating through results using v4 endpoint
+		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments>> = [];
 		let offset = 0;
 		let hasMore = true;
 
 		while (hasMore) {
-			const batch = await apiClient.treatments.getTreatments2(treatmentsQuery, pageSize, offset);
+			const batch = await apiClient.treatments.getTreatments(undefined, pageSize, offset, treatmentsQuery);
 			allTreatments = allTreatments.concat(batch);
 
 			if (batch.length < pageSize) {
@@ -187,14 +189,14 @@ export const getReportsData = query(
 		// Fetch entries first
 		const entries = await apiClient.entries.getEntries2(entriesQuery);
 
-		// Paginate treatments
+		// Paginate treatments using v4 endpoint
 		const pageSize = 1000;
-		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments2>> = [];
+		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments>> = [];
 		let offset = 0;
 		let hasMore = true;
 
 		while (hasMore) {
-			const batch = await apiClient.treatments.getTreatments2(treatmentsQuery, pageSize, offset);
+			const batch = await apiClient.treatments.getTreatments(undefined, pageSize, offset, treatmentsQuery);
 			allTreatments = allTreatments.concat(batch);
 
 			if (batch.length < pageSize) {
@@ -212,8 +214,8 @@ export const getReportsData = query(
 		const treatments = allTreatments;
 		const population = DiabetesPopulation.Type1Adult; // TODO: Get from user settings
 
-		// Get summary, analysis, and averaged stats in parallel
-		const [summary, analysis, averagedStats] = await Promise.all([
+		// Get summary, analysis, averaged stats, and basal data in parallel
+		const [summary, analysis, averagedStats, chartData] = await Promise.all([
 			apiClient.statistics.getMultiPeriodStatistics(),
 			apiClient.statistics.analyzeGlucoseDataExtended({
 				entries,
@@ -221,6 +223,11 @@ export const getReportsData = query(
 				population,
 			}),
 			apiClient.statistics.calculateAveragedStats(entries),
+			apiClient.chartData.getDashboardChartData(
+				startDate.getTime(),
+				endDate.getTime(),
+				5 // 5-minute intervals
+			),
 		]);
 
 		return {
@@ -229,6 +236,7 @@ export const getReportsData = query(
 			summary,
 			analysis,
 			averagedStats,
+			basalSeries: chartData.basalSeries ?? [] as BasalPoint[],
 			dateRange: {
 				from: startDate.toISOString(),
 				to: endDate.toISOString(),
@@ -239,12 +247,13 @@ export const getReportsData = query(
 );
 
 /**
- * Input schema for site change impact analysis
+ * Input schema for site change impact analysis.
+ * Uses nullish() for date fields to match date-params hook.
  */
 const SiteChangeImpactSchema = z.object({
-	days: z.number().optional(),
-	from: z.string().optional(),
-	to: z.string().optional(),
+	days: z.number().nullish(),
+	from: z.string().nullish(),
+	to: z.string().nullish(),
 	hoursBeforeChange: z.number().optional().default(12),
 	hoursAfterChange: z.number().optional().default(24),
 	bucketSizeMinutes: z.number().optional().default(30),
@@ -279,14 +288,14 @@ export const getSiteChangeImpact = query(
 		// Fetch entries
 		const entries = await apiClient.entries.getEntries2(entriesQuery);
 
-		// Paginate treatments to get all site changes
+		// Paginate treatments to get all site changes using v4 endpoint
 		const pageSize = 1000;
-		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments2>> = [];
+		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments>> = [];
 		let offset = 0;
 		let hasMore = true;
 
 		while (hasMore) {
-			const batch = await apiClient.treatments.getTreatments2(treatmentsQuery, pageSize, offset);
+			const batch = await apiClient.treatments.getTreatments(undefined, pageSize, offset, treatmentsQuery);
 			allTreatments = allTreatments.concat(batch);
 
 			if (batch.length < pageSize) {

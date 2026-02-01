@@ -254,6 +254,187 @@ public class DeviceSettingsUpdate
 
 
 /// <summary>
+/// Device issue type enumeration
+/// </summary>
+public enum DeviceIssueType
+{
+    /// <summary>
+    /// Low battery issue
+    /// </summary>
+    LowBattery,
+
+    /// <summary>
+    /// Sensor expiring issue
+    /// </summary>
+    SensorExpiring,
+
+    /// <summary>
+    /// Calibration needed issue
+    /// </summary>
+    CalibrationNeeded,
+
+    /// <summary>
+    /// Communication error issue
+    /// </summary>
+    CommunicationError,
+
+    /// <summary>
+    /// Data gap detected issue
+    /// </summary>
+    DataGap,
+
+    /// <summary>
+    /// Device error issue
+    /// </summary>
+    DeviceError,
+}
+
+/// <summary>
+/// Device health status enumeration
+/// </summary>
+public enum DeviceHealthStatus
+{
+    /// <summary>
+    /// Device is in excellent health
+    /// </summary>
+    Excellent,
+
+    /// <summary>
+    /// Device is in good health
+    /// </summary>
+    Good,
+
+    /// <summary>
+    /// Device has fair health with minor issues
+    /// </summary>
+    Fair,
+
+    /// <summary>
+    /// Device has poor health and needs attention
+    /// </summary>
+    Poor,
+
+    /// <summary>
+    /// Device is in critical condition
+    /// </summary>
+    Critical,
+}
+
+/// <summary>
+/// Device health issue model
+/// </summary>
+public class DeviceHealthIssue
+{
+    /// <summary>
+    /// Type of issue
+    /// </summary>
+    public DeviceIssueType Type { get; set; }
+
+    /// <summary>
+    /// Severity of the issue
+    /// </summary>
+    public DeviceIssueSeverity Severity { get; set; }
+
+    /// <summary>
+    /// Description of the issue
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Suggested resolution for the issue
+    /// </summary>
+    public string? SuggestedResolution { get; set; }
+}
+
+/// <summary>
+/// Device health analysis result model
+/// </summary>
+public class DeviceHealthAnalysis
+{
+    /// <summary>
+    /// Device identifier
+    /// </summary>
+    public string DeviceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Overall health score (0-100)
+    /// </summary>
+    public decimal HealthScore { get; set; }
+
+    /// <summary>
+    /// Overall health status
+    /// </summary>
+    public DeviceHealthStatus HealthStatus { get; set; }
+
+    /// <summary>
+    /// List of detected issues
+    /// </summary>
+    public List<DeviceHealthIssue> Issues { get; set; } = new();
+
+    /// <summary>
+    /// Recommendations for improving device health
+    /// </summary>
+    public List<string> Recommendations { get; set; } = new();
+}
+
+/// <summary>
+/// Maintenance type enumeration
+/// </summary>
+public enum MaintenanceType
+{
+    /// <summary>
+    /// Sensor replacement needed
+    /// </summary>
+    SensorReplacement,
+
+    /// <summary>
+    /// Battery replacement needed
+    /// </summary>
+    BatteryReplacement,
+
+    /// <summary>
+    /// Calibration needed
+    /// </summary>
+    Calibration,
+
+    /// <summary>
+    /// General maintenance needed
+    /// </summary>
+    GeneralMaintenance,
+}
+
+/// <summary>
+/// Maintenance prediction model
+/// </summary>
+public class MaintenancePrediction
+{
+    /// <summary>
+    /// Device identifier
+    /// </summary>
+    public string DeviceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Predicted date for maintenance
+    /// </summary>
+    public DateTime PredictedMaintenanceDate { get; set; }
+
+    /// <summary>
+    /// Confidence level of the prediction (0-100)
+    /// </summary>
+    public decimal ConfidenceLevel { get; set; }
+
+    /// <summary>
+    /// Type of maintenance predicted
+    /// </summary>
+    public MaintenanceType MaintenanceType { get; set; }
+
+    /// <summary>
+    /// Reasons for the prediction
+    /// </summary>
+    public List<string> Reasons { get; set; } = new();
+}
+
+/// <summary>
 /// Device issue severity enumeration
 /// </summary>
 public enum DeviceIssueSeverity

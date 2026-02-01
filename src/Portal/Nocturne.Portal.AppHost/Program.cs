@@ -1,4 +1,7 @@
+#pragma warning disable ASPIREPIPELINES003 // Experimental container image APIs
+
 using Aspire.Hosting;
+using Aspire.Hosting.Publishing;
 using Microsoft.Extensions.Configuration;
 using Nocturne.Aspire.Hosting;
 
@@ -12,7 +15,11 @@ builder.AddDeveloperCertificateExport();
 var api = builder
     .AddProject<Projects.Nocturne_Portal_API>("portal-api")
     .WithHttpsDeveloperCertificate()
-    .WithHttpsEndpoint(port: 1610);
+    .WithHttpsEndpoint(port: 1610)
+    .WithContainerBuildOptions(options =>
+    {
+        options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+    });
 
 // Conditional demo instance (Nocturne API + Web with demo data)
 var demoEnabled = builder.Configuration.GetValue<bool>("Parameters:DemoApi:Enabled", false);
@@ -41,6 +48,10 @@ if (demoEnabled)
         .WaitFor(demoDatabase)
         .WithHttpsDeveloperCertificate()
         .WithHttpsEndpoint(name: "demo-api", port: 1622)
+        .WithContainerBuildOptions(options =>
+        {
+            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+        })
         .WithEnvironment("DemoService__Enabled", "true")
         // Seed demo user accounts
         // Admin account - full access
@@ -68,6 +79,10 @@ if (demoEnabled)
         .WaitFor(demoDatabase)
         .WaitFor(demoApi)
         .WithHttpsEndpoint(name: "demo-service-https", port: 1624)
+        .WithContainerBuildOptions(options =>
+        {
+            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+        })
         .WithEnvironment("DemoMode__Enabled", "true")
         .WithEnvironment("DemoMode__ClearOnStartup", "true")
         .WithEnvironment("DemoMode__RegenerateOnStartup", "true")
@@ -80,6 +95,7 @@ if (demoEnabled)
     // Add Nocturne Web pointing to demo API
     demoWeb = builder
         .AddViteApp("demo-web", "../../Web/packages/app")
+        .WithPnpmPackageInstallation()
         .WithReference(demoApi)
         .WaitFor(demoApi)
         .WithEnvironment("PUBLIC_API_URL", demoApi.GetEndpoint("demo-api"))
@@ -87,12 +103,17 @@ if (demoEnabled)
         .WithDeveloperCertificateForVite()
         .WithHttpsEndpoint(env: "PORT", port: 1621, name: "https")
         .WithHttpsDeveloperCertificate()
-        .WithDeveloperCertificateTrust(true);
+        .WithDeveloperCertificateTrust(true)
+        .WithContainerBuildOptions(options =>
+        {
+            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+        });
 }
 
 // Add the Portal Web frontend
 var portalWeb = builder
     .AddViteApp("portal-web", "../../Web/packages/portal")
+    .WithPnpmPackageInstallation()
     .WithReference(api)
     .WaitFor(api)
     .WithEnvironment("VITE_PORTAL_API_URL", api.GetEndpoint("https"))
@@ -100,6 +121,10 @@ var portalWeb = builder
     .WithHttpsEndpoint(env: "PORT", port: 1611, name: "web")
     .WithHttpsDeveloperCertificate()
     .WithDeveloperCertificateTrust(true)
+    .WithContainerBuildOptions(options =>
+    {
+        options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+    })
     .PublishAsDockerFile();
 
 // Pass demo URLs to portal web when demo is enabled

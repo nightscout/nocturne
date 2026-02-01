@@ -131,7 +131,7 @@
       header: ({ table }) => {
         const checked = table.getIsAllPageRowsSelected();
         const indeterminate = table.getIsSomePageRowsSelected();
-        return renderSnippet(selectHeaderSnippet, {
+        return renderSnippet(selectHeaderSnippet as any, {
           checked,
           indeterminate,
           table,
@@ -139,7 +139,7 @@
       },
       cell: ({ row }) => {
         const checked = row.getIsSelected();
-        return renderSnippet(selectCellSnippet, { checked, row });
+        return renderSnippet(selectCellSnippet as any, { checked, row });
       },
       enableSorting: false,
       enableHiding: false,
@@ -150,7 +150,7 @@
       id: "time",
       accessorFn: (row) => row.created_at,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "Time" }),
+        renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
       cell: ({ row }) => formatDateTimeCompact(row.original.created_at),
       sortingFn: (rowA, rowB) => {
         const a = new Date(rowA.original.created_at || 0).getTime();
@@ -162,11 +162,11 @@
     {
       id: "eventType",
       accessorKey: "eventType",
-      header: () => renderSnippet(eventTypeFilterHeaderSnippet, {}),
+      header: () => renderSnippet(eventTypeFilterHeaderSnippet as any, {}),
       cell: ({ row }) => {
         const eventType = row.original.eventType || "<none>";
         const styles = getEventTypeStyle(eventType);
-        return renderSnippet(eventTypeBadgeSnippet, { eventType, styles });
+        return renderSnippet(eventTypeBadgeSnippet as any, { eventType, styles });
       },
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
@@ -178,7 +178,7 @@
       id: "insulin",
       accessorKey: "insulin",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "Insulin" }),
+        renderSnippet(sortableHeaderSnippet as any, { column, label: "Insulin" }),
       cell: ({ row }) => formatNumber(row.original.insulin, "U"),
       sortingFn: (rowA, rowB) => {
         const a = rowA.original.insulin ?? 0;
@@ -191,7 +191,7 @@
       id: "rate",
       accessorKey: "rate",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "Rate" }),
+        renderSnippet(sortableHeaderSnippet as any, { column, label: "Rate" }),
       cell: ({ row }) => {
         const rate = row.original.rate ?? row.original.absolute;
         if (rate === undefined || rate === null) return "—";
@@ -208,7 +208,7 @@
       id: "carbs",
       accessorKey: "carbs",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "Carbs" }),
+        renderSnippet(sortableHeaderSnippet as any, { column, label: "Carbs" }),
       cell: ({ row }) => formatNumber(row.original.carbs, "g"),
       sortingFn: (rowA, rowB) => {
         const a = rowA.original.carbs ?? 0;
@@ -221,7 +221,7 @@
       id: "glucose",
       accessorKey: "glucose",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet, { column, label: "BG" }),
+        renderSnippet(sortableHeaderSnippet as any, { column, label: "BG" }),
       cell: ({ row }) => formatNumber(row.original.glucose),
     },
     // Duration column
@@ -246,7 +246,7 @@
     {
       id: "enteredBy",
       accessorKey: "enteredBy",
-      header: () => renderSnippet(sourceFilterHeaderSnippet, {}),
+      header: () => renderSnippet(sourceFilterHeaderSnippet as any, {}),
       cell: ({ row }) => {
         const enteredBy = row.original.enteredBy;
         const source = row.original.data_source;
@@ -259,7 +259,7 @@
         if (source && enteredBy && source !== enteredBy) {
           const secondary =
             enteredBy.length > 15 ? enteredBy.slice(0, 15) + "…" : enteredBy;
-          return renderSnippet(sourceSnippet, { primary: display, secondary });
+          return renderSnippet(sourceSnippet as any, { primary: display, secondary });
         }
         return display;
       },
@@ -277,7 +277,7 @@
       cell: ({ row }) => {
         const props = row.original.additional_properties;
         if (!props || Object.keys(props).length === 0) return null;
-        return renderSnippet(additionalPropertiesSnippet, { props });
+        return renderSnippet(additionalPropertiesSnippet as any, { props });
       },
       enableSorting: false,
       size: 40,
@@ -298,7 +298,7 @@
       id: "actions",
       header: "",
       cell: ({ row }) =>
-        renderSnippet(actionsSnippet, { treatment: row.original }),
+        renderSnippet(actionsSnippet as any, { treatment: row.original }),
       enableSorting: false,
       enableHiding: false,
       size: 80,

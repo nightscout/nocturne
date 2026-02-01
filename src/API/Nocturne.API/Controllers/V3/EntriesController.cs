@@ -5,6 +5,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Extensions;
 using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Controllers.V3;
@@ -57,8 +58,17 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Convert V3 parameters to V1 query for backend compatibility
             var type = ExtractTypeFromFilter(parameters.Filter);
-            var findQuery = ConvertV3FilterToV1Find(parameters.Filter);
-            var reverseResults = ExtractSortDirection(parameters.Sort) == "asc";
+
+            // Convert V3 filter criteria (field$op=value) to MongoDB-style JSON query
+            var findQuery =
+                ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
+                ?? ConvertV3FilterToV1Find(parameters.Filter);
+
+            // Determine sort direction from sort$desc query parameter
+            // Nightscout V3: sort$desc=field means descending (newest first)
+            // reverseResults=false means descending, reverseResults=true means ascending
+            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
+            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
 
             // Get entries using existing V1 backend with V3 parameters
             var entries = await _postgreSqlService.GetEntriesWithAdvancedFilterAsync(
@@ -73,9 +83,6 @@ public class EntriesController : BaseV3Controller<Entry>
 
             var entriesList = entries.ToList();
 
-            // Get total count for pagination (approximation for performance)
-            var totalCount = await GetTotalCountAsync(type, findQuery, cancellationToken);
-
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(entriesList);
             var etag = GenerateETag(entriesList);
@@ -85,15 +92,16 @@ public class EntriesController : BaseV3Controller<Entry>
                 return StatusCode(304);
             }
 
-            // Create V3 response
-            var response = CreateV3CollectionResponse(entriesList, parameters, totalCount);
+            // Transform entries to V3 response format with computed fields
+            var v3Entries = entriesList.ToV3Responses().ToList();
 
             _logger.LogDebug(
                 "Successfully returned {Count} entries with V3 format",
                 entriesList.Count
             );
 
-            return Ok(response);
+            // Return Nightscout V3-compatible response with transformed V3 entries
+            return CreateV3SuccessResponse(v3Entries);
         }
         catch (ArgumentException ex)
         {
@@ -143,7 +151,7 @@ public class EntriesController : BaseV3Controller<Entry>
             Response.Headers["ETag"] = $"\"{etag}\"";
             Response.Headers["Cache-Control"] = "public, max-age=60";
 
-            return Ok(entry);
+            return Ok(entry.ToV3Response());
         }
         catch (Exception ex)
         {
@@ -217,7 +225,11 @@ public class EntriesController : BaseV3Controller<Entry>
             // Set location header for created resource
             Response.Headers["Location"] = $"/api/v3/entries/{createdEntry.Id}";
 
-            return CreatedAtAction(nameof(GetEntry), new { id = createdEntry.Id }, createdEntry);
+            return CreatedAtAction(
+                nameof(GetEntry),
+                new { id = createdEntry.Id },
+                createdEntry.ToV3Response()
+            );
         }
         catch (ArgumentException ex)
         {
@@ -303,7 +315,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 _logger.LogWarning(ex, "Failed to process alerts for V3 bulk entries");
             }
 
-            return StatusCode(201, createdEntries.ToArray());
+            return StatusCode(201, createdEntries.ToV3Responses());
         }
         catch (ArgumentException ex)
         {
@@ -373,7 +385,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             _logger.LogDebug("Successfully updated V3 entry {Id}", id);
 
-            return Ok(updatedEntry);
+            return Ok(updatedEntry.ToV3Response());
         }
         catch (ArgumentException ex)
         {
@@ -493,13 +505,53 @@ public class EntriesController : BaseV3Controller<Entry>
         }
     }
 
-    private new string ExtractSortDirection(string? sort)
+    /// <summary>
+    /// Convert V3 filter criteria (field$op=value format) to MongoDB-style JSON query
+    /// </summary>
+    /// <param name="filterCriteria">List of parsed filter criteria</param>
+    /// <returns>MongoDB-style JSON query string, or null if no criteria</returns>
+    private string? ConvertFilterCriteriaToFindQuery(List<V3FilterCriteria>? filterCriteria)
     {
-        if (string.IsNullOrEmpty(sort))
-            return "desc"; // Default to descending (newest first)
+        if (filterCriteria == null || filterCriteria.Count == 0)
+            return null;
 
-        // V3 sort format: "field" or "-field" (minus means descending)
-        return sort.StartsWith("-") ? "desc" : "asc";
+        var conditions = new Dictionary<string, object>();
+
+        foreach (var criteria in filterCriteria)
+        {
+            var mongoOp = criteria.Operator switch
+            {
+                "eq" => null, // Direct equality doesn't need operator
+                "ne" => "$ne",
+                "gt" => "$gt",
+                "gte" => "$gte",
+                "lt" => "$lt",
+                "lte" => "$lte",
+                "in" => "$in",
+                "nin" => "$nin",
+                "re" => "$regex",
+                _ => null,
+            };
+
+            if (mongoOp == null && criteria.Operator == "eq")
+            {
+                // Direct equality: { "field": "value" }
+                conditions[criteria.Field] = criteria.Value ?? "";
+            }
+            else if (mongoOp != null)
+            {
+                // Operator form: { "field": { "$op": "value" } }
+                conditions[criteria.Field] = new Dictionary<string, object?>
+                {
+                    [mongoOp] = criteria.Value,
+                };
+            }
+        }
+
+        if (conditions.Count == 0)
+            return null;
+
+        return JsonSerializer.Serialize(conditions);
     }
 
     private async Task<long> GetTotalCountAsync(

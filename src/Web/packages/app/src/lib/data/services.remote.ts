@@ -92,10 +92,20 @@ export const deleteConnectorData = command(z.string(), async (connectorId) => {
 
 	try {
 		const result = await apiClient.services.deleteConnectorData(connectorId);
-		await getServicesOverview().refresh();
+		// Refresh both services overview and connector statuses to update counts everywhere
+		await Promise.all([
+			getServicesOverview().refresh(),
+			getConnectorStatuses().refresh(),
+		]);
+		const entriesDeleted = result.entriesDeleted ?? 0;
+		const treatmentsDeleted = result.treatmentsDeleted ?? 0;
+		const deviceStatusDeleted = result.deviceStatusDeleted ?? 0;
 		return {
 			success: result.success ?? false,
-			entriesDeleted: result.entriesDeleted,
+			entriesDeleted,
+			treatmentsDeleted,
+			deviceStatusDeleted,
+			totalDeleted: entriesDeleted + treatmentsDeleted + deviceStatusDeleted,
 			error: result.error ?? undefined,
 		};
 	} catch (err) {
