@@ -6,6 +6,7 @@
     deleteDemoData as deleteDemoDataRemote,
     deleteDataSourceData as deleteDataSourceDataRemote,
     getConnectorStatuses,
+    getConnectorCapabilities,
     startDeduplicationJob,
     getDeduplicationJobStatus,
     cancelDeduplicationJob,
@@ -19,6 +20,7 @@
     SyncRequest,
     SyncResult,
     AvailableConnector,
+    ConnectorCapabilities,
     DeduplicationJobStatus,
   } from "$lib/api/generated/nocturne-api-client";
 
@@ -71,6 +73,7 @@
   import Apple from "lucide-svelte/icons/apple";
   import TabletSmartphone from "lucide-svelte/icons/tablet-smartphone";
   import { getApiClient } from "$lib/api";
+  import { toast } from "svelte-sonner";
 
   let servicesOverview = $state<ServicesOverview | null>(null);
   let isLoading = $state(true);
@@ -136,6 +139,14 @@
   let connectorStatuses = $state<ConnectorStatusDto[]>([]);
   let isLoadingConnectorStatuses = $state(false);
   let selectedConnector = $state<ConnectorStatusWithDescription | null>(null);
+  let selectedConnectorCapabilities = $state<ConnectorCapabilities | null>(
+    null
+  );
+  let isLoadingConnectorCapabilities = $state(false);
+  let connectorCapabilitiesById = $state<
+    Record<string, ConnectorCapabilities | null>
+  >({});
+  let quickSyncingById = $state<Record<string, boolean>>({});
   let showConnectorDialog = $state(false);
 
   // Deduplication state
@@ -167,6 +178,11 @@
     error = null;
     try {
       servicesOverview = await getServicesOverview();
+      if (servicesOverview?.availableConnectors) {
+        await loadConnectorCapabilitiesMap(servicesOverview.availableConnectors);
+      } else {
+        connectorCapabilitiesById = {};
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load services";
     } finally {
@@ -183,6 +199,57 @@
       connectorStatuses = [];
     } finally {
       isLoadingConnectorStatuses = false;
+    }
+  }
+
+  async function loadConnectorCapabilitiesFor(connectorId?: string) {
+    if (!connectorId) {
+      selectedConnectorCapabilities = null;
+      return;
+    }
+
+    isLoadingConnectorCapabilities = true;
+    try {
+      selectedConnectorCapabilities = await getConnectorCapabilities(connectorId);
+    } catch (e) {
+      console.error("Failed to load connector capabilities", e);
+      selectedConnectorCapabilities = null;
+    } finally {
+      isLoadingConnectorCapabilities = false;
+    }
+  }
+
+  async function loadConnectorCapabilitiesMap(
+    connectors: AvailableConnector[]
+  ) {
+    const connectorIds = connectors
+      .map((connector) => connector.id)
+      .filter((id): id is string => !!id);
+
+    if (connectorIds.length === 0) {
+      connectorCapabilitiesById = {};
+      return;
+    }
+
+    try {
+      const results = await Promise.all(
+        connectorIds.map(async (connectorId) => ({
+          connectorId,
+          capabilities: await getConnectorCapabilities(connectorId),
+        }))
+      );
+
+      connectorCapabilitiesById = results.reduce(
+        (acc, result) => {
+          acc[result.connectorId] = result.capabilities;
+          return acc;
+        },
+        {} as Record<string, ConnectorCapabilities | null>
+      );
+    } catch (e) {
+      console.error("Failed to load connector capabilities map", e);
+      connectorCapabilitiesById = {};
+    } finally {
     }
   }
 
@@ -442,6 +509,8 @@
     if (!selectedConnector?.id) return;
 
     const connectorId = selectedConnector.id;
+    const supportsHistoricalSync =
+      selectedConnectorCapabilities?.supportsHistoricalSync ?? true;
 
     // Immediately close the dialog
     showConnectorDialog = false;
@@ -460,10 +529,12 @@
 
     try {
       const apiClient = getApiClient();
-      const request: SyncRequest = {
-        from: new Date(fromDate),
-        to: new Date(toDate),
-      };
+      const request: SyncRequest = supportsHistoricalSync
+        ? {
+            from: new Date(fromDate),
+            to: new Date(toDate),
+          }
+        : {};
 
       const result = await apiClient.services.triggerConnectorSync(
         connectorId,
@@ -529,6 +600,31 @@
       };
     } finally {
       isFoodOnlySyncing = false;
+    }
+  }
+
+  async function triggerQuickSync(connectorId: string) {
+    if (quickSyncingById[connectorId]) return;
+
+    quickSyncingById = { ...quickSyncingById, [connectorId]: true };
+    try {
+      const apiClient = getApiClient();
+      const result = await apiClient.services.triggerConnectorSync(
+        connectorId,
+        {}
+      );
+
+      if (result.success) {
+        toast.success("Sync started");
+      } else {
+        toast.error(result.message || "Sync failed");
+      }
+
+      await loadConnectorStatuses();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      quickSyncingById = { ...quickSyncingById, [connectorId]: false };
     }
   }
 
@@ -1110,78 +1206,131 @@
             {@const connectorDataSource = getConnectorDataSource(connector)}
             {@const hasData =
               connectorDataSource !== null || isDisabledWithData}
+            {@const connectorCapabilities = connector.id
+              ? connectorCapabilitiesById[connector.id]
+              : null}
+            {@const canQuickSync =
+              connectorStatus?.isHealthy === true &&
+              (connectorCapabilities?.supportsManualSync ?? true)}
 
             {#if isConnected && connectorStatus}
               <!-- Connected connector - clickable button with dialog -->
-              <button
-                class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20"
-                onclick={() => {
-                  selectedConnector = connectorStatus;
-                  // Initialize granular sync dates in local time
-                  const now = new Date();
-                  const thirtyDaysAgo = new Date(
-                    now.getTime() - 30 * 24 * 60 * 60 * 1000
-                  );
-                  // format for datetime-local: YYYY-MM-DDThh:mm (local time)
-                  const formatLocal = (d: Date) => {
-                    const offset = d.getTimezoneOffset() * 60000;
-                    return new Date(d.getTime() - offset)
-                      .toISOString()
-                      .slice(0, 16);
-                  };
-                  granularSyncTo = formatLocal(now);
-                  granularSyncFrom = formatLocal(thirtyDaysAgo);
-                  granularSyncResult = null;
+              <div class="relative">
+                <button
+                  class="flex w-full items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20"
+                  onclick={async () => {
+                    selectedConnector = connectorStatus;
+                    // Initialize granular sync dates in local time
+                    const now = new Date();
+                    const thirtyDaysAgo = new Date(
+                      now.getTime() - 30 * 24 * 60 * 60 * 1000
+                    );
+                    // format for datetime-local: YYYY-MM-DDThh:mm (local time)
+                    const formatLocal = (d: Date) => {
+                      const offset = d.getTimezoneOffset() * 60000;
+                      return new Date(d.getTime() - offset)
+                        .toISOString()
+                        .slice(0, 16);
+                    };
+                    granularSyncTo = formatLocal(now);
+                    granularSyncFrom = formatLocal(thirtyDaysAgo);
+                    granularSyncResult = null;
 
-                  showConnectorDialog = true;
-                }}
-              >
-                <div
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30"
+                    await loadConnectorCapabilitiesFor(connector.id);
+                    showConnectorDialog = true;
+                  }}
                 >
-                  <Icon class="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-medium">{connector.name}</span>
-                    {#if connectorStatus.state === "Syncing"}
-                      <Badge
-                        class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
-                      >
-                        <Loader2 class="h-3 w-3 mr-1 animate-spin" />
-                        Syncing
-                      </Badge>
-                    {:else if connectorStatus.state === "BackingOff"}
-                      <Badge
-                        variant="secondary"
-                        class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100 text-xs"
-                      >
-                        <Clock class="h-3 w-3 mr-1" />
-                        Backing Off
-                      </Badge>
-                    {:else if connectorStatus.state === "Error"}
-                      <Badge variant="destructive" class="text-xs">
-                        <AlertCircle class="h-3 w-3 mr-1" />
-                        Error
-                      </Badge>
-                    {:else}
-                      <Badge
-                        class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
-                      >
-                        <CheckCircle class="h-3 w-3 mr-1" />
-                        Active
-                      </Badge>
-                    {/if}
+                  <div
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30"
+                  >
+                    <Icon class="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
-                  <p class="text-sm text-muted-foreground">
-                    {connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0} records
-                    (24h)
-                  </p>
-                </div>
-                <ChevronRight
-                  class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
-                />
-              </button>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-medium">{connector.name}</span>
+                      {#if connectorStatus.state === "Syncing"}
+                        <Badge
+                          class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
+                        >
+                          <Loader2 class="h-3 w-3 mr-1 animate-spin" />
+                          Syncing
+                        </Badge>
+                      {:else if connectorStatus.state === "BackingOff"}
+                        <Badge
+                          variant="secondary"
+                          class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100 text-xs"
+                        >
+                          <Clock class="h-3 w-3 mr-1" />
+                          Backing Off
+                        </Badge>
+                      {:else if connectorStatus.state === "Error"}
+                        <Badge variant="destructive" class="text-xs">
+                          <AlertCircle class="h-3 w-3 mr-1" />
+                          Error
+                        </Badge>
+                      {:else}
+                        <Badge
+                          class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
+                        >
+                          <CheckCircle class="h-3 w-3 mr-1" />
+                          Active
+                        </Badge>
+                      {/if}
+                      {#if connectorCapabilities &&
+                      (connectorCapabilities.supportsHistoricalSync === false ||
+                        connectorCapabilities.maxHistoricalDays)}
+                        <Tooltip.Root>
+                          <Tooltip.Trigger>
+                            <Badge
+                              variant="secondary"
+                              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
+                            >
+                              Limited
+                            </Badge>
+                          </Tooltip.Trigger>
+                          <Tooltip.Portal>
+                            <Tooltip.Content
+                              class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                            >
+                              {#if connectorCapabilities.supportsHistoricalSync ===
+                              false}
+                                Historical sync not supported.
+                              {:else if connectorCapabilities.maxHistoricalDays}
+                                Historical sync limited to {connectorCapabilities.maxHistoricalDays} days.
+                              {/if}
+                            </Tooltip.Content>
+                          </Tooltip.Portal>
+                        </Tooltip.Root>
+                      {/if}
+                    </div>
+                    <p class="text-sm text-muted-foreground">
+                      {connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0} records
+                      (24h)
+                    </p>
+                  </div>
+                  <ChevronRight
+                    class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
+                  />
+                </button>
+                {#if connector.id && canQuickSync}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    class="absolute right-3 top-1/2 -translate-y-1/2"
+                    disabled={quickSyncingById[connector.id] === true}
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      triggerQuickSync(connector.id!);
+                    }}
+                  >
+                    {#if quickSyncingById[connector.id] === true}
+                      <Loader2 class="h-4 w-4 animate-spin" />
+                    {:else}
+                      <RefreshCw class="h-4 w-4" />
+                    {/if}
+                  </Button>
+                {/if}
+              </div>
             {:else if hasData}
               <!-- Has data but not connected/disabled - clickable to view data and delete -->
               {@const entryCount = isDisabledWithData
@@ -1195,7 +1344,7 @@
                 : connectorDataSource?.lastSeen}
               <button
                 class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group border-gray-300 dark:border-gray-700"
-                onclick={() => {
+                onclick={async () => {
                   // Use connectorStatus if available (disabled connector), otherwise create synthetic
                   if (isDisabledWithData && connectorStatus) {
                     selectedConnector = connectorStatus;
@@ -1214,6 +1363,7 @@
                     };
                   }
                   granularSyncResult = null;
+                  await loadConnectorCapabilitiesFor(connector.id);
                   showConnectorDialog = true;
                 }}
               >
@@ -1246,6 +1396,32 @@
                       <Database class="h-3 w-3 mr-1" />
                       Has Data
                     </Badge>
+                    {#if connectorCapabilities &&
+                    (connectorCapabilities.supportsHistoricalSync === false ||
+                      connectorCapabilities.maxHistoricalDays)}
+                      <Tooltip.Root>
+                        <Tooltip.Trigger>
+                          <Badge
+                            variant="secondary"
+                            class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
+                          >
+                            Limited
+                          </Badge>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content
+                            class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
+                          >
+                            {#if connectorCapabilities.supportsHistoricalSync ===
+                            false}
+                              Historical sync not supported.
+                            {:else if connectorCapabilities.maxHistoricalDays}
+                              Historical sync limited to {connectorCapabilities.maxHistoricalDays} days.
+                            {/if}
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
+                    {/if}
                   </div>
                   <p class="text-sm text-muted-foreground">
                     {entryCount?.toLocaleString() ?? 0} records
@@ -2027,6 +2203,46 @@
           </div>
         {/if}
 
+        {#if isLoadingConnectorCapabilities}
+          <div class="text-xs text-muted-foreground">
+            Loading connector capabilities...
+          </div>
+        {:else if selectedConnectorCapabilities}
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-muted-foreground">
+                Supported data types
+              </span>
+              <div class="flex flex-wrap gap-1 justify-end">
+                {#if selectedConnectorCapabilities.supportedDataTypes &&
+                selectedConnectorCapabilities.supportedDataTypes.length > 0}
+                  {#each selectedConnectorCapabilities.supportedDataTypes as dataType}
+                    <Badge variant="outline" class="text-xs">
+                      {dataType}
+                    </Badge>
+                  {/each}
+                {:else}
+                  <span class="text-xs text-muted-foreground">Unknown</span>
+                {/if}
+              </div>
+            </div>
+            {#if selectedConnectorCapabilities.supportsHistoricalSync === false}
+              <div
+                class="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-800 dark:text-blue-200"
+              >
+                Historical sync is not supported for this connector.
+                {#if selectedConnectorCapabilities.maxHistoricalDays}
+                  Recent data only (last {selectedConnectorCapabilities.maxHistoricalDays} days).
+                {/if}
+              </div>
+            {:else if selectedConnectorCapabilities.maxHistoricalDays}
+              <div class="text-xs text-muted-foreground">
+                Historical sync limited to the last {selectedConnectorCapabilities.maxHistoricalDays} days.
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Notice for disabled or offline connectors -->
         {#if selectedConnector.state === "Disabled"}
           <div
@@ -2167,7 +2383,9 @@
         {/if}
 
         <!-- Only show sync controls for healthy/online connectors -->
-        {#if selectedConnector.isHealthy && selectedConnector.state !== "Offline"}
+        {#if selectedConnector.isHealthy &&
+        selectedConnector.state !== "Offline" &&
+        (selectedConnectorCapabilities?.supportsManualSync ?? true)}
           <Separator />
 
           <div class="space-y-3">
@@ -2175,34 +2393,39 @@
               <Download class="h-4 w-4" />
               <h4 class="font-medium text-sm">Manual Sync</h4>
             </div>
-            <p class="text-xs text-muted-foreground">
-              Select a date range to re-sync specific data.
-            </p>
-
-            <div class="grid grid-cols-2 gap-2">
-              <div class="space-y-1">
-                <label for="granular-sync-from" class="text-xs font-medium">
-                  From
-                </label>
-                <input
-                  type="datetime-local"
-                  id="granular-sync-from"
-                  bind:value={granularSyncFrom}
-                  class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                />
+            {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
+              <p class="text-xs text-muted-foreground">
+                This connector only supports recent syncs.
+              </p>
+            {:else}
+              <p class="text-xs text-muted-foreground">
+                Select a date range to re-sync specific data.
+              </p>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="space-y-1">
+                  <label for="granular-sync-from" class="text-xs font-medium">
+                    From
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="granular-sync-from"
+                    bind:value={granularSyncFrom}
+                    class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+                <div class="space-y-1">
+                  <label for="granular-sync-to" class="text-xs font-medium">
+                    To
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="granular-sync-to"
+                    bind:value={granularSyncTo}
+                    class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
               </div>
-              <div class="space-y-1">
-                <label for="granular-sync-to" class="text-xs font-medium">
-                  To
-                </label>
-                <input
-                  type="datetime-local"
-                  id="granular-sync-to"
-                  bind:value={granularSyncTo}
-                  class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-            </div>
+            {/if}
 
             {#if granularSyncResult}
               <div

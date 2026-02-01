@@ -6,11 +6,13 @@ This directory contains unit tests and integration tests for the Nocturne API.
 
 ### Unit Tests
 
-Unit tests run without external dependencies and test individual components in isolation. These tests are fast and can be run without any setup.
+Unit tests run without external dependencies and test individual components in isolation. These tests are fast and can
+be run without any setup.
 
 ### Integration Tests
 
-Integration tests use real MongoDB containers via Testcontainers to test end-to-end functionality. These tests require Docker to be installed and running.
+Integration tests use real MongoDB containers via Testcontainers to test end-to-end functionality. These tests require
+Docker to be installed and running.
 
 ## Running Tests
 
@@ -77,7 +79,8 @@ If you encounter Docker-related errors when running integration tests:
 
 3. **WSL 2 issues (Windows)**: Ensure WSL 2 backend is enabled in Docker Desktop settings
 
-4. **Port conflicts**: If you have MongoDB running locally on port 27017, the tests will automatically use a different port
+4. **Port conflicts**: If you have MongoDB running locally on port 27017, the tests will automatically use a different
+   port
 
 ## Test Structure
 
@@ -94,7 +97,8 @@ Nocturne.API.Tests/
 
 ## Test Data
 
-Integration tests automatically seed test data into temporary MongoDB containers. Each test run uses a fresh database instance, ensuring test isolation.
+Integration tests automatically seed test data into temporary MongoDB containers. Each test run uses a fresh database
+instance, ensuring test isolation.
 
 ## Best Practices
 
@@ -136,7 +140,8 @@ When running in CI/CD environments:
 
 ## Legacy Tests
 
-Legacy tests from the original Nocturne application are marked with the `[Parity]` attribute. These tests ensure that the new C# codebase maintains 1:1 functionality with the original implementation.
+Legacy tests from the original Nocturne application are marked with the `[Parity]` attribute. These tests ensure that
+the new C# codebase maintains 1:1 functionality with the original implementation.
 
 ### List of Legacy Tests still to implement:
 
@@ -162,7 +167,8 @@ Legacy tests from the original Nocturne application are marked with the `[Parity
 [ ] - security.test.js
 [ ] - socket.test.js
 [ ] - update.test.js
-[x] - ar2.test.js (? COVERED - AR2 forecasting algorithm with cone generation, notifications, and virtual assistant support tested in Ar2Tests and Ar2Service)
+[x] - ar2.test.js (? COVERED - AR2 forecasting algorithm with cone generation, notifications, and virtual assistant
+support tested in Ar2Tests and Ar2Service)
 [x] - basalprofileplugin.test.js (ProfileServiceTests)
 [x] - bgnow.test.js (BgNowTests)
 [x] - boluswizardpreview.test.js (BolusWizardServiceTests)

@@ -23,26 +23,51 @@ public class ConnectorsController : ControllerBase
     {
         var connectors = new List<ConnectorMetadataDto>();
 
-        // Scan the Configurations assembly for connector configuration classes
-        var configurationsAssembly = typeof(Nocturne.Connectors.Configurations.DexcomConnectorConfiguration).Assembly;
-
-        foreach (var type in configurationsAssembly.GetTypes())
+        // Ensure connector assemblies are loaded, then scan for configuration classes
+        var connectorAssemblies = new[]
         {
-            var registrationAttr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
-            if (registrationAttr == null)
-                continue;
+            "Nocturne.Connectors.Dexcom",
+            "Nocturne.Connectors.Glooko",
+            "Nocturne.Connectors.FreeStyle",
+            "Nocturne.Connectors.MyLife"
+        };
 
-            var connector = new ConnectorMetadataDto
+        foreach (var name in connectorAssemblies)
+        {
+            try
             {
-                Type = registrationAttr.ConnectorName,
-                DisplayName = registrationAttr.DisplayName,
-                Category = registrationAttr.Category.ToString(),
-                Description = registrationAttr.Description,
-                Icon = registrationAttr.Icon,
-                Fields = GetConnectorFields(type)
-            };
+                Assembly.Load(name);
+            }
+            catch
+            {
+                // Assembly may not be available in all contexts
+            }
+        }
 
-            connectors.Add(connector);
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => a.FullName?.Contains("Nocturne.Connectors.") == true)
+            .ToList();
+
+        foreach (var assembly in assemblies)
+        {
+            foreach (var type in assembly.GetTypes())
+            {
+                var registrationAttr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
+                if (registrationAttr == null)
+                    continue;
+
+                var connector = new ConnectorMetadataDto
+                {
+                    Type = registrationAttr.ConnectorName,
+                    DisplayName = registrationAttr.DisplayName,
+                    Category = registrationAttr.Category.ToString(),
+                    Description = registrationAttr.Description,
+                    Icon = registrationAttr.Icon,
+                    Fields = GetConnectorFields(type)
+                };
+
+                connectors.Add(connector);
+            }
         }
 
         return Ok(new ConnectorsResponse { Connectors = connectors });

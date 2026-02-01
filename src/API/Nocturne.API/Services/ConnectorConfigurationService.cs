@@ -1,11 +1,14 @@
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -21,7 +24,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly NocturneDbContext _context;
     private readonly ISecretEncryptionService _encryptionService;
     private readonly ISignalRBroadcastService _broadcastService;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -29,31 +33,19 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
-    /// <summary>
-    /// Maps connector IDs to their Aspire service names for HTTP calls.
-    /// </summary>
-    private static readonly Dictionary<string, string> ConnectorServiceNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["nightscout"] = ServiceNames.NightscoutConnector,
-        ["dexcom"] = ServiceNames.DexcomConnector,
-        ["libre"] = ServiceNames.LibreConnector,
-        ["glooko"] = ServiceNames.GlookoConnector,
-        ["carelink"] = ServiceNames.MiniMedConnector,
-        ["myfitnesspal"] = ServiceNames.MyFitnessPalConnector,
-        ["mylife"] = ServiceNames.MyLifeConnector,
-    };
-
     public ConnectorConfigurationService(
         NocturneDbContext context,
         ISecretEncryptionService encryptionService,
         ISignalRBroadcastService broadcastService,
-        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        IHostEnvironment environment,
         ILogger<ConnectorConfigurationService> logger)
     {
         _context = context;
         _encryptionService = encryptionService;
         _broadcastService = broadcastService;
-        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -397,39 +389,28 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
-        if (!ConnectorServiceNames.TryGetValue(connectorName, out var serviceName))
+        var configType = FindConfigurationType(connectorName);
+        if (configType == null)
         {
             _logger.LogWarning("Unknown connector {ConnectorName} for effective config", connectorName);
             return null;
         }
 
-        try
+        if (Activator.CreateInstance(configType) is not BaseConnectorConfiguration config)
         {
-            var client = _httpClientFactory.CreateClient(ConnectorHealthService.HttpClientName);
-            var url = $"http://{serviceName}/config/effective";
-
-            _logger.LogDebug("Fetching effective config for {Connector} at {Url}", connectorName, url);
-
-            var response = await client.GetAsync(url, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning(
-                    "Failed to get effective config for {Connector}: {StatusCode}",
-                    connectorName,
-                    response.StatusCode);
-                return null;
-            }
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var result = JsonSerializer.Deserialize<Dictionary<string, object?>>(json, _jsonOptions);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch effective config for {Connector}", connectorName);
+            _logger.LogWarning("Could not create configuration for connector {ConnectorName}", connectorName);
             return null;
         }
+
+        var registration = configType.GetCustomAttribute<ConnectorRegistrationAttribute>();
+        var bindingName = registration?.ConnectorName ?? connectorName;
+
+        _configuration.BindConnectorConfiguration(
+            config,
+            bindingName
+        );
+
+        return GetEffectiveConfiguration(config);
     }
 
     /// <summary>
@@ -574,6 +555,42 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         var json = JsonSerializer.Serialize(schema, _jsonOptions);
         return JsonDocument.Parse(json);
+    }
+
+    private static Dictionary<string, object?> GetEffectiveConfiguration(IConnectorConfiguration config)
+    {
+        var result = new Dictionary<string, object?>();
+        var configType = config.GetType();
+
+        foreach (var property in configType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var runtimeAttr = property.GetCustomAttribute<RuntimeConfigurableAttribute>();
+            if (runtimeAttr == null)
+                continue;
+
+            var secretAttr = property.GetCustomAttribute<SecretAttribute>();
+            if (secretAttr != null)
+                continue;
+
+            object? value = null;
+            try
+            {
+                value = property.GetValue(config);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (value != null && property.PropertyType.IsEnum)
+            {
+                value = value.ToString();
+            }
+
+            result[ToCamelCase(property.Name)] = value;
+        }
+
+        return result;
     }
 
     private static string FormatPropertyNameForDisplay(string name)

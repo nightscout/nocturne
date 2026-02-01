@@ -39,7 +39,15 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Check if connector is enabled
+        if (!Config.Enabled)
+        {
+            Logger.LogInformation(
+                "{ConnectorName} connector is disabled, background service will not run",
+                ConnectorName
+            );
+            return;
+        }
+
         if (Config.SyncIntervalMinutes <= 0)
         {
             Logger.LogInformation(
@@ -83,8 +91,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, "Error during {ConnectorName} data sync cycle", ConnectorName);
-                    // Continue running even if one sync fails
+                    Logger.LogError(ex, "Error during {ConnectorName} data sync cycle {ex}", ConnectorName, ex);
                 }
             } while (await timer.WaitForNextTickAsync(stoppingToken));
         }
@@ -98,9 +105,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         catch (Exception ex)
         {
             Logger.LogError(
-                ex,
-                "Unexpected error in {ConnectorName} connector background service",
-                ConnectorName
+                "Unexpected error in {ConnectorName} connector background service {ex}",
+                ConnectorName,
+                ex
             );
             throw;
         }

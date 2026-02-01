@@ -1068,6 +1068,8 @@ msgstr "Comparison Error"
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Unknown"
@@ -3246,6 +3248,8 @@ msgid "Suspended"
 msgstr "Suspended"
 
 #: src/lib/components/icons/PumpModeIcon.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
 msgid "Limited"
 msgstr "Limited"
 
@@ -8856,6 +8860,7 @@ msgid "Critical only"
 msgstr "Critical only"
 
 #: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Enabled"
 msgstr "Enabled"
 
@@ -10756,6 +10761,7 @@ msgstr "<0/> Manual Sync"
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Disabled"
 msgstr "Disabled"
 
@@ -11049,6 +11055,8 @@ msgstr "Sync completed successfully"
 msgid "{0} of {1} connectors synced in {2}s"
 msgstr "{0} of {1} connectors synced in {2}s"
 
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 msgid "Sync failed"
@@ -12876,3 +12884,151 @@ msgstr "({0} before expiration)"
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Exceeds tracker lifespan"
 msgstr "Exceeds tracker lifespan"
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr "Validation error"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhook settings saved."
+msgstr "Webhook settings saved."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to save webhook settings."
+msgstr "Failed to save webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test sent to all webhooks."
+msgstr "Test sent to all webhooks."
+
+#. placeholder {0}: response.failedUrls.join(", ")
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed: {0}"
+msgstr "Failed: {0}"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test failed."
+msgstr "Test failed."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to test webhook settings."
+msgstr "Failed to test webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhooks"
+msgstr "Webhooks"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Send alert events to external services"
+msgstr "Send alert events to external services"
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+msgid "Historical sync not supported."
+msgstr "Historical sync not supported."
+
+#. placeholder {0}: connectorCapabilities.maxHistoricalDays
+#. placeholder {0}: connectorCapabilities.maxHistoricalDays
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+msgid "Historical sync limited to {0} days."
+msgstr "Historical sync limited to {0} days."
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Loading connector capabilities..."
+msgstr "Loading connector capabilities..."
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Supported data types"
+msgstr "Supported data types"
+
+#. placeholder {0}: selectedConnectorCapabilities.maxHistoricalDays
+#: src/routes/settings/connectors/+page.svelte
+msgid "Recent data only (last {0} days)."
+msgstr "Recent data only (last {0} days)."
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Historical sync is not supported for this connector. <0/>"
+msgstr "Historical sync is not supported for this connector. <0/>"
+
+#. placeholder {0}: selectedConnectorCapabilities.maxHistoricalDays
+#: src/routes/settings/connectors/+page.svelte
+msgid "Historical sync limited to the last {0} days."
+msgstr "Historical sync limited to the last {0} days."
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "This connector only supports recent syncs."
+msgstr "This connector only supports recent syncs."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Webhook Settings"
+msgstr "Webhook Settings"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Configure URLs and signature secrets for alarm notifications."
+msgstr "Configure URLs and signature secrets for alarm notifications."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Send Test"
+msgstr "Send Test"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+msgid "Webhook URLs"
+msgstr "Webhook URLs"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr "No webhook URLs configured."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
+msgstr "<0/> Add URL"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Signature Secret"
+msgstr "Signature Secret"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret already configured"
+msgstr "Secret already configured"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret will be generated on save"
+msgstr "Secret will be generated on save"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "The API signs each webhook with HMAC-SHA256 using this secret."
+msgstr "The API signs each webhook with HMAC-SHA256 using this secret."
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Sync Capabilities"
+msgstr "Sync Capabilities"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "What this connector supports for manual sync"
+msgstr "What this connector supports for manual sync"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Historical sync"
+msgstr "Historical sync"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Supported"
+msgstr "Supported"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Not supported"
+msgstr "Not supported"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Max historical days"
+msgstr "Max historical days"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Manual sync"
+msgstr "Manual sync"
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Sync started"
+msgstr "Sync started"

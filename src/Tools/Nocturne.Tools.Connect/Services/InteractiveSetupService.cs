@@ -63,17 +63,11 @@ public class InteractiveSetupService
                 case "glooko":
                     await SetupGlookoAsync(cancellationToken);
                     break;
-                case "minimedcarelink":
-                    await SetupCarelinkAsync(cancellationToken);
-                    break;
                 case "dexcomshare":
                     await SetupDexcomAsync(cancellationToken);
                     break;
                 case "linkup":
                     await SetupLibreAsync(cancellationToken);
-                    break;
-                case "nightscout":
-                    await SetupNightscoutSourceAsync(cancellationToken);
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown source: {source}");
@@ -118,15 +112,14 @@ public class InteractiveSetupService
     {
         Console.WriteLine("Available data sources:");
         Console.WriteLine("  1. glooko          - Glooko diabetes platform");
-        Console.WriteLine("  2. minimedcarelink - MiniMed CareLink");
-        Console.WriteLine("  3. dexcomshare     - Dexcom Share");
-        Console.WriteLine("  4. linkup          - LibreLinkUp (FreeStyle Libre)");
-        Console.WriteLine("  5. nightscout      - Nightscout-to-Nightscout sync");
+        Console.WriteLine("  2. dexcomshare     - Dexcom Share");
+        Console.WriteLine("  3. linkup          - LibreLinkUp (FreeStyle Libre)");
+        Console.WriteLine("  4. mylife          - MyLife");
         Console.WriteLine();
 
         while (true)
         {
-            Console.Write("Select your data source (1-5 or name): ");
+            Console.Write("Select your data source (1-4 or name): ");
             var input = Console.ReadLine()?.Trim();
 
             if (string.IsNullOrWhiteSpace(input))
@@ -138,20 +131,18 @@ public class InteractiveSetupService
             var source = input switch
             {
                 "1" => "glooko",
-                "2" => "minimedcarelink",
-                "3" => "dexcomshare",
-                "4" => "linkup",
-                "5" => "nightscout",
+                "2" => "dexcomshare",
+                "3" => "linkup",
+                "4" => "mylife",
                 _ => input.ToLowerInvariant(),
             };
 
             var validSources = new[]
             {
                 "glooko",
-                "minimedcarelink",
                 "dexcomshare",
                 "linkup",
-                "nightscout",
+                "mylife",
             };
             if (validSources.Contains(source))
             {
@@ -160,7 +151,7 @@ public class InteractiveSetupService
             }
 
             Console.WriteLine(
-                $"❌ Invalid source '{input}'. Please select 1-5 or enter a valid source name."
+                $"❌ Invalid source '{input}'. Please select 1-4 or enter a valid source name."
             );
         }
     }
@@ -238,16 +229,6 @@ public class InteractiveSetupService
         return Task.CompletedTask;
     }
 
-    private Task SetupCarelinkAsync(CancellationToken cancellationToken)
-    {
-        Console.WriteLine("🩺 CareLink Configuration:");
-        Console.WriteLine("Add these properties to your appsettings.json:");
-        Console.WriteLine("\"CarelinkUsername\": \"your-username\",");
-        Console.WriteLine("\"CarelinkPassword\": \"your-password\",");
-        Console.WriteLine("\"CarelinkRegion\": \"us\"");
-        return Task.CompletedTask;
-    }
-
     private Task SetupDexcomAsync(CancellationToken cancellationToken)
     {
         Console.WriteLine("📱 Dexcom Share Configuration:");
@@ -268,12 +249,4 @@ public class InteractiveSetupService
         return Task.CompletedTask;
     }
 
-    private Task SetupNightscoutSourceAsync(CancellationToken cancellationToken)
-    {
-        Console.WriteLine("🌙 Nightscout Source Configuration:");
-        Console.WriteLine("Add these properties to your appsettings.json:");
-        Console.WriteLine("\"SourceEndpoint\": \"https://source-nightscout.com\",");
-        Console.WriteLine("\"SourceApiSecret\": \"source-api-secret\"");
-        return Task.CompletedTask;
-    }
 }

@@ -1,4 +1,5 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
+using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
@@ -18,9 +19,7 @@ internal sealed class TotalDailyDoseTreatmentHandler : IMyLifeTreatmentHandler
                 MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice),
                 MyLifeJsonKeys.Total,
                 out var total))
-        {
             return [];
-        }
 
         var treatment = MyLifeTreatmentFactory.Create(ev, MyLifeTreatmentTypes.TotalDailyDose);
         treatment.Insulin = total;

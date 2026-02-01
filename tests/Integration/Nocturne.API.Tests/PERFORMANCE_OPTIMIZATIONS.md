@@ -2,14 +2,17 @@
 
 ## Overview
 
-This document describes the optimizations implemented to resolve integration test collection isolation issues and improve performance by 60%+ as targeted in issue #122.
+This document describes the optimizations implemented to resolve integration test collection isolation issues and
+improve performance by 60%+ as targeted in issue #122.
 
 ## Problem Statement
 
 The original integration test infrastructure had several performance issues:
 
-1. **Sequential execution without benefits**: Tests marked with `[Collection("Integration")]` ran sequentially but didn't efficiently share resources
-2. **Expensive database cleanup**: Each test cleanup used `DeleteManyAsync("{}")` operations across multiple collections (100-500ms per cleanup)
+1. **Sequential execution without benefits**: Tests marked with `[Collection("Integration")]` ran sequentially but
+   didn't efficiently share resources
+2. **Expensive database cleanup**: Each test cleanup used `DeleteManyAsync("{}")` operations across multiple
+   collections (100-500ms per cleanup)
 3. **Container recreation**: Docker containers were started/stopped for each test class (~15-30s overhead)
 4. **Mixed patterns**: Inconsistent usage of collection fixtures vs. individual test setups
 5. **No data isolation**: Tests could interfere with each other due to shared collections
@@ -19,6 +22,7 @@ The original integration test infrastructure had several performance issues:
 ### 1. Shared Container Management
 
 **Before:**
+
 ```csharp
 // Each test fixture created its own containers
 public class TestDatabaseFixture : IAsyncLifetime
@@ -36,6 +40,7 @@ public class TestDatabaseFixture : IAsyncLifetime
 ```
 
 **After:**
+
 ```csharp
 // Shared containers with reference counting
 private static SharedContainerState? _sharedContainers;
@@ -56,6 +61,7 @@ public async ValueTask InitializeAsync()
 ### 2. Test Data Isolation
 
 **Before:**
+
 ```csharp
 // All tests shared the same database/collections
 Database = client.GetDatabase("nocturne_test");
@@ -72,6 +78,7 @@ public async Task CleanupAsync()
 ```
 
 **After:**
+
 ```csharp
 // Each test gets its own database
 Database = client.GetDatabase($"nocturne_test_{_testInstanceId}");
@@ -88,12 +95,14 @@ public async Task CleanupAsync()
 ### 3. Performance Monitoring
 
 Added `TestPerformanceTracker` to measure and report:
+
 - Test execution times
 - Container initialization duration
 - Database cleanup performance
 - Overall collection execution metrics
 
 **Usage:**
+
 ```csharp
 public virtual async ValueTask InitializeAsync()
 {
@@ -112,12 +121,12 @@ public virtual async ValueTask InitializeAsync()
 
 ### Expected Improvements
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Container Startup | Per test class (~15-30s each) | Once per collection (~15-30s total) | 60-90% reduction |
-| Database Cleanup | 100-500ms per collection × 5 collections | ~10ms database drop/recreate | 95-99% reduction |
-| Test Isolation | Shared collections (race conditions) | Isolated databases (no interference) | 100% isolation |
-| Resource Usage | N containers × test classes | 1 container set per collection | 80-95% reduction |
+| Metric            | Before                                   | After                                | Improvement      |
+|-------------------|------------------------------------------|--------------------------------------|------------------|
+| Container Startup | Per test class (~15-30s each)            | Once per collection (~15-30s total)  | 60-90% reduction |
+| Database Cleanup  | 100-500ms per collection × 5 collections | ~10ms database drop/recreate         | 95-99% reduction |
+| Test Isolation    | Shared collections (race conditions)     | Isolated databases (no interference) | 100% isolation   |
+| Resource Usage    | N containers × test classes              | 1 container set per collection       | 80-95% reduction |
 
 ### Measurement
 
@@ -136,6 +145,7 @@ SharedContainers.Initialize: 18,500ms (once vs. per-test)
 ### For New Integration Tests
 
 1. **Inherit from IntegrationTestBase:**
+
 ```csharp
 public class MyIntegrationTests : IntegrationTestBase
 {
@@ -148,6 +158,7 @@ public class MyIntegrationTests : IntegrationTestBase
 ```
 
 2. **Use the shared database fixture:**
+
 ```csharp
 public override async ValueTask InitializeAsync()
 {
@@ -159,6 +170,7 @@ public override async ValueTask InitializeAsync()
 ```
 
 3. **Create HTTP clients properly:**
+
 ```csharp
 [Fact]
 public async Task MyTest()
@@ -172,6 +184,7 @@ public async Task MyTest()
 ### Migration from Old Pattern
 
 **Old Pattern (Don't use):**
+
 ```csharp
 public class MyTests
 {
@@ -187,6 +200,7 @@ public class MyTests
 ```
 
 **New Pattern (Use this):**
+
 ```csharp
 public class MyTests : IntegrationTestBase
 {
@@ -215,9 +229,11 @@ public class MyTests : IntegrationTestBase
 ## Validation
 
 The `OptimizedInfrastructureValidationTests` class demonstrates the new capabilities:
+
 - Database isolation between tests
 - Efficient cleanup verification
 - HTTP client integration
 - Performance tracking integration
 
-This infrastructure provides a solid foundation for scalable integration testing with significant performance improvements.
+This infrastructure provides a solid foundation for scalable integration testing with significant performance
+improvements.

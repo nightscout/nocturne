@@ -1,6 +1,7 @@
 # Nocturne Redis Caching Infrastructure
 
-The Nocturne caching infrastructure provides a comprehensive Redis-based caching layer optimized for diabetes management data. Redis is required for all environments to ensure consistent behavior and proper distributed cache functionality.
+The Nocturne caching infrastructure provides a comprehensive Redis-based caching layer optimized for diabetes management
+data. Redis is required for all environments to ensure consistent behavior and proper distributed cache functionality.
 
 ## Features
 
@@ -169,7 +170,7 @@ profiles:at:{userId}:{timestamp} # Profile at specific time
 Optimized expiration times based on data usage patterns:
 
 | Data Type                | TTL        | Reason                    |
-| ------------------------ | ---------- | ------------------------- |
+|--------------------------|------------|---------------------------|
 | **Current Entries**      | 1 minute   | High frequency updates    |
 | **Recent Entries**       | 2 minutes  | Sliding window data       |
 | **Recent Treatments**    | 5 minutes  | Moderate update frequency |

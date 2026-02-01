@@ -12,7 +12,7 @@ public class MyLifeArchiveReader
         PropertyNameCaseInsensitive = true
     };
 
-    public IReadOnlyList<MyLifeEvent> ReadEvents(byte[] zipBytes)
+    public static IReadOnlyList<MyLifeEvent> ReadEvents(byte[] zipBytes)
     {
         using var memory = new MemoryStream(zipBytes);
         using var archive = new ZipArchive(memory, ZipArchiveMode.Read);

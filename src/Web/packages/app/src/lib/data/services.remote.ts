@@ -134,6 +134,21 @@ export const getConnectorStatuses = query(async () => {
 });
 
 /**
+ * Get connector capabilities
+ */
+export const getConnectorCapabilities = query(z.string(), async (connectorId) => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+
+	try {
+		return await apiClient.services.getConnectorCapabilities(connectorId);
+	} catch (err) {
+		console.error('Error loading connector capabilities:', err);
+		return null;
+	}
+});
+
+/**
  * Start a deduplication job
  */
 export const startDeduplicationJob = command(async () => {

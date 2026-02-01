@@ -1,36 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit.v3" />
-    <PackageReference Include="xunit.runner.visualstudio">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="coverlet.collector">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Moq" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
-    <!-- Keep MongoDB packages for migration performance testing (MongoDB → PostgreSQL) -->
-    <PackageReference Include="MongoDB.Driver" />
-    <PackageReference Include="BenchmarkDotNet" />
-    <PackageReference Include="NBomber" />
-    <PackageReference Include="Testcontainers.MongoDb" />
-    <PackageReference Include="Testcontainers.PostgreSql" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Tools\Nocturne.Tools.Migration\Nocturne.Tools.Migration.csproj" />
-    <ProjectReference Include="..\..\..\src\Tools\Nocturne.Tools.Abstractions\Nocturne.Tools.Abstractions.csproj" />
-    <ProjectReference Include="..\..\Unit\Nocturne.Tools.Migration.Tests\Nocturne.Tools.Migration.Tests.csproj" />
-  </ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+        <PackageReference Include="xunit.v3"/>
+        <PackageReference Include="xunit.runner.visualstudio">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="coverlet.collector">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Moq"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory"/>
+        <!-- Keep MongoDB packages for migration performance testing (MongoDB → PostgreSQL) -->
+        <PackageReference Include="MongoDB.Driver"/>
+        <PackageReference Include="BenchmarkDotNet"/>
+        <PackageReference Include="NBomber"/>
+        <PackageReference Include="Testcontainers.MongoDb"/>
+        <PackageReference Include="Testcontainers.PostgreSql"/>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\Tools\Nocturne.Tools.Migration\Nocturne.Tools.Migration.csproj"/>
+        <ProjectReference Include="..\..\..\src\Tools\Nocturne.Tools.Abstractions\Nocturne.Tools.Abstractions.csproj"/>
+        <ProjectReference Include="..\..\Unit\Nocturne.Tools.Migration.Tests\Nocturne.Tools.Migration.Tests.csproj"/>
+    </ItemGroup>
 </Project>

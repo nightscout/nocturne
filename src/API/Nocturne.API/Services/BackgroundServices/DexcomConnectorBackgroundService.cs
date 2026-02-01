@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.Dexcom.Configurations;
 using Nocturne.Connectors.Dexcom.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;

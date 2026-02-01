@@ -75,12 +75,6 @@ public static class ConnectorEnvironmentVariables
     public const string SourceEndpoint = "CONNECT_SOURCE_ENDPOINT";
     public const string SourceApiSecret = "CONNECT_SOURCE_API_SECRET";
 
-    // File I/O Configuration
-    public const string SaveRawData = "CONNECT_SAVE_RAW_DATA";
-    public const string DataDirectory = "CONNECT_DATA_DIRECTORY";
-    public const string LoadFromFile = "CONNECT_LOAD_FROM_FILE";
-    public const string LoadFilePath = "CONNECT_LOAD_FILE_PATH";
-
     // Proxy Configuration
     public const string NightscoutTargetUrl = "NIGHTSCOUT_TARGET_URL";
 
@@ -105,13 +99,6 @@ public static class ConnectorDefaults
     public const string Language = "en";
     public const string NodeEnvironment = "development";
     public const int AuthFailDelay = 50;
-
-    // Data directory defaults
-    /// <summary>
-    /// Default data directory name. This is relative to the content root path.
-    /// Files will be saved to {ContentRootPath}/data by default.
-    /// </summary>
-    public const string DataDirectory = "data";
 
     // Glooko defaults
     public const string GlookoServer = "eu.api.glooko.com";

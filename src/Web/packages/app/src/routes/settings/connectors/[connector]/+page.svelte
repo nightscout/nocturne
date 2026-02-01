@@ -14,12 +14,17 @@
     getConnectorDataSummary,
     type JsonSchema,
   } from "$lib/data/connectorConfig.remote";
-  import { getServicesOverview, deleteConnectorData } from "$lib/data/services.remote";
+  import {
+    getServicesOverview,
+    deleteConnectorData,
+    getConnectorCapabilities,
+  } from "$lib/data/services.remote";
   import type {
     AvailableConnector,
     ConnectorConfigurationResponse,
     ConnectorStatusInfo,
     ConnectorDataSummary,
+    ConnectorCapabilities,
     ServicesOverview,
   } from "$lib/api/generated/nocturne-api-client";
   import {
@@ -57,6 +62,7 @@
   let secrets = $state<Record<string, string>>({});
   let connectorStatus = $state<ConnectorStatusInfo | null>(null);
   let dataSummary = $state<ConnectorDataSummary | null>(null);
+  let connectorCapabilities = $state<ConnectorCapabilities | null>(null);
 
   let isLoading = $state(true);
   let isSaving = $state(false);
@@ -102,17 +108,25 @@
       }
 
       // Load schema, existing configuration, effective config, and data summary in parallel
-      const [schemaResult, configResult, effectiveResult, summaryResult] = await Promise.all([
+      const [
+        schemaResult,
+        configResult,
+        effectiveResult,
+        summaryResult,
+        capabilitiesResult,
+      ] = await Promise.all([
         getConnectorSchema(connectorInfo.id!),
         getConnectorConfiguration(connectorInfo.id!).catch(() => null),
         getConnectorEffectiveConfig(connectorInfo.id!).catch(() => null),
         getConnectorDataSummary(connectorInfo.id!).catch(() => null),
+        getConnectorCapabilities(connectorInfo.id!).catch(() => null),
       ]);
 
       schema = schemaResult;
       existingConfig = configResult;
       effectiveConfig = effectiveResult;
       dataSummary = summaryResult;
+      connectorCapabilities = capabilitiesResult;
 
       // Get connector status (includes hasSecrets, hasDatabaseConfig, isEnabled)
       try {
@@ -412,6 +426,64 @@
                 Configure via environment variables on the server.
               {/if}
             </p>
+          </div>
+        </CardContent>
+      </Card>
+    {/if}
+
+    {#if connectorCapabilities}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sync Capabilities</CardTitle>
+          <CardDescription>
+            What this connector supports for manual sync
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-muted-foreground">Supported data types</span>
+            <div class="flex flex-wrap gap-1 justify-end">
+              {#if connectorCapabilities.supportedDataTypes &&
+              connectorCapabilities.supportedDataTypes.length > 0}
+                {#each connectorCapabilities.supportedDataTypes as dataType}
+                  <Badge variant="outline" class="text-xs">
+                    {dataType}
+                  </Badge>
+                {/each}
+              {:else}
+                <span class="text-xs text-muted-foreground">Unknown</span>
+              {/if}
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-muted-foreground">Historical sync</span>
+            <Badge
+              variant={connectorCapabilities.supportsHistoricalSync
+                ? "default"
+                : "secondary"}
+              class="text-xs"
+            >
+              {connectorCapabilities.supportsHistoricalSync ? "Supported" : "Not supported"}
+            </Badge>
+          </div>
+          {#if connectorCapabilities.maxHistoricalDays}
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-muted-foreground">Max historical days</span>
+              <span class="text-sm font-medium">
+                {connectorCapabilities.maxHistoricalDays}
+              </span>
+            </div>
+          {/if}
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-muted-foreground">Manual sync</span>
+            <Badge
+              variant={connectorCapabilities.supportsManualSync
+                ? "default"
+                : "secondary"}
+              class="text-xs"
+            >
+              {connectorCapabilities.supportsManualSync ? "Enabled" : "Disabled"}
+            </Badge>
           </div>
         </CardContent>
       </Card>
