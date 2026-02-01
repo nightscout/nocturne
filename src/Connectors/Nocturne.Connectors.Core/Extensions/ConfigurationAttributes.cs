@@ -9,21 +9,6 @@ namespace Nocturne.Connectors.Core.Extensions;
 public class RuntimeConfigurableAttribute : Attribute
 {
     /// <summary>
-    ///     Creates a new RuntimeConfigurableAttribute with default values.
-    /// </summary>
-    public RuntimeConfigurableAttribute()
-    {
-    }
-
-    /// <summary>
-    ///     Creates a new RuntimeConfigurableAttribute with a display name.
-    /// </summary>
-    public RuntimeConfigurableAttribute(string displayName)
-    {
-        DisplayName = displayName;
-    }
-
-    /// <summary>
     ///     Creates a new RuntimeConfigurableAttribute with display name and category.
     /// </summary>
     public RuntimeConfigurableAttribute(string displayName, string category)
@@ -47,11 +32,6 @@ public class RuntimeConfigurableAttribute : Attribute
     ///     Common categories: "General", "Connection", "Sync", "Advanced"
     /// </summary>
     public string? Category { get; set; }
-
-    /// <summary>
-    ///     Display order within the category (lower numbers appear first).
-    /// </summary>
-    public int Order { get; set; }
 }
 
 /// <summary>

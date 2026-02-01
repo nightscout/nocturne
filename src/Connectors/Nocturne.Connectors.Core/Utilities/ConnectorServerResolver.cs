@@ -11,9 +11,6 @@ public static class ConnectorServerResolver
             return defaultServer;
 
         var key = region.Trim().ToUpperInvariant();
-        if (map.TryGetValue(key, out var server))
-            return server;
-
-        return defaultServer;
+        return map.GetValueOrDefault(key, defaultServer);
     }
 }

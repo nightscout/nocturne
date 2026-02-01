@@ -42,8 +42,15 @@ public static class ServiceCollectionExtensions
             LibreLinkUpConstants.Endpoints.Eu
         );
 
-        services.AddHttpClient<LibreConnectorService>().ConfigureLibreLinkUpClient(server);
-        services.AddHttpClient<LibreLinkAuthTokenProvider>().ConfigureLibreLinkUpClient(server);
+        var libreHeaders = new Dictionary<string, string>
+        {
+            ["Version"] = "4.16.0",
+            ["Product"] = "llu.android"
+        };
+        services.AddHttpClient<LibreConnectorService>()
+            .ConfigureConnectorClient(server, additionalHeaders: libreHeaders);
+        services.AddHttpClient<LibreLinkAuthTokenProvider>()
+            .ConfigureConnectorClient(server, additionalHeaders: libreHeaders);
 
         // Register as Singleton to preserve token cache across requests
         services.AddSingleton(sp =>

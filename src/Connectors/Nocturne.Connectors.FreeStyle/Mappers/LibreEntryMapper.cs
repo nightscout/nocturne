@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Models;
+using Nocturne.Connectors.FreeStyle.Utilities;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.FreeStyle.Mappers;
@@ -28,7 +28,7 @@ public class LibreEntryMapper
     {
         try
         {
-            var timestamp = TimestampParser.ParseLibreFormat(measurement.FactoryTimestamp);
+            var timestamp = LibreTimestampParser.Parse(measurement.FactoryTimestamp);
 
             var direction = TrendArrowMap.GetValueOrDefault(
                 measurement.TrendArrow,

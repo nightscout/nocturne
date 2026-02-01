@@ -57,12 +57,10 @@ public static class HttpClientExtensions
                     client.Timeout = effectiveTimeout;
 
                     // Add any additional headers
-                    if (additionalHeaders != null)
+                    if (additionalHeaders == null) return;
+                    foreach (var header in additionalHeaders)
                     {
-                        foreach (var header in additionalHeaders)
-                        {
-                            client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
-                        }
+                        client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
                     }
                 })
                 .ConfigurePrimaryHttpMessageHandler(() =>
@@ -83,47 +81,6 @@ public static class HttpClientExtensions
         }
 
         /// <summary>
-        ///     Configures standard headers for Dexcom Share API
-        /// </summary>
-        public IHttpClientBuilder ConfigureDexcomClient(string server)
-        {
-            return builder.ConfigureConnectorClient(server);
-        }
-
-        /// <summary>
-        ///     Configures standard headers for LibreLinkUp API
-        /// </summary>
-        public IHttpClientBuilder ConfigureLibreLinkUpClient(string server)
-        {
-            return builder.ConfigureConnectorClient(
-                server,
-                additionalHeaders: new Dictionary<string, string>
-                {
-                    ["Version"] = "4.16.0",
-                    ["Product"] = "llu.android"
-                }
-            );
-        }
-
-        /// <summary>
-        ///     Configures standard headers for Glooko API
-        /// </summary>
-        public IHttpClientBuilder ConfigureGlookoClient(string server)
-        {
-            return builder.ConfigureConnectorClient(
-                server,
-                additionalHeaders: new Dictionary<string, string>
-                {
-                    ["Accept-Encoding"] = "gzip, deflate, br"
-                },
-                userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
-                timeout: TimeSpan.FromMinutes(5),
-                connectTimeout: TimeSpan.FromSeconds(15),
-                addResilience: true
-            );
-        }
-
-        /// <summary>
         ///     Configures resilience settings optimized for connector services that make
         ///     multiple sequential API calls. Uses longer timeouts per-request (2 minutes)
         ///     and a longer total timeout (10 minutes) to accommodate sync operations.
@@ -138,7 +95,7 @@ public static class HttpClientExtensions
         ///     - Retries up to 3 times with exponential backoff for transient failures
         ///     - Circuit breaker to fail fast when the remote service is consistently failing
         /// </remarks>
-        public IHttpClientBuilder ConfigureConnectorResilience(TimeSpan? attemptTimeout = null,
+        private IHttpClientBuilder ConfigureConnectorResilience(TimeSpan? attemptTimeout = null,
             TimeSpan? totalTimeout = null
         )
         {

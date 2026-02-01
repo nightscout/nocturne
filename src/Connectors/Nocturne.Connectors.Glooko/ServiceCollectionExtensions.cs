@@ -33,8 +33,27 @@ public static class ServiceCollectionExtensions
             GlookoConstants.Configuration.DefaultServer
         );
 
-        services.AddHttpClient<GlookoConnectorService>().ConfigureGlookoClient(server);
-        services.AddHttpClient<GlookoAuthTokenProvider>().ConfigureGlookoClient(server);
+        var glookoHeaders = new Dictionary<string, string>
+        {
+            ["Accept-Encoding"] = "gzip, deflate, br"
+        };
+        const string glookoUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15";
+        services.AddHttpClient<GlookoConnectorService>()
+            .ConfigureConnectorClient(
+                server,
+                additionalHeaders: glookoHeaders,
+                userAgent: glookoUserAgent,
+                timeout: TimeSpan.FromMinutes(5),
+                connectTimeout: TimeSpan.FromSeconds(15),
+                addResilience: true);
+        services.AddHttpClient<GlookoAuthTokenProvider>()
+            .ConfigureConnectorClient(
+                server,
+                additionalHeaders: glookoHeaders,
+                userAgent: glookoUserAgent,
+                timeout: TimeSpan.FromMinutes(5),
+                connectTimeout: TimeSpan.FromSeconds(15),
+                addResilience: true);
         services.AddSingleton(sp =>
         {
             var factory = sp.GetRequiredService<IHttpClientFactory>();

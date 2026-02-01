@@ -10,10 +10,10 @@ namespace Nocturne.Connectors.Core.Services;
 /// </summary>
 public static class ConnectorMetadataService
 {
-    private static readonly Dictionary<string, ConnectorDisplayInfo> _connectorsByDataSourceId = new();
-    private static readonly Dictionary<string, ConnectorRegistrationAttribute> _registrationsByConnectorId = new();
+    private static readonly Dictionary<string, ConnectorDisplayInfo> ConnectorsByDataSourceId = new();
+    private static readonly Dictionary<string, ConnectorRegistrationAttribute> RegistrationsByConnectorId = new();
     private static bool _initialized;
-    private static readonly object _lock = new();
+    private static readonly Lock Lock = new();
 
     /// <summary>
     ///     Gets connector display info by DataSource ID (e.g., "dexcom-connector").
@@ -26,7 +26,7 @@ public static class ConnectorMetadataService
 
         EnsureInitialized();
 
-        _connectorsByDataSourceId.TryGetValue(dataSourceId, out var info);
+        ConnectorsByDataSourceId.TryGetValue(dataSourceId, out var info);
         return info;
     }
 
@@ -41,7 +41,7 @@ public static class ConnectorMetadataService
 
         EnsureInitialized();
 
-        return _connectorsByDataSourceId.Values.FirstOrDefault(c =>
+        return ConnectorsByDataSourceId.Values.FirstOrDefault(c =>
             c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
         );
     }
@@ -56,7 +56,7 @@ public static class ConnectorMetadataService
 
         EnsureInitialized();
 
-        _registrationsByConnectorId.TryGetValue(connectorId.ToLowerInvariant(), out var registration);
+        RegistrationsByConnectorId.TryGetValue(connectorId.ToLowerInvariant(), out var registration);
         return registration;
     }
 
@@ -66,7 +66,7 @@ public static class ConnectorMetadataService
     public static IReadOnlyCollection<ConnectorDisplayInfo> GetAll()
     {
         EnsureInitialized();
-        return _connectorsByDataSourceId.Values.ToList().AsReadOnly();
+        return ConnectorsByDataSourceId.Values.ToList().AsReadOnly();
     }
 
     /// <summary>
@@ -75,7 +75,7 @@ public static class ConnectorMetadataService
     public static List<AvailableService> GetAvailableServices()
     {
         EnsureInitialized();
-        return _connectorsByDataSourceId.Values
+        return ConnectorsByDataSourceId.Values
             .Select(c => c.ToAvailableService())
             .ToList();
     }
@@ -89,7 +89,7 @@ public static class ConnectorMetadataService
             return false;
 
         EnsureInitialized();
-        return _connectorsByDataSourceId.ContainsKey(dataSourceId);
+        return ConnectorsByDataSourceId.ContainsKey(dataSourceId);
     }
 
     private static void EnsureInitialized()
@@ -97,30 +97,13 @@ public static class ConnectorMetadataService
         if (_initialized)
             return;
 
-        lock (_lock)
+        lock (Lock)
         {
             if (_initialized)
                 return;
 
-            var connectorAssemblies = new[]
-            {
-                "Nocturne.Connectors.Dexcom",
-                "Nocturne.Connectors.Glooko",
-                "Nocturne.Connectors.FreeStyle",
-                "Nocturne.Connectors.MyLife"
-            };
-
-            foreach (var name in connectorAssemblies)
-                try
-                {
-                    Assembly.Load(name);
-                }
-                catch
-                {
-                    // Assembly may not be available in all contexts
-                }
-
             // Scan all loaded assemblies for ConnectorRegistration attributes
+            // Connector assemblies are loaded through normal DI registration (AddXxxConnector methods)
             var assemblies = AppDomain.CurrentDomain.GetAssemblies()
                 .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
                 .ToList();
@@ -131,24 +114,22 @@ public static class ConnectorMetadataService
                     foreach (var type in assembly.GetTypes())
                     {
                         var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
-                        if (attr != null && !string.IsNullOrEmpty(attr.DataSourceId))
+                        if (attr == null || string.IsNullOrEmpty(attr.DataSourceId)) continue;
+                        var info = new ConnectorDisplayInfo
                         {
-                            var info = new ConnectorDisplayInfo
-                            {
-                                ConnectorName = attr.ConnectorName,
-                                DisplayName = attr.DisplayName,
-                                DataSourceId = attr.DataSourceId,
-                                Icon = attr.Icon,
-                                Category = attr.Category,
-                                Description = attr.Description,
-                                ServiceName = attr.ServiceName
-                            };
+                            ConnectorName = attr.ConnectorName,
+                            DisplayName = attr.DisplayName,
+                            DataSourceId = attr.DataSourceId,
+                            Icon = attr.Icon,
+                            Category = attr.Category,
+                            Description = attr.Description,
+                            ServiceName = attr.ServiceName
+                        };
 
-                            _connectorsByDataSourceId[attr.DataSourceId] = info;
+                        ConnectorsByDataSourceId[attr.DataSourceId] = info;
 
-                            var connectorId = attr.ConnectorName.ToLowerInvariant();
-                            _registrationsByConnectorId[connectorId] = attr;
-                        }
+                        var connectorId = attr.ConnectorName.ToLowerInvariant();
+                        RegistrationsByConnectorId[connectorId] = attr;
                     }
                 }
                 catch (ReflectionTypeLoadException)
@@ -161,29 +142,16 @@ public static class ConnectorMetadataService
     }
 
     /// <summary>
-    ///     Force re-initialization (useful for testing).
-    /// </summary>
-    public static void Reset()
-    {
-        lock (_lock)
-        {
-            _connectorsByDataSourceId.Clear();
-            _registrationsByConnectorId.Clear();
-            _initialized = false;
-        }
-    }
-
-    /// <summary>
     ///     Connector display information extracted from ConnectorRegistration attribute.
     /// </summary>
     public class ConnectorDisplayInfo
     {
-        public string ConnectorName { get; set; } = string.Empty;
-        public string DisplayName { get; set; } = string.Empty;
-        public string DataSourceId { get; set; } = string.Empty;
-        public string Icon { get; set; } = string.Empty;
-        public ConnectorCategory Category { get; set; } = ConnectorCategory.Other;
-        public string Description { get; set; } = string.Empty;
+        public string ConnectorName { get; init; } = string.Empty;
+        public string DisplayName { get; init; } = string.Empty;
+        public string DataSourceId { get; init; } = string.Empty;
+        public string Icon { get; init; } = string.Empty;
+        public ConnectorCategory Category { get; init; } = ConnectorCategory.Other;
+        public string Description { get; init; } = string.Empty;
         public string ServiceName { get; set; } = string.Empty;
 
         /// <summary>

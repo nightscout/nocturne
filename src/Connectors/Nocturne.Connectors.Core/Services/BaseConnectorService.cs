@@ -229,7 +229,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        if (request.DataTypes == null || !request.DataTypes.Any()) request.DataTypes = SupportedDataTypes;
+        if (!request.DataTypes.Any()) request.DataTypes = SupportedDataTypes;
 
         var tasks = request
             .DataTypes.Where(type => SupportedDataTypes.Contains(type))
@@ -281,82 +281,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                             );
                             break;
 
-                        case SyncDataType.Profiles:
-                            var profiles = await FetchProfilesAsync(request.From, request.To);
-                            var profileList = profiles.ToList();
-                            count = profileList.Count;
-                            if (count > 0)
-                                lastTime = profileList
-                                    .Select(p =>
-                                        DateTime.TryParse(p.StartDate, out var dt)
-                                            ? dt
-                                            : (DateTime?)null
-                                    )
-                                    .Where(dt => dt.HasValue)
-                                    .Max();
-                            publishSuccess = await PublishProfileDataAsync(
-                                profileList,
-                                config,
-                                cancellationToken
-                            );
-                            break;
-
-                        case SyncDataType.DeviceStatus:
-                            var statuses = await FetchDeviceStatusAsync(
-                                request.From,
-                                request.To
-                            );
-                            var statusList = statuses.ToList();
-                            count = statusList.Count;
-                            if (count > 0)
-                                lastTime = statusList
-                                    .Select(s =>
-                                        DateTime.TryParse(s.CreatedAt, out var dt)
-                                            ? dt
-                                            : (DateTime?)null
-                                    )
-                                    .Where(dt => dt.HasValue)
-                                    .Max();
-                            publishSuccess = await PublishDeviceStatusAsync(
-                                statusList,
-                                config,
-                                cancellationToken
-                            );
-                            break;
-
-                        case SyncDataType.Activity:
-                            var activities = await FetchActivitiesAsync(
-                                request.From,
-                                request.To
-                            );
-                            var activityList = activities.ToList();
-                            count = activityList.Count;
-                            if (count > 0)
-                                lastTime = activityList
-                                    .Select(a =>
-                                        DateTime.TryParse(a.CreatedAt, out var dt)
-                                            ? dt
-                                            : (DateTime?)null
-                                    )
-                                    .Where(dt => dt.HasValue)
-                                    .Max();
-                            publishSuccess = await PublishActivityDataAsync(
-                                activityList,
-                                config,
-                                cancellationToken
-                            );
-                            break;
-
-                        case SyncDataType.Food:
-                            var foods = await FetchFoodsAsync(request.From, request.To);
-                            var foodList = foods.ToList();
-                            count = foodList.Count;
-                            // Food items generally don't have a timestamp in the model, skipping lastTime update
-                            publishSuccess = await PublishFoodDataAsync(
-                                foodList,
-                                config,
-                                cancellationToken
-                            );
+                        default:
+                            // Other data types (Profiles, DeviceStatus, Activity, Food) not yet supported by connectors
+                            _logger.LogDebug("Data type {DataType} not supported by this connector", type);
                             break;
                     }
 
@@ -379,7 +306,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                         result.Errors.Add($"Failed to sync {type}: {ex.Message}");
                     }
 
-                    _logger?.LogError(
+                    _logger.LogError(
                         ex,
                         "Failed to sync {DataType} for {Connector}",
                         type,
@@ -410,38 +337,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return Task.FromResult(Enumerable.Empty<Treatment>());
     }
 
-    protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult(Enumerable.Empty<Profile>());
-    }
-
-    protected virtual Task<IEnumerable<DeviceStatus>> FetchDeviceStatusAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult(Enumerable.Empty<DeviceStatus>());
-    }
-
-    protected virtual Task<IEnumerable<Activity>> FetchActivitiesAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult(Enumerable.Empty<Activity>());
-    }
-
-    protected virtual Task<IEnumerable<Food>> FetchFoodsAsync(DateTime? from, DateTime? to)
-    {
-        return Task.FromResult(Enumerable.Empty<Food>());
-    }
-
-    /// <summary>
-    ///     Helper method to track metrics for any data type
-    /// </summary>
     /// <summary>
     ///     Submits glucose data directly to the API via HTTP
     /// </summary>

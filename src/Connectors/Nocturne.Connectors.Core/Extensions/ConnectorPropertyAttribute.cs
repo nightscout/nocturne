@@ -20,7 +20,7 @@ public class ConnectorPropertyAttribute : Attribute
     /// <summary>
     ///     Sentinel value indicating that MinValue or MaxValue is not set.
     /// </summary>
-    public const int NotSet = int.MinValue;
+    private const int NotSet = int.MinValue;
 
     /// <summary>
     ///     Creates a new ConnectorPropertyAttribute with the configuration key name.

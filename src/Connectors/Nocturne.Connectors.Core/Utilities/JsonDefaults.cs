@@ -16,24 +16,4 @@ public static class JsonDefaults
     {
         PropertyNameCaseInsensitive = true
     };
-
-    /// <summary>
-    ///     Options for serializing data with camelCase property names.
-    ///     Useful for sending data to APIs that expect camelCase.
-    /// </summary>
-    public static readonly JsonSerializerOptions CamelCase = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
-
-    /// <summary>
-    ///     Options for serializing data with indentation for debugging/logging.
-    /// </summary>
-    public static readonly JsonSerializerOptions Indented = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
 }

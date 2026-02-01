@@ -35,8 +35,8 @@ public static class ServiceCollectionExtensions
             dexcomConfig.Server
         );
 
-        services.AddHttpClient<DexcomConnectorService>().ConfigureDexcomClient(serverUrl);
-        services.AddHttpClient<DexcomAuthTokenProvider>().ConfigureDexcomClient(serverUrl);
+        services.AddHttpClient<DexcomConnectorService>().ConfigureConnectorClient(serverUrl);
+        services.AddHttpClient<DexcomAuthTokenProvider>().ConfigureConnectorClient(serverUrl);
 
         // Register as Singleton to preserve token cache across requests
         services.AddSingleton(sp =>

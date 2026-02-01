@@ -14,14 +14,14 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     ///     Gets the connector name from the ConnectorRegistration attribute.
     ///     Used for error messages and logging.
     /// </summary>
-    protected string ConnectorName =>
+    private string ConnectorName =>
         GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName
         ?? GetType().Name.Replace("Configuration", "");
 
     /// <summary>
     ///     Gets the environment variable prefix from the ConnectorRegistration attribute.
     /// </summary>
-    protected string? EnvPrefix =>
+    private string? EnvPrefix =>
         GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.EnvironmentPrefix;
     /// <summary>
     ///     Timezone offset in hours (default 0).
@@ -76,7 +76,7 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     ///     [ConnectorProperty(Required = true)].
     ///     Throws ArgumentException if any required string property is null or empty.
     /// </summary>
-    protected void ValidateRequiredProperties()
+    private void ValidateRequiredProperties()
     {
         var properties = GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
@@ -108,14 +108,12 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
             // For string properties, check for null or whitespace
             if (property.PropertyType == typeof(string))
             {
-                if (string.IsNullOrWhiteSpace(value as string))
-                {
-                    var envVarHint = connectorProp != null && EnvPrefix != null
-                        ? $" (set via {connectorProp.GetFullEnvVarName(EnvPrefix)} or configuration)"
-                        : "";
-                    throw new ArgumentException(
-                        $"{ConnectorName}: {displayName} is required{envVarHint}");
-                }
+                if (!string.IsNullOrWhiteSpace(value as string)) continue;
+                var envVarHint = connectorProp != null && EnvPrefix != null
+                    ? $" (set via {connectorProp.GetFullEnvVarName(EnvPrefix)} or configuration)"
+                    : "";
+                throw new ArgumentException(
+                    $"{ConnectorName}: {displayName} is required{envVarHint}");
             }
             // For nullable value types, check for null
             else if (Nullable.GetUnderlyingType(property.PropertyType) != null && value == null)

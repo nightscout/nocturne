@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Dexcom.Models;
+using Nocturne.Connectors.Dexcom.Utilities;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Dexcom.Mappers;
@@ -41,7 +41,7 @@ public class DexcomEntryMapper(ILogger logger, string connectorSource)
     {
         try
         {
-            if (!TimestampParser.TryParseDexcomFormat(dexcomEntry.Wt, out var timestamp))
+            if (!DexcomTimestampParser.TryParse(dexcomEntry.Wt, out var timestamp))
             {
                 _logger.LogWarning(
                     "Could not parse Dexcom timestamp: {Timestamp}",
