@@ -11,6 +11,7 @@
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     TrackerCategory,
+    TrackerMode,
     CompletionReason,
   } from "$api";
   import * as trackersRemote from "$lib/data/trackers.remote";
@@ -34,7 +35,11 @@
 
   let startNotes = $state("");
   let startedAtString = $state("");
+  let scheduledAtString = $state("");
   let isSubmitting = $state(false);
+
+  // Derived mode check
+  const isEventMode = $derived(definition?.mode === TrackerMode.Event);
 
   // Completion reason labels for history display
   const completionReasonLabels: Record<CompletionReason, string> = {
@@ -59,6 +64,12 @@
       const now = new Date();
       const offset = now.getTimezoneOffset() * 60000;
       startedAtString = new Date(now.getTime() - offset)
+        .toISOString()
+        .slice(0, 16);
+      // Default scheduled time to tomorrow at 9am for event mode
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      tomorrow.setHours(9, 0, 0, 0);
+      scheduledAtString = new Date(tomorrow.getTime() - offset)
         .toISOString()
         .slice(0, 16);
     }
@@ -124,19 +135,29 @@
   }
 
   const startPreview = $derived.by(() => {
-    if (!definition || !definition.notificationThresholds || !startedAtString)
+    if (!definition || !definition.notificationThresholds)
       return [];
 
-    const start = new Date(startedAtString);
     const now = new Date();
+    let referenceTime: Date;
 
-    if (isNaN(start.getTime())) return [];
+    if (isEventMode) {
+      if (!scheduledAtString) return [];
+      referenceTime = new Date(scheduledAtString);
+    } else {
+      if (!startedAtString) return [];
+      referenceTime = new Date(startedAtString);
+    }
+
+    if (isNaN(referenceTime.getTime())) return [];
 
     return definition.notificationThresholds
       .filter((n) => n.hours !== undefined)
       .map((n) => {
+        // For event mode, hours are relative to scheduled time (negative = before)
+        // For duration mode, hours are relative to start time
         const triggerTime = new Date(
-          start.getTime() + n.hours! * 60 * 60 * 1000
+          referenceTime.getTime() + n.hours! * 60 * 60 * 1000
         );
         const timeUntil = triggerTime.getTime() - now.getTime();
         const hoursUntil = timeUntil / (1000 * 60 * 60);
@@ -159,12 +180,14 @@
     isSubmitting = true;
     const defId = definition.id;
     const startedAt = startedAtString ? new Date(startedAtString) : undefined;
+    const scheduledAt = scheduledAtString ? new Date(scheduledAtString) : undefined;
 
     try {
       await trackersRemote.startInstance({
         definitionId: defId,
         startNotes: startNotes || undefined,
-        startedAt: startedAt,
+        startedAt: isEventMode ? undefined : startedAt,
+        scheduledAt: isEventMode ? scheduledAt : undefined,
       });
 
       // Create treatment event if configured on the definition
@@ -216,23 +239,37 @@
       </Dialog.Description>
     </Dialog.Header>
     <div class="grid gap-4 py-4">
-      <div class="space-y-2">
-        <Label for="startedAt">Start Time</Label>
-        <Input
-          type="datetime-local"
-          id="startedAt"
-          bind:value={startedAtString}
-        />
-        <p class="text-[10px] text-muted-foreground">
-          Adjust if you started this earlier.
-        </p>
-      </div>
+      {#if isEventMode}
+        <div class="space-y-2">
+          <Label for="scheduledAt">Scheduled For</Label>
+          <Input
+            type="datetime-local"
+            id="scheduledAt"
+            bind:value={scheduledAtString}
+          />
+          <p class="text-[10px] text-muted-foreground">
+            When is this event scheduled?
+          </p>
+        </div>
+      {:else}
+        <div class="space-y-2">
+          <Label for="startedAt">Start Time</Label>
+          <Input
+            type="datetime-local"
+            id="startedAt"
+            bind:value={startedAtString}
+          />
+          <p class="text-[10px] text-muted-foreground">
+            Adjust if you started this earlier.
+          </p>
+        </div>
+      {/if}
 
       <div class="space-y-2">
         <Label for="startNotes">Notes (optional)</Label>
         <TextareaAutosize
           bind:value={startNotes}
-          placeholder="e.g., Left arm, Lot #12345"
+          placeholder={isEventMode ? "e.g., Dr. Smith, Room 204" : "e.g., Left arm, Lot #12345"}
         />
       </div>
 
@@ -288,7 +325,7 @@
       </Button>
       <Button onclick={handleStart} disabled={isSubmitting}>
         <Play class="h-4 w-4 mr-2" />
-        Start
+        {isEventMode ? "Schedule" : "Start"}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

@@ -20672,6 +20672,8 @@ export interface TrackerDefinitionDto {
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
     completionEventType?: string | undefined;
+    /** Tracker mode: Duration or Event */
+    mode?: TrackerMode;
     createdAt?: Date;
     updatedAt?: Date | undefined;
 }
@@ -20717,6 +20719,11 @@ export enum TrackerVisibility {
     RoleRestricted = "RoleRestricted",
 }
 
+export enum TrackerMode {
+    Duration = "Duration",
+    Event = "Event",
+}
+
 export interface CreateTrackerDefinitionRequest {
     name: string;
     description?: string | undefined;
@@ -20735,6 +20742,8 @@ export interface CreateTrackerDefinitionRequest {
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
     completionEventType?: string | undefined;
+    /** Tracker mode: Duration (time-based) or Event (scheduled datetime) */
+    mode?: TrackerMode;
 }
 
 export interface CreateNotificationThresholdRequest {
@@ -20769,6 +20778,8 @@ export interface UpdateTrackerDefinitionRequest {
     startEventType?: string | undefined;
     /** Event type to create when tracker is completed (for Nightscout compatibility) */
     completionEventType?: string | undefined;
+    /** Tracker mode: Duration (time-based) or Event (scheduled datetime) */
+    mode?: TrackerMode | undefined;
 }
 
 export interface TrackerInstanceDto {
@@ -20780,6 +20791,7 @@ export interface TrackerInstanceDto {
     startedAt?: Date;
     completedAt?: Date | undefined;
     expectedEndAt?: Date | undefined;
+    scheduledAt?: Date | undefined;
     startNotes?: string | undefined;
     completionNotes?: string | undefined;
     completionReason?: CompletionReason | undefined;
@@ -20810,6 +20822,8 @@ export interface StartTrackerInstanceRequest {
     startTreatmentId?: string | undefined;
     /** Optional custom start time for backdating. Defaults to now if not provided. */
     startedAt?: Date | undefined;
+    /** For Event mode: the scheduled datetime of the event */
+    scheduledAt?: Date | undefined;
 }
 
 export interface CompleteTrackerInstanceRequest {

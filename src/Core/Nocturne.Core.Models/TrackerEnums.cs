@@ -190,6 +190,23 @@ public enum DashboardVisibility
 }
 
 /// <summary>
+/// Mode of tracker operation
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<TrackerMode>))]
+public enum TrackerMode
+{
+    /// <summary>
+    /// Duration-based tracker - runs from StartedAt for LifespanHours
+    /// </summary>
+    Duration,
+
+    /// <summary>
+    /// Event-based tracker - occurs at ScheduledAt datetime
+    /// </summary>
+    Event
+}
+
+/// <summary>
 /// How a bolus was calculated/initiated by an APS system
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<CalculationType>))]
