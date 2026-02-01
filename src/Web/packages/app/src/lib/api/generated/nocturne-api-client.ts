@@ -3902,6 +3902,250 @@ export class ChartDataClient {
     }
 }
 
+export class ClockFacesClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get a clock face configuration by ID (public, no authentication required)
+     * @param id Clock face UUID
+     * @return Clock face configuration
+     */
+    getById(id: string, signal?: AbortSignal): Promise<ClockFacePublicDto> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetById(_response);
+        });
+    }
+
+    protected processGetById(response: Response): Promise<ClockFacePublicDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFacePublicDto;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFacePublicDto>(null as any);
+    }
+
+    /**
+     * Update an existing clock face (owner only)
+     * @param id Clock face UUID
+     * @param request Update request
+     * @return Updated clock face
+     */
+    update(id: string, request: UpdateClockFaceRequest, signal?: AbortSignal): Promise<ClockFace> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdate(_response);
+        });
+    }
+
+    protected processUpdate(response: Response): Promise<ClockFace> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFace;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFace>(null as any);
+    }
+
+    /**
+     * Delete a clock face (owner only)
+     * @param id Clock face UUID
+     * @return Success status
+     */
+    delete(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDelete(_response);
+        });
+    }
+
+    protected processDelete(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * List all clock faces for the current user
+     * @return List of clock faces
+     */
+    list(signal?: AbortSignal): Promise<ClockFaceListItem[]> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processList(_response);
+        });
+    }
+
+    protected processList(response: Response): Promise<ClockFaceListItem[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFaceListItem[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFaceListItem[]>(null as any);
+    }
+
+    /**
+     * Create a new clock face
+     * @param request Clock face creation request
+     * @return Created clock face
+     */
+    create(request: CreateClockFaceRequest, signal?: AbortSignal): Promise<ClockFace> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreate(_response);
+        });
+    }
+
+    protected processCreate(response: Response): Promise<ClockFace> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockFace;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockFace>(null as any);
+    }
+}
+
 export class CompatibilityClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -18893,6 +19137,95 @@ export interface StateSpan {
     updatedAt?: Date | undefined;
     canonicalId?: string | undefined;
     sources?: string[] | undefined;
+}
+
+export interface ClockFacePublicDto {
+    id?: string;
+    config?: ClockFaceConfig;
+}
+
+export interface ClockFaceConfig {
+    rows?: ClockRow[];
+    settings?: ClockSettings;
+}
+
+export interface ClockRow {
+    elements?: ClockElement[];
+}
+
+export interface ClockElement {
+    type?: string;
+    size?: number | undefined;
+    showUnits?: boolean | undefined;
+    hours?: number | undefined;
+    width?: number | undefined;
+    height?: number | undefined;
+    minutesAhead?: number | undefined;
+    format?: string | undefined;
+    definitionId?: string | undefined;
+    show?: string[] | undefined;
+    categories?: string[] | undefined;
+    visibilityThreshold?: string | undefined;
+    text?: string | undefined;
+    style?: ClockElementStyle | undefined;
+    chartConfig?: ClockChartConfig | undefined;
+}
+
+export interface ClockElementStyle {
+    color?: string | undefined;
+    font?: string | undefined;
+    fontWeight?: string | undefined;
+    opacity?: number | undefined;
+    custom?: { [key: string]: string; } | undefined;
+}
+
+export interface ClockChartConfig {
+    showIob?: boolean;
+    showCob?: boolean;
+    showBasal?: boolean;
+    showBolus?: boolean;
+    showCarbs?: boolean;
+    showDeviceEvents?: boolean;
+    showAlarms?: boolean;
+    showTrackers?: boolean;
+    showPredictions?: boolean;
+    lockToggles?: boolean;
+    showLegend?: boolean;
+    asBackground?: boolean;
+}
+
+export interface ClockSettings {
+    bgColor?: boolean;
+    staleMinutes?: number;
+    alwaysShowTime?: boolean;
+    backgroundImage?: string | undefined;
+    backgroundOpacity?: number;
+}
+
+export interface ClockFaceListItem {
+    id?: string;
+    name?: string;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export interface ClockFace {
+    id?: string;
+    userId?: string;
+    name?: string;
+    config?: ClockFaceConfig;
+    createdAt?: Date;
+    updatedAt?: Date | undefined;
+}
+
+export interface CreateClockFaceRequest {
+    name?: string;
+    config?: ClockFaceConfig;
+}
+
+export interface UpdateClockFaceRequest {
+    name?: string | undefined;
+    config?: ClockFaceConfig | undefined;
 }
 
 /** Proxy configuration DTO */

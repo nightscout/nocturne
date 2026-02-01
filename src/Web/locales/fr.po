@@ -209,6 +209,7 @@ msgstr ""
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
+#: src/routes/clock/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -381,7 +382,6 @@ msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
-#: src/routes/clock/config/+page.svelte
 msgid "Blood Glucose"
 msgstr ""
 
@@ -592,131 +592,98 @@ msgstr ""
 msgid "Just now"
 msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Simple Clock"
-msgstr ""
+#~ msgid "Simple Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Basic clock display"
-msgstr ""
+#~ msgid "Basic clock display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "BG Clock"
-msgstr ""
+#~ msgid "BG Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Clock with blood glucose data"
-msgstr ""
+#~ msgid "Clock with blood glucose data"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Color Clock"
-msgstr ""
+#~ msgid "Color Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Colorful clock display"
-msgstr ""
+#~ msgid "Colorful clock display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Large BG"
-msgstr ""
+#~ msgid "Large BG"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Large blood glucose display"
-msgstr ""
+#~ msgid "Large blood glucose display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Detailed View"
-msgstr ""
+#~ msgid "Detailed View"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Detailed clock with all elements"
-msgstr ""
+#~ msgid "Detailed clock with all elements"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Simple Display"
-msgstr ""
+#~ msgid "Simple Display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Minimal blood glucose display"
-msgstr ""
+#~ msgid "Minimal blood glucose display"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Extra Large"
-msgstr ""
+#~ msgid "Extra Large"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Very large display with time"
-msgstr ""
+#~ msgid "Very large display with time"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Faces"
-msgstr ""
+#~ msgid "Faces"
+#~ msgstr ""
 
-#. placeholder {0}: face ? ` - ${face}` : " Faces"
-#: src/routes/clock/+page.svelte
-msgid "Nightscout Clock{0}"
-msgstr ""
+#~ msgid "Nightscout Clock{0}"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Loading clock face..."
-msgstr ""
+#~ msgid "Loading clock face..."
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Nightscout Clock Faces"
-msgstr ""
+#~ msgid "Nightscout Clock Faces"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Choose a clock face to display your glucose data:"
-msgstr ""
+#~ msgid "Choose a clock face to display your glucose data:"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-#: src/routes/clock/config/+page.svelte
-msgid "Clock Builder"
-msgstr ""
+#~ msgid "Clock Builder"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "<0/> Custom"
-msgstr ""
+#~ msgid "<0/> Custom"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid ""
-"Build your own custom clock face with a visual editor. Add\n"
-"elements, adjust sizes, and see a live preview as you design."
-msgstr "Créez votre propre cadran personnalisé avec un éditeur visuel. Ajoutez des éléments, ajustez les tailles et visualisez un aperçu en direct pendant la conception."
+#~ msgid ""
+#~ "Build your own custom clock face with a visual editor. Add\n"
+#~ "elements, adjust sizes, and see a live preview as you design."
+#~ msgstr "Créez votre propre cadran personnalisé avec un éditeur visuel. Ajoutez des éléments, ajustez les tailles et visualisez un aperçu en direct pendant la conception."
 
-#: src/routes/clock/+page.svelte
-msgid "<0/> Open Builder"
-msgstr ""
+#~ msgid "<0/> Open Builder"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "<0/> Open Saved Clock"
-msgstr ""
+#~ msgid "<0/> Open Saved Clock"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Quick open:"
-msgstr ""
+#~ msgid "Quick open:"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Enter face string (e.g., bn0-sg40-ar25)"
-msgstr ""
+#~ msgid "Enter face string (e.g., bn0-sg40-ar25)"
+#~ msgstr ""
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/routes/clock/+page.svelte
 msgid "Enter"
 msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Go"
-msgstr ""
+#~ msgid "Go"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-msgid "Preset Clock Faces"
-msgstr ""
+#~ msgid "Preset Clock Faces"
+#~ msgstr ""
 
-#: src/routes/clock/+page.svelte
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Open Clock"
-msgstr ""
+#~ msgid "<0/> Open Clock"
+#~ msgstr ""
 
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/routes/calendar/+page.svelte
@@ -2303,6 +2270,7 @@ msgstr ""
 msgid "Unattributed"
 msgstr ""
 
+#: src/routes/clock/+page.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 msgid "Edit"
@@ -2641,8 +2609,10 @@ msgstr ""
 msgid "Active"
 msgstr ""
 
+#. placeholder {0}: new Date(face.createdAt).toLocaleDateString()
 #. placeholder {0}: formatDateDetailed(selectedProfile.created_at)
 #. placeholder {0}: formatDateDetailed(selectedProfile.created_at)
+#: src/routes/clock/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Created {0}"
@@ -2689,9 +2659,9 @@ msgstr ""
 msgid "DIA"
 msgstr ""
 
-#. placeholder {0}: defaultStore?.dia ?? "–"
 #. placeholder {0}: store.dia ?? "–"
 #. placeholder {0}: store.devices.cgmConfiguration?.sensorWarmupHours ?? 2
+#. placeholder {0}: store.features.display?.focusHours ?? 3
 #. placeholder {0}: store.features.display?.focusHours ?? 3
 #. placeholder {0}: defaultStore?.dia ?? "–"
 #. placeholder {0}: store.dia ?? "–"
@@ -2727,6 +2697,7 @@ msgstr ""
 msgid "Default"
 msgstr ""
 
+#: src/routes/clock/[id]/+page.svelte
 #: src/routes/profile/+page.svelte
 msgid "<0/> Edit"
 msgstr ""
@@ -2969,7 +2940,6 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 msgid "Temp Basal"
 msgstr ""
@@ -3289,6 +3259,8 @@ msgstr ""
 msgid "Custom"
 msgstr ""
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock/ClockFaceRenderer.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
@@ -3342,7 +3314,6 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -3672,7 +3643,6 @@ msgid "Include notes"
 msgstr ""
 
 #: src/lib/components/layout/ReportsFilterSidebar.svelte
-#: src/routes/clock/config/+page.svelte
 msgid "<0/> Reset"
 msgstr ""
 
@@ -4730,7 +4700,6 @@ msgstr ""
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
-#: src/routes/clock/config/+page.svelte
 msgid "<0/> Add"
 msgstr ""
 
@@ -4904,7 +4873,11 @@ msgstr ""
 msgid "Notification Schedule (Adjusted)"
 msgstr ""
 
+#. placeholder {0}: element.hours || 3
+#. placeholder {0}: element.hours || 3
 #. placeholder {0}: preview.hours
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "{0}h"
 msgstr ""
@@ -5436,7 +5409,9 @@ msgstr ""
 msgid "+ Add"
 msgstr ""
 
+#. placeholder {0}: m
 #. placeholder {0}: min
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 msgid "{0} min"
 msgstr ""
@@ -5863,6 +5838,7 @@ msgstr ""
 msgid "Click \"Upload Sound\" to add your own"
 msgstr ""
 
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
 msgstr ""
@@ -6093,9 +6069,11 @@ msgid "<0/> Additional Properties <1/>"
 msgstr ""
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/routes/clock/+page.svelte
 msgid "<0/> Delete"
 msgstr ""
 
+#: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 msgid "Medium"
 msgstr ""
@@ -6978,173 +6956,133 @@ msgstr ""
 msgid "+ Nocturne"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Current BG value"
-msgstr ""
+#~ msgid "Current BG value"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Delta"
-msgstr ""
+#~ msgid "Delta"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Change since last reading"
-msgstr ""
+#~ msgid "Change since last reading"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Arrow"
-msgstr ""
+#~ msgid "Arrow"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Trend direction arrow"
-msgstr ""
+#~ msgid "Trend direction arrow"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Reading Age"
-msgstr ""
+#~ msgid "Reading Age"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Time since last reading"
-msgstr ""
+#~ msgid "Time since last reading"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "Current Time"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Display current time"
-msgstr ""
+#~ msgid "Display current time"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-#: src/routes/clock/config/+page.svelte
-msgid "Line Break"
-msgstr ""
+#~ msgid "Line Break"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "New line separator"
-msgstr ""
+#~ msgid "New line separator"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Clock Configuration - Nightscout"
-msgstr ""
+#~ msgid "Clock Configuration - Nightscout"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Configure your Nightscout clock display settings"
-msgstr ""
+#~ msgid "Configure your Nightscout clock display settings"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Back to Clocks"
-msgstr ""
+#~ msgid "<0/> Back to Clocks"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Live Preview"
-msgstr ""
+#~ msgid "Live Preview"
+#~ msgstr ""
 
-#. placeholder {0}: bgDelta > 0 ? "+" : ""
-#. placeholder {1}: bgDelta
-#: src/routes/clock/config/+page.svelte
-msgid "{0}{1} mg/dL"
-msgstr ""
+#~ msgid "{0}{1} mg/dL"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "3m ago"
-msgstr ""
+#~ msgid "3m ago"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Generated Face String:"
-msgstr ""
+#~ msgid "Generated Face String:"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Save"
-msgstr ""
+#~ msgid "<0/> Save"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
+#: src/lib/components/clock-builder/DisplaySettings.svelte
 msgid "Display Settings"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Colorful Background"
-msgstr ""
+#~ msgid "Colorful Background"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Use BG-based colored background"
-msgstr ""
+#~ msgid "Use BG-based colored background"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Always Show Reading Age"
-msgstr ""
+#~ msgid "Always Show Reading Age"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Always display when last reading was taken"
-msgstr ""
+#~ msgid "Always display when last reading was taken"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Stale Threshold (minutes)"
-msgstr ""
+#~ msgid "Stale Threshold (minutes)"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "(0 = never stale)"
-msgstr ""
+#~ msgid "(0 = never stale)"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
+#: src/lib/components/clock-builder/AddElementMenu.svelte
 msgid "Add Element"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Elements are added to the end of the display (LIFO style)"
-msgstr ""
+#~ msgid "Elements are added to the end of the display (LIFO style)"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Remove Last"
-msgstr ""
+#~ msgid "<0/> Remove Last"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "<0/> Clear All"
-msgstr ""
+#~ msgid "<0/> Clear All"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Element Stack <0/>"
-msgstr ""
+#~ msgid "Element Stack <0/>"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Elements display from top to bottom"
-msgstr ""
+#~ msgid "Elements display from top to bottom"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid ""
-"No elements added yet. Add elements above to build your clock\n"
-"face."
-msgstr ""
+#~ msgid ""
+#~ "No elements added yet. Add elements above to build your clock\n"
+#~ "face."
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "New row separator"
-msgstr ""
+#~ msgid "New row separator"
+#~ msgstr ""
 
-#. placeholder {0}: element.size
-#: src/routes/clock/config/+page.svelte
+#. placeholder {0}: element.size || ELEMENT_INFO[element.type as ClockElementType]?.defaultSize || 20
+#: src/lib/components/clock-builder/TextStyleControls.svelte
 msgid "Size: {0}"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Quick Presets"
 msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Simple BG"
-msgstr ""
+#~ msgid "Simple BG"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Color Detailed"
-msgstr ""
+#~ msgid "Color Detailed"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "Large + Time"
-msgstr ""
+#~ msgid "Large + Time"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.svelte
-msgid "BG + Arrow"
-msgstr ""
+#~ msgid "BG + Arrow"
+#~ msgstr ""
 
 #: src/routes/dashboard/analyses/+page.svelte
 msgid "Discrepancy Analyses - Nocturne Dashboard"
@@ -7270,11 +7208,14 @@ msgstr ""
 msgid "Clock - {0}"
 msgstr ""
 
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/clock/[id]/+page.svelte
 msgid "<0/> Back"
 msgstr ""
 
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/clock/[id]/+page.svelte
 msgid "Demo Mode"
 msgstr ""
 
@@ -7295,7 +7236,9 @@ msgid "Your time ({0})"
 msgstr ""
 
 #. placeholder {0}: timeSince
+#. placeholder {0}: timeSince
 #: src/routes/clock/[face]/+page.svelte
+#: src/routes/clock/[id]/+page.svelte
 msgid "Data is {0} old"
 msgstr ""
 
@@ -9214,6 +9157,7 @@ msgstr ""
 msgid "No roles available"
 msgstr ""
 
+#: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "System"
 msgstr ""
@@ -9583,7 +9527,7 @@ msgstr ""
 msgid "Prediction horizon"
 msgstr ""
 
-#. placeholder {0}: store.algorithm.prediction.minutes ?? 30
+#. placeholder {0}: element.minutesAhead || 30
 #: src/routes/settings/algorithm/+page.svelte
 msgid "{0} minutes"
 msgstr ""
@@ -9985,6 +9929,7 @@ msgstr ""
 msgid "12-hour (AM/PM)"
 msgstr ""
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "24-hour"
 msgstr ""
@@ -11262,6 +11207,8 @@ msgstr ""
 msgid "Off - Don't show on dashboard"
 msgstr ""
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -11631,13 +11578,11 @@ msgstr ""
 msgid "The responses matched perfectly with no differences detected."
 msgstr ""
 
-#: src/routes/clock/config/+page.ts
-msgid "Clock Builder - Nightscout"
-msgstr ""
+#~ msgid "Clock Builder - Nightscout"
+#~ msgstr ""
 
-#: src/routes/clock/config/+page.ts
-msgid "Build your own custom Nightscout clock display"
-msgstr ""
+#~ msgid "Build your own custom Nightscout clock display"
+#~ msgstr ""
 
 #. placeholder {0}: formatAge(instance.ageHours ?? 0)
 #. placeholder {1}: formatDate(instance.startedAt)
@@ -14336,4 +14281,582 @@ msgstr ""
 
 #: src/routes/reports/week-to-week/+page.svelte
 msgid "Error Loading Week Comparison"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+#: src/routes/clock/config/[id]/+page.svelte
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "My Clock Face"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Link copied to clipboard"
+msgstr ""
+
+#~ msgid "Clock face saved locally"
+#~ msgstr ""
+
+#~ msgid "Sensor: 5d"
+#~ msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Clock Builder - Nocturne"
+msgstr ""
+
+#~ msgid "Build your custom clock face for Nocturne"
+#~ msgstr ""
+
+#~ msgid "Elements"
+#~ msgstr ""
+
+#~ msgid "Click an element to add it to the selected row"
+#~ msgstr ""
+
+#~ msgid "Layout"
+#~ msgstr ""
+
+#~ msgid "<0/> Add Row"
+#~ msgstr ""
+
+#~ msgid "Click an element to edit its properties"
+#~ msgstr ""
+
+#~ msgid "No rows yet. Click \"Add Row\" to start building."
+#~ msgstr ""
+
+#~ msgid "Row {0}"
+#~ msgstr ""
+
+#~ msgid "Empty row. Add elements from the palette."
+#~ msgstr ""
+
+#~ msgid "Element Settings"
+#~ msgstr ""
+
+#~ msgid "Show Units"
+#~ msgstr ""
+
+#~ msgid "Display mg/dL or mmol/L"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Hours"
+msgstr ""
+
+#~ msgid "Time Format"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "12-hour"
+msgstr ""
+
+#~ msgid "Forecast Minutes"
+#~ msgstr ""
+
+#~ msgid "15 minutes"
+#~ msgstr ""
+
+#~ msgid "30 minutes"
+#~ msgstr ""
+
+#~ msgid "45 minutes"
+#~ msgstr ""
+
+#~ msgid "60 minutes"
+#~ msgstr ""
+
+#~ msgid "<0/> Remove Element"
+#~ msgstr ""
+
+#~ msgid "Select an element to edit its properties"
+#~ msgstr ""
+
+#~ msgid "Clock Name"
+#~ msgstr ""
+
+#~ msgid "Background color based on BG value"
+#~ msgstr ""
+
+#~ msgid "Always Show Time"
+#~ msgstr ""
+
+#~ msgid "Show current time even when data is fresh"
+#~ msgstr ""
+
+#~ msgid "Stale Threshold: {0} min"
+#~ msgstr ""
+
+#~ msgid "Data older than this is shown as stale (0 = never)"
+#~ msgstr ""
+
+#~ msgid "<0/> Reset to Default"
+#~ msgstr ""
+
+#~ msgid "Loop Data"
+#~ msgstr ""
+
+#~ msgid "Trend Arrow"
+#~ msgstr ""
+
+#~ msgid "Direction indicator"
+#~ msgstr ""
+
+#~ msgid "Sparkline"
+#~ msgstr ""
+
+#~ msgid "Mini BG chart"
+#~ msgstr ""
+
+#~ msgid "Time in range text"
+#~ msgstr ""
+
+#~ msgid "Forecast"
+#~ msgstr ""
+
+#~ msgid "Predicted BG from loop"
+#~ msgstr ""
+
+#~ msgid "Insulin on board"
+#~ msgstr ""
+
+#~ msgid "Carbs on board"
+#~ msgstr ""
+
+#~ msgid "Current basal rate"
+#~ msgstr ""
+
+#~ msgid "Single tracker status"
+#~ msgstr ""
+
+#~ msgid "All Trackers"
+#~ msgstr ""
+
+#~ msgid "Active tracker grid"
+#~ msgstr ""
+
+#~ msgid "Loop / Forecast"
+#~ msgstr ""
+
+#~ msgid "Blood glucose"
+#~ msgstr ""
+
+#~ msgid "Change"
+#~ msgstr ""
+
+#~ msgid "Trend"
+#~ msgstr ""
+
+#~ msgid "Reading age"
+#~ msgstr ""
+
+#~ msgid "Chart"
+#~ msgstr ""
+
+#~ msgid "Mini chart"
+#~ msgstr ""
+
+#~ msgid "Time in range"
+#~ msgstr ""
+
+#~ msgid "Predicted BG"
+#~ msgstr ""
+
+#~ msgid "Basal rate"
+#~ msgstr ""
+
+#~ msgid "Single tracker"
+#~ msgstr ""
+
+#~ msgid "All trackers"
+#~ msgstr ""
+
+#~ msgid "Current time"
+#~ msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Clock face saved"
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Clock name"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Drop elements here"
+msgstr ""
+
+#~ msgid "Add row"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "BG-colored background"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Background Image URL"
+msgstr ""
+
+#. placeholder {0}: settings.backgroundOpacity
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Image brightness: {0}%"
+msgstr ""
+
+#. placeholder {0}: settings.staleMinutes ?? 13
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Stale threshold: {0} min"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "Always show time"
+msgstr ""
+
+#: src/lib/components/clock-builder/DisplaySettings.svelte
+msgid "<0/> Reset to default"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Show units"
+msgstr ""
+
+#. placeholder {0}: h
+#. placeholder {1}: h > 1 ? "s" : ""
+#. placeholder {0}: h
+#. placeholder {1}: h > 1 ? "s" : ""
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "{0} hour{1}"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Format"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Minutes ahead"
+msgstr ""
+
+#. placeholder {0}: element.minutesAhead || 30
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "{0}m"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "<0/> Remove"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Text"
+msgstr ""
+
+#~ msgid "Custom text"
+#~ msgstr ""
+
+#~ msgid "Full glucose chart"
+#~ msgstr ""
+
+#~ msgid "Display"
+#~ msgstr ""
+
+#~ msgid "Info or higher"
+#~ msgstr ""
+
+#~ msgid "Warning or higher"
+#~ msgstr ""
+
+#~ msgid "Hazard or higher"
+#~ msgstr ""
+
+#~ msgid "Urgent only"
+#~ msgstr ""
+
+#~ msgid "Time remaining"
+#~ msgstr ""
+
+#~ msgid "Urgency badge"
+#~ msgstr ""
+
+#~ msgid "Label"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Select tracker..."
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockElementPreview.svelte
+msgid "Select tracker"
+msgstr ""
+
+#~ msgid "Chart ({0}h)"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "No trackers defined"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Visibility threshold"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Show"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Categories"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "All categories"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Enter text..."
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Color"
+msgstr ""
+
+#. placeholder {0}: element.width || 400
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Width: {0}px"
+msgstr ""
+
+#. placeholder {0}: element.height || 200
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Height: {0}px"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Chart Features"
+msgstr ""
+
+#~ msgid "Bolus markers"
+#~ msgstr ""
+
+#~ msgid "Carb markers"
+#~ msgstr ""
+
+#~ msgid "IOB track"
+#~ msgstr ""
+
+#~ msgid "COB track"
+#~ msgstr ""
+
+#~ msgid "Basal track"
+#~ msgstr ""
+
+#~ msgid "Predictions"
+#~ msgstr ""
+
+#~ msgid "Device events"
+#~ msgstr ""
+
+#~ msgid "Tracker markers"
+#~ msgstr ""
+
+#~ msgid "Interaction"
+#~ msgstr ""
+
+#~ msgid "Lock toggles"
+#~ msgstr ""
+
+#~ msgid "Show legend"
+#~ msgstr ""
+
+#~ msgid "Monospace"
+#~ msgstr ""
+
+#~ msgid "Serif"
+#~ msgstr ""
+
+#~ msgid "Sans-serif"
+#~ msgstr ""
+
+#~ msgid "Semibold"
+#~ msgstr ""
+
+#~ msgid "Bold"
+#~ msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Text Style"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Font"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Weight"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Dynamic (BG-based)"
+msgstr ""
+
+#. placeholder {0}: Math.round((element.style?.opacity ?? 1.0) * 100)
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Opacity: {0}%"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Custom CSS"
+msgstr ""
+
+#: src/lib/components/clock-builder/TextStyleControls.svelte
+msgid "Add custom CSS properties (e.g., text-shadow, letter-spacing)"
+msgstr ""
+
+#: src/lib/components/clock-builder/ElementInspector.svelte
+msgid "Use as background"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Background Chart"
+msgstr ""
+
+#~ msgid "Save the clock face first to preview it"
+#~ msgstr ""
+
+#~ msgid "Save the clock face first to copy the link"
+#~ msgstr ""
+
+#: src/routes/clock/[id]/+page.svelte
+msgid "Clock - Nocturne"
+msgstr ""
+
+#: src/routes/clock/[id]/+page.svelte
+msgid "<0/> Back to Clock Faces"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Clock Faces - Nocturne"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Clock Faces"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Create and manage your custom clock displays"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "<0/> New Clock"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "No clock faces yet"
+msgstr ""
+
+#~ msgid "Create your first custom clock face to display your glucose data exactly how you want it."
+#~ msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "<0/> Create Clock Face"
+msgstr ""
+
+#. placeholder {0}: new Date(face.updatedAt).toLocaleDateString()
+#: src/routes/clock/+page.svelte
+msgid "Updated {0}"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Open"
+msgstr ""
+
+#: src/lib/components/clock/ClockFaceRenderer.svelte
+msgid "DoubleUp"
+msgstr ""
+
+#: src/lib/components/clock/ClockFaceRenderer.svelte
+msgid "DoubleDown"
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockElementPreview.svelte
+#: src/lib/components/clock/ClockFaceRenderer.svelte
+msgid "2d 4h"
+msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Failed to load clock face"
+msgstr ""
+
+#~ msgid "Clock face created"
+#~ msgstr ""
+
+#: src/routes/clock/config/[id]/+page.svelte
+msgid "Failed to save clock face"
+msgstr ""
+
+#~ msgid "Delete \"{0}\"?"
+#~ msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Clock face deleted"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Failed to delete clock face"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Untitled"
+msgstr ""
+
+#~ msgid "New row at top"
+#~ msgstr ""
+
+#~ msgid "New row at bottom"
+#~ msgstr ""
+
+#: src/routes/clock/config/+page.svelte
+msgid "New Clock Face - Nocturne"
+msgstr ""
+
+#: src/routes/clock/config/+page.svelte
+msgid "Creating new clock face..."
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "New Clock Face"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+#: src/routes/clock/+page.svelte
+msgid "Failed to create clock face"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid ""
+"Create your first custom clock face to display your glucose data\n"
+"exactly how you want it."
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Undo (Ctrl+Z)"
+msgstr ""
+
+#: src/lib/components/clock-builder/ClockBuilderHeader.svelte
+msgid "Redo (Ctrl+Shift+Z)"
+msgstr ""
+
+#: src/routes/clock/+page.svelte
+msgid "Delete Clock Face"
+msgstr ""
+
+#. placeholder {0}: clockFaceToDelete?.name
+#: src/routes/clock/+page.svelte
+msgid "Are you sure you want to delete \"{0}\"? This action cannot be undone."
+msgstr ""
+
+#~ msgid "<0/> Add new row"
+#~ msgstr ""
+
+#. placeholder {0}: position
+#: src/lib/components/clock-builder/DropZone.svelte
+msgid "New row at {0}"
 msgstr ""

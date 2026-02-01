@@ -12,8 +12,16 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser } from "$app/environment";
+  import { page } from "$app/state";
   import { ModeWatcher } from "mode-watcher";
   import * as Card from "$lib/components/ui/card";
+
+  // Routes that should hide the sidebar (fullscreen mode)
+  // Matches /clock/[id] but not /clock or /clock/config or /clock/config/[id]
+  const isFullscreen = $derived(
+    /^\/clock\/[^/]+$/.test(page.url.pathname) &&
+    !page.url.pathname.startsWith("/clock/config")
+  );
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -163,30 +171,34 @@
   });
 </script>
 
-<Sidebar.Provider>
-  <ModeWatcher />
-  <AppSidebar user={data.user} />
-  <MobileHeader />
-  <Sidebar.Inset>
-    <!-- Desktop header - hidden on mobile and on reports subpages (which have their own header) -->
+<ModeWatcher />
 
-    <main class="flex-1 overflow-auto">
-      <svelte:boundary>
-        {@render children()}
+{#if isFullscreen}
+  <!-- Fullscreen mode (no sidebar) for clock display -->
+  {@render children()}
+{:else}
+  <Sidebar.Provider>
+    <AppSidebar user={data.user} />
+    <MobileHeader />
+    <Sidebar.Inset>
+      <main class="flex-1 overflow-auto">
+        <svelte:boundary>
+          {@render children()}
 
-        {#snippet failed(e)}
-          <Card.Root class="flex items-center justify-center h-full">
-            <Card.Header>
-              <Card.Title>Error</Card.Title>
-            </Card.Header>
-            <Card.Content
-              class="text-destructive grid place-items-center h-full max-w-2xl"
-            >
-              {e instanceof Error ? e.message : JSON.stringify(e)}
-            </Card.Content>
-          </Card.Root>
-        {/snippet}
-      </svelte:boundary>
-    </main>
-  </Sidebar.Inset>
-</Sidebar.Provider>
+          {#snippet failed(e)}
+            <Card.Root class="flex items-center justify-center h-full">
+              <Card.Header>
+                <Card.Title>Error</Card.Title>
+              </Card.Header>
+              <Card.Content
+                class="text-destructive grid place-items-center h-full max-w-2xl"
+              >
+                {e instanceof Error ? e.message : JSON.stringify(e)}
+              </Card.Content>
+            </Card.Root>
+          {/snippet}
+        </svelte:boundary>
+      </main>
+    </Sidebar.Inset>
+  </Sidebar.Provider>
+{/if}

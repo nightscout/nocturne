@@ -3030,6 +3030,206 @@
         }
       }
     },
+    "/api/v4/clockfaces/{id}": {
+      "get": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Get a clock face configuration by ID (public, no authentication required)",
+        "operationId": "ClockFaces_GetById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clock face configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFacePublicDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Update an existing clock face (owner only)",
+        "operationId": "ClockFaces_Update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Update request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClockFaceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "Updated clock face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFace"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Delete a clock face (owner only)",
+        "operationId": "ClockFaces_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success status"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/clockfaces": {
+      "get": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "List all clock faces for the current user",
+        "operationId": "ClockFaces_List",
+        "responses": {
+          "200": {
+            "description": "List of clock faces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClockFaceListItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Clock Faces"
+        ],
+        "summary": "Create a new clock face",
+        "operationId": "ClockFaces_Create",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Clock face creation request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClockFaceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "Created clock face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockFace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/compatibility/config": {
       "get": {
         "tags": [
@@ -19698,6 +19898,307 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "ClockFacePublicDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          }
+        }
+      },
+      "ClockFaceConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockRow"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ClockSettings"
+          }
+        }
+      },
+      "ClockRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockElement"
+            }
+          }
+        }
+      },
+      "ClockElement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "showUnits": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "minutesAhead": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "show": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibilityThreshold": {
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "style": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockElementStyle"
+              }
+            ]
+          },
+          "chartConfig": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockChartConfig"
+              }
+            ]
+          }
+        }
+      },
+      "ClockElementStyle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "font": {
+            "type": "string",
+            "nullable": true
+          },
+          "fontWeight": {
+            "type": "string",
+            "nullable": true
+          },
+          "opacity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "custom": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ClockChartConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "showIob": {
+            "type": "boolean"
+          },
+          "showCob": {
+            "type": "boolean"
+          },
+          "showBasal": {
+            "type": "boolean"
+          },
+          "showBolus": {
+            "type": "boolean"
+          },
+          "showCarbs": {
+            "type": "boolean"
+          },
+          "showDeviceEvents": {
+            "type": "boolean"
+          },
+          "showAlarms": {
+            "type": "boolean"
+          },
+          "showTrackers": {
+            "type": "boolean"
+          },
+          "showPredictions": {
+            "type": "boolean"
+          },
+          "lockToggles": {
+            "type": "boolean"
+          },
+          "showLegend": {
+            "type": "boolean"
+          },
+          "asBackground": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ClockSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bgColor": {
+            "type": "boolean"
+          },
+          "staleMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "alwaysShowTime": {
+            "type": "boolean"
+          },
+          "backgroundImage": {
+            "type": "string",
+            "nullable": true
+          },
+          "backgroundOpacity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ClockFaceListItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ClockFace": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "CreateClockFaceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ClockFaceConfig"
+          }
+        }
+      },
+      "UpdateClockFaceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "config": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClockFaceConfig"
+              }
+            ]
           }
         }
       },
