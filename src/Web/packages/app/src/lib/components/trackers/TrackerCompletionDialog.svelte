@@ -1,16 +1,27 @@
 <script lang="ts">
   import { tick } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Collapsible from "$lib/components/ui/collapsible";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
   import { TextareaAutosize } from "$lib/components/ui/textarea";
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Check } from "lucide-svelte";
-  import { CompletionReason, TrackerCategory } from "$api";
+  import { CategoryBadge } from "$lib/components/notes";
+  import {
+    Check,
+    ChevronDown,
+    StickyNote,
+    CheckSquare,
+    ExternalLink,
+  } from "lucide-svelte";
+  import { cn } from "$lib/utils";
+  import { goto } from "$app/navigation";
+  import { CompletionReason, TrackerCategory, NoteCategory, type Note } from "$api";
   import * as trackersRemote from "$lib/data/trackers.remote";
   import * as treatmentsRemote from "$lib/data/treatments.remote";
+  import * as notesRemote from "$lib/data/notes.remote";
 
   interface TrackerCompletionDialogProps {
     open: boolean;
@@ -45,6 +56,11 @@
   let completedAt = $state("");
   let startAnother = $state(false);
   let isSubmitting = $state(false);
+
+  // Linked notes state
+  let linkedNotes = $state<Note[]>([]);
+  let notesExpanded = $state(false);
+  let viewingNote = $state<Note | null>(null);
 
   // Get default completion reason based on tracker category
   function getDefaultReasonForCategory(
@@ -153,8 +169,36 @@
       completionNotes = "";
       completedAt = formatDateTimeLocal(getDefaultDate());
       startAnother = false;
+      linkedNotes = [];
+      notesExpanded = false;
+      viewingNote = null;
+
+      // Fetch linked notes if we have a definition ID
+      if (definitionId) {
+        fetchLinkedNotes(definitionId);
+      }
     }
   });
+
+  async function fetchLinkedNotes(trackerId: string) {
+    try {
+      const notes = await notesRemote.getNotes({ trackerDefinitionId: trackerId });
+      linkedNotes = notes || [];
+      // Auto-expand if there are notes
+      if (linkedNotes.length > 0) {
+        notesExpanded = true;
+      }
+    } catch (err) {
+      console.error("Failed to fetch linked notes:", err);
+    }
+  }
+
+  function getChecklistProgress(note: Note): string | null {
+    const items = note.checklistItems;
+    if (!items || items.length === 0) return null;
+    const completed = items.filter((i) => i.isCompleted).length;
+    return `${completed}/${items.length}`;
+  }
 
   async function handleComplete() {
     if (!instanceId) return;
@@ -214,6 +258,69 @@
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
+      <!-- Linked Notes Section -->
+      {#if linkedNotes.length > 0}
+        <Collapsible.Root bind:open={notesExpanded}>
+          <Collapsible.Trigger
+            class="flex items-center justify-between w-full p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
+          >
+            <div class="flex items-center gap-2">
+              <StickyNote class="h-4 w-4 text-muted-foreground" />
+              <span class="font-medium text-sm">
+                Linked Notes ({linkedNotes.length})
+              </span>
+            </div>
+            <ChevronDown
+              class={cn(
+                "h-4 w-4 text-muted-foreground transition-transform",
+                notesExpanded && "rotate-180"
+              )}
+            />
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div class="space-y-2 mt-2">
+              {#each linkedNotes as note (note.id)}
+                {@const progress = getChecklistProgress(note)}
+                <button
+                  type="button"
+                  class="w-full text-left p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                  onclick={() => (viewingNote = note)}
+                >
+                  <div class="flex items-start gap-2">
+                    <CategoryBadge
+                      category={note.category ?? NoteCategory.Observation}
+                      showLabel={false}
+                      class="shrink-0"
+                    />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2">
+                        {#if note.title}
+                          <span class="font-medium text-sm truncate">{note.title}</span>
+                        {:else}
+                          <span class="text-sm text-muted-foreground line-clamp-1">
+                            {note.content}
+                          </span>
+                        {/if}
+                        {#if progress}
+                          <span class="text-xs text-muted-foreground flex items-center gap-1">
+                            <CheckSquare class="h-3 w-3" />
+                            {progress}
+                          </span>
+                        {/if}
+                      </div>
+                      {#if note.title && note.content}
+                        <p class="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                          {note.content}
+                        </p>
+                      {/if}
+                    </div>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
+      {/if}
       <div class="space-y-2">
         <Label for="completedAt">Completed At</Label>
         <Input
@@ -261,5 +368,77 @@
         Complete
       </Button>
     </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Nested Note Detail Dialog -->
+<Dialog.Root open={!!viewingNote} onOpenChange={(open) => !open && (viewingNote = null)}>
+  <Dialog.Content class="sm:max-w-[500px]">
+    {#if viewingNote}
+      <Dialog.Header>
+        <Dialog.Title class="flex items-center gap-2">
+          <CategoryBadge category={viewingNote.category ?? NoteCategory.Observation} />
+          {viewingNote.title || "Note"}
+        </Dialog.Title>
+        {#if viewingNote.occurredAt}
+          <Dialog.Description>
+            {new Date(viewingNote.occurredAt).toLocaleDateString(undefined, {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </Dialog.Description>
+        {/if}
+      </Dialog.Header>
+
+      <div class="py-4 space-y-4">
+        <p class="text-sm whitespace-pre-wrap">{viewingNote.content}</p>
+
+        {#if viewingNote.checklistItems && viewingNote.checklistItems.length > 0}
+          <div class="border-t pt-4">
+            <h4 class="text-sm font-medium mb-2">Checklist</h4>
+            <ul class="space-y-1">
+              {#each viewingNote.checklistItems as item}
+                <li class="flex items-center gap-2 text-sm">
+                  <span
+                    class={cn(
+                      "w-4 h-4 rounded border flex items-center justify-center text-xs",
+                      item.isCompleted
+                        ? "bg-primary text-primary-foreground"
+                        : "border-muted-foreground"
+                    )}
+                  >
+                    {#if item.isCompleted}✓{/if}
+                  </span>
+                  <span class={item.isCompleted ? "line-through text-muted-foreground" : ""}>
+                    {item.text}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+      </div>
+
+      <Dialog.Footer>
+        <Button variant="outline" onclick={() => (viewingNote = null)}>
+          Back
+        </Button>
+        <Button
+          variant="default"
+          onclick={() => {
+            const noteId = viewingNote?.id;
+            viewingNote = null;
+            if (noteId) {
+              goto(`/notes?edit=${noteId}`);
+            }
+          }}
+        >
+          <ExternalLink class="h-4 w-4 mr-2" />
+          Edit Note
+        </Button>
+      </Dialog.Footer>
+    {/if}
   </Dialog.Content>
 </Dialog.Root>

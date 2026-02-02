@@ -2,6 +2,7 @@
   import type {
     Note,
     NoteAttachment,
+    TrackerDefinitionDto,
   } from "$lib/api/generated/nocturne-api-client";
   import { NoteCategory } from "$lib/api/generated/nocturne-api-client";
   import { cn } from "$lib/utils";
@@ -13,6 +14,8 @@
   import * as Select from "$lib/components/ui/select";
   import * as Popover from "$lib/components/ui/popover";
   import { Calendar } from "$lib/components/ui/calendar";
+  import { TrackerCategoryIcon } from "$lib/components/icons";
+  import { TrackerCategory } from "$api";
   import CategoryBadge from "./CategoryBadge.svelte";
   import ChecklistEditor from "./ChecklistEditor.svelte";
   import CalendarIcon from "lucide-svelte/icons/calendar";
@@ -28,11 +31,14 @@
     CalendarDate,
     DateFormatter,
     getLocalTimeZone,
+    type DateValue,
   } from "@internationalized/date";
 
   interface Props {
     note: Note;
     attachments?: NoteAttachment[];
+    /** Tracker definitions to resolve tracker names */
+    trackerDefinitions?: TrackerDefinitionDto[];
     onSave?: (note: Note) => void;
     onArchive?: () => void;
     onDelete?: () => void;
@@ -43,6 +49,7 @@
   let {
     note = $bindable(),
     attachments = [],
+    trackerDefinitions = [],
     onSave,
     onArchive,
     onDelete,
@@ -50,13 +57,19 @@
     class: className,
   }: Props = $props();
 
+  // Get tracker definition by ID
+  function getTrackerDefinition(id: string | undefined): TrackerDefinitionDto | undefined {
+    if (!id) return undefined;
+    return trackerDefinitions.find((d) => d.id === id);
+  }
+
   // Date formatter for display
   const df = new DateFormatter("en-US", {
     dateStyle: "long",
   });
 
   // Convert Date to CalendarDate for the calendar component
-  const occurredDateValue = $derived(() => {
+  const occurredDateValue = $derived.by(() => {
     if (!note.occurredAt) return undefined;
     const date = new Date(note.occurredAt);
     return new CalendarDate(
@@ -67,7 +80,7 @@
   });
 
   // Handle date selection
-  function handleDateSelect(value: CalendarDate | undefined) {
+  function handleDateSelect(value: DateValue | undefined) {
     if (value) {
       note.occurredAt = value.toDate(getLocalTimeZone());
     } else {
@@ -126,7 +139,15 @@
             {#each categoryOptions as option (option.value)}
               <Select.Item value={option.value}>
                 <div class="flex items-center gap-2">
-                  <svelte:component this={option.icon} class="size-4" />
+                  {#if option.value === NoteCategory.Observation}
+                    <Eye class="size-4" />
+                  {:else if option.value === NoteCategory.Question}
+                    <HelpCircle class="size-4" />
+                  {:else if option.value === NoteCategory.Task}
+                    <CheckSquare class="size-4" />
+                  {:else if option.value === NoteCategory.Marker}
+                    <Bookmark class="size-4" />
+                  {/if}
                   <span>{option.label}</span>
                 </div>
               </Select.Item>
@@ -210,8 +231,8 @@
             class="w-full justify-start text-left font-normal"
           >
             <CalendarIcon class="mr-2 size-4" />
-            {#if occurredDateValue()}
-              {df.format(occurredDateValue()!.toDate(getLocalTimeZone()))}
+            {#if occurredDateValue}
+              {df.format(occurredDateValue.toDate(getLocalTimeZone()))}
             {:else}
               <span class="text-muted-foreground">Pick a date</span>
             {/if}
@@ -219,7 +240,8 @@
         </Popover.Trigger>
         <Popover.Content class="w-auto p-0">
           <Calendar
-            value={occurredDateValue()}
+            type="single"
+            value={occurredDateValue}
             onValueChange={handleDateSelect}
           />
         </Popover.Content>
@@ -290,11 +312,18 @@
       {#if note.trackerLinks && note.trackerLinks.length > 0}
         <div class="flex flex-wrap gap-2">
           {#each note.trackerLinks as link (link.id)}
+            {@const def = getTrackerDefinition(link.trackerDefinitionId)}
+            {@const category = def?.category ?? TrackerCategory.Custom}
             <div
-              class="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-sm"
+              class="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1 text-sm"
             >
-              <Link class="size-3" />
-              <span>Tracker {link.trackerDefinitionId?.slice(0, 8)}...</span>
+              <TrackerCategoryIcon {category} class="size-3.5" />
+              <span>{def?.name ?? "Unknown Tracker"}</span>
+              {#if link.thresholds && link.thresholds.length > 0}
+                <span class="text-xs text-muted-foreground">
+                  ({link.thresholds.length} reminder{link.thresholds.length !== 1 ? "s" : ""})
+                </span>
+              {/if}
             </div>
           {/each}
         </div>

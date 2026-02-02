@@ -12,8 +12,11 @@
     CheckCircle,
     CalendarClock,
     Check,
+    Files,
+    ExternalLink,
   } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { getPunchCardData } from "$lib/data/month-to-month.remote";
   import {
     getActiveInstances,
@@ -34,6 +37,11 @@
   import DayGlucoseProfile from "$lib/components/calendar/DayGlucoseProfile.svelte";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { TrackerCompletionDialog } from "$lib/components/trackers";
+  import { NotesListDialog, type NoteEvent } from "$lib/components/calendar";
+  import { CategoryBadge, NoteEditorDialog } from "$lib/components/notes";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import * as notesRemote from "$lib/data/notes.remote";
+  import { NoteCategory, type Note } from "$api";
 
   // Infer DayStats type from the query result
   type DayStats = NonNullable<
@@ -92,6 +100,116 @@
   const trackersQuery = $derived(getActiveInstances());
   const historyQuery = $derived(getInstanceHistory(100));
   const definitionsQuery = $derived(getDefinitions({}));
+
+  // Query for notes in the current month view
+  const notesQueryInput = $derived({
+    fromDate: dateRangeInput.fromDate,
+    toDate: dateRangeInput.toDate,
+  });
+  const notesQuery = $derived(notesRemote.getNotes(notesQueryInput));
+
+  // Notes list dialog state
+  let isNotesListDialogOpen = $state(false);
+  let notesListDialogDate = $state<Date>(new Date());
+  let notesListDialogEvents = $state<NoteEvent[]>([]);
+
+  // Note detail dialog state
+  let isNoteDetailOpen = $state(false);
+  let selectedNote = $state<Note | null>(null);
+
+  // Create note dialog state (for clicking future days)
+  let isCreateNoteDialogOpen = $state(false);
+  let createNoteDefaultDate = $state<Date | undefined>(undefined);
+
+  // Build note events map from notes query
+  function buildNoteEvents(
+    notes: Note[],
+    activeTrackers: TrackerInstanceDto[],
+    definitions: TrackerDefinitionDto[]
+  ): Map<string, NoteEvent[]> {
+    const events = new Map<string, NoteEvent[]>();
+
+    function addEvent(dateStr: string, event: NoteEvent) {
+      if (!events.has(dateStr)) {
+        events.set(dateStr, []);
+      }
+      events.get(dateStr)!.push(event);
+    }
+
+    function toDateStr(date: Date | undefined): string | null {
+      if (!date) return null;
+      const d = new Date(date);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    }
+
+    for (const note of notes) {
+      // Add notes by their occurredAt date
+      if (note.occurredAt) {
+        const dateStr = toDateStr(note.occurredAt);
+        if (dateStr) {
+          addEvent(dateStr, { note, source: "occurredAt" });
+        }
+      }
+
+      // Add notes linked to trackers on the tracker's due date
+      if (note.trackerLinks && note.trackerLinks.length > 0) {
+        for (const link of note.trackerLinks) {
+          // Find active tracker instances for this definition
+          const instances = activeTrackers.filter(
+            (t) => t.definitionId === link.trackerDefinitionId
+          );
+          const def = definitions.find((d) => d.id === link.trackerDefinitionId);
+
+          for (const instance of instances) {
+            if (instance.expectedEndAt) {
+              const dueDate = toDateStr(instance.expectedEndAt);
+              if (dueDate) {
+                addEvent(dueDate, {
+                  note,
+                  source: "trackerLink",
+                  trackerName: def?.name ?? instance.definitionName ?? "Tracker",
+                  reminderTime: instance.expectedEndAt,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return events;
+  }
+
+  function openNotesListDialog(date: Date, noteEvents: NoteEvent[]) {
+    notesListDialogDate = date;
+    notesListDialogEvents = noteEvents;
+    isNotesListDialogOpen = true;
+  }
+
+  function handleNoteClick(note: Note) {
+    selectedNote = note;
+    isNoteDetailOpen = true;
+    isNotesListDialogOpen = false;
+  }
+
+  function handleNoteDetailClose() {
+    isNoteDetailOpen = false;
+    selectedNote = null;
+  }
+
+  // Toggle checklist item completion
+  async function handleToggleChecklistItem(noteId: string, itemId: string) {
+    try {
+      await notesRemote.toggleChecklistItem({ noteId, itemId });
+      // Refresh the selected note
+      const updatedNote = await notesRemote.getNote(noteId);
+      if (updatedNote) {
+        selectedNote = updatedNote;
+      }
+    } catch (err) {
+      console.error("Failed to toggle checklist item:", err);
+    }
+  }
 
   // Tracker event types for calendar display
   type TrackerEventType = "start" | "due" | "completed";
@@ -240,6 +358,32 @@
   // Check if a day is today
   function isToday(date: string): boolean {
     return date === new Date().toISOString().split("T")[0];
+  }
+
+  // Check if a date string represents a future date
+  function isFutureDate(dateStr: string): boolean {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(dateStr + "T00:00:00");
+    return date > today;
+  }
+
+  // Handle clicking on a future day to create a task
+  function handleFutureDayClick(dateStr: string) {
+    // Create a date with the clicked date and current time
+    const now = new Date();
+    const date = new Date(dateStr + "T00:00:00");
+    date.setHours(now.getHours(), now.getMinutes(), 0, 0);
+    createNoteDefaultDate = date;
+    isCreateNoteDialogOpen = true;
+  }
+
+  // Handle note created from calendar
+  function handleNoteCreated() {
+    isCreateNoteDialogOpen = false;
+    createNoteDefaultDate = undefined;
+    // Refresh notes data
+    goto(page.url.toString(), { invalidateAll: true });
   }
 
   // Get cell classes based on day state
@@ -470,6 +614,49 @@
     // Refresh tracker data by invalidating the page
     goto(page.url.toString(), { invalidateAll: true });
   }
+
+  // Note category color classes
+  function getNoteCategoryColor(category: NoteCategory | undefined): string {
+    switch (category) {
+      case NoteCategory.Observation:
+        return "text-blue-500 dark:text-blue-400";
+      case NoteCategory.Question:
+        return "text-purple-500 dark:text-purple-400";
+      case NoteCategory.Task:
+        return "text-green-500 dark:text-green-400";
+      case NoteCategory.Marker:
+        return "text-amber-500 dark:text-amber-400";
+      default:
+        return "text-muted-foreground";
+    }
+  }
+
+  // Note category background color for inline display
+  function getNoteCategoryBgColor(category: NoteCategory | undefined): string {
+    switch (category) {
+      case NoteCategory.Observation:
+        return "bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30";
+      case NoteCategory.Question:
+        return "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30";
+      case NoteCategory.Task:
+        return "bg-green-500/10 hover:bg-green-500/20 border-green-500/30";
+      case NoteCategory.Marker:
+        return "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30";
+      default:
+        return "bg-muted hover:bg-muted/80 border-muted-foreground/30";
+    }
+  }
+
+  // Format reminder time for display
+  function formatReminderTime(reminderTime: Date | undefined): string | null {
+    if (!reminderTime) return null;
+    const date = new Date(reminderTime);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
 </script>
 
 {#await punchCardQuery}
@@ -558,7 +745,7 @@
     </div>
 
     <!-- Calendar Grid -->
-    {#await Promise.all([trackersQuery, historyQuery, definitionsQuery])}
+    {#await Promise.all([trackersQuery, historyQuery, definitionsQuery, notesQuery.catch(() => [])])}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex items-center justify-center">
@@ -566,10 +753,15 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:then [activeTrackers, historyTrackers, definitions]}
+    {:then [activeTrackers, historyTrackers, definitions, notes]}
       {@const trackerEvents = buildTrackerEvents(
         activeTrackers ?? [],
         historyTrackers ?? []
+      )}
+      {@const noteEvents = buildNoteEvents(
+        notes ?? [],
+        activeTrackers ?? [],
+        definitions ?? []
       )}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
@@ -599,6 +791,10 @@
                     {@const dayTrackerEvents = dateStr
                       ? (trackerEvents.get(dateStr) ?? [])
                       : []}
+                    {@const dayNoteEvents = dateStr
+                      ? (noteEvents.get(dateStr) ?? [])
+                      : []}
+                    {@const dayDate = dateStr ? new Date(dateStr + "T00:00:00") : new Date()}
                     <div class={getCellClasses(day)}>
                       {#if day && "date" in day && day.totalReadings > 0}
                         <!-- Day number in corner -->
@@ -608,9 +804,44 @@
                           {new Date(day.date).getDate()}
                         </span>
 
+                        <!-- Single note inline display (Google Calendar style) -->
+                        {#if dayNoteEvents.length === 1}
+                          {@const noteEvent = dayNoteEvents[0]}
+                          {@const noteCategory = noteEvent.note.category}
+                          {@const reminderTimeStr = formatReminderTime(noteEvent.reminderTime)}
+                          {@const noteTitle = noteEvent.note.title || noteEvent.note.content}
+                          <button
+                            type="button"
+                            class={cn(
+                              "absolute top-5 left-1 right-1 z-10 px-1.5 py-0.5 rounded text-[10px] leading-tight truncate text-left border transition-colors",
+                              getNoteCategoryBgColor(noteCategory),
+                              getNoteCategoryColor(noteCategory)
+                            )}
+                            title={noteEvent.note.title || noteEvent.note.content}
+                            onclick={() => handleNoteClick(noteEvent.note)}
+                          >
+                            {#if reminderTimeStr}
+                              <span class="font-medium">{reminderTimeStr}</span>
+                              {" "}
+                            {/if}
+                            <span class="truncate">{noteTitle}</span>
+                          </button>
+                        {/if}
+
                         <!-- Tracker icons in top-right corner -->
-                        {#if dayTrackerEvents.length > 0}
+                        {#if dayTrackerEvents.length > 0 || dayNoteEvents.length > 1}
                           <div class="absolute top-1 right-1 flex gap-0.5 z-10">
+                            <!-- Multiple notes icon -->
+                            {#if dayNoteEvents.length > 1}
+                              <button
+                                type="button"
+                                class="h-5 w-5 rounded-full flex items-center justify-center hover:scale-125 transition-transform text-muted-foreground hover:text-foreground"
+                                title="{dayNoteEvents.length} notes"
+                                onclick={() => openNotesListDialog(dayDate, dayNoteEvents)}
+                              >
+                                <Files class="h-4 w-4" />
+                              </button>
+                            {/if}
                             {#each dayTrackerEvents as event}
                               {@const def = getDefinition(
                                 event.instance,
@@ -636,7 +867,7 @@
                                     <button
                                       {...props}
                                       class={cn(
-                                        "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
+                                        "h-5 w-5 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
                                         getTrackerIconColor(
                                           event.eventType,
                                           level
@@ -646,7 +877,7 @@
                                     >
                                       <TrackerCategoryIcon
                                         {category}
-                                        class="h-3 w-3"
+                                        class="h-4 w-4"
                                       />
                                     </button>
                                   {/snippet}
@@ -743,7 +974,10 @@
                               {#if viewMode === "tir"}
                                 <div
                                   {...props}
-                                  class="absolute inset-0 p-2 pt-6"
+                                  class={cn(
+                                    "absolute inset-0 p-2",
+                                    dayNoteEvents.length === 1 ? "pt-10" : "pt-6"
+                                  )}
                                 >
                                   <DayStackedBar
                                     lowPercent={day.lowPercent}
@@ -850,14 +1084,49 @@
                         </Tooltip.Root>
                       {:else if day && "empty" in day}
                         <!-- Day with no data -->
+                        {@const isFuture = dateStr ? isFutureDate(dateStr) : false}
                         <span
                           class="absolute top-1 left-2 text-xs text-muted-foreground"
                         >
                           {day.dayNumber}
                         </span>
-                        <!-- Tracker icons for empty days -->
-                        {#if dayTrackerEvents.length > 0}
+                        <!-- Single note inline display for empty days -->
+                        {#if dayNoteEvents.length === 1}
+                          {@const noteEvent = dayNoteEvents[0]}
+                          {@const noteCategory = noteEvent.note.category}
+                          {@const reminderTimeStr = formatReminderTime(noteEvent.reminderTime)}
+                          {@const noteTitle = noteEvent.note.title || noteEvent.note.content}
+                          <button
+                            type="button"
+                            class={cn(
+                              "absolute top-5 left-1 right-1 z-10 px-1.5 py-0.5 rounded text-[10px] leading-tight truncate text-left border transition-colors",
+                              getNoteCategoryBgColor(noteCategory),
+                              getNoteCategoryColor(noteCategory)
+                            )}
+                            title={noteEvent.note.title || noteEvent.note.content}
+                            onclick={() => handleNoteClick(noteEvent.note)}
+                          >
+                            {#if reminderTimeStr}
+                              <span class="font-medium">{reminderTimeStr}</span>
+                              {" "}
+                            {/if}
+                            <span class="truncate">{noteTitle}</span>
+                          </button>
+                        {/if}
+                        <!-- Tracker icons and multi-note icon for empty days -->
+                        {#if dayTrackerEvents.length > 0 || dayNoteEvents.length > 1}
                           <div class="absolute top-1 right-1 flex gap-0.5">
+                            <!-- Multiple notes icon -->
+                            {#if dayNoteEvents.length > 1}
+                              <button
+                                type="button"
+                                class="h-5 w-5 rounded-full flex items-center justify-center hover:scale-125 transition-transform text-muted-foreground hover:text-foreground"
+                                title="{dayNoteEvents.length} notes"
+                                onclick={() => openNotesListDialog(dayDate, dayNoteEvents)}
+                              >
+                                <Files class="h-4 w-4" />
+                              </button>
+                            {/if}
                             {#each dayTrackerEvents as event}
                               {@const def = getDefinition(
                                 event.instance,
@@ -883,7 +1152,7 @@
                                     <button
                                       {...props}
                                       class={cn(
-                                        "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
+                                        "h-5 w-5 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
                                         getTrackerIconColor(
                                           event.eventType,
                                           level
@@ -893,7 +1162,7 @@
                                     >
                                       <TrackerCategoryIcon
                                         {category}
-                                        class="h-3 w-3"
+                                        class="h-4 w-4"
                                       />
                                     </button>
                                   {/snippet}
@@ -954,19 +1223,63 @@
                             {/each}
                           </div>
                         {/if}
-                        <div
-                          class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"
-                        ></div>
+                        {#if isFuture && dateStr}
+                          <button
+                            type="button"
+                            class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20 hover:border-primary hover:bg-primary/10 transition-colors"
+                            title="Add task for this day"
+                            onclick={() => handleFutureDayClick(dateStr)}
+                          ></button>
+                        {:else}
+                          <div
+                            class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"
+                          ></div>
+                        {/if}
                       {:else if day && "date" in day}
                         <!-- Day exists in data but has no readings -->
+                        {@const isFutureDay = isFutureDate(day.date)}
                         <span
                           class="absolute top-1 left-2 text-xs text-muted-foreground"
                         >
                           {new Date(day.date).getDate()}
                         </span>
-                        <!-- Tracker icons for days with no readings -->
-                        {#if dayTrackerEvents.length > 0}
+                        <!-- Single note inline display for days with no readings -->
+                        {#if dayNoteEvents.length === 1}
+                          {@const noteEvent = dayNoteEvents[0]}
+                          {@const noteCategory = noteEvent.note.category}
+                          {@const reminderTimeStr = formatReminderTime(noteEvent.reminderTime)}
+                          {@const noteTitle = noteEvent.note.title || noteEvent.note.content}
+                          <button
+                            type="button"
+                            class={cn(
+                              "absolute top-5 left-1 right-1 z-10 px-1.5 py-0.5 rounded text-[10px] leading-tight truncate text-left border transition-colors",
+                              getNoteCategoryBgColor(noteCategory),
+                              getNoteCategoryColor(noteCategory)
+                            )}
+                            title={noteEvent.note.title || noteEvent.note.content}
+                            onclick={() => handleNoteClick(noteEvent.note)}
+                          >
+                            {#if reminderTimeStr}
+                              <span class="font-medium">{reminderTimeStr}</span>
+                              {" "}
+                            {/if}
+                            <span class="truncate">{noteTitle}</span>
+                          </button>
+                        {/if}
+                        <!-- Tracker icons and multi-note icon for days with no readings -->
+                        {#if dayTrackerEvents.length > 0 || dayNoteEvents.length > 1}
                           <div class="absolute top-1 right-1 flex gap-0.5">
+                            <!-- Multiple notes icon -->
+                            {#if dayNoteEvents.length > 1}
+                              <button
+                                type="button"
+                                class="h-5 w-5 rounded-full flex items-center justify-center hover:scale-125 transition-transform text-muted-foreground hover:text-foreground"
+                                title="{dayNoteEvents.length} notes"
+                                onclick={() => openNotesListDialog(dayDate, dayNoteEvents)}
+                              >
+                                <Files class="h-4 w-4" />
+                              </button>
+                            {/if}
                             {#each dayTrackerEvents as event}
                               {@const def = getDefinition(
                                 event.instance,
@@ -992,7 +1305,7 @@
                                     <button
                                       {...props}
                                       class={cn(
-                                        "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
+                                        "h-5 w-5 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
                                         getTrackerIconColor(
                                           event.eventType,
                                           level
@@ -1002,7 +1315,7 @@
                                     >
                                       <TrackerCategoryIcon
                                         {category}
-                                        class="h-3 w-3"
+                                        class="h-4 w-4"
                                       />
                                     </button>
                                   {/snippet}
@@ -1063,9 +1376,18 @@
                             {/each}
                           </div>
                         {/if}
-                        <div
-                          class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"
-                        ></div>
+                        {#if isFutureDay}
+                          <button
+                            type="button"
+                            class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20 hover:border-primary hover:bg-primary/10 transition-colors"
+                            title="Add task for this day"
+                            onclick={() => handleFutureDayClick(day.date)}
+                          ></button>
+                        {:else}
+                          <div
+                            class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"
+                          ></div>
+                        {/if}
                       {:else}
                         <!-- Empty cell (before/after month) -->
                       {/if}
@@ -1169,4 +1491,104 @@
   defaultCompletedAt={completingDefaultDate ?? undefined}
   onClose={handleCompletionDialogClose}
   onComplete={handleCompletionComplete}
+/>
+
+<!-- Notes List Dialog -->
+<NotesListDialog
+  bind:open={isNotesListDialogOpen}
+  date={notesListDialogDate}
+  noteEvents={notesListDialogEvents}
+  onNoteClick={handleNoteClick}
+/>
+
+<!-- Note Detail Dialog -->
+<Dialog.Root bind:open={isNoteDetailOpen}>
+  <Dialog.Content class="sm:max-w-[500px]">
+    {#if selectedNote}
+      <Dialog.Header>
+        <Dialog.Title class="flex items-center gap-2">
+          <CategoryBadge category={selectedNote.category ?? NoteCategory.Observation} />
+          {selectedNote.title || "Note"}
+        </Dialog.Title>
+        {#if selectedNote.occurredAt}
+          <Dialog.Description>
+            {new Date(selectedNote.occurredAt).toLocaleDateString(undefined, {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </Dialog.Description>
+        {/if}
+      </Dialog.Header>
+
+      <div class="py-4 space-y-4">
+        <p class="text-sm whitespace-pre-wrap">{selectedNote.content}</p>
+
+        {#if selectedNote.checklistItems && selectedNote.checklistItems.length > 0}
+          <div class="border-t pt-4">
+            <h4 class="text-sm font-medium mb-2">Checklist</h4>
+            <ul class="space-y-2">
+              {#each selectedNote.checklistItems as item (item.id)}
+                <li class="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={item.isCompleted}
+                    onCheckedChange={() => {
+                      if (selectedNote?.id && item.id) {
+                        handleToggleChecklistItem(selectedNote.id, item.id);
+                      }
+                    }}
+                  />
+                  <span class={item.isCompleted ? "line-through text-muted-foreground" : ""}>
+                    {item.text}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+
+        {#if selectedNote.trackerLinks && selectedNote.trackerLinks.length > 0}
+          <div class="border-t pt-4">
+            <h4 class="text-sm font-medium mb-2">Linked Trackers</h4>
+            <p class="text-sm text-muted-foreground">
+              {selectedNote.trackerLinks.length} tracker{selectedNote.trackerLinks.length !== 1 ? "s" : ""} linked
+            </p>
+          </div>
+        {/if}
+      </div>
+
+      <Dialog.Footer>
+        <Button variant="outline" onclick={handleNoteDetailClose}>
+          Close
+        </Button>
+        <Button
+          variant="default"
+          onclick={() => {
+            const noteId = selectedNote?.id;
+            handleNoteDetailClose();
+            if (noteId) {
+              goto(`/notes?edit=${noteId}`);
+            }
+          }}
+        >
+          <ExternalLink class="h-4 w-4 mr-2" />
+          Edit Note
+        </Button>
+      </Dialog.Footer>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Create Note Dialog (for future days) -->
+<NoteEditorDialog
+  bind:open={isCreateNoteDialogOpen}
+  note={null}
+  defaultCategory={NoteCategory.Task}
+  defaultDate={createNoteDefaultDate}
+  onClose={() => {
+    isCreateNoteDialogOpen = false;
+    createNoteDefaultDate = undefined;
+  }}
+  onSave={handleNoteCreated}
 />

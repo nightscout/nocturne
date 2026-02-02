@@ -74,6 +74,11 @@ public static class NoteMapper
             .Select(ToStateSpanLinkModel)
             .ToList();
 
+        // Map attachments (metadata only, binary data not included)
+        model.Attachments = entity.Attachments
+            .Select(ToAttachmentModel)
+            .ToList();
+
         return model;
     }
 

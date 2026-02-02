@@ -5,7 +5,6 @@
   import HelpCircle from "lucide-svelte/icons/help-circle";
   import CheckSquare from "lucide-svelte/icons/check-square";
   import Bookmark from "lucide-svelte/icons/bookmark";
-  import type { Component } from "svelte";
 
   interface Props {
     category: NoteCategory;
@@ -17,25 +16,21 @@
 
   const categoryConfig: Record<
     NoteCategory,
-    { icon: Component; label: string; colorClass: string }
+    { label: string; colorClass: string }
   > = {
     [NoteCategory.Observation]: {
-      icon: Eye,
       label: "Observation",
       colorClass: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
     },
     [NoteCategory.Question]: {
-      icon: HelpCircle,
       label: "Question",
       colorClass: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
     },
     [NoteCategory.Task]: {
-      icon: CheckSquare,
       label: "Task",
       colorClass: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
     },
     [NoteCategory.Marker]: {
-      icon: Bookmark,
       label: "Marker",
       colorClass: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
     },
@@ -51,7 +46,15 @@
     className
   )}
 >
-  <svelte:component this={config.icon} class="size-3" />
+  {#if category === NoteCategory.Observation}
+    <Eye class="size-3" />
+  {:else if category === NoteCategory.Question}
+    <HelpCircle class="size-3" />
+  {:else if category === NoteCategory.Task}
+    <CheckSquare class="size-3" />
+  {:else if category === NoteCategory.Marker}
+    <Bookmark class="size-3" />
+  {/if}
   {#if showLabel}
     <span>{config.label}</span>
   {/if}

@@ -1,20 +1,9 @@
 <script lang="ts">
-  import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-  } from "$lib/components/ui/card";
+  import { Card, CardContent } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import * as Select from "$lib/components/ui/select";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import {
     StickyNote,
@@ -31,13 +20,20 @@
     AlertTriangle,
     Filter,
     Clock,
+    ImagePlus,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import * as notesRemote from "$lib/data/notes.remote";
-  import { NoteCategory, type Note, type NoteChecklistItem } from "$api";
+  import { NoteEditorDialog } from "$lib/components/notes";
+  import {
+    NoteCategory,
+    type Note,
+    type NoteChecklistItem,
+  } from "$api";
 
   // Auth state
   const authStore = getAuthStore();
@@ -52,47 +48,73 @@
   let selectedCategory = $state<NoteCategory | null>(null);
   let statusFilter = $state<"active" | "archived" | "all">("active");
 
-  // Dialog state
-  let isNoteDialogOpen = $state(false);
-  let isNewNote = $state(false);
-  let editingNote = $state<Note | null>(null);
+  // URL-based dialog state - derive from search params
+  const editNoteId = $derived($page.url.searchParams.get("edit"));
+  const isNewNoteParam = $derived($page.url.searchParams.get("new") === "true");
+  const urlCategory = $derived($page.url.searchParams.get("category") as NoteCategory | null);
+  const urlDate = $derived($page.url.searchParams.get("date"));
+
+  // Dialog is open if we have an edit ID or new=true
+  let isNoteDialogOpen = $derived(editNoteId !== null || isNewNoteParam);
+  let isNewNote = $derived(isNewNoteParam);
+
+  // Get the note being edited from the notes array
+  const editingNote = $derived.by(() => {
+    if (!editNoteId) return null;
+    return notes.find((n) => n.id === editNoteId) ?? null;
+  });
+
+  // Get default category from URL or use Observation
+  const defaultCategory = $derived(
+    urlCategory && Object.values(NoteCategory).includes(urlCategory)
+      ? urlCategory
+      : NoteCategory.Observation
+  );
+
+  // Get default date from URL
+  const defaultDate = $derived.by(() => {
+    if (!urlDate) return undefined;
+    const date = new Date(urlDate);
+    return isNaN(date.getTime()) ? undefined : date;
+  });
 
   // Delete confirmation dialog state
   let isDeleteDialogOpen = $state(false);
   let deletingNoteId = $state<string | null>(null);
 
-  // Form state
-  let formTitle = $state("");
-  let formContent = $state("");
-  let formCategory = $state<NoteCategory>(NoteCategory.Observation);
-  let formChecklistItems = $state<
-    Array<{ id?: string; text: string; isCompleted: boolean }>
-  >([]);
-
   // Category config
   const categoryConfig: Record<
     NoteCategory,
-    { label: string; icon: typeof StickyNote; color: string }
+    {
+      label: string;
+      icon: typeof StickyNote;
+      color: string;
+      description: string;
+    }
   > = {
     [NoteCategory.Observation]: {
       label: "Observation",
       icon: Eye,
       color: "text-blue-500 bg-blue-500/10",
+      description: "Record patterns, symptoms, or things you notice",
     },
     [NoteCategory.Question]: {
       label: "Question",
       icon: HelpCircle,
       color: "text-purple-500 bg-purple-500/10",
+      description: "Questions to ask your doctor or research later",
     },
     [NoteCategory.Task]: {
       label: "Task",
       icon: CheckSquare,
       color: "text-green-500 bg-green-500/10",
+      description: "Action items with optional checklist",
     },
     [NoteCategory.Marker]: {
       label: "Marker",
       icon: Flag,
       color: "text-orange-500 bg-orange-500/10",
+      description: "Mark significant events or milestones",
     },
   };
 
@@ -137,9 +159,8 @@
     loading = true;
     error = null;
     try {
-      // Load all notes (we'll filter on the client for responsiveness)
-      const data = await notesRemote.getNotes(undefined);
-      notes = data || [];
+      const notesData = await notesRemote.getNotes(undefined);
+      notes = notesData || [];
     } catch (err) {
       console.error("Failed to load notes:", err);
       error = "Failed to load notes";
@@ -190,68 +211,70 @@
     return true;
   }
 
+  // Helper to update URL with shallow routing
+  async function updateUrl(params: {
+    edit?: string | null;
+    new?: string | null;
+    category?: string | null;
+    date?: string | null;
+  }) {
+    const url = new URL($page.url);
+    if (params.edit !== undefined) {
+      if (params.edit) {
+        url.searchParams.set("edit", params.edit);
+      } else {
+        url.searchParams.delete("edit");
+      }
+    }
+    if (params.new !== undefined) {
+      if (params.new) {
+        url.searchParams.set("new", params.new);
+      } else {
+        url.searchParams.delete("new");
+      }
+    }
+    if (params.category !== undefined) {
+      if (params.category) {
+        url.searchParams.set("category", params.category);
+      } else {
+        url.searchParams.delete("category");
+      }
+    }
+    if (params.date !== undefined) {
+      if (params.date) {
+        url.searchParams.set("date", params.date);
+      } else {
+        url.searchParams.delete("date");
+      }
+    }
+    await goto(url.toString(), { replaceState: true, noScroll: true });
+  }
+
+  // Close dialog by clearing URL params
+  function closeDialog() {
+    updateUrl({ edit: null, new: null, category: null, date: null });
+  }
+
   // Open new note dialog
   function openNewNote(category?: NoteCategory) {
     if (!requireAuth()) return;
-
-    isNewNote = true;
-    editingNote = null;
-    formTitle = "";
-    formContent = "";
-    formCategory = category ?? NoteCategory.Observation;
-    formChecklistItems = [];
-    isNoteDialogOpen = true;
+    if (category) {
+      updateUrl({ edit: null, new: "true", category: category });
+    } else {
+      updateUrl({ edit: null, new: "true" });
+    }
   }
 
   // Open edit note dialog
   function openEditNote(note: Note) {
     if (!requireAuth()) return;
-
-    isNewNote = false;
-    editingNote = note;
-    formTitle = note.title ?? "";
-    formContent = note.content ?? "";
-    formCategory = note.category ?? NoteCategory.Observation;
-    formChecklistItems = (note.checklistItems ?? []).map((item) => ({
-      id: item.id,
-      text: item.text ?? "",
-      isCompleted: item.isCompleted ?? false,
-    }));
-    isNoteDialogOpen = true;
+    updateUrl({ new: null, edit: note.id, category: null, date: null });
   }
 
-  // Save note
-  async function saveNote() {
-    try {
-      const noteData = {
-        category: formCategory,
-        title: formTitle || undefined,
-        content: formContent,
-        checklistItems:
-          formChecklistItems.length > 0
-            ? formChecklistItems.map((item, index) => ({
-                id: item.id,
-                text: item.text,
-                isCompleted: item.isCompleted,
-                sortOrder: index,
-              }))
-            : undefined,
-      };
-
-      if (isNewNote) {
-        await notesRemote.createNote(noteData);
-      } else if (editingNote) {
-        await notesRemote.updateNote({
-          id: editingNote.id!,
-          ...noteData,
-        });
-      }
-
-      await loadData();
-      isNoteDialogOpen = false;
-    } catch (err) {
-      console.error("Failed to save note:", err);
-    }
+  // Handle note saved from dialog
+  async function handleNoteSaved(_savedNote: Note) {
+    await loadData();
+    closeDialog();
   }
 
   // Archive/unarchive note
@@ -304,19 +327,6 @@
     } catch (err) {
       console.error("Failed to toggle checklist item:", err);
     }
-  }
-
-  // Add checklist item to form
-  function addChecklistItem() {
-    formChecklistItems = [
-      ...formChecklistItems,
-      { text: "", isCompleted: false },
-    ];
-  }
-
-  // Remove checklist item from form
-  function removeChecklistItem(index: number) {
-    formChecklistItems = formChecklistItems.filter((_, i) => i !== index);
   }
 
   // Get checklist progress
@@ -381,7 +391,7 @@
           onclick={() => (selectedCategory = null)}
         >
           All
-          <Badge variant="secondary" class="ml-1.5"></Badge>
+          <Badge variant="secondary" class="ml-1.5">
             {categoryCounts["all"]}
           </Badge>
         </Button>
@@ -406,23 +416,24 @@
       </div>
 
       <!-- Status Toggle -->
-      <div class="flex items-center gap-4">
+      <div class=" items-center">
         <ToggleGroup.Root
           type="single"
+          spacing={0}
           value={statusFilter}
           onValueChange={(v) => {
             if (v) statusFilter = v as "active" | "archived" | "all";
           }}
+          class="border rounded-md flex"
         >
-          <ToggleGroup.Item value="active" class="gap-1.5">
-            <CheckSquare class="h-3.5 w-3.5" />
+          <ToggleGroup.Item value="active" class="px-3">
             Active
           </ToggleGroup.Item>
-          <ToggleGroup.Item value="archived" class="gap-1.5">
-            <Archive class="h-3.5 w-3.5" />
+          <ToggleGroup.Item value="archived" class="px-3">
+            <Archive class="h-3.5 w-3.5 shrink-0" />
             Archived
           </ToggleGroup.Item>
-          <ToggleGroup.Item value="all" class="gap-1.5">All</ToggleGroup.Item>
+          <ToggleGroup.Item value="all" class="px-3">All</ToggleGroup.Item>
         </ToggleGroup.Root>
       </div>
     </div>
@@ -588,6 +599,12 @@
                         {progress.completed}/{progress.total}
                       </span>
                     {/if}
+                    {#if note.attachments && note.attachments.length > 0}
+                      <span class="flex items-center gap-1">
+                        <ImagePlus class="h-3 w-3" />
+                        {note.attachments.length}
+                      </span>
+                    {/if}
                     {#if note.isArchived}
                       <Badge variant="secondary" class="text-xs">
                         Archived
@@ -604,119 +621,15 @@
   {/if}
 </div>
 
-<!-- Note Dialog -->
-<Dialog.Root bind:open={isNoteDialogOpen}>
-  <Dialog.Content class="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-    <Dialog.Header>
-      <Dialog.Title>
-        {isNewNote ? "New Note" : "Edit Note"}
-      </Dialog.Title>
-    </Dialog.Header>
-    <div class="space-y-4 py-4">
-      <!-- Category -->
-      <div class="space-y-2">
-        <Label>Category</Label>
-        <Select.Root type="single" bind:value={formCategory}>
-          <Select.Trigger>
-            {#if formCategory}
-              {@const config = categoryConfig[formCategory]}
-              {@const Icon = config.icon}
-              <span class="flex items-center gap-2">
-                <Icon class="h-4 w-4" />
-                {config.label}
-              </span>
-            {:else}
-              Select category
-            {/if}
-          </Select.Trigger>
-          <Select.Content>
-            {#each Object.values(NoteCategory) as category}
-              {@const config = categoryConfig[category]}
-              {@const Icon = config.icon}
-              <Select.Item value={category}>
-                <span class="flex items-center gap-2">
-                  <Icon class="h-4 w-4" />
-                  {config.label}
-                </span>
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-
-      <!-- Title -->
-      <div class="space-y-2">
-        <Label for="title">Title (optional)</Label>
-        <Input
-          id="title"
-          bind:value={formTitle}
-          placeholder="Give your note a title..."
-        />
-      </div>
-
-      <!-- Content -->
-      <div class="space-y-2">
-        <Label for="content">Content</Label>
-        <Textarea
-          id="content"
-          bind:value={formContent}
-          placeholder="Write your note here..."
-          rows={4}
-        />
-      </div>
-
-      <!-- Checklist Items -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <Label>Checklist Items</Label>
-          <Button variant="ghost" size="sm" onclick={addChecklistItem}>
-            <Plus class="h-3.5 w-3.5 mr-1" />
-            Add Item
-          </Button>
-        </div>
-        {#if formChecklistItems.length > 0}
-          <div class="space-y-2">
-            {#each formChecklistItems as item, index (index)}
-              <div class="flex items-center gap-2">
-                <Checkbox
-                  checked={item.isCompleted}
-                  onCheckedChange={(checked) =>
-                    (item.isCompleted = checked === true)}
-                />
-                <Input
-                  bind:value={item.text}
-                  placeholder="Checklist item..."
-                  class="flex-1"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 shrink-0"
-                  onclick={() => removeChecklistItem(index)}
-                >
-                  <Trash2 class="h-4 w-4" />
-                </Button>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <p class="text-sm text-muted-foreground">
-            Add checklist items to track progress on tasks
-          </p>
-        {/if}
-      </div>
-    </div>
-
-    <Dialog.Footer>
-      <Button variant="outline" onclick={() => (isNoteDialogOpen = false)}>
-        Cancel
-      </Button>
-      <Button onclick={saveNote} disabled={!formContent.trim()}>
-        {isNewNote ? "Create" : "Save"}
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+<!-- Note Editor Dialog -->
+<NoteEditorDialog
+  open={isNoteDialogOpen}
+  note={isNewNote ? null : editingNote}
+  defaultCategory={defaultCategory}
+  defaultDate={defaultDate}
+  onClose={closeDialog}
+  onSave={handleNoteSaved}
+/>
 
 <!-- Delete Confirmation Dialog -->
 <AlertDialog.Root bind:open={isDeleteDialogOpen}>

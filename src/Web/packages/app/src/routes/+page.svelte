@@ -11,9 +11,24 @@
   import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { isWidgetEnabled } from "$lib/types/dashboard-widgets";
+  import * as notesRemote from "$lib/data/notes.remote";
+  import type { Note } from "$api";
+  import { onMount } from "svelte";
 
   const realtimeStore = getRealtimeStore();
   const settingsStore = getSettingsStore();
+
+  // Notes state for chart display
+  let notes = $state<Note[]>([]);
+
+  onMount(async () => {
+    try {
+      const notesData = await notesRemote.getNotes(undefined);
+      notes = notesData || [];
+    } catch (err) {
+      console.error("Failed to load notes:", err);
+    }
+  });
 
   // Get widgets array from settings (for main section visibility)
   const widgets = $derived(settingsStore.features?.widgets);
@@ -45,6 +60,7 @@
     <GlucoseChartCard
       entries={realtimeStore.entries}
       treatments={realtimeStore.treatments}
+      {notes}
       showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
       defaultFocusHours={focusHours}
     />

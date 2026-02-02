@@ -78,4 +78,10 @@ public class Note
     /// </summary>
     [JsonPropertyName("stateSpanLinks")]
     public List<NoteStateSpanLink> StateSpanLinks { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the attachments associated with this note (metadata only)
+    /// </summary>
+    [JsonPropertyName("attachments")]
+    public List<NoteAttachment> Attachments { get; set; } = new();
 }

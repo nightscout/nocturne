@@ -2,7 +2,7 @@
   import { Tooltip } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin, type BasalPoint, type Treatment } from "$lib/api";
+  import { BasalDeliveryOrigin, NoteCategory, type BasalPoint, type Treatment } from "$lib/api";
   import type { TimeSeriesPoint } from "$lib/data/chart-data.remote";
   import type {
     StateSpanChartData,
@@ -34,6 +34,15 @@
     config: { color: string };
   }
 
+  interface NoteMarker {
+    id?: string;
+    time: Date;
+    title?: string;
+    content?: string;
+    category: NoteCategory;
+    config: { color: string };
+  }
+
   // Profile span extends StateSpanChartData with profileName
   type ProfileSpan = DisplaySpan<StateSpanChartData> & { profileName: string };
 
@@ -53,6 +62,7 @@
     findNearbyBolus: (time: Date) => BolusMarker | undefined;
     findNearbyCarbs: (time: Date) => CarbMarker | undefined;
     findNearbyDeviceEvent: (time: Date) => DeviceEventMarker | undefined;
+    findNearbyNote: (time: Date) => NoteMarker | undefined;
     findActivePumpMode: (time: Date) => DisplaySpan<StateSpanChartData> | undefined;
     findActiveOverride: (time: Date) => DisplaySpan<StateSpanChartData> | undefined;
     findActiveProfile: (time: Date) => ProfileSpan | undefined;
@@ -64,6 +74,7 @@
     showBolus: boolean;
     showCarbs: boolean;
     showDeviceEvents: boolean;
+    showNotes: boolean;
     showIob: boolean;
     showCob: boolean;
     showBasal: boolean;
@@ -84,6 +95,7 @@
     findNearbyBolus,
     findNearbyCarbs,
     findNearbyDeviceEvent,
+    findNearbyNote,
     findActivePumpMode,
     findActiveOverride,
     findActiveProfile,
@@ -94,6 +106,7 @@
     showBolus,
     showCarbs,
     showDeviceEvents,
+    showNotes,
     showIob,
     showCob,
     showBasal,
@@ -123,6 +136,7 @@
     {@const nearbyBolus = findNearbyBolus(data.time)}
     {@const nearbyCarbs = findNearbyCarbs(data.time)}
     {@const nearbyDeviceEvent = findNearbyDeviceEvent(data.time)}
+    {@const nearbyNote = findNearbyNote(data.time)}
     {@const nearbySystemEvent = findNearbySystemEvent(data.time)}
 
     <Tooltip.Header
@@ -161,6 +175,14 @@
           label={nearbyDeviceEvent.eventType}
           value={nearbyDeviceEvent.notes || ""}
           color={nearbyDeviceEvent.config.color}
+          class="font-medium"
+        />
+      {/if}
+      {#if showNotes && nearbyNote}
+        <Tooltip.Item
+          label={nearbyNote.title || nearbyNote.category}
+          value={nearbyNote.content || ""}
+          color={nearbyNote.config.color}
           class="font-medium"
         />
       {/if}

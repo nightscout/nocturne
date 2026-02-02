@@ -7,6 +7,8 @@
     type TrackerInstanceDto,
     type TrackerDefinitionDto,
     type TrackerCategory,
+    type Note,
+    NoteCategory,
   } from "$lib/api";
 
   // Extended Treatment type that may include foods (populated externally)
@@ -62,6 +64,7 @@
   import DeviceEventMarker from "./markers/DeviceEventMarker.svelte";
   import SystemEventMarker from "./markers/SystemEventMarker.svelte";
   import TrackerExpirationMarker from "./markers/TrackerExpirationMarker.svelte";
+  import NoteMarker from "./markers/NoteMarker.svelte";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -88,8 +91,10 @@
     initialShowOverrideSpans?: boolean;
     initialShowProfileSpans?: boolean;
     initialShowActivitySpans?: boolean;
+    initialShowNotes?: boolean;
     trackerInstances?: TrackerInstanceDto[];
     trackerDefinitions?: TrackerDefinitionDto[];
+    notes?: Note[];
     /** Hide header, mini overview, and legend for embedded/compact mode */
     compact?: boolean;
     /** Custom height class override (e.g., "h-[300px]") */
@@ -116,8 +121,10 @@
     initialShowOverrideSpans = false,
     initialShowProfileSpans = false,
     initialShowActivitySpans = false,
+    initialShowNotes = true,
     trackerInstances = realtimeStore.trackerInstances,
     trackerDefinitions = realtimeStore.trackerDefinitions,
+    notes = [],
     compact = false,
     heightClass,
     defaultFocusHours,
@@ -152,6 +159,8 @@
   let showProfileSpans = $state(initialShowProfileSpans);
   // svelte-ignore state_referenced_locally
   let showActivitySpans = $state(initialShowActivitySpans);
+  // svelte-ignore state_referenced_locally
+  let showNotes = $state(initialShowNotes);
   let showPumpModes = $state(true);
   let expandedPumpModes = $state(false);
 
@@ -500,6 +509,64 @@
   function getTreatmentTime(t: Treatment): number {
     return t.mills ?? (t.created_at ? new Date(t.created_at).getTime() : 0);
   }
+
+  // Note category configuration
+  const noteCategoryConfig: Record<
+    NoteCategory,
+    { label: string; color: string; bgColor: string }
+  > = {
+    [NoteCategory.Observation]: {
+      label: "Observation",
+      color: "var(--chart-1)",
+      bgColor: "hsl(var(--chart-1) / 0.2)",
+    },
+    [NoteCategory.Question]: {
+      label: "Question",
+      color: "var(--chart-2)",
+      bgColor: "hsl(var(--chart-2) / 0.2)",
+    },
+    [NoteCategory.Task]: {
+      label: "Task",
+      color: "var(--chart-3)",
+      bgColor: "hsl(var(--chart-3) / 0.2)",
+    },
+    [NoteCategory.Marker]: {
+      label: "Marker",
+      color: "var(--chart-4)",
+      bgColor: "hsl(var(--chart-4) / 0.2)",
+    },
+  };
+
+  // Filter notes to current display range and create markers
+  const noteMarkers = $derived.by(() => {
+    if (!notes || notes.length === 0) return [];
+    const rangeStart = displayDateRangeWithPredictions.from.getTime();
+    const rangeEnd = displayDateRangeWithPredictions.to.getTime();
+
+    return notes
+      .filter((note) => {
+        const noteTime = note.occurredAt
+          ? new Date(note.occurredAt).getTime()
+          : note.createdAt
+            ? new Date(note.createdAt).getTime()
+            : 0;
+        return noteTime >= rangeStart && noteTime <= rangeEnd;
+      })
+      .map((note) => ({
+        id: note.id,
+        time: new Date(
+          note.occurredAt
+            ? new Date(note.occurredAt).getTime()
+            : note.createdAt
+              ? new Date(note.createdAt).getTime()
+              : 0
+        ),
+        title: note.title,
+        content: note.content,
+        category: note.category ?? NoteCategory.Observation,
+        config: noteCategoryConfig[note.category ?? NoteCategory.Observation],
+      }));
+  });
 
   // Thresholds
   const lowThreshold = $derived(Number(bg(chartConfig.low.threshold ?? 55)));
@@ -1072,6 +1139,13 @@
     );
   }
 
+  function findNearbyNote(time: Date) {
+    return noteMarkers.find(
+      (n) =>
+        Math.abs(n.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
+    );
+  }
+
   function findActiveSpan<T extends { startTime: Date; endTime?: Date | null }>(
     spans: T[],
     time: Date,
@@ -1307,6 +1381,20 @@
                 {/each}
               {/if}
 
+              <!-- Note markers -->
+              {#if showNotes}
+                {#each noteMarkers as marker (marker.id)}
+                  {@const xPos = context.xScale(marker.time)}
+                  {@const yPos = context.yScale(glucoseScale(highThreshold * 1.1))}
+                  <NoteMarker
+                    {xPos}
+                    {yPos}
+                    category={marker.category}
+                    color={marker.config.color}
+                  />
+                {/each}
+              {/if}
+
               <!-- Basal highlight -->
               {#if showBasal}
                 <Highlight
@@ -1335,6 +1423,7 @@
             {findNearbyBolus}
             {findNearbyCarbs}
             {findNearbyDeviceEvent}
+            {findNearbyNote}
             {findActivePumpMode}
             {findActiveOverride}
             {findActiveProfile}
@@ -1345,6 +1434,7 @@
             {showBolus}
             {showCarbs}
             {showDeviceEvents}
+            {showNotes}
             {showIob}
             {showCob}
             {showBasal}
@@ -1576,6 +1666,20 @@
                 {/each}
               {/if}
 
+              <!-- Note markers -->
+              {#if showNotes}
+                {#each noteMarkers as marker (marker.id)}
+                  {@const xPos = context.xScale(marker.time)}
+                  {@const yPos = context.yScale(glucoseScale(highThreshold * 1.1))}
+                  <NoteMarker
+                    {xPos}
+                    {yPos}
+                    category={marker.category}
+                    color={marker.config.color}
+                  />
+                {/each}
+              {/if}
+
               <!-- Basal highlight -->
               {#if showBasal}
                 <Highlight
@@ -1604,6 +1708,7 @@
             {findNearbyBolus}
             {findNearbyCarbs}
             {findNearbyDeviceEvent}
+            {findNearbyNote}
             {findActivePumpMode}
             {findActiveOverride}
             {findActiveProfile}
@@ -1614,6 +1719,7 @@
             {showBolus}
             {showCarbs}
             {showDeviceEvents}
+            {showNotes}
             {showIob}
             {showCob}
             {showBasal}
@@ -1673,6 +1779,7 @@
       {showOverrideSpans}
       {showProfileSpans}
       {showActivitySpans}
+      {showNotes}
       onToggleBasal={() => (showBasal = !showBasal)}
       onToggleIob={() => (showIob = !showIob)}
       onToggleCob={() => (showCob = !showCob)}
@@ -1688,10 +1795,12 @@
       onToggleOverrideSpans={() => (showOverrideSpans = !showOverrideSpans)}
       onToggleProfileSpans={() => (showProfileSpans = !showProfileSpans)}
       onToggleActivitySpans={() => (showActivitySpans = !showActivitySpans)}
+      onToggleNotes={() => (showNotes = !showNotes)}
       {deviceEventMarkers}
       {systemEvents}
       {pumpModeSpans}
       {scheduledTrackerMarkers}
+      {noteMarkers}
       {currentPumpMode}
       {uniquePumpModes}
       {expandedPumpModes}

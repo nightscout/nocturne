@@ -73,8 +73,8 @@ export const getNote = query(z.string(), async (id) => {
 export const createNote = command(
 	z.object({
 		category: z.enum(NoteCategory),
-		title: z.string().optional(),
-		content: z.string(),
+		title: z.string(),
+		content: z.string().optional(),
 		occurredAt: z.coerce.date().optional(),
 		checklistItems: z
 			.array(
@@ -96,6 +96,70 @@ export const createNote = command(
 			return result;
 		} catch (err) {
 			console.error('Error creating note:', err);
+			throw error(500, 'Failed to create note');
+		}
+	}
+);
+
+/**
+ * Create a new note with optional tracker links
+ * Creates the note first, then links any specified trackers
+ */
+export const createNoteWithTrackerLinks = command(
+	z.object({
+		category: z.enum(NoteCategory),
+		title: z.string(),
+		content: z.string().optional(),
+		occurredAt: z.coerce.date().optional(),
+		checklistItems: z
+			.array(
+				z.object({
+					text: z.string(),
+					isCompleted: z.boolean().optional(),
+					sortOrder: z.number().optional(),
+				})
+			)
+			.optional(),
+		trackerLinks: z
+			.array(
+				z.object({
+					trackerDefinitionId: z.string(),
+					thresholds: z
+						.array(
+							z.object({
+								hoursOffset: z.number().optional(),
+								description: z.string().optional(),
+							})
+						)
+						.optional(),
+				})
+			)
+			.optional(),
+	}),
+	async ({ trackerLinks, ...noteRequest }) => {
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
+
+		try {
+			// First create the note
+			const note = await apiClient.notes.createNote(noteRequest as CreateNoteRequest);
+
+			// Then link any trackers
+			if (trackerLinks && trackerLinks.length > 0 && note.id) {
+				for (const link of trackerLinks) {
+					await apiClient.notes.linkTracker(note.id, {
+						trackerDefinitionId: link.trackerDefinitionId,
+						thresholds: link.thresholds,
+					} as LinkTrackerRequest);
+				}
+				// Refresh to get the note with links
+				await getNote(note.id).refresh();
+			}
+
+			await getNotes(undefined).refresh();
+			return note;
+		} catch (err) {
+			console.error('Error creating note with tracker links:', err);
 			throw error(500, 'Failed to create note');
 		}
 	}

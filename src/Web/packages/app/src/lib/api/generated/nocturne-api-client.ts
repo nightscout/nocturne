@@ -21151,6 +21151,7 @@ export interface Note {
     checklistItems?: NoteChecklistItem[];
     trackerLinks?: NoteTrackerLink[];
     stateSpanLinks?: NoteStateSpanLink[];
+    attachments?: NoteAttachment[];
 }
 
 export enum NoteCategory {
@@ -21185,6 +21186,14 @@ export interface NoteTrackerThreshold {
 export interface NoteStateSpanLink {
     id?: string | undefined;
     stateSpanId?: string;
+    createdAt?: Date;
+}
+
+export interface NoteAttachment {
+    id?: string | undefined;
+    fileName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
     createdAt?: Date;
 }
 
@@ -21244,14 +21253,6 @@ export interface UpdateChecklistItemRequest {
 export interface ArchiveNoteRequest {
     /** True to archive, false to unarchive */
     archive: boolean;
-}
-
-export interface NoteAttachment {
-    id?: string | undefined;
-    fileName?: string;
-    mimeType?: string;
-    sizeBytes?: number;
-    createdAt?: Date;
 }
 
 /** Request model for linking a tracker to a note */
