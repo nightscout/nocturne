@@ -52,7 +52,12 @@ public enum StateSpanCategory
     /// <summary>
     /// User-annotated travel/timezone change period
     /// </summary>
-    Travel
+    Travel,
+
+    /// <summary>
+    /// Data exclusion period (compression lows, sensor errors)
+    /// </summary>
+    DataExclusion
 }
 
 /// <summary>

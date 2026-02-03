@@ -22,7 +22,7 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { Chart, Svg, Axis, ChartClipPath, Highlight } from "layerchart";
+  import { Chart, Svg, Axis, ChartClipPath, Highlight, BrushContext, AnnotationRange } from "layerchart";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
   import { chartConfig, getMealNameForTime } from "$lib/constants";
   import { bisector } from "d3";
@@ -94,6 +94,10 @@
     compact?: boolean;
     /** Custom height class override (e.g., "h-[300px]") */
     heightClass?: string;
+    /** Initial selection domain for brush selection mode */
+    selectionDomain?: [Date, Date] | null;
+    /** Callback when brush selection changes (enables selection mode) */
+    onSelectionChange?: (domain: [Date, Date] | null) => void;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -121,7 +125,12 @@
     compact = false,
     heightClass,
     defaultFocusHours,
+    selectionDomain,
+    onSelectionChange,
   }: ComponentProps = $props();
+
+  // Selection mode is enabled when onSelectionChange callback is provided
+  const isSelectionMode = $derived(!!onSelectionChange);
 
   // ===== STATE =====
   let predictionData = $state<PredictionData | null>(null);
@@ -567,6 +576,7 @@
         activity: [],
         tempBasal: [],
         basalDelivery: [] as (BasalDeliveryChartData & { displayStart: Date; displayEnd: Date })[],
+        dataExclusion: [] as { id: string; state: string; displayStart: Date; displayEnd: Date; color: string }[],
         events: [],
       };
     }
@@ -602,6 +612,17 @@
     // Process basal delivery spans (all origins, with rate)
     const basalDelivery = processSpans(stateData.basalDeliverySpans, rangeStart, rangeEnd);
 
+    // Process data exclusion spans (compression lows, sensor errors)
+    const dataExclusion = processSpans(stateData.dataExclusionSpans, rangeStart, rangeEnd).map(
+      (span) => ({
+        id: span.id,
+        state: span.state,
+        displayStart: span.displayStart,
+        displayEnd: span.displayEnd,
+        color: span.color,
+      })
+    );
+
     const events = stateData.systemEvents
       ? stateData.systemEvents.filter((event) => {
           const eventTime = event.time.getTime();
@@ -609,7 +630,7 @@
         })
       : [];
 
-    return { pumpMode, override, profile, activity, tempBasal, basalDelivery, events };
+    return { pumpMode, override, profile, activity, tempBasal, basalDelivery, dataExclusion, events };
   });
 
   // Derived references to processed state spans
@@ -619,6 +640,7 @@
   const activitySpans = $derived(processedStateSpans.activity);
   const tempBasalSpans = $derived(processedStateSpans.tempBasal);
   const basalDeliverySpans = $derived(processedStateSpans.basalDelivery);
+  const dataExclusionSpans = $derived(processedStateSpans.dataExclusion);
   const systemEvents = $derived(processedStateSpans.events);
 
   // Stale basal detection - use basalDeliverySpans from state data
@@ -1216,6 +1238,17 @@
               />
             </ChartClipPath>
 
+            <!-- Data Exclusion Spans (compression lows, sensor errors) - render behind glucose -->
+            <ChartClipPath>
+              {#each dataExclusionSpans as span (span.id)}
+                <AnnotationRange
+                  x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+                  y={[glucoseScale(glucoseYMax), glucoseScale(0)]}
+                  fill={span.color}
+                />
+              {/each}
+            </ChartClipPath>
+
             <!-- Glucose Track -->
             <GlucoseTrack
               {glucoseData}
@@ -1326,6 +1359,24 @@
               {/if}
             </ChartClipPath>
           </Svg>
+
+          <!-- Selection brush for selection mode -->
+          {#if isSelectionMode}
+            <BrushContext
+              axis="x"
+              mode="separated"
+              xDomain={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
+              onChange={(e: { xDomain: unknown }) => {
+                if (e.xDomain && Array.isArray(e.xDomain) && e.xDomain.length === 2) {
+                  onSelectionChange?.([new Date(e.xDomain[0] as number), new Date(e.xDomain[1] as number)]);
+                }
+              }}
+              classes={{
+                range: 'bg-warning/30 border border-warning/60 rounded',
+                handle: 'bg-warning hover:bg-warning/80 rounded-sm'
+              }}
+            />
+          {/if}
 
           <ChartTooltip
             {context}
@@ -1485,6 +1536,17 @@
               />
             </ChartClipPath>
 
+            <!-- Data Exclusion Spans (compression lows, sensor errors) - render behind glucose -->
+            <ChartClipPath>
+              {#each dataExclusionSpans as span (span.id)}
+                <AnnotationRange
+                  x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+                  y={[glucoseScale(glucoseYMax), glucoseScale(0)]}
+                  fill={span.color}
+                />
+              {/each}
+            </ChartClipPath>
+
             <!-- Glucose Track -->
             <GlucoseTrack
               {glucoseData}
@@ -1595,6 +1657,24 @@
               {/if}
             </ChartClipPath>
           </Svg>
+
+          <!-- Selection brush for selection mode -->
+          {#if isSelectionMode}
+            <BrushContext
+              axis="x"
+              mode="separated"
+              xDomain={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
+              onChange={(e: { xDomain: unknown }) => {
+                if (e.xDomain && Array.isArray(e.xDomain) && e.xDomain.length === 2) {
+                  onSelectionChange?.([new Date(e.xDomain[0] as number), new Date(e.xDomain[1] as number)]);
+                }
+              }}
+              classes={{
+                range: 'bg-warning/30 border border-warning/60 rounded',
+                handle: 'bg-warning hover:bg-warning/80 rounded-sm'
+              }}
+            />
+          {/if}
 
           <ChartTooltip
             {context}

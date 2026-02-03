@@ -39,6 +39,12 @@ public class UISettingsConfiguration
     /// </summary>
     [JsonPropertyName("services")]
     public ServicesSettings Services { get; set; } = new();
+
+    /// <summary>
+    /// Data quality settings including sleep schedule and compression low detection
+    /// </summary>
+    [JsonPropertyName("dataQuality")]
+    public DataQualitySettings DataQuality { get; set; } = new();
 }
 
 #region Device Settings
@@ -552,6 +558,64 @@ public class SyncSettings
 
     [JsonPropertyName("backgroundRefresh")]
     public bool BackgroundRefresh { get; set; } = true;
+}
+
+#endregion
+
+#region Data Quality Settings
+
+/// <summary>
+/// Data quality settings including sleep schedule and compression low detection
+/// </summary>
+public class DataQualitySettings
+{
+    /// <summary>
+    /// User's typical sleep schedule (used by compression low detection, overnight reports, etc.)
+    /// </summary>
+    [JsonPropertyName("sleepSchedule")]
+    public SleepScheduleSettings SleepSchedule { get; set; } = new();
+
+    /// <summary>
+    /// Compression low detection settings
+    /// </summary>
+    [JsonPropertyName("compressionLowDetection")]
+    public CompressionLowDetectionSettings CompressionLowDetection { get; set; } = new();
+}
+
+/// <summary>
+/// User's typical sleep schedule
+/// </summary>
+public class SleepScheduleSettings
+{
+    /// <summary>
+    /// Typical bedtime hour (0-23), e.g., 23 for 11 PM
+    /// </summary>
+    [JsonPropertyName("bedtimeHour")]
+    public int BedtimeHour { get; set; } = 23;
+
+    /// <summary>
+    /// Typical wake time hour (0-23), e.g., 7 for 7 AM
+    /// </summary>
+    [JsonPropertyName("wakeTimeHour")]
+    public int WakeTimeHour { get; set; } = 7;
+}
+
+/// <summary>
+/// Compression low detection settings
+/// </summary>
+public class CompressionLowDetectionSettings
+{
+    /// <summary>
+    /// Whether automatic overnight detection is enabled
+    /// </summary>
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Whether to exclude accepted compression lows from statistics calculations
+    /// </summary>
+    [JsonPropertyName("excludeFromStatistics")]
+    public bool ExcludeFromStatistics { get; set; } = true;
 }
 
 #endregion

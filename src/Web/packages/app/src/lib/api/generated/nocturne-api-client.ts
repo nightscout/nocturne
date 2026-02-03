@@ -4435,6 +4435,289 @@ export class CompatibilityClient {
     }
 }
 
+export class CompressionLowClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get compression low suggestions with optional filtering
+     * @param status (optional) 
+     * @param nightOf (optional) 
+     */
+    getSuggestions(status?: CompressionLowStatus | null | undefined, nightOf?: string | null | undefined, signal?: AbortSignal): Promise<CompressionLowSuggestion[]> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions?";
+        if (status !== undefined && status !== null)
+            url_ += "status=" + encodeURIComponent("" + status) + "&";
+        if (nightOf !== undefined && nightOf !== null)
+            url_ += "nightOf=" + encodeURIComponent("" + nightOf) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSuggestions(_response);
+        });
+    }
+
+    protected processGetSuggestions(response: Response): Promise<CompressionLowSuggestion[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CompressionLowSuggestion[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<CompressionLowSuggestion[]>(null as any);
+    }
+
+    /**
+     * Get a single suggestion with glucose entries for charting
+     */
+    getSuggestion(id: string, signal?: AbortSignal): Promise<CompressionLowSuggestionWithEntries> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSuggestion(_response);
+        });
+    }
+
+    protected processGetSuggestion(response: Response): Promise<CompressionLowSuggestionWithEntries> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CompressionLowSuggestionWithEntries;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<CompressionLowSuggestionWithEntries>(null as any);
+    }
+
+    /**
+     * Delete a suggestion and its associated state span
+     */
+    deleteSuggestion(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteSuggestion(_response);
+        });
+    }
+
+    protected processDeleteSuggestion(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Accept a suggestion with adjusted bounds
+     */
+    acceptSuggestion(id: string, request: AcceptSuggestionRequest, signal?: AbortSignal): Promise<StateSpan> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}/accept";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAcceptSuggestion(_response);
+        });
+    }
+
+    protected processAcceptSuggestion(response: Response): Promise<StateSpan> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan>(null as any);
+    }
+
+    /**
+     * Dismiss a suggestion
+     */
+    dismissSuggestion(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}/dismiss";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDismissSuggestion(_response);
+        });
+    }
+
+    protected processDismissSuggestion(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Manually trigger detection for a date range (for testing)
+     */
+    triggerDetection(request: TriggerDetectionRequest, signal?: AbortSignal): Promise<DetectionResult> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/detect";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTriggerDetection(_response);
+        });
+    }
+
+    protected processTriggerDetection(response: Response): Promise<DetectionResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DetectionResult;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DetectionResult>(null as any);
+    }
+}
+
 export class ConnectorFoodEntriesClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -18174,6 +18457,7 @@ export enum StateSpanCategory {
     Exercise = "Exercise",
     Illness = "Illness",
     Travel = "Travel",
+    DataExclusion = "DataExclusion",
 }
 
 export enum BasalDeliveryState {
@@ -19626,6 +19910,64 @@ export interface ManualTestRequest {
     requestBody?: string | undefined;
 }
 
+export interface CompressionLowSuggestion {
+    id?: string;
+    startMills?: number;
+    endMills?: number;
+    confidence?: number;
+    status?: CompressionLowStatus;
+    nightOf?: Date;
+    createdAt?: number;
+    reviewedAt?: number | undefined;
+    stateSpanId?: string | undefined;
+    lowestGlucose?: number | undefined;
+    dropRate?: number | undefined;
+    recoveryMinutes?: number | undefined;
+}
+
+export enum CompressionLowStatus {
+    Pending = "Pending",
+    Accepted = "Accepted",
+    Dismissed = "Dismissed",
+}
+
+export interface CompressionLowSuggestionWithEntries extends CompressionLowSuggestion {
+    entries?: Entry[];
+    treatments?: Treatment[];
+}
+
+export function isCompressionLowSuggestionWithEntries(object: any): object is CompressionLowSuggestionWithEntries {
+    return object && object[''] === 'CompressionLowSuggestionWithEntries';
+}
+
+export interface AcceptSuggestionRequest {
+    startMills?: number;
+    endMills?: number;
+}
+
+/** Result of compression low detection */
+export interface DetectionResult {
+    totalSuggestionsCreated?: number;
+    nightsProcessed?: number;
+    results?: NightDetectionResult[];
+}
+
+/** Result of detection for a single night */
+export interface NightDetectionResult {
+    nightOf?: string;
+    suggestionsCreated?: number;
+}
+
+/** Request to trigger compression low detection */
+export interface TriggerDetectionRequest {
+    /** Single night to process (use this OR startDate/endDate) */
+    nightOf?: string | undefined;
+    /** Start of date range (inclusive) */
+    startDate?: string | undefined;
+    /** End of date range (inclusive) */
+    endDate?: string | undefined;
+}
+
 export interface ConnectorFoodEntry {
     id?: string;
     connectorSource?: string;
@@ -19732,6 +20074,7 @@ export enum InAppNotificationType {
     PredictedLow = "PredictedLow",
     SuggestedMealMatch = "SuggestedMealMatch",
     SuggestedTrackerMatch = "SuggestedTrackerMatch",
+    CompressionLowReview = "CompressionLowReview",
 }
 
 export enum NotificationUrgency {
@@ -20906,6 +21249,7 @@ export interface UISettingsConfiguration {
     features?: FeatureSettings;
     notifications?: NotificationSettings;
     services?: ServicesSettings;
+    dataQuality?: DataQualitySettings;
 }
 
 export interface DeviceSettings {
@@ -21211,6 +21555,21 @@ export interface SyncSettings {
     autoSync?: boolean;
     syncOnAppOpen?: boolean;
     backgroundRefresh?: boolean;
+}
+
+export interface DataQualitySettings {
+    sleepSchedule?: SleepScheduleSettings;
+    compressionLowDetection?: CompressionLowDetectionSettings;
+}
+
+export interface SleepScheduleSettings {
+    bedtimeHour?: number;
+    wakeTimeHour?: number;
+}
+
+export interface CompressionLowDetectionSettings {
+    enabled?: boolean;
+    excludeFromStatistics?: boolean;
 }
 
 /** User preferences response */

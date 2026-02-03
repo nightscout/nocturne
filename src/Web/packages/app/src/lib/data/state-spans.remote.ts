@@ -67,6 +67,7 @@ export interface ChartStateData {
 	profileSpans: StateSpanChartData[];
 	activitySpans: StateSpanChartData[];
 	basalDeliverySpans: BasalDeliveryChartData[];
+	dataExclusionSpans: StateSpanChartData[];
 	systemEvents: SystemEventChartData[];
 }
 
@@ -169,6 +170,17 @@ function getBasalDeliveryColor(origin: BasalDeliveryOrigin): string {
 }
 
 /**
+ * Map data exclusion state to CSS color variable
+ */
+function getDataExclusionColor(state: string): string {
+	const stateColors: Record<string, string> = {
+		CompressionLow: 'var(--data-exclusion-compression-low)',
+		SensorError: 'var(--data-exclusion-sensor-error)',
+	};
+	return stateColors[state] ?? 'var(--muted-foreground)';
+}
+
+/**
  * Get state span and system event data for chart visualization
  */
 export const getChartStateData = query(stateDataSchema, async ({ startTime, endTime }) => {
@@ -184,6 +196,7 @@ export const getChartStateData = query(stateDataSchema, async ({ startTime, endT
 			profileSpans,
 			activitySpans,
 			basalDeliverySpans,
+			dataExclusionSpans,
 			systemEvents,
 		] = await Promise.all([
 			apiClient.stateSpans.getPumpModes(startTime, endTime),
@@ -193,6 +206,12 @@ export const getChartStateData = query(stateDataSchema, async ({ startTime, endT
 			apiClient.stateSpans.getActivities(startTime, endTime),
 			apiClient.stateSpans.getStateSpans(
 				StateSpanCategory.BasalDelivery,
+				undefined, // state - get all
+				startTime,
+				endTime
+			),
+			apiClient.stateSpans.getStateSpans(
+				StateSpanCategory.DataExclusion,
 				undefined, // state - get all
 				startTime,
 				endTime
@@ -298,6 +317,17 @@ export const getChartStateData = query(stateDataSchema, async ({ startTime, endT
 			};
 		});
 
+		// Transform data exclusion spans (compression lows, sensor errors, etc.)
+		const processedDataExclusions: StateSpanChartData[] = (dataExclusionSpans ?? []).map((span) => ({
+			id: span.id ?? '',
+			category: span.category ?? StateSpanCategory.DataExclusion,
+			state: span.state ?? 'Unknown',
+			startTime: new Date(span.startMills ?? 0),
+			endTime: span.endMills ? new Date(span.endMills) : null,
+			color: getDataExclusionColor(span.state ?? ''),
+			metadata: span.metadata,
+		}));
+
 		return {
 			pumpModeSpans: processedPumpModes,
 			connectivitySpans: processedConnectivity,
@@ -306,6 +336,7 @@ export const getChartStateData = query(stateDataSchema, async ({ startTime, endT
 			profileSpans: processedProfiles,
 			activitySpans: processedActivities,
 			basalDeliverySpans: processedBasalDelivery,
+			dataExclusionSpans: processedDataExclusions,
 			systemEvents: processedEvents,
 		};
 	} catch (err) {

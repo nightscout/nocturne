@@ -3524,6 +3524,270 @@
         }
       }
     },
+    "/api/v4/compression-lows/suggestions": {
+      "get": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Get compression low suggestions with optional filtering",
+        "operationId": "CompressionLow_GetSuggestions",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CompressionLowStatus"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 1
+          },
+          {
+            "name": "nightOf",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompressionLowSuggestion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions/{id}": {
+      "get": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Get a single suggestion with glucose entries for charting",
+        "operationId": "CompressionLow_GetSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompressionLowSuggestionWithEntries"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Delete a suggestion and its associated state span",
+        "operationId": "CompressionLow_DeleteSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions/{id}/accept": {
+      "post": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Accept a suggestion with adjusted bounds",
+        "operationId": "CompressionLow_AcceptSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptSuggestionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateSpan"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Dismiss a suggestion",
+        "operationId": "CompressionLow_DismissSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/detect": {
+      "post": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Manually trigger detection for a date range (for testing)",
+        "description": "Provide either a single `nightOf` date or a range with `startDate` and `endDate`.\nWhen using a range, detection runs for each night in the range (inclusive).",
+        "operationId": "CompressionLow_TriggerDetection",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerDetectionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/connector-food-entries/import": {
       "post": {
         "tags": [
@@ -16163,7 +16427,8 @@
           "Sleep",
           "Exercise",
           "Illness",
-          "Travel"
+          "Travel",
+          "DataExclusion"
         ],
         "enum": [
           "PumpMode",
@@ -16174,7 +16439,8 @@
           "Sleep",
           "Exercise",
           "Illness",
-          "Travel"
+          "Travel",
+          "DataExclusion"
         ]
       },
       "BasalDeliveryState": {
@@ -20851,6 +21117,174 @@
           }
         }
       },
+      "CompressionLowSuggestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CompressionLowStatus"
+          },
+          "nightOf": {
+            "type": "string",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reviewedAt": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "stateSpanId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "lowestGlucose": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dropRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "recoveryMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "CompressionLowStatus": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pending",
+          "Accepted",
+          "Dismissed"
+        ],
+        "enum": [
+          "Pending",
+          "Accepted",
+          "Dismissed"
+        ]
+      },
+      "CompressionLowSuggestionWithEntries": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CompressionLowSuggestion"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Entry"
+                }
+              },
+              "treatments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Treatment"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AcceptSuggestionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DetectionResult": {
+        "type": "object",
+        "description": "Result of compression low detection",
+        "additionalProperties": false,
+        "properties": {
+          "totalSuggestionsCreated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nightsProcessed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NightDetectionResult"
+            }
+          }
+        }
+      },
+      "NightDetectionResult": {
+        "type": "object",
+        "description": "Result of detection for a single night",
+        "additionalProperties": false,
+        "properties": {
+          "nightOf": {
+            "type": "string"
+          },
+          "suggestionsCreated": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TriggerDetectionRequest": {
+        "type": "object",
+        "description": "Request to trigger compression low detection",
+        "additionalProperties": false,
+        "properties": {
+          "nightOf": {
+            "type": "string",
+            "description": "Single night to process (use this OR startDate/endDate)",
+            "nullable": true
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Start of date range (inclusive)",
+            "nullable": true
+          },
+          "endDate": {
+            "type": "string",
+            "description": "End of date range (inclusive)",
+            "nullable": true
+          }
+        }
+      },
       "ConnectorFoodEntry": {
         "type": "object",
         "additionalProperties": false,
@@ -21195,7 +21629,8 @@
           "AnonymousLoginRequest",
           "PredictedLow",
           "SuggestedMealMatch",
-          "SuggestedTrackerMatch"
+          "SuggestedTrackerMatch",
+          "CompressionLowReview"
         ],
         "enum": [
           "PasswordResetRequest",
@@ -21206,7 +21641,8 @@
           "AnonymousLoginRequest",
           "PredictedLow",
           "SuggestedMealMatch",
-          "SuggestedTrackerMatch"
+          "SuggestedTrackerMatch",
+          "CompressionLowReview"
         ]
       },
       "NotificationUrgency": {
@@ -24838,6 +25274,9 @@
           },
           "services": {
             "$ref": "#/components/schemas/ServicesSettings"
+          },
+          "dataQuality": {
+            "$ref": "#/components/schemas/DataQualitySettings"
           }
         }
       },
@@ -25735,6 +26174,44 @@
             "type": "boolean"
           },
           "backgroundRefresh": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DataQualitySettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sleepSchedule": {
+            "$ref": "#/components/schemas/SleepScheduleSettings"
+          },
+          "compressionLowDetection": {
+            "$ref": "#/components/schemas/CompressionLowDetectionSettings"
+          }
+        }
+      },
+      "SleepScheduleSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bedtimeHour": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wakeTimeHour": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CompressionLowDetectionSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "excludeFromStatistics": {
             "type": "boolean"
           }
         }
