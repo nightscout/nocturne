@@ -73,7 +73,8 @@
                   <Definition Id="NocturneSmall"
                               DisplayName="Nocturne (Small)"
                               Description="Displays current glucose value and trend direction"
-                              AllowMultiple="true">
+                              AllowMultiple="true"
+                              IsCustomizable="true">
                     <Capabilities>
                       <Capability>
                         <Size Name="small" />
@@ -94,7 +95,8 @@
                   <Definition Id="NocturneMedium"
                               DisplayName="Nocturne"
                               Description="Displays glucose, trend, and insulin/carbs on board"
-                              AllowMultiple="true">
+                              AllowMultiple="true"
+                              IsCustomizable="true">
                     <Capabilities>
                       <Capability>
                         <Size Name="medium" />
@@ -115,7 +117,8 @@
                   <Definition Id="NocturneLarge"
                               DisplayName="Nocturne Dashboard"
                               Description="Full dashboard with glucose, trend, IOB/COB, and predictions"
-                              AllowMultiple="true">
+                              AllowMultiple="true"
+                              IsCustomizable="true">
                     <Capabilities>
                       <Capability>
                         <Size Name="large" />

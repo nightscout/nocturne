@@ -1,6 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Windows.Widgets.Providers;
+using Nocturne.Widget.Contracts;
+using Nocturne.Widget.Infrastructure;
+using Nocturne.Widget.Infrastructure.Windows;
 using WinRT;
 
 namespace Nocturne.Widget.Windows11;
@@ -16,6 +21,7 @@ internal static class Program
     public static readonly Guid WidgetProviderClsid = new("B8E3F2A1-5C4D-4E6F-8A9B-1C2D3E4F5A6B");
 
     private static ManualResetEvent? _emptyWidgetListEvent;
+    private static IServiceProvider? _serviceProvider;
 
     // COM registration constants
     private const uint CLSCTX_LOCAL_SERVER = 4;
@@ -36,6 +42,12 @@ internal static class Program
     [DllImport("ole32.dll")]
     private static extern int CoRevokeClassObject(uint dwRegister);
 
+    /// <summary>
+    /// Gets the service provider for resolving dependencies
+    /// </summary>
+    public static IServiceProvider Services => _serviceProvider
+        ?? throw new InvalidOperationException("Service provider not initialized");
+
     [MTAThread]
     public static void Main(string[] args)
     {
@@ -51,6 +63,10 @@ internal static class Program
             Console.WriteLine("To test manually, run with: -RegisterProcessAsComServer");
             return;
         }
+
+        Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] Configuring services...");
+        _serviceProvider = ConfigureServices();
+        Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] Services configured");
 
         Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] Initializing COM wrappers...");
         // Initialize COM wrappers for WinRT interop - REQUIRED for widget provider
@@ -104,6 +120,29 @@ internal static class Program
     public static void SignalEmptyWidgetList()
     {
         _emptyWidgetListEvent?.Set();
+    }
+
+    private static IServiceProvider ConfigureServices()
+    {
+        var services = new ServiceCollection();
+
+        // Logging
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Debug);
+        });
+
+        // HTTP client
+        services.AddHttpClient();
+
+        // Credential store
+        services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
+
+        // API client
+        services.AddSingleton<INocturneApiClient, NocturneApiClient>();
+
+        return services.BuildServiceProvider();
     }
 }
 

@@ -1,7 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Windows.Widgets.Providers;
+using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Widget.Windows11;
 
@@ -11,12 +14,15 @@ namespace Nocturne.Widget.Windows11;
 [ComVisible(true)]
 [ComDefaultInterface(typeof(IWidgetProvider))]
 [Guid("B8E3F2A1-5C4D-4E6F-8A9B-1C2D3E4F5A6B")]
-// Removed [ClassInterface(ClassInterfaceType.None)] to match Microsoft sample
-public sealed class NocturneWidgetProvider : IWidgetProvider
+public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 {
     private readonly Dictionary<string, WidgetInfo> _activeWidgets = new();
     private readonly Dictionary<string, string> _templateCache = new();
     private readonly object _widgetLock = new();
+
+    private readonly ICredentialStore _credentialStore;
+    private readonly INocturneApiClient _apiClient;
+    private readonly ILogger<NocturneWidgetProvider> _logger;
 
     private static readonly string TemplatesPath = Path.Combine(AppContext.BaseDirectory, "Templates");
 
@@ -43,6 +49,12 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
     public NocturneWidgetProvider()
     {
         Console.WriteLine("NocturneWidgetProvider initialized");
+
+        // Resolve services from the static service provider
+        _credentialStore = Program.Services.GetRequiredService<ICredentialStore>();
+        _apiClient = Program.Services.GetRequiredService<INocturneApiClient>();
+        _logger = Program.Services.GetRequiredService<ILogger<NocturneWidgetProvider>>();
+
         // Don't call RecoverRunningWidgets here - it blocks DCOM registration
         // Existing widgets will be handled on first Activate/Create call
     }
@@ -120,7 +132,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
         var verb = actionInvokedArgs.Verb;
         var data = actionInvokedArgs.Data;
 
-        Console.WriteLine($"Action invoked on widget {widgetId}: {verb}");
+        _logger.LogInformation("Action invoked on widget {WidgetId}: {Verb}", widgetId, verb);
 
         switch (verb)
         {
@@ -132,8 +144,16 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
                 HandleOpenAppAction(data);
                 break;
 
+            case "saveConfig":
+                HandleSaveConfigAction(widgetId, data);
+                break;
+
+            case "exitCustomization":
+                HandleExitCustomizationAction(widgetId);
+                break;
+
             default:
-                Console.WriteLine($"Unknown action verb: {verb}");
+                _logger.LogWarning("Unknown action verb: {Verb}", verb);
                 break;
         }
     }
@@ -180,7 +200,29 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
         }
     }
 
+    /// <inheritdoc />
+    public void OnCustomizationRequested(WidgetCustomizationRequestedArgs customizationRequestedArgs)
+    {
+        var widgetId = customizationRequestedArgs.WidgetContext.Id;
+        _logger.LogInformation("Customization requested for widget {WidgetId}", widgetId);
+
+        lock (_widgetLock)
+        {
+            if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+            {
+                widgetInfo.InCustomization = true;
+                UpdateWidget(widgetId);
+            }
+        }
+    }
+
     private void UpdateWidget(string widgetId)
+    {
+        // Fire and forget async update
+        _ = UpdateWidgetAsync(widgetId);
+    }
+
+    private async Task UpdateWidgetAsync(string widgetId)
     {
         try
         {
@@ -189,32 +231,64 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
             {
                 if (!_activeWidgets.TryGetValue(widgetId, out widgetInfo))
                 {
-                    Console.WriteLine($"Widget not found: {widgetId}");
+                    _logger.LogWarning("Widget not found: {WidgetId}", widgetId);
                     return;
                 }
             }
 
-            // Super simple template like Microsoft sample
-            var template = """
-                {
-                    "type": "AdaptiveCard",
-                    "body": [
-                        {
-                            "type": "TextBlock",
-                            "text": "${glucose} ${direction}"
-                        }
-                    ],
-                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                    "version": "1.5"
-                }
-                """;
+            string template;
+            JsonObject dataNode;
 
-            // Use JsonObject like Microsoft sample
-            var dataNode = new JsonObject
+            // Check if we're in customization mode
+            if (widgetInfo.InCustomization)
             {
-                ["glucose"] = "120",
-                ["direction"] = "→"
-            };
+                // Show customization card with input fields
+                var credentials = await _credentialStore.GetCredentialsAsync();
+                template = GetCustomizationTemplate();
+                dataNode = new JsonObject
+                {
+                    ["apiUrl"] = credentials?.ApiUrl ?? "",
+                    ["token"] = credentials?.Token ?? ""
+                };
+                _logger.LogInformation("Showing customization card for widget {WidgetId}", widgetId);
+            }
+            else
+            {
+                // Check if we have credentials configured
+                var hasCredentials = await _credentialStore.HasCredentialsAsync();
+
+                if (!hasCredentials)
+                {
+                    // Show setup card
+                    template = GetSetupTemplate();
+                    dataNode = new JsonObject();
+                    _logger.LogInformation("Showing setup card for widget {WidgetId}", widgetId);
+                }
+                else
+                {
+                    // Fetch data from API
+                    var summary = await _apiClient.GetSummaryAsync(hours: 0, includePredictions: false);
+
+                    if (summary is null)
+                    {
+                        // Show error card
+                        template = GetErrorTemplate();
+                        dataNode = new JsonObject
+                        {
+                            ["errorMessage"] = "Unable to connect to Nocturne server"
+                        };
+                        _logger.LogWarning("Failed to fetch data for widget {WidgetId}", widgetId);
+                    }
+                    else
+                    {
+                        // Show glucose card with real data
+                        template = GetGlucoseTemplate(widgetInfo.DefinitionId);
+                        dataNode = CreateGlucoseData(summary);
+                        _logger.LogDebug("Updated widget {WidgetId} with glucose: {Glucose}",
+                            widgetId, summary.CurrentGlucose);
+                    }
+                }
+            }
 
             var updateOptions = new WidgetUpdateRequestOptions(widgetId)
             {
@@ -223,15 +297,229 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
                 CustomState = widgetInfo.CustomState ?? string.Empty,
             };
 
-            Console.WriteLine($"Updating widget {widgetId} with template and data");
+            _logger.LogDebug("Sending update to widget {WidgetId}", widgetId);
             WidgetManager.GetDefault().UpdateWidget(updateOptions);
-            Console.WriteLine($"Widget {widgetId} updated successfully");
+            _logger.LogDebug("Widget {WidgetId} updated successfully", widgetId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to update widget {widgetId}: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            _logger.LogError(ex, "Failed to update widget {WidgetId}", widgetId);
         }
+    }
+
+    private static string GetCustomizationTemplate()
+    {
+        return """
+            {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "text": "Configure Nocturne",
+                        "size": "Medium",
+                        "weight": "Bolder"
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "apiUrl",
+                        "label": "Server URL",
+                        "placeholder": "https://your-nocturne-server.com",
+                        "value": "${apiUrl}",
+                        "isRequired": true
+                    },
+                    {
+                        "type": "Input.Text",
+                        "id": "token",
+                        "label": "API Token",
+                        "placeholder": "Your API secret or token",
+                        "value": "${token}",
+                        "style": "password",
+                        "isRequired": true
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Execute",
+                        "title": "Save",
+                        "verb": "saveConfig"
+                    },
+                    {
+                        "type": "Action.Execute",
+                        "title": "Cancel",
+                        "verb": "exitCustomization"
+                    }
+                ]
+            }
+            """;
+    }
+
+    private static string GetSetupTemplate()
+    {
+        return """
+            {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [
+                    {
+                        "type": "Container",
+                        "items": [
+                            {
+                                "type": "TextBlock",
+                                "text": "Nocturne",
+                                "size": "Large",
+                                "weight": "Bolder",
+                                "horizontalAlignment": "Center"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": "Setup Required",
+                                "size": "Medium",
+                                "horizontalAlignment": "Center",
+                                "spacing": "Small"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": "Click the ... menu and select Customize to configure",
+                                "size": "Small",
+                                "horizontalAlignment": "Center",
+                                "wrap": true,
+                                "isSubtle": true,
+                                "spacing": "Medium"
+                            }
+                        ],
+                        "verticalContentAlignment": "Center",
+                        "height": "stretch"
+                    }
+                ]
+            }
+            """;
+    }
+
+    private static string GetErrorTemplate()
+    {
+        return """
+            {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [
+                    {
+                        "type": "Container",
+                        "items": [
+                            {
+                                "type": "TextBlock",
+                                "text": "Connection Error",
+                                "size": "Medium",
+                                "weight": "Bolder",
+                                "horizontalAlignment": "Center",
+                                "color": "Attention"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": "${errorMessage}",
+                                "size": "Small",
+                                "horizontalAlignment": "Center",
+                                "wrap": true,
+                                "isSubtle": true,
+                                "spacing": "Small"
+                            }
+                        ],
+                        "verticalContentAlignment": "Center",
+                        "height": "stretch"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Execute",
+                        "title": "Retry",
+                        "verb": "refresh"
+                    },
+                    {
+                        "type": "Action.Execute",
+                        "title": "Configure",
+                        "verb": "configure"
+                    }
+                ]
+            }
+            """;
+    }
+
+    private static string GetGlucoseTemplate(string definitionId)
+    {
+        // Return appropriate template based on widget size
+        return """
+            {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [
+                    {
+                        "type": "Container",
+                        "items": [
+                            {
+                                "type": "TextBlock",
+                                "text": "${glucose}",
+                                "size": "ExtraLarge",
+                                "weight": "Bolder",
+                                "horizontalAlignment": "Center"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": "${direction}",
+                                "size": "Large",
+                                "horizontalAlignment": "Center",
+                                "spacing": "None"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": "${delta}",
+                                "size": "Small",
+                                "horizontalAlignment": "Center",
+                                "isSubtle": true,
+                                "spacing": "Small"
+                            }
+                        ],
+                        "verticalContentAlignment": "Center",
+                        "height": "stretch"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Execute",
+                        "title": "Refresh",
+                        "verb": "refresh"
+                    }
+                ],
+                "selectAction": {
+                    "type": "Action.Execute",
+                    "verb": "openApp"
+                }
+            }
+            """;
+    }
+
+    private static JsonObject CreateGlucoseData(V4SummaryResponse summary)
+    {
+        var glucose = summary.CurrentGlucose?.ToString() ?? "---";
+        var direction = GetDirectionArrow(summary.Direction);
+        var delta = FormatDelta(summary.Delta);
+
+        return new JsonObject
+        {
+            ["glucose"] = glucose,
+            ["direction"] = direction,
+            ["delta"] = delta
+        };
+    }
+
+    private static string FormatDelta(double? delta)
+    {
+        if (delta is null) return "";
+        var sign = delta >= 0 ? "+" : "";
+        return $"{sign}{delta:F1}";
     }
 
     private string GetTemplate(string definitionId)
@@ -304,7 +592,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
 
     private void HandleOpenAppAction(string data)
     {
-        Console.WriteLine($"Open app action with data: {data}");
+        _logger.LogInformation("Open app action with data: {Data}", data);
 
         // Launch the Nocturne app via protocol activation
         try
@@ -323,8 +611,75 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to launch Nocturne app: {ex.Message}");
+            _logger.LogError(ex, "Failed to launch Nocturne app");
         }
+    }
+
+    private void HandleSaveConfigAction(string widgetId, string data)
+    {
+        _logger.LogInformation("Saving configuration for widget {WidgetId}", widgetId);
+
+        // Parse the form data from the action
+        // The data comes as JSON with the input values
+        try
+        {
+            var formData = JsonSerializer.Deserialize<JsonElement>(data);
+            var apiUrl = formData.TryGetProperty("apiUrl", out var urlProp) ? urlProp.GetString() : null;
+            var token = formData.TryGetProperty("token", out var tokenProp) ? tokenProp.GetString() : null;
+
+            if (string.IsNullOrWhiteSpace(apiUrl) || string.IsNullOrWhiteSpace(token))
+            {
+                _logger.LogWarning("Invalid configuration: missing apiUrl or token");
+                return;
+            }
+
+            // Save credentials
+            _ = SaveCredentialsAndRefreshAsync(widgetId, apiUrl, token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse configuration data");
+        }
+    }
+
+    private async Task SaveCredentialsAndRefreshAsync(string widgetId, string apiUrl, string token)
+    {
+        try
+        {
+            var credentials = new NocturneCredentials(apiUrl, token);
+            await _credentialStore.SaveCredentialsAsync(credentials);
+            _logger.LogInformation("Credentials saved successfully");
+
+            // Exit customization mode and refresh widget
+            lock (_widgetLock)
+            {
+                if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+                {
+                    widgetInfo.InCustomization = false;
+                }
+            }
+
+            UpdateWidget(widgetId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save credentials");
+        }
+    }
+
+    private void HandleExitCustomizationAction(string widgetId)
+    {
+        _logger.LogInformation("Exiting customization for widget {WidgetId}", widgetId);
+
+        lock (_widgetLock)
+        {
+            if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+            {
+                widgetInfo.InCustomization = false;
+            }
+        }
+
+        UpdateWidget(widgetId);
     }
 
     /// <summary>
@@ -336,12 +691,14 @@ public sealed class NocturneWidgetProvider : IWidgetProvider
         public string DefinitionId { get; }
         public bool IsActive { get; set; }
         public string? CustomState { get; set; }
+        public bool InCustomization { get; set; }
 
         public WidgetInfo(string widgetId, string definitionId)
         {
             WidgetId = widgetId;
             DefinitionId = definitionId;
             IsActive = true;
+            InCustomization = false;
         }
     }
 }
