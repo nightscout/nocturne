@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "Nocturne.Widget.Windows11 (Package)": {
+      "commandName": "MsixPackage"
+    }
+  }
+}

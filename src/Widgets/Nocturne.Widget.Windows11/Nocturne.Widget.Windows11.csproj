@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    NOTE: This project requires Visual Studio 2022 with Windows App SDK workload
+    to build successfully. Building from command line (dotnet build) will fail
+    due to missing VS build tooling for MRT/PRI resource generation.
+
+    To build from VS: Open Nocturne.sln in Visual Studio 2022, right-click
+    this project, and select Build.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Nocturne.Widget.Windows11</RootNamespace>
+    <AssemblyName>Nocturne.Widget.Windows11</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Windows App SDK Configuration - Single-project MSIX packaging -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <UseWinUI>false</UseWinUI>
+
+    <!-- MSIX Package Identity -->
+    <AppxPackage>true</AppxPackage>
+    <AppxBundle>Never</AppxBundle>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
+    <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+
+    <!-- COM Server Registration -->
+    <CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Suppress warnings for preview features -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- TEMPORARILY DISABLED for debugging - remove deps to speed up startup
+  <ItemGroup>
+    <ProjectReference Include="..\Nocturne.Widget.Contracts\Nocturne.Widget.Contracts.csproj" />
+    <ProjectReference Include="..\Nocturne.Widget.Infrastructure\Nocturne.Widget.Infrastructure.csproj" />
+  </ItemGroup>
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    <!-- TEMPORARILY DISABLED for debugging - minimal packages only
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="AdaptiveCards" />
+    -->
+  </ItemGroup>
+
+  <!-- Content items for MSIX package -->
+  <ItemGroup>
+    <Content Include="Assets\*.png" />
+    <Content Include="Images\*.png" />
+    <Content Include="Templates\*.json" />
+    <Content Include="Public\*" />
+  </ItemGroup>
+
+  <!-- Enable Msix ProjectCapability for single-project MSIX packaging -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,264 @@
+{
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.5",
+    "body": [
+        {
+            "type": "Container",
+            "items": [
+                {
+                    "type": "ColumnSet",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "Nocturne",
+                                    "size": "Medium",
+                                    "weight": "Bolder",
+                                    "color": "Accent"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${lastUpdate}",
+                                    "size": "Small",
+                                    "isSubtle": true
+                                }
+                            ],
+                            "verticalContentAlignment": "Center"
+                        }
+                    ]
+                }
+            ],
+            "style": "emphasis",
+            "bleed": true
+        },
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "${glucose}",
+                            "size": "ExtraLarge",
+                            "weight": "Bolder",
+                            "color": "${if(stale, 'Attention', 'Default')}"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "${delta} mg/dL",
+                            "size": "Medium",
+                            "isSubtle": true,
+                            "spacing": "None"
+                        }
+                    ],
+                    "verticalContentAlignment": "Center"
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "${direction}",
+                            "size": "ExtraLarge",
+                            "horizontalAlignment": "Center"
+                        }
+                    ],
+                    "verticalContentAlignment": "Center"
+                }
+            ],
+            "spacing": "Medium"
+        },
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "Container",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "Insulin on Board",
+                                    "size": "Small",
+                                    "isSubtle": true
+                                },
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${iob} U",
+                                    "size": "Large",
+                                    "weight": "Bolder",
+                                    "spacing": "None"
+                                }
+                            ],
+                            "style": "good",
+                            "bleed": false
+                        }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "Container",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "Carbs on Board",
+                                    "size": "Small",
+                                    "isSubtle": true
+                                },
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${cob} g",
+                                    "size": "Large",
+                                    "weight": "Bolder",
+                                    "spacing": "None"
+                                }
+                            ],
+                            "style": "warning",
+                            "bleed": false
+                        }
+                    ]
+                }
+            ],
+            "spacing": "Medium"
+        },
+        {
+            "type": "Container",
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": "Predicted Glucose",
+                    "size": "Small",
+                    "weight": "Bolder",
+                    "isSubtle": true
+                },
+                {
+                    "type": "ColumnSet",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[0].value}",
+                                    "size": "Small",
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 0}"
+                                },
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[0].time}",
+                                    "size": "Small",
+                                    "isSubtle": true,
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 0}"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[1].value}",
+                                    "size": "Small",
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 1}"
+                                },
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[1].time}",
+                                    "size": "Small",
+                                    "isSubtle": true,
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 1}"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[2].value}",
+                                    "size": "Small",
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 2}"
+                                },
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[2].time}",
+                                    "size": "Small",
+                                    "isSubtle": true,
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 2}"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[3].value}",
+                                    "size": "Small",
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 3}"
+                                },
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${predictions[3].time}",
+                                    "size": "Small",
+                                    "isSubtle": true,
+                                    "horizontalAlignment": "Center",
+                                    "$when": "${count(predictions) > 3}"
+                                }
+                            ]
+                        }
+                    ],
+                    "spacing": "Small"
+                }
+            ],
+            "spacing": "Medium",
+            "$when": "${count(predictions) > 0}"
+        }
+    ],
+    "actions": [
+        {
+            "type": "Action.Execute",
+            "title": "Refresh",
+            "verb": "refresh"
+        },
+        {
+            "type": "Action.Execute",
+            "title": "Open Nocturne",
+            "verb": "openApp",
+            "style": "positive"
+        }
+    ],
+    "selectAction": {
+        "type": "Action.Execute",
+        "verb": "openApp"
+    }
+}

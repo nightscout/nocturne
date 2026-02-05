@@ -412,6 +412,7 @@ builder.Services.AddScoped<
     MyFitnessPalMatchingSettingsService
 >();
 builder.Services.AddScoped<IClockFaceService, ClockFaceService>();
+builder.Services.AddScoped<IWidgetSummaryService, WidgetSummaryService>();
 
 // Note: Processing status service is registered by AddNocturneMemoryCache
 

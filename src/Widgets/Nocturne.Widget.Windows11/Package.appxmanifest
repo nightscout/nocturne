@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 rescap">
+
+  <Identity
+    Name="Nightscout.Nocturne.Widget"
+    Publisher="CN=Nocturne Dev"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>Nocturne Widget</DisplayName>
+    <PublisherDisplayName>Nightscout Foundation</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+    <Description>Windows 11 Widget for Nocturne diabetes management</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="Nocturne.Widget.Windows11.exe"
+      EntryPoint="Windows.FullTrustApplication">
+
+      <uap:VisualElements
+        DisplayName="Nocturne Widget"
+        Description="Nocturne Widget Provider for Windows 11"
+        BackgroundColor="transparent"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- COM Server Registration for Widget Provider -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="Nocturne.Widget.Windows11.exe"
+                           Arguments="-RegisterProcessAsComServer"
+                           DisplayName="Nocturne Widget Provider">
+              <com:Class Id="B8E3F2A1-5C4D-4E6F-8A9B-1C2D3E4F5A6B"
+                         DisplayName="Nocturne Widget Provider Class" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <!-- Widget Provider Extension -->
+        <uap3:Extension Category="windows.appExtension">
+          <uap3:AppExtension Name="com.microsoft.windows.widgets"
+                             DisplayName="Nocturne Widgets"
+                             Id="NocturneWidgetProvider"
+                             PublicFolder="Public">
+            <uap3:Properties>
+              <WidgetProvider>
+                <ProviderIcons>
+                  <Icon Path="Images\WidgetProviderIcon.png" />
+                </ProviderIcons>
+                <Activation>
+                  <CreateInstance ClassId="B8E3F2A1-5C4D-4E6F-8A9B-1C2D3E4F5A6B" />
+                </Activation>
+                <Definitions>
+                  <Definition Id="NocturneSmall"
+                              DisplayName="Nocturne (Small)"
+                              Description="Displays current glucose value and trend direction"
+                              AllowMultiple="true">
+                    <Capabilities>
+                      <Capability>
+                        <Size Name="small" />
+                      </Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Images\WidgetIconSmall.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Images\WidgetScreenshotSmall.png" DisplayAltText="Small glucose widget" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+
+                  <Definition Id="NocturneMedium"
+                              DisplayName="Nocturne"
+                              Description="Displays glucose, trend, and insulin/carbs on board"
+                              AllowMultiple="true">
+                    <Capabilities>
+                      <Capability>
+                        <Size Name="medium" />
+                      </Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Images\WidgetIconMedium.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Images\WidgetScreenshotMedium.png" DisplayAltText="Medium glucose widget" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+
+                  <Definition Id="NocturneLarge"
+                              DisplayName="Nocturne Dashboard"
+                              Description="Full dashboard with glucose, trend, IOB/COB, and predictions"
+                              AllowMultiple="true">
+                    <Capabilities>
+                      <Capability>
+                        <Size Name="large" />
+                      </Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons>
+                        <Icon Path="Images\WidgetIconLarge.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Images\WidgetScreenshotLarge.png" DisplayAltText="Large dashboard widget" />
+                      </Screenshots>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+                </Definitions>
+              </WidgetProvider>
+            </uap3:Properties>
+          </uap3:AppExtension>
+        </uap3:Extension>
+
+        <!-- Protocol Activation for nocturne:// URI scheme -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="nocturne">
+            <uap:DisplayName>Nocturne Protocol</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <Capability Name="internetClient" />
+  </Capabilities>
+</Package>

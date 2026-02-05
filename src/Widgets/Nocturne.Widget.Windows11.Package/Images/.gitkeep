@@ -1,0 +1,29 @@
+# Placeholder for MSIX package images
+# Required images for the package:
+#
+# App Logos:
+# - StoreLogo.png (50x50)
+# - Square150x150Logo.png (150x150)
+# - Square44x44Logo.png (44x44)
+# - Wide310x150Logo.png (310x150)
+#
+# Widget Provider:
+# - WidgetProviderIcon.png (256x256)
+#
+# Small Widget:
+# - WidgetIconSmall.png (256x256)
+# - WidgetIconSmallDark.png (256x256)
+# - WidgetIconSmallLight.png (256x256)
+# - WidgetScreenshotSmall.png (widget preview screenshot)
+#
+# Medium Widget:
+# - WidgetIconMedium.png (256x256)
+# - WidgetIconMediumDark.png (256x256)
+# - WidgetIconMediumLight.png (256x256)
+# - WidgetScreenshotMedium.png (widget preview screenshot)
+#
+# Large Widget:
+# - WidgetIconLarge.png (256x256)
+# - WidgetIconLargeDark.png (256x256)
+# - WidgetIconLargeLight.png (256x256)
+# - WidgetScreenshotLarge.png (widget preview screenshot)

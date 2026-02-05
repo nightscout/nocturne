@@ -9725,6 +9725,123 @@ export class StatusClient {
     }
 }
 
+export class SummaryClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get widget-friendly summary data including current glucose, IOB, COB, trackers, and alarm state.
+     * @param hours (optional) Number of hours of glucose history to include (default 0 for current reading only)
+     * @param includePredictions (optional) Whether to include predicted glucose values (default false)
+     * @return Widget summary response with aggregated diabetes management data
+     */
+    getSummary(hours?: number | undefined, includePredictions?: boolean | undefined, signal?: AbortSignal): Promise<V4SummaryResponse> {
+        let url_ = this.baseUrl + "/api/v4/summary?";
+        if (hours === null)
+            throw new globalThis.Error("The parameter 'hours' cannot be null.");
+        else if (hours !== undefined)
+            url_ += "hours=" + encodeURIComponent("" + hours) + "&";
+        if (includePredictions === null)
+            throw new globalThis.Error("The parameter 'includePredictions' cannot be null.");
+        else if (includePredictions !== undefined)
+            url_ += "includePredictions=" + encodeURIComponent("" + includePredictions) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSummary(_response);
+        });
+    }
+
+    protected processGetSummary(response: Response): Promise<V4SummaryResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V4SummaryResponse;
+            return result200;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<V4SummaryResponse>(null as any);
+    }
+
+    /**
+     * Get summary data for the specified time window
+    Returns processed SGVs, treatments, profile, and state information
+     * @param hours (optional) Number of hours to include in summary (default 6)
+     * @return Returns the summary data
+     */
+    getSummary2(hours?: number | null | undefined, signal?: AbortSignal): Promise<SummaryResponse> {
+        let url_ = this.baseUrl + "/api/v2/summary?";
+        if (hours !== undefined && hours !== null)
+            url_ += "hours=" + encodeURIComponent("" + hours) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSummary2(_response);
+        });
+    }
+
+    protected processGetSummary2(response: Response): Promise<SummaryResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SummaryResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("If the hours parameter is invalid", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("If there was an internal server error", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SummaryResponse>(null as any);
+    }
+}
+
 export class SystemEventsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -15946,69 +16063,6 @@ export class PropertiesClient {
     }
 }
 
-export class SummaryClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Get summary data for the specified time window
-    Returns processed SGVs, treatments, profile, and state information
-     * @param hours (optional) Number of hours to include in summary (default 6)
-     * @return Returns the summary data
-     */
-    getSummary(hours?: number | null | undefined, signal?: AbortSignal): Promise<SummaryResponse> {
-        let url_ = this.baseUrl + "/api/v2/summary?";
-        if (hours !== undefined && hours !== null)
-            url_ += "hours=" + encodeURIComponent("" + hours) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetSummary(_response);
-        });
-    }
-
-    protected processGetSummary(response: Response): Promise<SummaryResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SummaryResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("If the hours parameter is invalid", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("If there was an internal server error", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<SummaryResponse>(null as any);
-    }
-}
-
 export class ActivityClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -20602,6 +20656,88 @@ export interface StatusResponse {
     head?: string | undefined;
 }
 
+export interface V4SummaryResponse {
+    current?: V4GlucoseReading | undefined;
+    history?: V4GlucoseReading[];
+    iob?: number;
+    cob?: number;
+    trackers?: V4TrackerStatus[];
+    alarm?: V4AlarmState | undefined;
+    predictions?: V4Predictions | undefined;
+    serverMills?: number;
+}
+
+export interface V4GlucoseReading {
+    sgv?: number;
+    direction?: Direction;
+    trendRate?: number | undefined;
+    delta?: number | undefined;
+    mills?: number;
+    noise?: number | undefined;
+}
+
+export enum Direction {
+    NONE = "NONE",
+    TripleUp = "TripleUp",
+    DoubleUp = "DoubleUp",
+    SingleUp = "SingleUp",
+    FortyFiveUp = "FortyFiveUp",
+    Flat = "Flat",
+    FortyFiveDown = "FortyFiveDown",
+    SingleDown = "SingleDown",
+    DoubleDown = "DoubleDown",
+    TripleDown = "TripleDown",
+    NotComputable = "NotComputable",
+    RateOutOfRange = "RateOutOfRange",
+    CgmError = "CgmError",
+}
+
+export interface V4TrackerStatus {
+    id?: string;
+    definitionId?: string;
+    name?: string;
+    icon?: string;
+    category?: TrackerCategory;
+    mode?: TrackerMode;
+    ageHours?: number | undefined;
+    hoursUntilEvent?: number | undefined;
+    urgency?: NotificationUrgency;
+    lifespanHours?: number | undefined;
+    percentElapsed?: number | undefined;
+}
+
+export enum TrackerCategory {
+    Consumable = "Consumable",
+    Reservoir = "Reservoir",
+    Appointment = "Appointment",
+    Reminder = "Reminder",
+    Custom = "Custom",
+    Sensor = "Sensor",
+    Cannula = "Cannula",
+    Battery = "Battery",
+}
+
+export enum TrackerMode {
+    Duration = "Duration",
+    Event = "Event",
+}
+
+export interface V4AlarmState {
+    level?: number;
+    type?: string;
+    message?: string;
+    triggeredMills?: number;
+    isSilenced?: boolean;
+    silenceExpiresMills?: number | undefined;
+}
+
+export interface V4Predictions {
+    values?: number[] | undefined;
+    startMills?: number;
+    intervalMills?: number;
+    source?: string | undefined;
+}
+
 export interface SystemEvent {
     id?: string | undefined;
     eventType?: SystemEventType;
@@ -20678,17 +20814,6 @@ export interface TrackerDefinitionDto {
     updatedAt?: Date | undefined;
 }
 
-export enum TrackerCategory {
-    Consumable = "Consumable",
-    Reservoir = "Reservoir",
-    Appointment = "Appointment",
-    Reminder = "Reminder",
-    Custom = "Custom",
-    Sensor = "Sensor",
-    Cannula = "Cannula",
-    Battery = "Battery",
-}
-
 export interface NotificationThresholdDto {
     id?: string | undefined;
     urgency?: NotificationUrgency;
@@ -20717,11 +20842,6 @@ export enum TrackerVisibility {
     Public = "Public",
     Private = "Private",
     RoleRestricted = "RoleRestricted",
-}
-
-export enum TrackerMode {
-    Duration = "Duration",
-    Event = "Event",
 }
 
 export interface CreateTrackerDefinitionRequest {

@@ -7449,6 +7449,60 @@
         }
       }
     },
+    "/api/v4/summary": {
+      "get": {
+        "tags": [
+          "V4 Summary"
+        ],
+        "summary": "Get widget-friendly summary data including current glucose, IOB, COB, trackers, and alarm state.",
+        "operationId": "Summary_GetSummary",
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "description": "Number of hours of glucose history to include (default 0 for current reading only)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 1
+          },
+          {
+            "name": "includePredictions",
+            "in": "query",
+            "description": "Whether to include predicted glucose values (default false)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Widget summary response with aggregated diabetes management data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V4SummaryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/system-events": {
       "get": {
         "tags": [
@@ -11335,7 +11389,7 @@
           "V2 Summary"
         ],
         "summary": "Get summary data for the specified time window\nReturns processed SGVs, treatments, profile, and state information",
-        "operationId": "Summary_GetSummary",
+        "operationId": "Summary_GetSummary2",
         "parameters": [
           {
             "name": "hours",
@@ -23850,6 +23904,265 @@
           }
         }
       },
+      "V4SummaryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/V4GlucoseReading"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/V4GlucoseReading"
+            }
+          },
+          "iob": {
+            "type": "number",
+            "format": "double"
+          },
+          "cob": {
+            "type": "number",
+            "format": "double"
+          },
+          "trackers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/V4TrackerStatus"
+            }
+          },
+          "alarm": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/V4AlarmState"
+              }
+            ]
+          },
+          "predictions": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/V4Predictions"
+              }
+            ]
+          },
+          "serverMills": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "V4GlucoseReading": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sgv": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Direction"
+          },
+          "trendRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "delta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "noise": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "Direction": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "NONE",
+          "TripleUp",
+          "DoubleUp",
+          "SingleUp",
+          "FortyFiveUp",
+          "Flat",
+          "FortyFiveDown",
+          "SingleDown",
+          "DoubleDown",
+          "TripleDown",
+          "NotComputable",
+          "RateOutOfRange",
+          "CgmError"
+        ],
+        "enum": [
+          "NONE",
+          "TripleUp",
+          "DoubleUp",
+          "SingleUp",
+          "FortyFiveUp",
+          "Flat",
+          "FortyFiveDown",
+          "SingleDown",
+          "DoubleDown",
+          "TripleDown",
+          "NotComputable",
+          "RateOutOfRange",
+          "CgmError"
+        ]
+      },
+      "V4TrackerStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/TrackerMode"
+          },
+          "ageHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursUntilEvent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/NotificationUrgency"
+          },
+          "lifespanHours": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "percentElapsed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "TrackerCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ],
+        "enum": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ]
+      },
+      "TrackerMode": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Duration",
+          "Event"
+        ],
+        "enum": [
+          "Duration",
+          "Event"
+        ]
+      },
+      "V4AlarmState": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "type": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "triggeredMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isSilenced": {
+            "type": "boolean"
+          },
+          "silenceExpiresMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "V4Predictions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "values": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "intervalMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "SystemEvent": {
         "type": "object",
         "additionalProperties": false,
@@ -24094,30 +24407,6 @@
           }
         }
       },
-      "TrackerCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ],
-        "enum": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ]
-      },
       "NotificationThresholdDto": {
         "type": "object",
         "additionalProperties": false,
@@ -24200,18 +24489,6 @@
           "Public",
           "Private",
           "RoleRestricted"
-        ]
-      },
-      "TrackerMode": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Duration",
-          "Event"
-        ],
-        "enum": [
-          "Duration",
-          "Event"
         ]
       },
       "CreateTrackerDefinitionRequest": {

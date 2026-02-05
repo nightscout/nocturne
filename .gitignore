@@ -31,6 +31,19 @@ appsettings.*.json
 # Aspire publish temporary output
 aspire-output/
 
+# Widget publish output
+**/publish/
+
+# Widget MSIX packaging artifacts
+**/AppPackages/
+**/BundleArtifacts/
+*.appx
+*.msix
+*.appxbundle
+*.msixbundle
+*.appxupload
+*.msixupload
+
 # Git worktrees
 .worktrees/
 

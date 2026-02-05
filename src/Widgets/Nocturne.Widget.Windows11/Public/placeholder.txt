@@ -1,0 +1,2 @@
+This folder is required for Windows 11 Widget registration.
+It serves as the PublicFolder for the widget provider extension.
