@@ -31,7 +31,7 @@
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
     <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
-    <PackageCertificateKeyFile>..\NocturneWidget.pfx</PackageCertificateKeyFile>
+    <PackageCertificateThumbprint>7FB8182F7259D416A16851E5C6B132B9EF2B7613</PackageCertificateThumbprint>
 
     <!-- COM Server Registration -->
     <CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
