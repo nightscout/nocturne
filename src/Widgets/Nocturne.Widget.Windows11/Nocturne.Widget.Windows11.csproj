@@ -29,8 +29,9 @@
     <AppxPackage>true</AppxPackage>
     <AppxBundle>Never</AppxBundle>
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
-    <AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+    <PackageCertificateKeyFile>..\NocturneWidget.pfx</PackageCertificateKeyFile>
 
     <!-- COM Server Registration -->
     <CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
