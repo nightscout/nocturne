@@ -13,6 +13,7 @@
   import { SystemEventType } from "$lib/api";
   import Clock from "lucide-svelte/icons/clock";
   import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import StickyNote from "lucide-svelte/icons/sticky-note";
 
   interface DeviceEventMarker {
     eventType: string;
@@ -31,6 +32,11 @@
 
   interface ScheduledTrackerMarker {
     id: string;
+  }
+
+  interface NoteMarker {
+    id?: string;
+    category: string;
   }
 
   interface GlucoseDataPoint {
@@ -57,6 +63,7 @@
     showOverrideSpans: boolean;
     showProfileSpans: boolean;
     showActivitySpans: boolean;
+    showNotes: boolean;
 
     // Toggle callbacks
     onToggleBasal: () => void;
@@ -70,12 +77,14 @@
     onToggleOverrideSpans: () => void;
     onToggleProfileSpans: () => void;
     onToggleActivitySpans: () => void;
+    onToggleNotes: () => void;
 
     // Data for conditional rendering
     deviceEventMarkers: DeviceEventMarker[];
     systemEvents: SystemEvent[];
     pumpModeSpans: PumpModeSpan[];
     scheduledTrackerMarkers: ScheduledTrackerMarker[];
+    noteMarkers: NoteMarker[];
     currentPumpMode: string;
     uniquePumpModes: string[];
 
@@ -101,6 +110,7 @@
     showOverrideSpans,
     showProfileSpans,
     showActivitySpans,
+    showNotes,
     onToggleBasal,
     onToggleIob,
     onToggleCob,
@@ -112,10 +122,12 @@
     onToggleOverrideSpans,
     onToggleProfileSpans,
     onToggleActivitySpans,
+    onToggleNotes,
     deviceEventMarkers,
     systemEvents,
     pumpModeSpans,
     scheduledTrackerMarkers,
+    noteMarkers,
     currentPumpMode,
     uniquePumpModes,
     expandedPumpModes,
@@ -337,6 +349,28 @@
       />
       <span class={cn(!showScheduledTrackers && "line-through")}>
         Scheduled ({scheduledTrackerMarkers.length})
+      </span>
+    </button>
+  {/if}
+
+  <!-- Notes legend items -->
+  {#if noteMarkers.length > 0}
+    <button
+      type="button"
+      class={cn(
+        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
+        !showNotes && "opacity-50"
+      )}
+      onclick={onToggleNotes}
+    >
+      <StickyNote
+        size={14}
+        class={showNotes
+          ? "text-chart-1"
+          : "text-muted-foreground"}
+      />
+      <span class={cn(!showNotes && "line-through")}>
+        Notes ({noteMarkers.length})
       </span>
     </button>
   {/if}

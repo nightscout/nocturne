@@ -12,7 +12,7 @@ export interface ResourceState {
   /** Title for the error card */
   errorTitle: string;
   /** Function to retry all registered resources */
-  refetch: () => void;
+  refresh: () => void;
 }
 
 /**
@@ -24,14 +24,14 @@ export class ResourceContext {
   error = $state<Error | string | null | undefined>(null);
   hasData = $state(false);
   errorTitle = $state("Error Loading Data");
-  refetch = $state<() => void>(() => {});
+  refresh = $state<() => void>(() => {});
 
   setResource(newState: Partial<ResourceState>) {
     if (newState.loading !== undefined) this.loading = newState.loading;
     if (newState.error !== undefined) this.error = newState.error;
     if (newState.hasData !== undefined) this.hasData = newState.hasData;
     if (newState.errorTitle !== undefined) this.errorTitle = newState.errorTitle;
-    if (newState.refetch !== undefined) this.refetch = newState.refetch;
+    if (newState.refresh !== undefined) this.refresh = newState.refresh;
   }
 }
 
@@ -71,7 +71,7 @@ export function getResourceContext(): ResourceContext | undefined {
  *     error: () => myResource.error,
  *     hasData: () => !!myResource.current,
  *     errorTitle: "Error Loading My Data",
- *     refetch: () => myResource.refetch(),
+ *     refresh: () => myResource.refresh(),
  *   });
  * </script>
  * ```
@@ -81,7 +81,7 @@ export function useResourceContext(config: {
   error: () => Error | string | null | undefined;
   hasData: () => boolean;
   errorTitle?: string;
-  refetch: () => void;
+  refresh: () => void;
 }): void {
   const ctx = getResourceContext();
   if (!ctx) return;
@@ -93,7 +93,7 @@ export function useResourceContext(config: {
       error: config.error(),
       hasData: config.hasData(),
       errorTitle: config.errorTitle ?? "Error Loading Data",
-      refetch: config.refetch,
+      refresh: config.refresh,
     });
   });
 }
@@ -141,7 +141,7 @@ export function contextResource<T>(
       ctx.error = query.error as Error | string | null | undefined;
       ctx.hasData = query.current !== undefined && query.current !== null;
       ctx.errorTitle = errorTitle;
-      ctx.refetch = () => query.refresh();
+      ctx.refresh = () => query.refresh();
     }
   });
 

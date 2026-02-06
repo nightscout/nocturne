@@ -75,4 +75,9 @@ public class StateSpanEntity
     /// </summary>
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Navigation property for note links
+    /// </summary>
+    public virtual ICollection<NoteStateSpanLinkEntity> NoteLinks { get; set; } = new List<NoteStateSpanLinkEntity>();
 }

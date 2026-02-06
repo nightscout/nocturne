@@ -223,6 +223,38 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<ClockFaceEntity> ClockFaces { get; set; }
 
+    // Notes entities
+
+    /// <summary>
+    /// Gets or sets the Notes table for user notes
+    /// </summary>
+    public DbSet<NoteEntity> Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteChecklistItems table for note checklist items
+    /// </summary>
+    public DbSet<NoteChecklistItemEntity> NoteChecklistItems { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteAttachments table for note file attachments
+    /// </summary>
+    public DbSet<NoteAttachmentEntity> NoteAttachments { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteTrackerLinks table for note-tracker links
+    /// </summary>
+    public DbSet<NoteTrackerLinkEntity> NoteTrackerLinks { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteTrackerThresholds table for note tracker thresholds
+    /// </summary>
+    public DbSet<NoteTrackerThresholdEntity> NoteTrackerThresholds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the NoteStateSpanLinks table for note-state span links
+    /// </summary>
+    public DbSet<NoteStateSpanLinkEntity> NoteStateSpanLinks { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1073,6 +1105,95 @@ public class NocturneDbContext : DbContext
             .HasIndex(cf => new { cf.UserId, cf.CreatedAt })
             .HasDatabaseName("ix_clock_faces_user_created_at")
             .IsDescending(false, true);
+
+        // Notes indexes - optimized for user queries
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.UserId)
+            .HasDatabaseName("ix_notes_user_id");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.Category)
+            .HasDatabaseName("ix_notes_category");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.IsArchived)
+            .HasDatabaseName("ix_notes_is_archived");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.OccurredAt)
+            .HasDatabaseName("ix_notes_occurred_at")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => new { n.UserId, n.Category })
+            .HasDatabaseName("ix_notes_user_category");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => new { n.UserId, n.IsArchived })
+            .HasDatabaseName("ix_notes_user_archived");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => new { n.UserId, n.OccurredAt })
+            .HasDatabaseName("ix_notes_user_occurred_at")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(n => n.CreatedAt)
+            .HasDatabaseName("ix_notes_created_at")
+            .IsDescending();
+
+        // NoteChecklistItem indexes
+        modelBuilder
+            .Entity<NoteChecklistItemEntity>()
+            .HasIndex(ci => ci.NoteId)
+            .HasDatabaseName("ix_note_checklist_items_note_id");
+
+        modelBuilder
+            .Entity<NoteChecklistItemEntity>()
+            .HasIndex(ci => new { ci.NoteId, ci.SortOrder })
+            .HasDatabaseName("ix_note_checklist_items_note_sort");
+
+        // NoteAttachment indexes
+        modelBuilder
+            .Entity<NoteAttachmentEntity>()
+            .HasIndex(a => a.NoteId)
+            .HasDatabaseName("ix_note_attachments_note_id");
+
+        // NoteTrackerLink indexes
+        modelBuilder
+            .Entity<NoteTrackerLinkEntity>()
+            .HasIndex(tl => tl.NoteId)
+            .HasDatabaseName("ix_note_tracker_links_note_id");
+
+        modelBuilder
+            .Entity<NoteTrackerLinkEntity>()
+            .HasIndex(tl => tl.TrackerDefinitionId)
+            .HasDatabaseName("ix_note_tracker_links_tracker_definition_id");
+
+        // NoteTrackerThreshold indexes
+        modelBuilder
+            .Entity<NoteTrackerThresholdEntity>()
+            .HasIndex(t => t.NoteTrackerLinkId)
+            .HasDatabaseName("ix_note_tracker_thresholds_note_tracker_link_id");
+
+        // NoteStateSpanLink indexes
+        modelBuilder
+            .Entity<NoteStateSpanLinkEntity>()
+            .HasIndex(sl => sl.NoteId)
+            .HasDatabaseName("ix_note_state_span_links_note_id");
+
+        modelBuilder
+            .Entity<NoteStateSpanLinkEntity>()
+            .HasIndex(sl => sl.StateSpanId)
+            .HasDatabaseName("ix_note_state_span_links_state_span_id");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1719,6 +1840,103 @@ public class NocturneDbContext : DbContext
                 .ValueGeneratedOnAddOrUpdate();
         });
 
+        // Configure Note entities
+        modelBuilder.Entity<NoteEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.IsArchived).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+
+            // Store enum as int in database
+            entity.Property(e => e.Category).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<NoteChecklistItemEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.IsCompleted).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.ChecklistItems)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteAttachmentEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.Attachments)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteTrackerLinkEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete when note is deleted
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.TrackerLinks)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relationship with cascade delete when tracker definition is deleted
+            entity
+                .HasOne(e => e.TrackerDefinition)
+                .WithMany()
+                .HasForeignKey(e => e.TrackerDefinitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteTrackerThresholdEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+
+            // Store enum as int in database
+            entity.Property(e => e.Urgency).HasConversion<int>();
+
+            // Relationship with cascade delete when note tracker link is deleted
+            entity
+                .HasOne(e => e.NoteTrackerLink)
+                .WithMany(tl => tl.Thresholds)
+                .HasForeignKey(e => e.NoteTrackerLinkId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NoteStateSpanLinkEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Relationship with cascade delete when note is deleted
+            entity
+                .HasOne(e => e.Note)
+                .WithMany(n => n.StateSpanLinks)
+                .HasForeignKey(e => e.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relationship with cascade delete when state span is deleted
+            entity
+                .HasOne(e => e.StateSpan)
+                .WithMany(ss => ss.NoteLinks)
+                .HasForeignKey(e => e.StateSpanId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
 
     /// <summary>
@@ -1743,7 +1961,9 @@ public class NocturneDbContext : DbContext
     }
 
     /// <summary>
-    /// Update system tracking timestamps before saving
+    /// Update system tracking timestamps before saving.
+    /// Entities opt in by implementing IHasCreatedAt, IHasUpdatedAt,
+    /// IHasSysCreatedAt, and/or IHasSysUpdatedAt.
     /// </summary>
     private void UpdateTimestamps()
     {
@@ -1751,190 +1971,38 @@ public class NocturneDbContext : DbContext
 
         foreach (var entry in ChangeTracker.Entries())
         {
-            if (entry.Entity is EntryEntity entryEntity)
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
+                continue;
+
+            var entity = entry.Entity;
+
+            if (entry.State == EntityState.Added)
             {
-                if (entry.State == EntityState.Added)
-                {
-                    entryEntity.SysCreatedAt = utcNow;
-                }
-                entryEntity.SysUpdatedAt = utcNow;
+                if (entity is IHasCreatedAt created)
+                    created.CreatedAt = utcNow;
+                if (entity is IHasSysCreatedAt sysCreated)
+                    sysCreated.SysCreatedAt = utcNow;
             }
-            else if (entry.Entity is TreatmentEntity treatmentEntity)
+
+            if (entity is IHasUpdatedAt updated)
+                updated.UpdatedAt = utcNow;
+            if (entity is IHasSysUpdatedAt sysUpdated)
+                sysUpdated.SysUpdatedAt = utcNow;
+
+            // Entities with non-standard timestamp property names
+            switch (entity)
             {
-                if (entry.State == EntityState.Added)
-                {
-                    treatmentEntity.SysCreatedAt = utcNow;
-                }
-                treatmentEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is DeviceStatusEntity deviceStatusEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    deviceStatusEntity.SysCreatedAt = utcNow;
-                }
-                deviceStatusEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is FoodEntity foodEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    foodEntity.SysCreatedAt = utcNow;
-                }
-                foodEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ConnectorFoodEntryEntity connectorFoodEntryEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    connectorFoodEntryEntity.SysCreatedAt = utcNow;
-                }
-                connectorFoodEntryEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is TreatmentFoodEntity treatmentFoodEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    treatmentFoodEntity.SysCreatedAt = utcNow;
-                }
-                treatmentFoodEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is UserFoodFavoriteEntity userFoodFavoriteEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    userFoodFavoriteEntity.SysCreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is SettingsEntity settingsEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    settingsEntity.SysCreatedAt = utcNow;
-                }
-                settingsEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ActivityEntity activityEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    activityEntity.SysCreatedAt = utcNow;
-                }
-                activityEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ProfileEntity profileEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    profileEntity.CreatedAtPg = utcNow;
-                }
-                profileEntity.UpdatedAtPg = utcNow;
-            }
-            else if (entry.Entity is AlertRuleEntity alertRuleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    alertRuleEntity.CreatedAt = utcNow;
-                }
-                alertRuleEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is AlertHistoryEntity alertHistoryEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    alertHistoryEntity.CreatedAt = utcNow;
-                }
-                alertHistoryEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is NotificationPreferencesEntity notificationPreferencesEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    notificationPreferencesEntity.CreatedAt = utcNow;
-                }
-                notificationPreferencesEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is EmergencyContactEntity emergencyContactEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    emergencyContactEntity.CreatedAt = utcNow;
-                }
-                emergencyContactEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is DeviceHealthEntity deviceHealthEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    deviceHealthEntity.CreatedAt = utcNow;
-                }
-                deviceHealthEntity.UpdatedAt = utcNow;
-            }
-            // Auth entities
-            else if (entry.Entity is RefreshTokenEntity refreshTokenEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    refreshTokenEntity.CreatedAt = utcNow;
-                }
-                refreshTokenEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is SubjectEntity subjectEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    subjectEntity.CreatedAt = utcNow;
-                }
-                subjectEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is RoleEntity roleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    roleEntity.CreatedAt = utcNow;
-                }
-                roleEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is OidcProviderEntity oidcProviderEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oidcProviderEntity.CreatedAt = utcNow;
-                }
-                oidcProviderEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is AuthAuditLogEntity authAuditLogEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    authAuditLogEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is LinkedRecordEntity linkedRecordEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    linkedRecordEntity.SysCreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is ConnectorConfigurationEntity connectorConfigEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    connectorConfigEntity.SysCreatedAt = utcNow;
-                    connectorConfigEntity.LastModified = DateTimeOffset.UtcNow;
-                }
-                connectorConfigEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ClockFaceEntity clockFaceEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    clockFaceEntity.CreatedAt = utcNow;
-                    clockFaceEntity.SysCreatedAt = utcNow;
-                }
-                clockFaceEntity.UpdatedAt = utcNow;
-                clockFaceEntity.SysUpdatedAt = utcNow;
+                case ProfileEntity profile:
+                    if (entry.State == EntityState.Added)
+                        profile.CreatedAtPg = utcNow;
+                    profile.UpdatedAtPg = utcNow;
+                    break;
+                case ConnectorConfigurationEntity connConfig when entry.State == EntityState.Added:
+                    connConfig.LastModified = DateTimeOffset.UtcNow;
+                    break;
+                case ClockFaceEntity clockFace:
+                    clockFace.UpdatedAt = utcNow;
+                    break;
             }
         }
     }

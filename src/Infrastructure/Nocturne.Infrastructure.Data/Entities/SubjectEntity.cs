@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Represents both human users and automated devices that can authenticate
 /// </summary>
 [Table("subjects")]
-public class SubjectEntity
+public class SubjectEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

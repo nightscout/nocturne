@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.Entry
 /// </summary>
 [Table("entries")]
-public class EntryEntity
+public class EntryEntity : IHasSysCreatedAt, IHasSysUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

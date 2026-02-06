@@ -40,6 +40,7 @@
     Timer,
     Layers,
     Bug,
+    StickyNote,
   } from "lucide-svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -76,6 +77,11 @@
       title: "Time Spans",
       href: "/time-spans",
       icon: Layers,
+    },
+    {
+      title: "Notes",
+      href: "/notes",
+      icon: StickyNote,
     },
     {
       title: "Reports",

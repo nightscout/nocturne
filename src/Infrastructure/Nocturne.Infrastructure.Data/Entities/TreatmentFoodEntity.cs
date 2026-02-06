@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// PostgreSQL entity for food attribution entries linked to treatments.
 /// </summary>
 [Table("treatment_foods")]
-public class TreatmentFoodEntity
+public class TreatmentFoodEntity : IHasSysCreatedAt, IHasSysUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

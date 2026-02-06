@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to user-specific notification preferences and delivery settings
 /// </summary>
 [Table("notification_preferences")]
-public class NotificationPreferencesEntity
+public class NotificationPreferencesEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID for notification preferences

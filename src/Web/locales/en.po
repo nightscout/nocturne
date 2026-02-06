@@ -57,7 +57,10 @@ msgstr "Carb Correction"
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
+#: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
+#: src/routes/calendar/+page.svelte
+#: src/routes/notes/+page.svelte
 msgid "Note"
 msgstr "Note"
 
@@ -145,6 +148,7 @@ msgid "Event Type"
 msgstr "Event Type"
 
 #: src/lib/components/TreatmentEditModal.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Date & Time"
 msgstr "Date & Time"
@@ -168,6 +172,7 @@ msgstr "Absorption Time (minutes)"
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -194,6 +199,7 @@ msgstr "Reason for this treatment"
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileDeleteDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -207,6 +213,7 @@ msgstr "Reason for this treatment"
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/routes/clock/+page.svelte
+#: src/routes/notes/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -219,6 +226,8 @@ msgstr "Reason for this treatment"
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
+#: src/routes/tasks/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Cancel"
 msgstr "Cancel"
 
@@ -322,9 +331,11 @@ msgstr "Never"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
+#: src/routes/notes/+page.svelte
 #: src/routes/notifications/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Retry"
 msgstr "Retry"
 
@@ -385,10 +396,13 @@ msgid "Fat"
 msgstr "Fat"
 
 #: src/lib/components/TreatmentsTable.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Duration"
 msgstr "Duration"
@@ -506,7 +520,9 @@ msgid "Failed to save alarm configuration"
 msgstr "Failed to save alarm configuration"
 
 #: src/lib/stores/settings-store.svelte.ts
+#: src/routes/notes/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Just now"
 msgstr "Just now"
 
@@ -1298,6 +1314,8 @@ msgstr "Unknown error"
 #~ msgstr "Enter face string (e.g., bn0-sg40-ar25)"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/notes/ChecklistEditor.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
 msgid "Enter"
 msgstr "Enter"
 
@@ -1422,6 +1440,8 @@ msgstr "Method"
 #: src/routes/compatibility/+page.svelte
 #: src/routes/compatibility/+page.svelte
 #: src/routes/meals/+page.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "All"
 msgstr "All"
 
@@ -1662,9 +1682,11 @@ msgstr "Portion"
 msgid "Unit"
 msgstr "Unit"
 
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/routes/food/FoodEditor.svelte
 #: src/routes/food/FoodList.svelte
 #: src/routes/settings/trackers/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Category"
 msgstr "Category"
 
@@ -1838,6 +1860,7 @@ msgid "Show hidden <0/>"
 msgstr "Show hidden <0/>"
 
 #: src/lib/components/entries/EntryEditDialog.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/routes/food/QuickPicksList.svelte
@@ -1845,6 +1868,7 @@ msgstr "Show hidden <0/>"
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Save"
 msgstr "Save"
 
@@ -2070,7 +2094,9 @@ msgstr "Unattributed"
 
 #: src/routes/clock/+page.svelte
 #: src/routes/meals/+page.svelte
+#: src/routes/notes/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Edit"
 msgstr "Edit"
 
@@ -2957,6 +2983,7 @@ msgstr "Custom"
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
+#: src/routes/calendar/+page.svelte
 msgid "Tracker"
 msgstr "Tracker"
 
@@ -3149,9 +3176,11 @@ msgid "Update"
 msgstr "Update"
 
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Create"
 msgstr "Create"
 
@@ -3261,7 +3290,13 @@ msgstr "Snack"
 msgid "Profile Switch"
 msgstr "Profile Switch"
 
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
+#: src/lib/components/notes/CategoryBadge.svelte
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Question"
 msgstr "Question"
 
@@ -3667,7 +3702,7 @@ msgstr "Target Low"
 
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 msgid "<0/> Add"
 msgstr "<0/> Add"
 
@@ -4067,8 +4102,10 @@ msgstr ""
 msgid "Unnamed Profile"
 msgstr "Unnamed Profile"
 
+#. placeholder {0}: df.format(new Date(note.createdAt))
 #. placeholder {0}: formatDateDetailed(profile.created_at)
 #. placeholder {0}: formatDate(subject.created)
+#: src/lib/components/notes/NoteDetail.svelte
 #: src/lib/components/profile/ProfileDeleteDialog.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "Created: {0}"
@@ -5364,6 +5401,8 @@ msgstr "Enable dynamic title & favicon"
 msgid "Show glucose values in browser tab"
 msgstr "Show glucose values in browser tab"
 
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/lib/components/settings/TitleFaviconSettings.svelte
 msgid "Title"
 msgstr "Title"
@@ -5470,6 +5509,7 @@ msgstr "My Custom Alarm"
 msgid "Optional: Give your sound a friendly name"
 msgstr "Optional: Give your sound a friendly name"
 
+#: src/lib/components/notes/NoteEditorDialog.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "<0/> Uploading..."
 msgstr "<0/> Uploading..."
@@ -5495,12 +5535,17 @@ msgstr "Click \"Upload Sound\" to add your own"
 msgid "Preview"
 msgstr "Preview"
 
+#: src/lib/components/notes/NoteDetail.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/notes/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
+#: src/routes/tasks/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "Delete"
 msgstr "Delete"
 
@@ -5528,9 +5573,8 @@ msgstr "Urgent"
 msgid "Notification Thresholds"
 msgstr "Notification Thresholds"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "No notification thresholds configured"
-msgstr "No notification thresholds configured"
+#~ msgid "No notification thresholds configured"
+#~ msgstr "No notification thresholds configured"
 
 #: src/lib/components/trackers/tracker-notification-editor.svelte
 msgid "Add thresholds to get notified as the tracker ages"
@@ -5540,22 +5584,21 @@ msgstr "Add thresholds to get notified as the tracker ages"
 msgid "Level"
 msgstr "Level"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 msgid "After (hours)"
 msgstr "After (hours)"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Description (optional)"
 msgstr "Description (optional)"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 msgid "Message shown when triggered"
 msgstr "Message shown when triggered"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-msgid "Remove notification"
-msgstr "Remove notification"
+#~ msgid "Remove notification"
+#~ msgstr "Remove notification"
 
 #~ msgid "Notifications trigger when tracker age exceeds the specified hours."
 #~ msgstr "Notifications trigger when tracker age exceeds the specified hours."
@@ -7743,13 +7786,12 @@ msgstr "Battery Report"
 msgid "No Battery Data Available"
 msgstr "No Battery Data Available"
 
-#: src/routes/reports/battery/+page.svelte
-msgid ""
-"Battery data is collected from devices that report uploader status.\n"
-"Make sure your CGM uploader app is sending device status data."
-msgstr ""
-"Battery data is collected from devices that report uploader status.\n"
-"Make sure your CGM uploader app is sending device status data."
+#~ msgid ""
+#~ "Battery data is collected from devices that report uploader status.\n"
+#~ "Make sure your CGM uploader app is sending device status data."
+#~ msgstr ""
+#~ "Battery data is collected from devices that report uploader status.\n"
+#~ "Make sure your CGM uploader app is sending device status data."
 
 #: src/routes/reports/battery/+page.svelte
 msgid "All Devices"
@@ -7823,7 +7865,7 @@ msgstr "History of battery charge and discharge periods"
 msgid "Charged: {0} ({1}% → {2}%)"
 msgstr "Charged: {0} ({1}% → {2}%)"
 
-#. placeholder {0}: formatDuration(cycle.dischargeDurationMinutes)
+#. placeholder {0}: formatDuration( cycle.dischargeDurationMinutes )
 #. placeholder {1}: cycle.dischargeStartLevel ?? "?"
 #. placeholder {2}: cycle.dischargeEndLevel ?? "?"
 #: src/routes/reports/battery/+page.svelte
@@ -8567,13 +8609,12 @@ msgstr "View and manage your diabetes treatments, insulin doses, and carb entrie
 msgid "{0} treatments"
 msgstr "{0} treatments"
 
-#: src/routes/reports/treatments/+page.svelte
-msgid ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
-msgstr ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
+#~ msgid ""
+#~ "Review and manage your insulin doses, carb entries, and device events. Use\n"
+#~ "filters to find specific treatments."
+#~ msgstr ""
+#~ "Review and manage your insulin doses, carb entries, and device events. Use\n"
+#~ "filters to find specific treatments."
 
 #: src/routes/reports/treatments/+page.svelte
 msgid "Search"
@@ -9257,9 +9298,11 @@ msgstr "<0>Important:</0> Store this token securely. Use it in the <1/> header o
 msgid "No access token available for this subject."
 msgstr "No access token available for this subject."
 
+#: src/lib/components/calendar/NotesListDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/lib/components/ui/dialog/dialog-content.svelte
 #: src/lib/components/ui/sheet/sheet-content.svelte
+#: src/routes/calendar/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -9326,6 +9369,7 @@ msgstr "<0/> Color Theme"
 msgid "Choose between Nocturne's custom theme or match the Trio iOS app"
 msgstr "Choose between Nocturne's custom theme or match the Trio iOS app"
 
+#: src/routes/notes/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -10732,6 +10776,7 @@ msgstr "AID Systems"
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/tasks/+page.svelte
 msgid "<0/> Active"
 msgstr "<0/> Active"
 
@@ -12273,7 +12318,7 @@ msgstr "Clock Builder - Nocturne"
 
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 msgid "Hours"
 msgstr "Hours"
 
@@ -12802,19 +12847,22 @@ msgstr "Are you sure you want to delete \"{0}\"? This action cannot be undone."
 msgid "New row at {0}"
 msgstr "New row at {0}"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/NoteThresholdEditor.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Event"
 msgstr "Event"
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 msgid "Negative = before event, Positive = after event."
 msgstr "Negative = before event, Positive = after event."
 
-#: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
 msgid "Positive = after start, Negative = before expiration."
 msgstr "Positive = after start, Negative = before expiration."
 
@@ -12876,3 +12924,506 @@ msgstr "({0} before expiration)"
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Exceeds tracker lifespan"
 msgstr "Exceeds tracker lifespan"
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr "Validation error"
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/notes/CategoryBadge.svelte
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Observation"
+msgstr "Observation"
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/notes/CategoryBadge.svelte
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Task"
+msgstr "Task"
+
+#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
+#: src/lib/components/notes/CategoryBadge.svelte
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Marker"
+msgstr "Marker"
+
+#: src/lib/components/notes/ChecklistEditor.svelte
+msgid "Remove item"
+msgstr "Remove item"
+
+#: src/lib/components/notes/ChecklistEditor.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+msgid "Add checklist item..."
+msgstr "Add checklist item..."
+
+#: src/lib/components/notes/ChecklistEditor.svelte
+msgid "Add item"
+msgstr "Add item"
+
+#. placeholder {0}: completedCount
+#. placeholder {1}: totalCount
+#: src/lib/components/notes/ChecklistEditor.svelte
+msgid "{0}/{1} completed"
+msgstr "{0}/{1} completed"
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Select category"
+msgstr "Select category"
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Unarchive"
+msgstr "Unarchive"
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Archive"
+msgstr "Archive"
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "Add a title..."
+msgstr "Add a title..."
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Content"
+msgstr "Content"
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "Write your note..."
+msgstr "Write your note..."
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "Occurred Date"
+msgstr "Occurred Date"
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "Pick a date"
+msgstr "Pick a date"
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/trackers/TrackerCompletionDialog.svelte
+#: src/routes/calendar/+page.svelte
+msgid "Checklist"
+msgstr "Checklist"
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "<0/> Attachments"
+msgstr "<0/> Attachments"
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "No attachments"
+msgstr "No attachments"
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "<0/> Linked Trackers"
+msgstr "<0/> Linked Trackers"
+
+#~ msgid "Tracker {0}..."
+#~ msgstr "Tracker {0}..."
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "No linked trackers"
+msgstr "No linked trackers"
+
+#. placeholder {0}: df.format(new Date(note.updatedAt))
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "Updated: {0}"
+msgstr "Updated: {0}"
+
+#: src/lib/components/notes/NoteDetail.svelte
+msgid "This note is archived"
+msgstr "This note is archived"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhook settings saved."
+msgstr "Webhook settings saved."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to save webhook settings."
+msgstr "Failed to save webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test sent to all webhooks."
+msgstr "Test sent to all webhooks."
+
+#. placeholder {0}: response.failedUrls.join(", ")
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed: {0}"
+msgstr "Failed: {0}"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test failed."
+msgstr "Test failed."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to test webhook settings."
+msgstr "Failed to test webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhooks"
+msgstr "Webhooks"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Send alert events to external services"
+msgstr "Send alert events to external services"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+msgid "Webhook URLs"
+msgstr "Webhook URLs"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr "No webhook URLs configured."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
+msgstr "<0/> Add URL"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Webhook Settings"
+msgstr "Webhook Settings"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Configure URLs and signature secrets for alarm notifications."
+msgstr "Configure URLs and signature secrets for alarm notifications."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Send Test"
+msgstr "Send Test"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Signature Secret"
+msgstr "Signature Secret"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret already configured"
+msgstr "Secret already configured"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret will be generated on save"
+msgstr "Secret will be generated on save"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "The API signs each webhook with HMAC-SHA256 using this secret."
+msgstr "The API signs each webhook with HMAC-SHA256 using this secret."
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Failed to load notes"
+msgstr "Failed to load notes"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Notes & Tasks - Nocturne"
+msgstr "Notes & Tasks - Nocturne"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Notes & Tasks"
+msgstr "Notes & Tasks"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Capture observations, questions, and to-dos"
+msgstr "Capture observations, questions, and to-dos"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "<0/> New Note"
+msgstr "<0/> New Note"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "All <0/>"
+msgstr "All <0/>"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "<0/> Archived"
+msgstr "<0/> Archived"
+
+#. placeholder {0}: categoryConfig[selectedCategory].label.toLowerCase()
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "No {0}s found"
+msgstr "No {0}s found"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "No archived notes"
+msgstr "No archived notes"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "No notes yet"
+msgstr "No notes yet"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Create a note to get started"
+msgstr "Create a note to get started"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Archive notes to see them here"
+msgstr "Archive notes to see them here"
+
+#. placeholder {0}: selectedCategory ? ` ${categoryConfig[selectedCategory].label}` : " Note"
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "<0/> New{0}"
+msgstr "<0/> New{0}"
+
+#. placeholder {0}: note.checklistItems.length - 3
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "+{0} more items"
+msgstr "+{0} more items"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Archived"
+msgstr "Archived"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/tasks/+page.svelte
+msgid "New Note"
+msgstr "New Note"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Edit Note"
+msgstr "Edit Note"
+
+#: src/routes/tasks/+page.svelte
+msgid "Title (optional)"
+msgstr "Title (optional)"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Give your note a title..."
+msgstr "Give your note a title..."
+
+#: src/routes/tasks/+page.svelte
+msgid "Write your note here..."
+msgstr "Write your note here..."
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Checklist Items"
+msgstr "Checklist Items"
+
+#: src/routes/tasks/+page.svelte
+msgid "<0/> Add Item"
+msgstr "<0/> Add Item"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Checklist item..."
+msgstr "Checklist item..."
+
+#: src/routes/tasks/+page.svelte
+msgid "Add checklist items to track progress on tasks"
+msgstr "Add checklist items to track progress on tasks"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Delete Note"
+msgstr "Delete Note"
+
+#: src/routes/notes/+page.svelte
+#: src/routes/tasks/+page.svelte
+msgid "Are you sure you want to delete this note? This action cannot be undone."
+msgstr "Are you sure you want to delete this note? This action cannot be undone."
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/NoteThresholdEditor.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "Reminders"
+msgstr "Reminders"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/NoteThresholdEditor.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "Add reminders to get notified before the tracker is due"
+msgstr "Add reminders to get notified before the tracker is due"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "<0/> Link Tracker"
+msgstr "<0/> Link Tracker"
+
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid ""
+"Link this note to a tracker to get reminded before appointments or due\n"
+"dates"
+msgstr ""
+"Link this note to a tracker to get reminded before appointments or due\n"
+"dates"
+
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "Unknown Tracker"
+msgstr "Unknown Tracker"
+
+#. placeholder {0}: link.thresholds.length
+#. placeholder {1}: link.thresholds.length !== 1 ? "s" : ""
+#. placeholder {0}: link.thresholds.length
+#. placeholder {1}: link.thresholds .length !== 1 ? "s" : ""
+#. placeholder {0}: thresholds.length
+#. placeholder {1}: thresholds.length !== 1 ? "s" : ""
+#: src/lib/components/notes/NoteDetail.svelte
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "({0} reminder{1})"
+msgstr "({0} reminder{1})"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/lib/components/notes/TrackerLinkSection.svelte
+msgid "Unlink tracker"
+msgstr "Unlink tracker"
+
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
+msgid "Thresholds"
+msgstr "Thresholds"
+
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
+msgid "Add thresholds to configure notifications"
+msgstr "Add thresholds to configure notifications"
+
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
+msgid "No thresholds configured"
+msgstr "No thresholds configured"
+
+#: src/lib/components/ui/threshold-editor/ThresholdEditor.svelte
+msgid "Remove threshold"
+msgstr "Remove threshold"
+
+#. placeholder {0}: linkedNotes.length
+#: src/lib/components/trackers/TrackerCompletionDialog.svelte
+msgid "Linked Notes ({0})"
+msgstr "Linked Notes ({0})"
+
+#: src/lib/components/trackers/TrackerCompletionDialog.svelte
+msgid "Back"
+msgstr "Back"
+
+#: src/lib/components/trackers/TrackerCompletionDialog.svelte
+#: src/routes/calendar/+page.svelte
+msgid "<0/> Edit Note"
+msgstr "<0/> Edit Note"
+
+#: src/routes/calendar/+page.svelte
+msgid "Linked Trackers"
+msgstr "Linked Trackers"
+
+#. placeholder {0}: selectedNote.trackerLinks.length
+#. placeholder {1}: selectedNote.trackerLinks.length !== 1 ? "s" : ""
+#: src/routes/calendar/+page.svelte
+msgid "{0} tracker{1} linked"
+msgstr "{0} tracker{1} linked"
+
+#. placeholder {0}: formattedDate
+#: src/lib/components/calendar/NotesListDialog.svelte
+msgid "<0/> Notes for {0}"
+msgstr "<0/> Notes for {0}"
+
+#. placeholder {0}: noteEvents.length
+#. placeholder {1}: noteEvents.length !== 1 ? "s" : ""
+#: src/lib/components/calendar/NotesListDialog.svelte
+msgid "{0} note{1} on this day"
+msgstr "{0} note{1} on this day"
+
+#: src/lib/components/calendar/NotesListDialog.svelte
+msgid "No notes for this day"
+msgstr "No notes for this day"
+
+#: src/routes/reports/battery/+page.svelte
+msgid ""
+"Battery data is collected from devices that report uploader\n"
+"status. Make sure your CGM uploader app is sending device status\n"
+"data."
+msgstr ""
+"Battery data is collected from devices that report uploader\n"
+"status. Make sure your CGM uploader app is sending device status\n"
+"data."
+
+#: src/routes/reports/treatments/+page.svelte
+msgid ""
+"Review and manage your insulin doses, carb entries, and device events.\n"
+"Use filters to find specific treatments."
+msgstr ""
+"Review and manage your insulin doses, carb entries, and device events.\n"
+"Use filters to find specific treatments."
+
+#~ msgid "Save the note first to link trackers"
+#~ msgstr "Save the note first to link trackers"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+msgid "Link this note to a tracker to get reminded before appointments"
+msgstr "Link this note to a tracker to get reminded before appointments"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+msgid "Content (optional)"
+msgstr "Content (optional)"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+msgid "Add additional details..."
+msgstr "Add additional details..."
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+msgid "<0/> Images"
+msgstr "<0/> Images"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+msgid "Add images"
+msgstr "Add images"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+msgid "Record patterns, symptoms, or things you notice"
+msgstr "Record patterns, symptoms, or things you notice"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+msgid "Questions to ask your doctor or research later"
+msgstr "Questions to ask your doctor or research later"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+msgid "Action items with optional checklist"
+msgstr "Action items with optional checklist"
+
+#: src/lib/components/notes/NoteEditorDialog.svelte
+#: src/routes/notes/+page.svelte
+msgid "Mark significant events or milestones"
+msgstr "Mark significant events or milestones"
+
+#: src/routes/calendar/+page.svelte
+#: src/routes/calendar/+page.svelte
+msgid "Add task for this day"
+msgstr "Add task for this day"
+
+#. placeholder {0}: noteMarkers.length
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+msgid "Notes ({0})"
+msgstr "Notes ({0})"

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to notification alert history and state management
 /// </summary>
 [Table("alert_history")]
-public class AlertHistoryEntity
+public class AlertHistoryEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID for alert history entry

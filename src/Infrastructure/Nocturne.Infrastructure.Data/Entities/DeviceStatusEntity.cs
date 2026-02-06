@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.DeviceStatus
 /// </summary>
 [Table("devicestatus")]
-public class DeviceStatusEntity
+public class DeviceStatusEntity : IHasSysCreatedAt, IHasSysUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

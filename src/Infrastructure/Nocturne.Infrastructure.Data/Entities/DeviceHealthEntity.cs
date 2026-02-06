@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Comprehensive device monitoring for CGM sensors, insulin pumps, and blood glucose meters
 /// </summary>
 [Table("device_health")]
-public class DeviceHealthEntity
+public class DeviceHealthEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID for device health record

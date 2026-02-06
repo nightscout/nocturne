@@ -8,6 +8,7 @@ using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Adapters;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.Interfaces;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -291,6 +292,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UserFoodFavoriteRepository>();
         services.AddScoped<EntryRepository>();
         services.AddScoped<TreatmentRepository>();
+        services.AddScoped<INoteRepository, NoteRepository>();
         return services;
     }
 }

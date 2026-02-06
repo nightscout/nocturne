@@ -5693,6 +5693,1078 @@
         }
       }
     },
+    "/api/v4/notes": {
+      "post": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Create a new note",
+        "operationId": "Note_CreateNote",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Note creation request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "Note created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "List notes with optional filtering",
+        "operationId": "Note_GetNotes",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by note category",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/NoteCategory"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 1
+          },
+          {
+            "name": "isArchived",
+            "in": "query",
+            "description": "Filter by archive status",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "trackerDefinitionId",
+            "in": "query",
+            "description": "Filter by linked tracker definition",
+            "schema": {
+              "type": "string",
+              "format": "guid",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "stateSpanId",
+            "in": "query",
+            "description": "Filter by linked state span",
+            "schema": {
+              "type": "string",
+              "format": "guid",
+              "nullable": true
+            },
+            "x-position": 4
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Filter notes created on or after this date",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 5
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Filter notes created on or before this date",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of notes to return (default: 100)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 7
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of notes to skip for pagination",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 8
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notes retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Note"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}": {
+      "get": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Get a single note by ID",
+        "operationId": "Note_GetNote",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Note retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to access this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Update an existing note",
+        "operationId": "Note_UpdateNote",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Updated note data",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "Note updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to update this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Delete a note",
+        "operationId": "Note_DeleteNote",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Note deleted successfully"
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to delete this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/archive": {
+      "patch": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Toggle archive status of a note",
+        "operationId": "Note_ArchiveNote",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Archive request with archive flag",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveNoteRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "Archive status updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/attachments": {
+      "post": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Upload an attachment to a note",
+        "operationId": "Note_UploadAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attachment uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteAttachment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid file or file too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/attachments/{attachmentId}": {
+      "get": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Download an attachment from a note",
+        "operationId": "Note_DownloadAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "description": "Attachment ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment downloaded successfully"
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to access this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note or attachment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Delete an attachment from a note",
+        "operationId": "Note_DeleteAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "description": "Attachment ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Attachment deleted successfully"
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note or attachment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/trackers": {
+      "post": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Link a tracker to a note",
+        "operationId": "Note_LinkTracker",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Tracker link request with tracker definition ID and thresholds",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkTrackerRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "201": {
+            "description": "Tracker linked successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteTrackerLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/trackers/{linkId}": {
+      "delete": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Unlink a tracker from a note",
+        "operationId": "Note_UnlinkTracker",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "description": "Tracker link ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tracker unlinked successfully"
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note or tracker link not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/statespans": {
+      "post": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Link a state span to a note",
+        "operationId": "Note_LinkStateSpan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "State span link request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkStateSpanRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "201": {
+            "description": "State span linked successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteStateSpanLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/statespans/{linkId}": {
+      "delete": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Unlink a state span from a note",
+        "operationId": "Note_UnlinkStateSpan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "description": "State span link ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "State span unlinked successfully"
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note or state span link not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/notes/{id}/checklist/{itemId}": {
+      "patch": {
+        "tags": [
+          "V4 Notes"
+        ],
+        "summary": "Toggle a checklist item completion status",
+        "operationId": "Note_ToggleChecklistItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Note ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "description": "Checklist item ID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checklist item toggled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteChecklistItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorized to modify this note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Note or checklist item not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/notifications": {
       "get": {
         "tags": [
@@ -21195,7 +22267,8 @@
           "AnonymousLoginRequest",
           "PredictedLow",
           "SuggestedMealMatch",
-          "SuggestedTrackerMatch"
+          "SuggestedTrackerMatch",
+          "NoteReminder"
         ],
         "enum": [
           "PasswordResetRequest",
@@ -21206,7 +22279,8 @@
           "AnonymousLoginRequest",
           "PredictedLow",
           "SuggestedMealMatch",
-          "SuggestedTrackerMatch"
+          "SuggestedTrackerMatch",
+          "NoteReminder"
         ]
       },
       "NotificationUrgency": {
@@ -22668,6 +23742,425 @@
           },
           "enableMatchNotifications": {
             "type": "boolean"
+          }
+        }
+      },
+      "Note": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "userId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "category": {
+            "$ref": "#/components/schemas/NoteCategory"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "content": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isArchived": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteChecklistItem"
+            }
+          },
+          "trackerLinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteTrackerLink"
+            }
+          },
+          "stateSpanLinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteStateSpanLink"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteAttachment"
+            }
+          }
+        }
+      },
+      "NoteCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Observation",
+          "Question",
+          "Task",
+          "Marker"
+        ],
+        "enum": [
+          "Observation",
+          "Question",
+          "Task",
+          "Marker"
+        ]
+      },
+      "NoteChecklistItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "type": "string"
+          },
+          "isCompleted": {
+            "type": "boolean"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "NoteTrackerLink": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackerDefinitionId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "thresholds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteTrackerThreshold"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NoteTrackerThreshold": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "hoursOffset": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "urgency": {
+            "$ref": "#/components/schemas/NotificationUrgency"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "NoteStateSpanLink": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "stateSpanId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NoteAttachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateNoteRequest": {
+        "type": "object",
+        "description": "Request model for creating a new note",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "content"
+        ],
+        "properties": {
+          "category": {
+            "description": "The note category",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NoteCategory"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional title for the note (max 200 characters)",
+            "maxLength": 200,
+            "nullable": true
+          },
+          "content": {
+            "type": "string",
+            "description": "The note content (max 10000 characters)",
+            "maxLength": 10000,
+            "minLength": 1
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "Optional contextual timestamp for when the note event occurred",
+            "format": "date-time",
+            "nullable": true
+          },
+          "checklistItems": {
+            "type": "array",
+            "description": "Optional checklist items to create with the note",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CreateChecklistItemRequest"
+            }
+          }
+        }
+      },
+      "CreateChecklistItemRequest": {
+        "type": "object",
+        "description": "Request model for creating a checklist item",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The checklist item text (max 500 characters)",
+            "maxLength": 500,
+            "minLength": 1
+          },
+          "isCompleted": {
+            "type": "boolean",
+            "description": "Whether the item is completed"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "description": "Optional sort order (defaults to creation order)",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "UpdateNoteRequest": {
+        "type": "object",
+        "description": "Request model for updating an existing note",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "description": "Updated category (optional)",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NoteCategory"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title (optional, max 200 characters)",
+            "maxLength": 200,
+            "nullable": true
+          },
+          "content": {
+            "type": "string",
+            "description": "Updated content (optional, max 10000 characters)",
+            "maxLength": 10000,
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "Updated contextual timestamp (optional)",
+            "format": "date-time",
+            "nullable": true
+          },
+          "checklistItems": {
+            "type": "array",
+            "description": "Updated checklist items (if provided, replaces all existing items)",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/UpdateChecklistItemRequest"
+            }
+          }
+        }
+      },
+      "UpdateChecklistItemRequest": {
+        "type": "object",
+        "description": "Request model for updating a checklist item",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Item ID (null for new items)",
+            "nullable": true
+          },
+          "text": {
+            "type": "string",
+            "description": "The checklist item text (max 500 characters)",
+            "maxLength": 500,
+            "minLength": 1
+          },
+          "isCompleted": {
+            "type": "boolean",
+            "description": "Whether the item is completed"
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "When the item was completed (optional)",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "description": "Optional sort order (defaults to creation order)",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "ArchiveNoteRequest": {
+        "type": "object",
+        "description": "Request model for archiving/unarchiving a note",
+        "additionalProperties": false,
+        "required": [
+          "archive"
+        ],
+        "properties": {
+          "archive": {
+            "type": "boolean",
+            "description": "True to archive, false to unarchive"
+          }
+        }
+      },
+      "LinkTrackerRequest": {
+        "type": "object",
+        "description": "Request model for linking a tracker to a note",
+        "additionalProperties": false,
+        "required": [
+          "trackerDefinitionId"
+        ],
+        "properties": {
+          "trackerDefinitionId": {
+            "type": "string",
+            "description": "The tracker definition ID to link",
+            "format": "guid",
+            "minLength": 1
+          },
+          "thresholds": {
+            "type": "array",
+            "description": "Optional notification thresholds for this link",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CreateTrackerThresholdRequest"
+            }
+          }
+        }
+      },
+      "CreateTrackerThresholdRequest": {
+        "type": "object",
+        "description": "Request model for creating a tracker notification threshold",
+        "additionalProperties": false,
+        "properties": {
+          "hoursOffset": {
+            "type": "number",
+            "description": "Hours offset from tracker start (positive) or end (negative)",
+            "format": "decimal"
+          },
+          "urgency": {
+            "description": "The notification urgency level",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotificationUrgency"
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description for this threshold",
+            "nullable": true
+          }
+        }
+      },
+      "LinkStateSpanRequest": {
+        "type": "object",
+        "description": "Request model for linking a state span to a note",
+        "additionalProperties": false,
+        "required": [
+          "stateSpanId"
+        ],
+        "properties": {
+          "stateSpanId": {
+            "type": "string",
+            "description": "The state span ID to link",
+            "format": "guid",
+            "minLength": 1
           }
         }
       },

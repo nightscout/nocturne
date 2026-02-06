@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Secret properties (passwords, API keys) are stored encrypted in SecretsJson.
 /// </summary>
 [Table("connector_configurations")]
-public class ConnectorConfigurationEntity
+public class ConnectorConfigurationEntity : IHasSysCreatedAt, IHasSysUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

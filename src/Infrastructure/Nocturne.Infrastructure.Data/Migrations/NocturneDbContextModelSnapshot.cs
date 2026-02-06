@@ -2009,6 +2009,276 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("migration_sources");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteAttachmentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("data");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<Guid>("NoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("note_id");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NoteId")
+                        .HasDatabaseName("ix_note_attachments_note_id");
+
+                    b.ToTable("note_attachments");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteChecklistItemEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("IsCompleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_completed");
+
+                    b.Property<Guid>("NoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("note_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NoteId")
+                        .HasDatabaseName("ix_note_checklist_items_note_id");
+
+                    b.HasIndex("NoteId", "SortOrder")
+                        .HasDatabaseName("ix_note_checklist_items_note_sort");
+
+                    b.ToTable("note_checklist_items");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_archived");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category")
+                        .HasDatabaseName("ix_notes_category");
+
+                    b.HasIndex("CreatedAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_notes_created_at");
+
+                    b.HasIndex("IsArchived")
+                        .HasDatabaseName("ix_notes_is_archived");
+
+                    b.HasIndex("OccurredAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_notes_occurred_at");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_notes_user_id");
+
+                    b.HasIndex("UserId", "Category")
+                        .HasDatabaseName("ix_notes_user_category");
+
+                    b.HasIndex("UserId", "IsArchived")
+                        .HasDatabaseName("ix_notes_user_archived");
+
+                    b.HasIndex("UserId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_notes_user_occurred_at");
+
+                    b.ToTable("notes");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteStateSpanLinkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("NoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("note_id");
+
+                    b.Property<Guid>("StateSpanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("state_span_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NoteId")
+                        .HasDatabaseName("ix_note_state_span_links_note_id");
+
+                    b.HasIndex("StateSpanId")
+                        .HasDatabaseName("ix_note_state_span_links_state_span_id");
+
+                    b.ToTable("note_state_span_links");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteTrackerLinkEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("NoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("note_id");
+
+                    b.Property<Guid>("TrackerDefinitionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tracker_definition_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NoteId")
+                        .HasDatabaseName("ix_note_tracker_links_note_id");
+
+                    b.HasIndex("TrackerDefinitionId")
+                        .HasDatabaseName("ix_note_tracker_links_tracker_definition_id");
+
+                    b.ToTable("note_tracker_links");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteTrackerThresholdEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<decimal>("HoursOffset")
+                        .HasColumnType("numeric")
+                        .HasColumnName("hours_offset");
+
+                    b.Property<Guid>("NoteTrackerLinkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("note_tracker_link_id");
+
+                    b.Property<int>("Urgency")
+                        .HasColumnType("integer")
+                        .HasColumnName("urgency");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NoteTrackerLinkId")
+                        .HasDatabaseName("ix_note_tracker_thresholds_note_tracker_link_id");
+
+                    b.ToTable("note_tracker_thresholds");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NotificationPreferencesEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3724,6 +3994,77 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Source");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteAttachmentEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.NoteEntity", "Note")
+                        .WithMany("Attachments")
+                        .HasForeignKey("NoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Note");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteChecklistItemEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.NoteEntity", "Note")
+                        .WithMany("ChecklistItems")
+                        .HasForeignKey("NoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Note");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteStateSpanLinkEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.NoteEntity", "Note")
+                        .WithMany("StateSpanLinks")
+                        .HasForeignKey("NoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.StateSpanEntity", "StateSpan")
+                        .WithMany("NoteLinks")
+                        .HasForeignKey("StateSpanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Note");
+
+                    b.Navigation("StateSpan");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteTrackerLinkEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.NoteEntity", "Note")
+                        .WithMany("TrackerLinks")
+                        .HasForeignKey("NoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TrackerDefinitionEntity", "TrackerDefinition")
+                        .WithMany()
+                        .HasForeignKey("TrackerDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Note");
+
+                    b.Navigation("TrackerDefinition");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteTrackerThresholdEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.NoteTrackerLinkEntity", "NoteTrackerLink")
+                        .WithMany("Thresholds")
+                        .HasForeignKey("NoteTrackerLinkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("NoteTrackerLink");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PasswordResetRequestEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "HandledBy")
@@ -3856,9 +4197,30 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("Runs");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteEntity", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("ChecklistItems");
+
+                    b.Navigation("StateSpanLinks");
+
+                    b.Navigation("TrackerLinks");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NoteTrackerLinkEntity", b =>
+                {
+                    b.Navigation("Thresholds");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RoleEntity", b =>
                 {
                     b.Navigation("SubjectRoles");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.StateSpanEntity", b =>
+                {
+                    b.Navigation("NoteLinks");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SubjectEntity", b =>

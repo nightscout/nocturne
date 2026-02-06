@@ -124,10 +124,10 @@
   }
 
   /**
-   * Format hours with smart day/hour display
-   * <= 48 hours: show hours only
-   * < 360 hours (15 days): show days + hours
-   * >= 360 hours: show days only
+   * Format hours with smart day/hour display <= 48 hours: show hours only < 360
+   * hours (15 days): show days + hours
+   *
+   * > = 360 hours: show days only
    */
   function formatHours(hours: number): string {
     const absHours = Math.abs(hours);
@@ -169,7 +169,7 @@
   );
 
   // Effective hours for Duration mode negative thresholds
-  const effectiveHours = $derived(() => {
+  const effectiveHours = $derived.by(() => {
     if (value === undefined) return null;
     if (mode === "Event") return null; // Event mode doesn't need this
     if (value >= 0) return null; // Positive values don't need effective calculation
@@ -205,7 +205,7 @@
           </Button>
         {/snippet}
       </Tooltip.Trigger>
-      <Tooltip.Content side="top" class="max-w-xs">
+      <Tooltip.Content side="top" class="max-w-xs bg-card text-card-foreground">
         <p class="font-medium mb-1">Supported formats:</p>
         <ul class="text-sm space-y-0.5">
           <li>
@@ -244,12 +244,14 @@
     <p class="text-sm text-muted-foreground px-1">
       {#if mode === "Event"}
         {#if computedHours < 0}
-          = <span class="font-medium">{formatHours(computedHours)}</span> before event
+          = <span class="font-medium">{formatHours(computedHours)}</span>
+           before event
         {:else}
-          = <span class="font-medium">{formatHours(computedHours)}</span> after event
+          = <span class="font-medium">{formatHours(computedHours)}</span>
+           after event
         {/if}
       {:else if computedHours < 0 && lifespanHours !== undefined}
-        = <span class="font-medium">{formatHours(effectiveHours() ?? 0)}</span>
+        = <span class="font-medium">{formatHours(effectiveHours ?? 0)}</span>
         <span class="text-muted-foreground/70">
           ({formatHours(Math.abs(computedHours))} before expiration)
         </span>
@@ -259,9 +261,7 @@
     </p>
   {/if}
   {#if exceedsLifespan}
-    <p class="text-sm text-destructive px-1">
-      Exceeds tracker lifespan
-    </p>
+    <p class="text-sm text-destructive px-1">Exceeds tracker lifespan</p>
   {:else if parseError}
     <p class="text-sm text-destructive px-1">
       Invalid format. Try: 168, 7x24, 7d, or 1w
