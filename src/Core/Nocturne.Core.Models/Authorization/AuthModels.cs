@@ -193,5 +193,10 @@ public enum AuthType
     /// <summary>
     /// Session cookie
     /// </summary>
-    SessionCookie
+    SessionCookie,
+
+    /// <summary>
+    /// OAuth 2.0 access token (JWT with scope claims)
+    /// </summary>
+    OAuthAccessToken
 }

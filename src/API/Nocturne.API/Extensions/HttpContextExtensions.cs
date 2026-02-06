@@ -1,6 +1,7 @@
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
 
 namespace Nocturne.API.Extensions;
 
@@ -118,5 +119,35 @@ public static class HttpContextExtensions
             || context.HasPermission("api:*:create")
             || context.HasPermission("api:*:update")
             || context.HasPermission("api:*:delete");
+    }
+
+    /// <summary>
+    /// Get the resolved OAuth scopes for the current request.
+    /// These are populated by the auth middleware from either OAuth token claims
+    /// or translated from legacy Shiro-style permissions.
+    /// </summary>
+    /// <param name="context">HTTP context</param>
+    /// <returns>Set of granted scope strings</returns>
+    public static IReadOnlySet<string> GetGrantedScopes(this HttpContext context)
+    {
+        if (context.Items["GrantedScopes"] is IReadOnlySet<string> scopes)
+        {
+            return scopes;
+        }
+
+        return new HashSet<string>();
+    }
+
+    /// <summary>
+    /// Check if the current request has a specific OAuth scope.
+    /// Handles readwrite implying read, and * implying everything.
+    /// </summary>
+    /// <param name="context">HTTP context</param>
+    /// <param name="scope">The scope to check</param>
+    /// <returns>True if the scope is satisfied</returns>
+    public static bool HasScope(this HttpContext context, string scope)
+    {
+        var grantedScopes = context.GetGrantedScopes();
+        return OAuthScopes.SatisfiesScope(grantedScopes, scope);
     }
 }
