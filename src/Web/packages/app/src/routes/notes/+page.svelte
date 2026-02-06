@@ -8,10 +8,7 @@
   import {
     StickyNote,
     Plus,
-    Eye,
-    HelpCircle,
     CheckSquare,
-    Flag,
     Archive,
     ArchiveRestore,
     Trash2,
@@ -22,13 +19,13 @@
     Clock,
     ImagePlus,
   } from "lucide-svelte";
-  import { cn } from "$lib/utils";
+  import { cn, timeAgo } from "$lib/utils";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import * as notesRemote from "$lib/data/notes.remote";
-  import { NoteEditorDialog } from "$lib/components/notes";
+  import { NoteEditorDialog, categoryConfig } from "$lib/components/notes";
   import {
     NoteCategory,
     type Note,
@@ -81,42 +78,6 @@
   // Delete confirmation dialog state
   let isDeleteDialogOpen = $state(false);
   let deletingNoteId = $state<string | null>(null);
-
-  // Category config
-  const categoryConfig: Record<
-    NoteCategory,
-    {
-      label: string;
-      icon: typeof StickyNote;
-      color: string;
-      description: string;
-    }
-  > = {
-    [NoteCategory.Observation]: {
-      label: "Observation",
-      icon: Eye,
-      color: "text-blue-500 bg-blue-500/10",
-      description: "Record patterns, symptoms, or things you notice",
-    },
-    [NoteCategory.Question]: {
-      label: "Question",
-      icon: HelpCircle,
-      color: "text-purple-500 bg-purple-500/10",
-      description: "Questions to ask your doctor or research later",
-    },
-    [NoteCategory.Task]: {
-      label: "Task",
-      icon: CheckSquare,
-      color: "text-green-500 bg-green-500/10",
-      description: "Action items with optional checklist",
-    },
-    [NoteCategory.Marker]: {
-      label: "Marker",
-      icon: Flag,
-      color: "text-orange-500 bg-orange-500/10",
-      description: "Mark significant events or milestones",
-    },
-  };
 
   // Filtered notes
   const filteredNotes = $derived.by(() => {
@@ -172,34 +133,6 @@
   onMount(() => {
     loadData();
   });
-
-  // Format date
-  function formatDate(dateStr: Date | undefined): string {
-    if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  // Format relative time
-  function formatRelativeTime(dateStr: Date | undefined): string {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return formatDate(dateStr);
-  }
 
   // Redirect to login if not authenticated
   function requireAuth(): boolean {
@@ -585,7 +518,7 @@
                   >
                     <span class="flex items-center gap-1">
                       <Clock class="h-3 w-3" />
-                      {formatRelativeTime(note.updatedAt ?? note.createdAt)}
+                      {timeAgo(new Date(note.updatedAt ?? note.createdAt ?? 0).getTime())}
                     </span>
                     {#if progress}
                       <span

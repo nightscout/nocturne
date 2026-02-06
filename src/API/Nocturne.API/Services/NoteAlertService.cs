@@ -99,6 +99,7 @@ public class NoteAlertService : INoteAlertService
                                 Note = noteModel,
                                 TrackerInstanceId = instance.Id,
                                 TrackerName = instance.Definition?.Name ?? "Unknown Tracker",
+                                ThresholdId = threshold.Id,
                                 Urgency = threshold.Urgency,
                                 ThresholdDescription = threshold.Description
                             });
@@ -244,9 +245,9 @@ public class NoteAlertService : INoteAlertService
         NoteAlert alert,
         CancellationToken cancellationToken)
     {
-        // Create a source ID that combines note ID and tracker instance ID for deduplication
+        // Create a source ID that combines note ID, tracker instance ID, and threshold ID for deduplication
         // This ensures we don't create duplicate notifications for the same note/instance/threshold combination
-        var sourceId = $"note:{alert.NoteId}:instance:{alert.TrackerInstanceId}";
+        var sourceId = $"note:{alert.NoteId}:instance:{alert.TrackerInstanceId}:threshold:{alert.ThresholdId}";
 
         // Check if a notification already exists for this source
         var existingNotifications = await _notificationService.GetActiveNotificationsAsync(

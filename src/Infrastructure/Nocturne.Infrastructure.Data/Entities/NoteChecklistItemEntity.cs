@@ -14,6 +14,7 @@ public class NoteChecklistItemEntity
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification
     /// </summary>
     [Key]
+    [Column("id")]
     public Guid Id { get; set; }
 
     /// <summary>

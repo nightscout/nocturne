@@ -23769,8 +23769,7 @@
           },
           "occurredAt": {
             "type": "string",
-            "format": "date-time",
-            "nullable": true
+            "format": "date-time"
           },
           "isArchived": {
             "type": "boolean"

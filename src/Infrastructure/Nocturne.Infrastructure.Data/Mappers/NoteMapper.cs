@@ -16,16 +16,14 @@ public static class NoteMapper
         var entity = new NoteEntity
         {
             Id = string.IsNullOrEmpty(model.Id)
-                ? Guid.CreateVersion7()
+                ? Guid.Empty
                 : ParseIdToGuid(model.Id),
             UserId = model.UserId,
             Category = model.Category,
             Title = model.Title,
             Content = model.Content,
-            OccurredAt = model.OccurredAt ?? DateTime.UtcNow,
+            OccurredAt = model.OccurredAt == default ? DateTime.UtcNow : model.OccurredAt,
             IsArchived = model.IsArchived,
-            CreatedAt = model.CreatedAt == default ? DateTime.UtcNow : model.CreatedAt,
-            UpdatedAt = model.UpdatedAt == default ? DateTime.UtcNow : model.UpdatedAt,
         };
 
         // Map checklist items
@@ -92,9 +90,8 @@ public static class NoteMapper
         entity.Category = model.Category;
         entity.Title = model.Title;
         entity.Content = model.Content;
-        entity.OccurredAt = model.OccurredAt ?? entity.OccurredAt;
+        entity.OccurredAt = model.OccurredAt == default ? entity.OccurredAt : model.OccurredAt;
         entity.IsArchived = model.IsArchived;
-        entity.UpdatedAt = DateTime.UtcNow;
 
         // Update existing checklist items and add new ones
         var existingItemIds = entity.ChecklistItems.Select(ci => ci.Id).ToHashSet();
@@ -142,14 +139,13 @@ public static class NoteMapper
         return new NoteChecklistItemEntity
         {
             Id = string.IsNullOrEmpty(model.Id)
-                ? Guid.CreateVersion7()
+                ? Guid.Empty
                 : ParseIdToGuid(model.Id),
             NoteId = noteId,
             Text = model.Text,
             IsCompleted = model.IsCompleted,
             CompletedAt = model.CompletedAt,
             SortOrder = model.SortOrder,
-            CreatedAt = DateTime.UtcNow,
         };
     }
 
@@ -221,7 +217,7 @@ public static class NoteMapper
         return new NoteTrackerThresholdEntity
         {
             Id = string.IsNullOrEmpty(model.Id)
-                ? Guid.CreateVersion7()
+                ? Guid.Empty
                 : ParseIdToGuid(model.Id),
             NoteTrackerLinkId = linkId,
             HoursOffset = model.HoursOffset,
@@ -244,28 +240,17 @@ public static class NoteMapper
     }
 
     /// <summary>
-    /// Parse string ID to GUID, or generate new GUID if invalid
+    /// Parse string ID to GUID
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when the ID is not a valid GUID format</exception>
     private static Guid ParseIdToGuid(string id)
     {
         if (string.IsNullOrEmpty(id))
-            return Guid.CreateVersion7();
+            return Guid.Empty;
 
         if (Guid.TryParse(id, out var guidId))
             return guidId;
 
-        // Hash the ID to get a deterministic GUID for legacy IDs
-        try
-        {
-            using var sha1 = System.Security.Cryptography.SHA1.Create();
-            var hashBytes = sha1.ComputeHash(System.Text.Encoding.UTF8.GetBytes(id));
-            var guidBytes = new byte[16];
-            Array.Copy(hashBytes, guidBytes, 16);
-            return new Guid(guidBytes);
-        }
-        catch
-        {
-            return Guid.CreateVersion7();
-        }
+        throw new ArgumentException($"Invalid GUID format: '{id}'", nameof(id));
     }
 }

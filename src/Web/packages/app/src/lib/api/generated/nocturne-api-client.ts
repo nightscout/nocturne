@@ -21144,7 +21144,7 @@ export interface Note {
     category?: NoteCategory;
     title?: string | undefined;
     content?: string;
-    occurredAt?: Date | undefined;
+    occurredAt?: Date;
     isArchived?: boolean;
     createdAt?: Date;
     updatedAt?: Date;

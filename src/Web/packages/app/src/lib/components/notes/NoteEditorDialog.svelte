@@ -7,10 +7,6 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
   import {
-    Eye,
-    HelpCircle,
-    CheckSquare,
-    Flag,
     Plus,
     Trash2,
     Loader2,
@@ -27,6 +23,7 @@
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import { ThresholdEditor } from "$lib/components/ui/threshold-editor";
   import { TrackerLinkSection } from "$lib/components/notes";
+  import { categoryConfig } from "$lib/components/notes/category-config";
   import {
     NoteCategory,
     TrackerCategory,
@@ -147,42 +144,6 @@
       expandedNewLinks = new Set();
     }
   });
-
-  // Category config
-  const categoryConfig: Record<
-    NoteCategory,
-    {
-      label: string;
-      icon: typeof Eye;
-      color: string;
-      description: string;
-    }
-  > = {
-    [NoteCategory.Observation]: {
-      label: "Observation",
-      icon: Eye,
-      color: "text-blue-500 bg-blue-500/10",
-      description: "Record patterns, symptoms, or things you notice",
-    },
-    [NoteCategory.Question]: {
-      label: "Question",
-      icon: HelpCircle,
-      color: "text-purple-500 bg-purple-500/10",
-      description: "Questions to ask your doctor or research later",
-    },
-    [NoteCategory.Task]: {
-      label: "Task",
-      icon: CheckSquare,
-      color: "text-green-500 bg-green-500/10",
-      description: "Action items with optional checklist",
-    },
-    [NoteCategory.Marker]: {
-      label: "Marker",
-      icon: Flag,
-      color: "text-orange-500 bg-orange-500/10",
-      description: "Mark significant events or milestones",
-    },
-  };
 
   // Get definition by ID
   function getDefinition(id: string): TrackerDefinitionDto | undefined {
@@ -424,17 +385,10 @@
     uploadingAttachment = true;
     try {
       for (const file of pendingAttachments) {
-        const formData = new FormData();
-        formData.append("file", file, file.name);
-
-        const response = await fetch(`/api/v4/notes/${noteId}/attachments`, {
-          method: "POST",
-          body: formData,
+        await notesRemote.uploadAttachment({
+          noteId,
+          file: { data: file, fileName: file.name },
         });
-
-        if (!response.ok) {
-          throw new Error(`Upload failed: ${response.statusText}`);
-        }
       }
       pendingAttachments = [];
     } catch (err) {

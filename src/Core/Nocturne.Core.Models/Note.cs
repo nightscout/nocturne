@@ -38,10 +38,10 @@ public class Note
     public string Content { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets when the note event occurred (optional contextual timestamp)
+    /// Gets or sets when the note event occurred (defaults to creation time)
     /// </summary>
     [JsonPropertyName("occurredAt")]
-    public DateTime? OccurredAt { get; set; }
+    public DateTime OccurredAt { get; set; }
 
     /// <summary>
     /// Gets or sets whether the note is archived

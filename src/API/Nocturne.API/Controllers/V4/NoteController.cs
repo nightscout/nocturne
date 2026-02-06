@@ -57,7 +57,7 @@ public class NoteController : ControllerBase
             Category = request.Category,
             Title = request.Title,
             Content = request.Content,
-            OccurredAt = request.OccurredAt,
+            OccurredAt = request.OccurredAt ?? DateTime.UtcNow,
             ChecklistItems = request.ChecklistItems?.Select((item, index) => new NoteChecklistItem
             {
                 Text = item.Text,

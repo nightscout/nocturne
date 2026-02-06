@@ -28,6 +28,11 @@ public class NoteAlert
     public string TrackerName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the threshold ID that was crossed
+    /// </summary>
+    public Guid ThresholdId { get; set; }
+
+    /// <summary>
     /// Gets or sets the urgency level of the alert
     /// </summary>
     public NotificationUrgency Urgency { get; set; }

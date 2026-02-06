@@ -51,17 +51,8 @@ public class NoteService : INoteService
     {
         _logger.LogDebug("Creating note for user {UserId} with category {Category}", note.UserId, note.Category);
 
-        // Set defaults
-        var now = DateTime.UtcNow;
-        note.CreatedAt = now;
-        note.UpdatedAt = now;
-        note.OccurredAt ??= now;
-
-        // Convert to entity
+        // Convert to entity (ID and timestamps are handled by repository/DbContext)
         var entity = NoteMapper.ToEntity(note);
-
-        // Generate UUID v7 for the note ID
-        entity.Id = Guid.CreateVersion7();
 
         // Create in repository
         var createdEntity = await _repository.CreateAsync(entity, cancellationToken);
@@ -301,18 +292,14 @@ public class NoteService : INoteService
             TrackerDefinitionId = trackerDefinitionId,
         };
 
-        var createdLink = await _repository.AddTrackerLinkAsync(linkEntity, cancellationToken);
-
-        // Add thresholds to the link
+        // Add thresholds to the link entity BEFORE persisting so they are saved together
         foreach (var threshold in thresholds)
         {
-            var thresholdEntity = NoteMapper.ToThresholdEntity(threshold, createdLink.Id);
-            createdLink.Thresholds.Add(thresholdEntity);
+            var thresholdEntity = NoteMapper.ToThresholdEntity(threshold, Guid.Empty);
+            linkEntity.Thresholds.Add(thresholdEntity);
         }
 
-        // Update to save thresholds
-        // Note: The repository AddTrackerLinkAsync doesn't save thresholds, we need to handle them separately
-        // For now, thresholds are included in the link entity which will be saved
+        var createdLink = await _repository.AddTrackerLinkAsync(linkEntity, cancellationToken);
 
         var result = NoteMapper.ToTrackerLinkModel(createdLink);
         _logger.LogInformation(
