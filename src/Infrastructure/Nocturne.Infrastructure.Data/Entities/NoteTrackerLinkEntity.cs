@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Represents a link between a note and a tracker definition
 /// </summary>
 [Table("note_tracker_links")]
-public class NoteTrackerLinkEntity
+public class NoteTrackerLinkEntity : IHasCreatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

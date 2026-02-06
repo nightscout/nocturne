@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Stores user-created clock face layouts with drag-and-drop configured elements
 /// </summary>
 [Table("clock_faces")]
-public class ClockFaceEntity
+public class ClockFaceEntity : IHasCreatedAt, IHasSysCreatedAt, IHasSysUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID v7 serves as unguessable public URL

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Represents a file attachment within a note
 /// </summary>
 [Table("note_attachments")]
-public class NoteAttachmentEntity
+public class NoteAttachmentEntity : IHasCreatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

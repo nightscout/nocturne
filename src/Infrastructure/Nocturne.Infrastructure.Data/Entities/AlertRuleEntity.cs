@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to notification alert rule configuration
 /// </summary>
 [Table("alert_rules")]
-public class AlertRuleEntity
+public class AlertRuleEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID for alert rule

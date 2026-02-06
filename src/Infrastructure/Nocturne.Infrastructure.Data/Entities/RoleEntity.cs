@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Defines sets of permissions that can be assigned to subjects
 /// </summary>
 [Table("roles")]
-public class RoleEntity
+public class RoleEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

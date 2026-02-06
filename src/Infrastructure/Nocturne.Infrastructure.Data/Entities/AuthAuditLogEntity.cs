@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Tracks all authentication-related events for security monitoring
 /// </summary>
 [Table("auth_audit_log")]
-public class AuthAuditLogEntity
+public class AuthAuditLogEntity : IHasCreatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Represents a checklist item within a note
 /// </summary>
 [Table("note_checklist_items")]
-public class NoteChecklistItemEntity
+public class NoteChecklistItemEntity : IHasCreatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

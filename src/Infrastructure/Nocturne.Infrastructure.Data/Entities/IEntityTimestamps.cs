@@ -5,6 +5,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// </summary>
 public interface IHasCreatedAt
 {
+    /// <inheritdoc cref="IHasCreatedAt"/>
     DateTime CreatedAt { get; set; }
 }
 
@@ -13,6 +14,7 @@ public interface IHasCreatedAt
 /// </summary>
 public interface IHasUpdatedAt
 {
+    /// <inheritdoc cref="IHasUpdatedAt"/>
     DateTime UpdatedAt { get; set; }
 }
 
@@ -21,6 +23,7 @@ public interface IHasUpdatedAt
 /// </summary>
 public interface IHasSysCreatedAt
 {
+    /// <inheritdoc cref="IHasSysCreatedAt"/>
     DateTime SysCreatedAt { get; set; }
 }
 
@@ -29,5 +32,6 @@ public interface IHasSysCreatedAt
 /// </summary>
 public interface IHasSysUpdatedAt
 {
+    /// <inheritdoc cref="IHasSysUpdatedAt"/>
     DateTime SysUpdatedAt { get; set; }
 }

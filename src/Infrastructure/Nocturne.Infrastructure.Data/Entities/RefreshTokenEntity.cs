@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Stored in database for revocation support - access tokens are short-lived JWTs validated statelessly
 /// </summary>
 [Table("refresh_tokens")]
-public class RefreshTokenEntity
+public class RefreshTokenEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

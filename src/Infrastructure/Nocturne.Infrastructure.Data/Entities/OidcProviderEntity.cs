@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Stores configuration for external identity providers
 /// </summary>
 [Table("oidc_providers")]
-public class OidcProviderEntity
+public class OidcProviderEntity : IHasCreatedAt, IHasUpdatedAt
 {
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification

@@ -1961,7 +1961,9 @@ public class NocturneDbContext : DbContext
     }
 
     /// <summary>
-    /// Update system tracking timestamps before saving
+    /// Update system tracking timestamps before saving.
+    /// Entities opt in by implementing IHasCreatedAt, IHasUpdatedAt,
+    /// IHasSysCreatedAt, and/or IHasSysUpdatedAt.
     /// </summary>
     private void UpdateTimestamps()
     {
@@ -1969,227 +1971,38 @@ public class NocturneDbContext : DbContext
 
         foreach (var entry in ChangeTracker.Entries())
         {
-            if (entry.Entity is EntryEntity entryEntity)
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
+                continue;
+
+            var entity = entry.Entity;
+
+            if (entry.State == EntityState.Added)
             {
-                if (entry.State == EntityState.Added)
-                {
-                    entryEntity.SysCreatedAt = utcNow;
-                }
-                entryEntity.SysUpdatedAt = utcNow;
+                if (entity is IHasCreatedAt created)
+                    created.CreatedAt = utcNow;
+                if (entity is IHasSysCreatedAt sysCreated)
+                    sysCreated.SysCreatedAt = utcNow;
             }
-            else if (entry.Entity is TreatmentEntity treatmentEntity)
+
+            if (entity is IHasUpdatedAt updated)
+                updated.UpdatedAt = utcNow;
+            if (entity is IHasSysUpdatedAt sysUpdated)
+                sysUpdated.SysUpdatedAt = utcNow;
+
+            // Entities with non-standard timestamp property names
+            switch (entity)
             {
-                if (entry.State == EntityState.Added)
-                {
-                    treatmentEntity.SysCreatedAt = utcNow;
-                }
-                treatmentEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is DeviceStatusEntity deviceStatusEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    deviceStatusEntity.SysCreatedAt = utcNow;
-                }
-                deviceStatusEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is FoodEntity foodEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    foodEntity.SysCreatedAt = utcNow;
-                }
-                foodEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ConnectorFoodEntryEntity connectorFoodEntryEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    connectorFoodEntryEntity.SysCreatedAt = utcNow;
-                }
-                connectorFoodEntryEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is TreatmentFoodEntity treatmentFoodEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    treatmentFoodEntity.SysCreatedAt = utcNow;
-                }
-                treatmentFoodEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is UserFoodFavoriteEntity userFoodFavoriteEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    userFoodFavoriteEntity.SysCreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is SettingsEntity settingsEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    settingsEntity.SysCreatedAt = utcNow;
-                }
-                settingsEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ActivityEntity activityEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    activityEntity.SysCreatedAt = utcNow;
-                }
-                activityEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ProfileEntity profileEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    profileEntity.CreatedAtPg = utcNow;
-                }
-                profileEntity.UpdatedAtPg = utcNow;
-            }
-            else if (entry.Entity is AlertRuleEntity alertRuleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    alertRuleEntity.CreatedAt = utcNow;
-                }
-                alertRuleEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is AlertHistoryEntity alertHistoryEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    alertHistoryEntity.CreatedAt = utcNow;
-                }
-                alertHistoryEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is NotificationPreferencesEntity notificationPreferencesEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    notificationPreferencesEntity.CreatedAt = utcNow;
-                }
-                notificationPreferencesEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is EmergencyContactEntity emergencyContactEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    emergencyContactEntity.CreatedAt = utcNow;
-                }
-                emergencyContactEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is DeviceHealthEntity deviceHealthEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    deviceHealthEntity.CreatedAt = utcNow;
-                }
-                deviceHealthEntity.UpdatedAt = utcNow;
-            }
-            // Auth entities
-            else if (entry.Entity is RefreshTokenEntity refreshTokenEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    refreshTokenEntity.CreatedAt = utcNow;
-                }
-                refreshTokenEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is SubjectEntity subjectEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    subjectEntity.CreatedAt = utcNow;
-                }
-                subjectEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is RoleEntity roleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    roleEntity.CreatedAt = utcNow;
-                }
-                roleEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is OidcProviderEntity oidcProviderEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oidcProviderEntity.CreatedAt = utcNow;
-                }
-                oidcProviderEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is AuthAuditLogEntity authAuditLogEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    authAuditLogEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is LinkedRecordEntity linkedRecordEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    linkedRecordEntity.SysCreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is ConnectorConfigurationEntity connectorConfigEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    connectorConfigEntity.SysCreatedAt = utcNow;
-                    connectorConfigEntity.LastModified = DateTimeOffset.UtcNow;
-                }
-                connectorConfigEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ClockFaceEntity clockFaceEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    clockFaceEntity.CreatedAt = utcNow;
-                    clockFaceEntity.SysCreatedAt = utcNow;
-                }
-                clockFaceEntity.UpdatedAt = utcNow;
-                clockFaceEntity.SysUpdatedAt = utcNow;
-            }
-            // Note entities
-            else if (entry.Entity is NoteEntity noteEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    noteEntity.CreatedAt = utcNow;
-                }
-                noteEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is NoteChecklistItemEntity noteChecklistItemEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    noteChecklistItemEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is NoteAttachmentEntity noteAttachmentEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    noteAttachmentEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is NoteTrackerLinkEntity noteTrackerLinkEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    noteTrackerLinkEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is NoteStateSpanLinkEntity noteStateSpanLinkEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    noteStateSpanLinkEntity.CreatedAt = utcNow;
-                }
+                case ProfileEntity profile:
+                    if (entry.State == EntityState.Added)
+                        profile.CreatedAtPg = utcNow;
+                    profile.UpdatedAtPg = utcNow;
+                    break;
+                case ConnectorConfigurationEntity connConfig when entry.State == EntityState.Added:
+                    connConfig.LastModified = DateTimeOffset.UtcNow;
+                    break;
+                case ClockFaceEntity clockFace:
+                    clockFace.UpdatedAt = utcNow;
+                    break;
             }
         }
     }
