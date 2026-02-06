@@ -97,14 +97,9 @@ public class FollowerAccessMiddleware
         var currentScopes = context.GetGrantedScopes();
         var grantScopes = OAuthScopes.Normalize(grant.Scopes);
 
-        var restrictedScopes = new HashSet<string>();
-        foreach (var grantScope in grantScopes)
-        {
-            if (OAuthScopes.SatisfiesScope(currentScopes, grantScope))
-            {
-                restrictedScopes.Add(grantScope);
-            }
-        }
+        var restrictedScopes = grantScopes
+            .Where(grantScope => OAuthScopes.SatisfiesScope(currentScopes, grantScope))
+            .ToHashSet();
 
         context.Items["GrantedScopes"] = (IReadOnlySet<string>)restrictedScopes;
 

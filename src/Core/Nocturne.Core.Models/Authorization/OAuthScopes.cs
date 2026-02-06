@@ -151,12 +151,6 @@ public static class OAuthScopes
             return true;
 
         // If requiring a .read scope, check if the corresponding .readwrite is granted
-        foreach (var kvp in ReadWriteImpliesRead)
-        {
-            if (kvp.Value == requiredScope && granted.Contains(kvp.Key))
-                return true;
-        }
-
-        return false;
+        return ReadWriteImpliesRead.Any(kvp => kvp.Value == requiredScope && granted.Contains(kvp.Key));
     }
 }

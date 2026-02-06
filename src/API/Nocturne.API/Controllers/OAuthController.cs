@@ -21,6 +21,7 @@ public class OAuthController : ControllerBase
     private readonly IOAuthGrantService _grantService;
     private readonly IOAuthTokenService _tokenService;
     private readonly IOAuthDeviceCodeService _deviceCodeService;
+    private readonly IFollowerInviteService _inviteService;
     private readonly ISubjectService _subjectService;
     private readonly IJwtService _jwtService;
     private readonly IOAuthTokenRevocationCache _revocationCache;
@@ -34,6 +35,7 @@ public class OAuthController : ControllerBase
         IOAuthGrantService grantService,
         IOAuthTokenService tokenService,
         IOAuthDeviceCodeService deviceCodeService,
+        IFollowerInviteService inviteService,
         ISubjectService subjectService,
         IJwtService jwtService,
         IOAuthTokenRevocationCache revocationCache,
@@ -44,6 +46,7 @@ public class OAuthController : ControllerBase
         _grantService = grantService;
         _tokenService = tokenService;
         _deviceCodeService = deviceCodeService;
+        _inviteService = inviteService;
         _subjectService = subjectService;
         _jwtService = jwtService;
         _revocationCache = revocationCache;
@@ -489,18 +492,9 @@ public class OAuthController : ControllerBase
             });
         }
 
-        bool success;
-        if (request.Approved)
-        {
-            success = await _deviceCodeService.ApproveDeviceCodeAsync(
-                request.UserCode,
-                subjectId.Value
-            );
-        }
-        else
-        {
-            success = await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
-        }
+        var success = request.Approved
+            ? await _deviceCodeService.ApproveDeviceCodeAsync(request.UserCode, subjectId.Value)
+            : await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
 
         if (!success)
         {
@@ -904,6 +898,237 @@ public class OAuthController : ControllerBase
         return Ok(new FollowerTargetListResponse { Targets = targets });
     }
 
+    // ============================================================================
+    // Follower Invite Endpoints
+    // ============================================================================
+
+    /// <summary>
+    /// Create a follower invite link.
+    /// The link can be shared with someone who doesn't have an account yet.
+    /// </summary>
+    [HttpPost("invites")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(CreateInviteResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CreateInviteResponse>> CreateInvite(
+        [FromBody] CreateInviteRequest request)
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        if (request.Scopes == null || request.Scopes.Count == 0)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "At least one scope is required.",
+            });
+        }
+
+        try
+        {
+            TimeSpan? expiresIn = request.ExpiresInDays.HasValue
+                ? TimeSpan.FromDays(request.ExpiresInDays.Value)
+                : null;
+
+            var result = await _inviteService.CreateInviteAsync(
+                subjectId.Value,
+                request.Scopes,
+                request.Label,
+                expiresIn,
+                request.MaxUses);
+
+            return StatusCode(StatusCodes.Status201Created, new CreateInviteResponse
+            {
+                Id = result.Id,
+                Token = result.Token,
+                InviteUrl = result.InviteUrl,
+                ExpiresAt = result.ExpiresAt,
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = ex.Message,
+            });
+        }
+    }
+
+    /// <summary>
+    /// List invites created by the authenticated user.
+    /// </summary>
+    [HttpGet("invites")]
+    [ProducesResponseType(typeof(InviteListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<InviteListResponse>> ListInvites()
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        var invites = await _inviteService.GetInvitesForOwnerAsync(subjectId.Value);
+
+        return Ok(new InviteListResponse
+        {
+            Invites = invites.Select(i => new InviteDto
+            {
+                Id = i.Id,
+                Scopes = i.Scopes,
+                Label = i.Label,
+                ExpiresAt = i.ExpiresAt,
+                MaxUses = i.MaxUses,
+                UseCount = i.UseCount,
+                CreatedAt = i.CreatedAt,
+                IsValid = i.IsValid,
+                IsExpired = i.IsExpired,
+                IsRevoked = i.IsRevoked,
+            }).ToList(),
+        });
+    }
+
+    /// <summary>
+    /// Revoke an invite so it can no longer be used.
+    /// </summary>
+    [HttpDelete("invites/{inviteId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeInvite(Guid inviteId)
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        await _inviteService.RevokeInviteAsync(inviteId, subjectId.Value);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Get invite details by token (for the accept page).
+    /// This is a public endpoint so invitees can see what they're accepting.
+    /// </summary>
+    [HttpGet("invites/{token}/info")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(InviteInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<InviteInfoResponse>> GetInviteInfo(string token)
+    {
+        var invite = await _inviteService.GetInviteByTokenAsync(token);
+
+        if (invite == null)
+        {
+            return NotFound(new OAuthError
+            {
+                Error = "not_found",
+                ErrorDescription = "Invite not found or has expired.",
+            });
+        }
+
+        return Ok(new InviteInfoResponse
+        {
+            OwnerName = invite.OwnerName,
+            OwnerEmail = invite.OwnerEmail,
+            Scopes = invite.Scopes,
+            Label = invite.Label,
+            ExpiresAt = invite.ExpiresAt,
+            IsValid = invite.IsValid,
+            IsExpired = invite.IsExpired,
+            IsRevoked = invite.IsRevoked,
+        });
+    }
+
+    /// <summary>
+    /// Accept an invite and create the follower grant.
+    /// Requires authentication - the invitee must be logged in.
+    /// </summary>
+    [HttpPost("invites/{token}/accept")]
+    [ProducesResponseType(typeof(AcceptInviteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<AcceptInviteResponse>> AcceptInvite(string token)
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "You must be logged in to accept an invite.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        var result = await _inviteService.AcceptInviteAsync(token, subjectId.Value);
+
+        if (!result.Success)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = result.Error ?? "accept_failed",
+                ErrorDescription = result.ErrorDescription ?? "Failed to accept invite.",
+            });
+        }
+
+        return Ok(new AcceptInviteResponse
+        {
+            Success = true,
+            GrantId = result.GrantId,
+        });
+    }
+
     /// <summary>
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
@@ -1168,6 +1393,92 @@ public class TokenIntrospectionResponse
     public long? Iat { get; set; }
     public string? Jti { get; set; }
     public string? TokenType { get; set; }
+}
+
+/// <summary>
+/// Request to create a follower invite link
+/// </summary>
+public class CreateInviteRequest
+{
+    /// <summary>
+    /// Scopes to grant when the invite is accepted
+    /// </summary>
+    public List<string> Scopes { get; set; } = new();
+
+    /// <summary>
+    /// Optional label for the grant (e.g., "Mom", "Endocrinologist")
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Days until the invite expires (default: 7)
+    /// </summary>
+    public int? ExpiresInDays { get; set; }
+
+    /// <summary>
+    /// Maximum number of times the invite can be used (null = unlimited)
+    /// </summary>
+    public int? MaxUses { get; set; }
+}
+
+/// <summary>
+/// Response after creating an invite
+/// </summary>
+public class CreateInviteResponse
+{
+    public Guid Id { get; set; }
+    public string Token { get; set; } = string.Empty;
+    public string InviteUrl { get; set; } = string.Empty;
+    public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// DTO for an invite in list responses
+/// </summary>
+public class InviteDto
+{
+    public Guid Id { get; set; }
+    public List<string> Scopes { get; set; } = new();
+    public string? Label { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public int? MaxUses { get; set; }
+    public int UseCount { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public bool IsValid { get; set; }
+    public bool IsExpired { get; set; }
+    public bool IsRevoked { get; set; }
+}
+
+/// <summary>
+/// Response containing a list of invites
+/// </summary>
+public class InviteListResponse
+{
+    public List<InviteDto> Invites { get; set; } = new();
+}
+
+/// <summary>
+/// Response for invite info (for the accept page)
+/// </summary>
+public class InviteInfoResponse
+{
+    public string? OwnerName { get; set; }
+    public string? OwnerEmail { get; set; }
+    public List<string> Scopes { get; set; } = new();
+    public string? Label { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public bool IsValid { get; set; }
+    public bool IsExpired { get; set; }
+    public bool IsRevoked { get; set; }
+}
+
+/// <summary>
+/// Response after accepting an invite
+/// </summary>
+public class AcceptInviteResponse
+{
+    public bool Success { get; set; }
+    public Guid? GrantId { get; set; }
 }
 
 #endregion

@@ -61,9 +61,18 @@ public class OAuthCodeCleanupService : BackgroundService
             {
                 await CleanupExpiredCodesAsync(stoppingToken);
             }
+            catch (DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database update error during OAuth code cleanup");
+            }
+            catch (DbUpdateConcurrencyException dbCx)
+            {
+                _logger.LogError(dbCx, "Database concurrency error during OAuth code cleanup");
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during OAuth code cleanup");
+                _logger.LogError(ex, "Unexpected error during OAuth code cleanup");
+                throw;
             }
         }
 

@@ -95,18 +95,11 @@ public static class ScopeTranslator
     /// <returns>Set of equivalent OAuth scopes</returns>
     public static IReadOnlySet<string> FromPermissions(IEnumerable<string> permissions)
     {
-        var scopes = new HashSet<string>();
-
-        foreach (var permission in permissions)
-        {
-            if (TrieToScopes.TryGetValue(permission, out var mapped))
-            {
-                foreach (var scope in mapped)
-                {
-                    scopes.Add(scope);
-                }
-            }
-        }
+        var scopes = permissions
+            .SelectMany(permission => TrieToScopes.TryGetValue(permission, out var mapped)
+                ? mapped
+                : Array.Empty<string>())
+            .ToHashSet();
 
         // If full access is granted, normalize to include everything
         if (scopes.Contains(OAuthScopes.FullAccess))

@@ -107,13 +107,7 @@ public static class KnownOAuthClients
         if (string.IsNullOrEmpty(clientId))
             return null;
 
-        foreach (var entry in Entries)
-        {
-            if (MatchesPattern(clientId, entry.ClientIdPattern))
-                return entry;
-        }
-
-        return null;
+        return Entries.FirstOrDefault(entry => MatchesPattern(clientId, entry.ClientIdPattern));
     }
 
     /// <summary>
