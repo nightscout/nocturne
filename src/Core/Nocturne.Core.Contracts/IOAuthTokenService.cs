@@ -38,6 +38,16 @@ public interface IOAuthTokenService
     );
 
     /// <summary>
+    /// Exchange a device code for access + refresh tokens (RFC 8628 polling).
+    /// Returns authorization_pending, slow_down, expired_token, access_denied, or tokens.
+    /// </summary>
+    Task<OAuthTokenResult> ExchangeDeviceCodeAsync(
+        string deviceCode,
+        string clientId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
     /// Generate an authorization code for a user who has approved a consent request.
     /// </summary>
     Task<string> GenerateAuthorizationCodeAsync(

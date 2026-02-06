@@ -19,6 +19,7 @@ public class OAuthController : ControllerBase
     private readonly IOAuthClientService _clientService;
     private readonly IOAuthGrantService _grantService;
     private readonly IOAuthTokenService _tokenService;
+    private readonly IOAuthDeviceCodeService _deviceCodeService;
     private readonly ILogger<OAuthController> _logger;
 
     /// <summary>
@@ -28,12 +29,14 @@ public class OAuthController : ControllerBase
         IOAuthClientService clientService,
         IOAuthGrantService grantService,
         IOAuthTokenService tokenService,
+        IOAuthDeviceCodeService deviceCodeService,
         ILogger<OAuthController> logger
     )
     {
         _clientService = clientService;
         _grantService = grantService;
         _tokenService = tokenService;
+        _deviceCodeService = deviceCodeService;
         _logger = logger;
     }
 
@@ -280,11 +283,21 @@ public class OAuthController : ControllerBase
                 break;
 
             case "urn:ietf:params:oauth:grant-type:device_code":
-                return StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
+                if (string.IsNullOrEmpty(request.DeviceCode) ||
+                    string.IsNullOrEmpty(request.ClientId))
                 {
-                    Error = "server_error",
-                    ErrorDescription = "Device code exchange will be implemented in Phase 3.",
-                });
+                    return BadRequest(new OAuthError
+                    {
+                        Error = "invalid_request",
+                        ErrorDescription = "Missing required parameters: device_code, client_id.",
+                    });
+                }
+
+                result = await _tokenService.ExchangeDeviceCodeAsync(
+                    request.DeviceCode,
+                    request.ClientId
+                );
+                break;
 
             default:
                 return BadRequest(new OAuthError
@@ -322,7 +335,7 @@ public class OAuthController : ControllerBase
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(typeof(OAuthDeviceAuthorizationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
-    public ActionResult<OAuthDeviceAuthorizationResponse> DeviceAuthorization(
+    public async Task<ActionResult<OAuthDeviceAuthorizationResponse>> DeviceAuthorization(
         [FromForm] string client_id,
         [FromForm] string? scope = null
     )
@@ -338,11 +351,141 @@ public class OAuthController : ControllerBase
             });
         }
 
-        return StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
+        if (requestedScopes.Length == 0)
         {
-            Error = "server_error",
-            ErrorDescription = "Device authorization flow will be implemented in Phase 3.",
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = "At least one scope must be requested.",
+            });
+        }
+
+        // Validate client
+        await _clientService.FindOrCreateClientAsync(client_id);
+
+        // Normalize scopes
+        var normalizedScopes = OAuthScopes.Normalize(requestedScopes);
+
+        // Create device code pair
+        var result = await _deviceCodeService.CreateDeviceCodeAsync(client_id, normalizedScopes);
+
+        // Build verification URI from current request
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var verificationUri = $"{baseUrl}/oauth/device";
+        var verificationUriComplete = $"{verificationUri}?user_code={Uri.EscapeDataString(result.UserCode)}";
+
+        _logger.LogInformation(
+            "Device authorization initiated for client {ClientId}, user_code={UserCode}",
+            client_id,
+            result.UserCode
+        );
+
+        return Ok(new OAuthDeviceAuthorizationResponse
+        {
+            DeviceCode = result.DeviceCode,
+            UserCode = result.UserCode,
+            VerificationUri = verificationUri,
+            VerificationUriComplete = verificationUriComplete,
+            ExpiresIn = result.ExpiresIn,
+            Interval = result.Interval,
         });
+    }
+
+    /// <summary>
+    /// Get device code info for the approval page.
+    /// </summary>
+    [HttpGet("device-info")]
+    [ProducesResponseType(typeof(DeviceCodeInfo), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeviceCodeInfo>> GetDeviceInfo(
+        [FromQuery] string user_code
+    )
+    {
+        if (string.IsNullOrEmpty(user_code))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Missing required parameter: user_code.",
+            });
+        }
+
+        var info = await _deviceCodeService.GetByUserCodeAsync(user_code);
+        if (info == null)
+        {
+            return NotFound(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Device code not found or has expired.",
+            });
+        }
+
+        return Ok(info);
+    }
+
+    /// <summary>
+    /// Approve or deny a device authorization request.
+    /// Called by the device approval page.
+    /// </summary>
+    [HttpPost("device-approve")]
+    [Consumes("application/x-www-form-urlencoded")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> DeviceApprove(
+        [FromForm] DeviceApprovalRequest request
+    )
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        if (string.IsNullOrEmpty(request.UserCode))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Missing required parameter: user_code.",
+            });
+        }
+
+        bool success;
+        if (request.Approved)
+        {
+            success = await _deviceCodeService.ApproveDeviceCodeAsync(
+                request.UserCode,
+                subjectId.Value
+            );
+        }
+        else
+        {
+            success = await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
+        }
+
+        if (!success)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Device code is invalid, expired, or already processed.",
+            });
+        }
+
+        return Ok(new { approved = request.Approved });
     }
 
     /// <summary>
@@ -551,6 +694,18 @@ public class OAuthClientInfoResponse
     public string? DisplayName { get; set; }
     public bool IsKnown { get; set; }
     public string? Homepage { get; set; }
+}
+
+/// <summary>
+/// Device approval request (submitted by the device approval page)
+/// </summary>
+public class DeviceApprovalRequest
+{
+    [FromForm(Name = "user_code")]
+    public string UserCode { get; set; } = string.Empty;
+
+    [FromForm(Name = "approved")]
+    public bool Approved { get; set; }
 }
 
 #endregion

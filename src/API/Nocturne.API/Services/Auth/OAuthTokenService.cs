@@ -281,6 +281,112 @@ public class OAuthTokenService : IOAuthTokenService
         _logger.LogDebug("Token revocation: token not found (this is normal per RFC 7009)");
     }
 
+    /// <inheritdoc />
+    public async Task<OAuthTokenResult> ExchangeDeviceCodeAsync(
+        string deviceCode,
+        string clientId,
+        CancellationToken ct = default
+    )
+    {
+        var codeHash = _jwtService.HashRefreshToken(deviceCode);
+
+        var entity = await _db.OAuthDeviceCodes
+            .FirstOrDefaultAsync(d => d.DeviceCodeHash == codeHash, ct);
+
+        if (entity == null)
+        {
+            _logger.LogWarning("Device code exchange failed: code not found");
+            return OAuthTokenResult.Fail("invalid_grant", "Device code is invalid.");
+        }
+
+        if (entity.ClientId != clientId)
+        {
+            _logger.LogWarning("Device code exchange failed: client_id mismatch");
+            return OAuthTokenResult.Fail("invalid_grant", "Client ID does not match.");
+        }
+
+        if (entity.IsExpired)
+        {
+            _logger.LogWarning("Device code exchange failed: code expired");
+            return OAuthTokenResult.Fail("expired_token", "The device code has expired.");
+        }
+
+        if (entity.IsDenied)
+        {
+            _logger.LogWarning("Device code exchange failed: authorization denied");
+            return OAuthTokenResult.Fail("access_denied", "The authorization request was denied.");
+        }
+
+        // Slow-down check per RFC 8628 Section 3.5
+        if (entity.LastPolledAt != null
+            && (DateTime.UtcNow - entity.LastPolledAt.Value).TotalSeconds < entity.Interval)
+        {
+            entity.Interval += 5;
+            entity.LastPolledAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogDebug(
+                "Device code polling too fast for client {ClientId}, interval increased to {Interval}s",
+                clientId,
+                entity.Interval
+            );
+            return OAuthTokenResult.Fail("slow_down", "Polling too frequently. Increase interval.");
+        }
+
+        // Update last polled timestamp
+        entity.LastPolledAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        if (!entity.IsApproved || entity.GrantId == null)
+        {
+            return OAuthTokenResult.Fail("authorization_pending", "The authorization request is still pending.");
+        }
+
+        // Load the grant with client info
+        var grantEntity = await _db.OAuthGrants
+            .Include(g => g.Client)
+            .FirstOrDefaultAsync(g => g.Id == entity.GrantId, ct);
+
+        if (grantEntity == null || grantEntity.IsRevoked)
+        {
+            _logger.LogWarning(
+                "Device code exchange failed: grant {GrantId} not found or revoked",
+                entity.GrantId
+            );
+            return OAuthTokenResult.Fail("server_error", "Grant not found.");
+        }
+
+        var grantInfo = new OAuthGrantInfo
+        {
+            Id = grantEntity.Id,
+            ClientEntityId = grantEntity.ClientEntityId,
+            ClientId = grantEntity.Client?.ClientId ?? string.Empty,
+            ClientDisplayName = grantEntity.Client?.DisplayName,
+            IsKnownClient = grantEntity.Client?.IsKnown ?? false,
+            SubjectId = grantEntity.SubjectId,
+            GrantType = grantEntity.GrantType,
+            Scopes = grantEntity.Scopes,
+            Label = grantEntity.Label,
+            CreatedAt = grantEntity.CreatedAt,
+            LastUsedAt = grantEntity.LastUsedAt,
+            LastUsedIp = grantEntity.LastUsedIp,
+            LastUsedUserAgent = grantEntity.LastUsedUserAgent,
+            IsRevoked = grantEntity.IsRevoked,
+        };
+
+        var result = await MintTokenPairAsync(grantInfo, ct);
+
+        await _grantService.UpdateLastUsedAsync(entity.GrantId.Value, null, null, ct);
+
+        _logger.LogDebug(
+            "Device code exchange succeeded for client {ClientId}, subject {SubjectId}",
+            clientId,
+            grantEntity.SubjectId
+        );
+
+        return result;
+    }
+
     /// <summary>
     /// Mint an access + refresh token pair for a grant.
     /// </summary>

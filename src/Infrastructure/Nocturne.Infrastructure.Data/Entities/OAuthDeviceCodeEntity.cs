@@ -78,6 +78,18 @@ public class OAuthDeviceCodeEntity
     public int Interval { get; set; } = 5;
 
     /// <summary>
+    /// When the client last polled the token endpoint (for slow_down detection per RFC 8628 Section 3.5)
+    /// </summary>
+    [Column("last_polled_at")]
+    public DateTime? LastPolledAt { get; set; }
+
+    /// <summary>
+    /// The subject (user) who approved or denied this device code
+    /// </summary>
+    [Column("subject_id")]
+    public Guid? SubjectId { get; set; }
+
+    /// <summary>
     /// When this record was created
     /// </summary>
     [Column("created_at")]

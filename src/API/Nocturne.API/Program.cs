@@ -223,6 +223,7 @@ builder.Services.AddScoped<IOidcAuthService, OidcAuthService>();
 builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 builder.Services.AddScoped<IOAuthGrantService, OAuthGrantService>();
 builder.Services.AddScoped<IOAuthTokenService, OAuthTokenService>();
+builder.Services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
 
 // Local identity provider services (built-in authentication without external OIDC)
 builder.Services.AddScoped<ILocalIdentityService, LocalIdentityService>();
