@@ -1112,6 +1112,19 @@ public class NocturneDbContext : DbContext
             .HasDatabaseName("ix_oauth_grants_revoked_at")
             .HasFilter("revoked_at IS NULL");
 
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => g.FollowerSubjectId)
+            .HasDatabaseName("ix_oauth_grants_follower_subject_id")
+            .HasFilter("follower_subject_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => new { g.SubjectId, g.FollowerSubjectId })
+            .HasDatabaseName("ix_oauth_grants_subject_follower")
+            .HasFilter("follower_subject_id IS NOT NULL AND revoked_at IS NULL")
+            .IsUnique();
+
         // OAuth Refresh Token indexes
         modelBuilder
             .Entity<OAuthRefreshTokenEntity>()
@@ -1848,6 +1861,13 @@ public class NocturneDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.SubjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.FollowerSubject)
+                .WithMany()
+                .HasForeignKey(e => e.FollowerSubjectId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
         });
 
         // Configure OAuth Refresh Token entity

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -11,16 +12,26 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthGrantService : IOAuthGrantService
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly IOAuthClientService _clientService;
     private readonly ILogger<OAuthGrantService> _logger;
+
+    private static readonly HashSet<string> AllowedFollowerScopes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        OAuthScopes.EntriesRead, OAuthScopes.TreatmentsRead, OAuthScopes.DeviceStatusRead,
+        OAuthScopes.ProfileRead, OAuthScopes.NotificationsRead, OAuthScopes.ReportsRead,
+        OAuthScopes.IdentityRead, OAuthScopes.HealthRead,
+    };
 
     /// <summary>
     /// Creates a new instance of OAuthGrantService
     /// </summary>
     public OAuthGrantService(
         NocturneDbContext dbContext,
+        IOAuthClientService clientService,
         ILogger<OAuthGrantService> logger)
     {
         _dbContext = dbContext;
+        _clientService = clientService;
         _logger = logger;
     }
 
@@ -123,6 +134,7 @@ public class OAuthGrantService : IOAuthGrantService
         var entities = await _dbContext.OAuthGrants
             .AsNoTracking()
             .Include(g => g.Client)
+            .Include(g => g.FollowerSubject)
             .Where(g => g.SubjectId == subjectId && g.RevokedAt == null)
             .OrderByDescending(g => g.CreatedAt)
             .ToListAsync(ct);
@@ -197,11 +209,186 @@ public class OAuthGrantService : IOAuthGrantService
             GrantType = entity.GrantType,
             Scopes = entity.Scopes,
             Label = entity.Label,
+            FollowerSubjectId = entity.FollowerSubjectId,
+            FollowerName = entity.FollowerSubject?.Name,
+            FollowerEmail = entity.FollowerSubject?.Email,
             CreatedAt = entity.CreatedAt,
             LastUsedAt = entity.LastUsedAt,
             LastUsedIp = entity.LastUsedIp,
             LastUsedUserAgent = entity.LastUsedUserAgent,
             IsRevoked = entity.IsRevoked
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<OAuthGrantInfo> CreateFollowerGrantAsync(
+        Guid dataOwnerSubjectId,
+        Guid followerSubjectId,
+        IEnumerable<string> scopes,
+        string? label = null,
+        CancellationToken ct = default)
+    {
+        if (followerSubjectId == dataOwnerSubjectId)
+            throw new ArgumentException("A user cannot follow themselves.");
+
+        var scopeList = scopes.ToList();
+        ValidateFollowerScopes(scopeList);
+
+        var followerClient = await _clientService.FindOrCreateClientAsync(KnownOAuthClients.FollowerClientId, ct);
+
+        // Check for existing active follower grant for this owner+follower pair
+        var existingGrant = await _dbContext.OAuthGrants
+            .Include(g => g.Client)
+            .Where(g => g.SubjectId == dataOwnerSubjectId
+                     && g.FollowerSubjectId == followerSubjectId
+                     && g.RevokedAt == null)
+            .FirstOrDefaultAsync(ct);
+
+        if (existingGrant != null)
+        {
+            // Update scopes (union) and label
+            var mergedScopes = existingGrant.Scopes
+                .Union(scopeList)
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
+
+            existingGrant.Scopes = mergedScopes;
+
+            if (label != null)
+            {
+                existingGrant.Label = label;
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            // Load FollowerSubject navigation for the return DTO
+            await _dbContext.Entry(existingGrant)
+                .Reference(e => e.FollowerSubject)
+                .LoadAsync(ct);
+
+            _logger.LogDebug(
+                "Updated existing follower grant {GrantId} for owner {OwnerId} and follower {FollowerId} with {ScopeCount} scopes",
+                existingGrant.Id, dataOwnerSubjectId, followerSubjectId, mergedScopes.Count);
+
+            return MapToInfo(existingGrant);
+        }
+
+        var normalizedScopes = scopeList.Distinct().OrderBy(s => s).ToList();
+
+        var entity = new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ClientEntityId = followerClient.Id,
+            SubjectId = dataOwnerSubjectId,
+            GrantType = OAuthGrantTypes.Follower,
+            Scopes = normalizedScopes,
+            Label = label,
+            FollowerSubjectId = followerSubjectId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _dbContext.OAuthGrants.Add(entity);
+        await _dbContext.SaveChangesAsync(ct);
+
+        // Load navigation properties for the return DTO
+        await _dbContext.Entry(entity)
+            .Reference(e => e.Client)
+            .LoadAsync(ct);
+        await _dbContext.Entry(entity)
+            .Reference(e => e.FollowerSubject)
+            .LoadAsync(ct);
+
+        _logger.LogDebug(
+            "Created new follower grant {GrantId} for owner {OwnerId} and follower {FollowerId} with {ScopeCount} scopes",
+            entity.Id, dataOwnerSubjectId, followerSubjectId, normalizedScopes.Count);
+
+        return MapToInfo(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<OAuthGrantInfo>> GetGrantsAsFollowerAsync(
+        Guid followerSubjectId,
+        CancellationToken ct = default)
+    {
+        var entities = await _dbContext.OAuthGrants
+            .AsNoTracking()
+            .Include(g => g.Client)
+            .Include(g => g.Subject)
+            .Where(g => g.FollowerSubjectId == followerSubjectId && g.RevokedAt == null)
+            .OrderByDescending(g => g.CreatedAt)
+            .ToListAsync(ct);
+
+        return entities.Select(MapToInfo).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<OAuthGrantInfo?> GetActiveFollowerGrantAsync(
+        Guid dataOwnerSubjectId,
+        Guid followerSubjectId,
+        CancellationToken ct = default)
+    {
+        var entity = await _dbContext.OAuthGrants
+            .AsNoTracking()
+            .Include(g => g.Client)
+            .Include(g => g.Subject)
+            .Where(g => g.SubjectId == dataOwnerSubjectId
+                     && g.FollowerSubjectId == followerSubjectId
+                     && g.RevokedAt == null)
+            .FirstOrDefaultAsync(ct);
+
+        return entity == null ? null : MapToInfo(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<OAuthGrantInfo?> UpdateGrantAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
+        string? label = null,
+        IEnumerable<string>? scopes = null,
+        CancellationToken ct = default)
+    {
+        var grant = await _dbContext.OAuthGrants
+            .Include(g => g.Client)
+            .Include(g => g.FollowerSubject)
+            .Where(g => g.Id == grantId)
+            .FirstOrDefaultAsync(ct);
+
+        // Grant not found or not owned by the specified subject
+        if (grant == null || grant.SubjectId != ownerSubjectId)
+            return null;
+
+        if (label != null)
+        {
+            grant.Label = label;
+        }
+
+        if (scopes != null)
+        {
+            var scopeList = scopes.ToList();
+
+            // For follower grants, reject write scopes
+            if (grant.GrantType == OAuthGrantTypes.Follower)
+            {
+                ValidateFollowerScopes(scopeList);
+            }
+
+            grant.Scopes = scopeList.Distinct().OrderBy(s => s).ToList();
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        _logger.LogDebug(
+            "Updated OAuth grant {GrantId} for subject {SubjectId}",
+            grantId, ownerSubjectId);
+
+        return MapToInfo(grant);
+    }
+
+    private static void ValidateFollowerScopes(IEnumerable<string> scopes)
+    {
+        var invalid = scopes.Where(s => !AllowedFollowerScopes.Contains(s)).ToList();
+        if (invalid.Count > 0)
+            throw new ArgumentException($"Follower grants only allow read scopes. Invalid: {string.Join(", ", invalid)}");
     }
 }

@@ -49,6 +49,45 @@ public interface IOAuthGrantService
         string? userAgent,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// Create a follower grant (data owner sharing with another user).
+    /// </summary>
+    Task<OAuthGrantInfo> CreateFollowerGrantAsync(
+        Guid dataOwnerSubjectId,
+        Guid followerSubjectId,
+        IEnumerable<string> scopes,
+        string? label = null,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Get active follower grants where the specified subject is the follower.
+    /// </summary>
+    Task<IReadOnlyList<OAuthGrantInfo>> GetGrantsAsFollowerAsync(
+        Guid followerSubjectId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Get an active follower grant for a specific data-owner/follower pair.
+    /// </summary>
+    Task<OAuthGrantInfo?> GetActiveFollowerGrantAsync(
+        Guid dataOwnerSubjectId,
+        Guid followerSubjectId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Update grant label and/or scopes. Returns null if grant not found or not owned.
+    /// </summary>
+    Task<OAuthGrantInfo?> UpdateGrantAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
+        string? label = null,
+        IEnumerable<string>? scopes = null,
+        CancellationToken ct = default
+    );
 }
 
 /// <summary>
@@ -65,6 +104,9 @@ public class OAuthGrantInfo
     public string GrantType { get; set; } = "app";
     public List<string> Scopes { get; set; } = new();
     public string? Label { get; set; }
+    public Guid? FollowerSubjectId { get; set; }
+    public string? FollowerName { get; set; }
+    public string? FollowerEmail { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastUsedAt { get; set; }
     public string? LastUsedIp { get; set; }

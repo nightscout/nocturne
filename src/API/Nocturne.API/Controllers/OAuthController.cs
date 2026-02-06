@@ -20,6 +20,7 @@ public class OAuthController : ControllerBase
     private readonly IOAuthGrantService _grantService;
     private readonly IOAuthTokenService _tokenService;
     private readonly IOAuthDeviceCodeService _deviceCodeService;
+    private readonly ISubjectService _subjectService;
     private readonly ILogger<OAuthController> _logger;
 
     /// <summary>
@@ -30,6 +31,7 @@ public class OAuthController : ControllerBase
         IOAuthGrantService grantService,
         IOAuthTokenService tokenService,
         IOAuthDeviceCodeService deviceCodeService,
+        ISubjectService subjectService,
         ILogger<OAuthController> logger
     )
     {
@@ -37,6 +39,7 @@ public class OAuthController : ControllerBase
         _grantService = grantService;
         _tokenService = tokenService;
         _deviceCodeService = deviceCodeService;
+        _subjectService = subjectService;
         _logger = logger;
     }
 
@@ -592,6 +595,255 @@ public class OAuthController : ControllerBase
 
         return $"/oauth/consent?{qs}";
     }
+
+    /// <summary>
+    /// List all active grants for the authenticated user.
+    /// </summary>
+    [HttpGet("grants")]
+    [ProducesResponseType(typeof(OAuthGrantListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<OAuthGrantListResponse>> GetGrants()
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value);
+        var dtos = grants.Select(MapToDto).ToList();
+
+        return Ok(new OAuthGrantListResponse { Grants = dtos });
+    }
+
+    /// <summary>
+    /// Revoke (delete) a specific grant owned by the authenticated user.
+    /// </summary>
+    [HttpDelete("grants/{grantId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DeleteGrant(Guid grantId)
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        // Verify ownership: load all grants for the subject and check if grantId is among them
+        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value);
+        if (grants.All(g => g.Id != grantId))
+        {
+            return NotFound(new OAuthError
+            {
+                Error = "not_found",
+                ErrorDescription = "Grant not found.",
+            });
+        }
+
+        await _grantService.RevokeGrantAsync(grantId);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Create a follower grant (share data with another user by email).
+    /// </summary>
+    [HttpPost("grants/follower")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(OAuthGrantDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<OAuthGrantDto>> CreateFollowerGrant(
+        [FromBody] CreateFollowerGrantRequest request
+    )
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(request.FollowerEmail))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Follower email is required.",
+            });
+        }
+
+        if (request.Scopes == null || request.Scopes.Count == 0)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "At least one scope is required.",
+            });
+        }
+
+        // Look up follower subject by email
+        var subjects = await _subjectService.GetSubjectsAsync(new SubjectFilter
+        {
+            EmailContains = request.FollowerEmail,
+            Limit = 100,
+        });
+        var follower = subjects.FirstOrDefault(s =>
+            string.Equals(s.Email, request.FollowerEmail, StringComparison.OrdinalIgnoreCase));
+
+        if (follower == null)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Follower not found.",
+            });
+        }
+
+        if (follower.Id == subjectId.Value)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Cannot create a follower grant for yourself.",
+            });
+        }
+
+        try
+        {
+            var grant = await _grantService.CreateFollowerGrantAsync(
+                subjectId.Value,
+                follower.Id,
+                request.Scopes,
+                request.Label
+            );
+
+            return StatusCode(StatusCodes.Status201Created, MapToDto(grant));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = ex.Message,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Update a grant's label and/or scopes.
+    /// </summary>
+    [HttpPatch("grants/{grantId}")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(OAuthGrantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OAuthGrantDto>> UpdateGrant(
+        Guid grantId,
+        [FromBody] UpdateGrantRequest request
+    )
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        try
+        {
+            var updated = await _grantService.UpdateGrantAsync(
+                grantId,
+                subjectId.Value,
+                request.Label,
+                request.Scopes
+            );
+
+            if (updated == null)
+            {
+                return NotFound(new OAuthError
+                {
+                    Error = "not_found",
+                    ErrorDescription = "Grant not found.",
+                });
+            }
+
+            return Ok(MapToDto(updated));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = ex.Message,
+            });
+        }
+    }
+
+    private static OAuthGrantDto MapToDto(OAuthGrantInfo info) => new()
+    {
+        Id = info.Id,
+        GrantType = info.GrantType,
+        ClientId = info.ClientId,
+        ClientDisplayName = info.ClientDisplayName,
+        IsKnownClient = info.IsKnownClient,
+        FollowerSubjectId = info.FollowerSubjectId,
+        FollowerName = info.FollowerName,
+        FollowerEmail = info.FollowerEmail,
+        Scopes = info.Scopes,
+        Label = info.Label,
+        CreatedAt = info.CreatedAt,
+        LastUsedAt = info.LastUsedAt,
+        LastUsedUserAgent = info.LastUsedUserAgent,
+    };
 }
 
 #region Request/Response Models
@@ -706,6 +958,53 @@ public class DeviceApprovalRequest
 
     [FromForm(Name = "approved")]
     public bool Approved { get; set; }
+}
+
+/// <summary>
+/// DTO representing an OAuth grant for the management UI
+/// </summary>
+public class OAuthGrantDto
+{
+    public Guid Id { get; set; }
+    public string GrantType { get; set; } = string.Empty;
+    public string? ClientId { get; set; }
+    public string? ClientDisplayName { get; set; }
+    public bool IsKnownClient { get; set; }
+    public Guid? FollowerSubjectId { get; set; }
+    public string? FollowerName { get; set; }
+    public string? FollowerEmail { get; set; }
+    public List<string> Scopes { get; set; } = new();
+    public string? Label { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? LastUsedAt { get; set; }
+    public string? LastUsedUserAgent { get; set; }
+}
+
+/// <summary>
+/// Response containing a list of OAuth grants
+/// </summary>
+public class OAuthGrantListResponse
+{
+    public List<OAuthGrantDto> Grants { get; set; } = new();
+}
+
+/// <summary>
+/// Request to create a follower grant (share data with another user)
+/// </summary>
+public class CreateFollowerGrantRequest
+{
+    public string FollowerEmail { get; set; } = string.Empty;
+    public List<string> Scopes { get; set; } = new();
+    public string? Label { get; set; }
+}
+
+/// <summary>
+/// Request to update an existing grant's label and/or scopes
+/// </summary>
+public class UpdateGrantRequest
+{
+    public string? Label { get; set; }
+    public List<string>? Scopes { get; set; }
 }
 
 #endregion

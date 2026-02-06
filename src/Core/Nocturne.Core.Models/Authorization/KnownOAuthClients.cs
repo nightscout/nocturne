@@ -78,7 +78,23 @@ public static class KnownOAuthClients
                 OAuthScopes.TreatmentsRead,
             ],
         },
+        new()
+        {
+            ClientIdPattern = "nocturne-follower-internal",
+            DisplayName = "Nocturne Follower",
+            TypicalScopes = [
+                OAuthScopes.EntriesRead,
+                OAuthScopes.TreatmentsRead,
+                OAuthScopes.DeviceStatusRead,
+                OAuthScopes.ProfileRead,
+            ],
+        },
     };
+
+    /// <summary>
+    /// The well-known client ID used for follower (user-to-user sharing) grants.
+    /// </summary>
+    public const string FollowerClientId = "nocturne-follower-internal";
 
     /// <summary>
     /// Try to match a client_id against the known app directory.

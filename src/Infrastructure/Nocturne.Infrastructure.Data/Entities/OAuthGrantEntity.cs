@@ -78,6 +78,13 @@ public class OAuthGrantEntity
     public string? LastUsedUserAgent { get; set; }
 
     /// <summary>
+    /// For follower grants: the subject ID of the follower receiving access.
+    /// Null for app grants. SubjectId remains the data owner.
+    /// </summary>
+    [Column("follower_subject_id")]
+    public Guid? FollowerSubjectId { get; set; }
+
+    /// <summary>
     /// When this grant was revoked (soft delete for audit trail)
     /// </summary>
     [Column("revoked_at")]
@@ -100,6 +107,11 @@ public class OAuthGrantEntity
     /// The subject (user) who approved this grant
     /// </summary>
     public SubjectEntity? Subject { get; set; }
+
+    /// <summary>
+    /// The follower subject (for follower grants only)
+    /// </summary>
+    public SubjectEntity? FollowerSubject { get; set; }
 
     /// <summary>
     /// Refresh tokens issued under this grant

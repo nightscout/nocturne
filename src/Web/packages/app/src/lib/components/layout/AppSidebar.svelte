@@ -40,6 +40,7 @@
     Timer,
     Layers,
     Bug,
+    Shield,
   } from "lucide-svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -174,6 +175,7 @@
           icon: Timer,
         },
         { title: "Connectors", href: "/settings/connectors", icon: Plug },
+        { title: "Grants & Sharing", href: "/settings/grants", icon: Shield },
         {
           title: "Support & Community",
           href: "/settings/support",
