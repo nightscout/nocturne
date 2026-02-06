@@ -17,9 +17,11 @@
     Check,
     AlertTriangle,
     Clock,
+    Link,
+    Copy,
   } from "lucide-svelte";
   import { formatDate } from "$lib/utils/formatting";
-  import type { Grant } from "./+page.server";
+  import type { Grant, Invite } from "./+page.server";
 
   const { data, form } = $props();
 
@@ -53,13 +55,17 @@
   ] as const;
 
   const grants = $derived((data.grants ?? []) as Grant[]);
+  const invites = $derived((data.invites ?? []) as Invite[]);
+  const activeInvites = $derived(invites.filter((i) => i.isValid));
   const appGrants = $derived(grants.filter((g) => g.grantType === "app"));
   const followerGrants = $derived(grants.filter((g) => g.grantType === "follower"));
 
   let activeTab = $state("apps");
   let showAddFollower = $state(false);
+  let showCreateInvite = $state(false);
   let followerEmail = $state("");
   let followerLabel = $state("");
+  let inviteLabel = $state("");
   let selectedScopes = $state<Record<string, boolean>>({
     "entries.read": true,
     "treatments.read": false,
@@ -68,9 +74,25 @@
     "notifications.read": false,
     "reports.read": false,
   });
+  let inviteScopes = $state<Record<string, boolean>>({
+    "entries.read": true,
+    "treatments.read": false,
+    "devicestatus.read": false,
+    "profile.read": false,
+    "notifications.read": false,
+    "reports.read": false,
+  });
+  let createdInviteUrl = $state<string | null>(null);
+  let copiedInvite = $state(false);
 
   const selectedScopeList = $derived(
     Object.entries(selectedScopes)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+  );
+
+  const inviteScopeList = $derived(
+    Object.entries(inviteScopes)
       .filter(([, v]) => v)
       .map(([k]) => k)
   );
@@ -87,6 +109,17 @@
     form && "success" in form && form.success === true
   );
 
+  const inviteUrl = $derived(
+    form && "inviteUrl" in form ? (form.inviteUrl as string) : null
+  );
+
+  // Show invite URL when created
+  $effect(() => {
+    if (formAction === "createInvite" && formSuccess && inviteUrl) {
+      createdInviteUrl = inviteUrl;
+    }
+  });
+
   /** Reset the add-follower form to its defaults. */
   function resetFollowerForm() {
     followerEmail = "";
@@ -100,6 +133,30 @@
       "reports.read": false,
     };
     showAddFollower = false;
+  }
+
+  /** Reset the create-invite form to its defaults. */
+  function resetInviteForm() {
+    inviteLabel = "";
+    inviteScopes = {
+      "entries.read": true,
+      "treatments.read": false,
+      "devicestatus.read": false,
+      "profile.read": false,
+      "notifications.read": false,
+      "reports.read": false,
+    };
+    showCreateInvite = false;
+    createdInviteUrl = null;
+  }
+
+  /** Copy invite URL to clipboard */
+  async function copyInviteUrl() {
+    if (createdInviteUrl) {
+      await navigator.clipboard.writeText(createdInviteUrl);
+      copiedInvite = true;
+      setTimeout(() => (copiedInvite = false), 2000);
+    }
   }
 </script>
 
@@ -263,21 +320,208 @@
 
     <!-- Followers Tab -->
     <Tabs.Content value="followers" class="space-y-4 pt-4">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-4">
         <p class="text-sm text-muted-foreground">
           Share your data with caregivers and family members
         </p>
-        {#if !showAddFollower}
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={() => (showAddFollower = true)}
-          >
-            <Plus class="mr-1.5 h-3.5 w-3.5" />
-            Add Follower
-          </Button>
-        {/if}
+        <div class="flex gap-2">
+          {#if !showCreateInvite && !showAddFollower}
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => (showCreateInvite = true)}
+            >
+              <Link class="mr-1.5 h-3.5 w-3.5" />
+              Create Invite Link
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => (showAddFollower = true)}
+            >
+              <Plus class="mr-1.5 h-3.5 w-3.5" />
+              Add by Email
+            </Button>
+          {/if}
+        </div>
       </div>
+
+      <!-- Create Invite Link Card -->
+      {#if showCreateInvite}
+        <Card.Root>
+          <Card.Header>
+            <Card.Title class="text-lg">Create Invite Link</Card.Title>
+            <Card.Description>
+              Generate a shareable link. Anyone with this link can accept the invite
+              after signing in.
+            </Card.Description>
+          </Card.Header>
+          <Card.Content>
+            {#if createdInviteUrl}
+              <!-- Show the created invite URL -->
+              <div class="space-y-4">
+                <div class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20">
+                  <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                  <p class="text-sm text-green-800 dark:text-green-200">
+                    Invite link created! Share it with your friend or family member.
+                  </p>
+                </div>
+
+                <div class="flex gap-2">
+                  <Input
+                    type="text"
+                    value={createdInviteUrl}
+                    readonly
+                    class="font-mono text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onclick={copyInviteUrl}
+                  >
+                    {#if copiedInvite}
+                      <Check class="h-4 w-4 text-green-600" />
+                    {:else}
+                      <Copy class="h-4 w-4" />
+                    {/if}
+                  </Button>
+                </div>
+
+                <Button
+                  variant="outline"
+                  class="w-full"
+                  onclick={() => resetInviteForm()}
+                >
+                  Done
+                </Button>
+              </div>
+            {:else}
+              <!-- Show the create invite form -->
+              <form
+                method="POST"
+                action="?/createInvite"
+                use:enhance={() => {
+                  return async ({ result, update }) => {
+                    await update();
+                    if (result.type === "success") {
+                      await invalidateAll();
+                    }
+                  };
+                }}
+                class="space-y-4"
+              >
+                <div class="space-y-2">
+                  <Label for="invite-label">Label (optional)</Label>
+                  <Input
+                    id="invite-label"
+                    type="text"
+                    name="label"
+                    placeholder="e.g. Mom, Endocrinologist"
+                    bind:value={inviteLabel}
+                  />
+                </div>
+
+                <div class="space-y-3">
+                  <Label>Data to share</Label>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    {#each followerScopes as scope}
+                      <div class="flex items-center gap-2">
+                        <Checkbox
+                          id="invite-scope-{scope}"
+                          checked={inviteScopes[scope]}
+                          onCheckedChange={(checked) => {
+                            inviteScopes[scope] = checked === true;
+                          }}
+                        />
+                        <label
+                          for="invite-scope-{scope}"
+                          class="text-sm text-foreground cursor-pointer select-none"
+                        >
+                          {scopeDescriptions[scope] ?? scope}
+                        </label>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+
+                <input type="hidden" name="scopes" value={inviteScopeList.join(",")} />
+                <input type="hidden" name="expires_in_days" value="7" />
+
+                {#if formError && formAction === "createInvite"}
+                  <div
+                    class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
+                  >
+                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <p class="text-sm text-destructive">{formError}</p>
+                  </div>
+                {/if}
+
+                <div class="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    class="flex-1"
+                    onclick={() => resetInviteForm()}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    class="flex-1"
+                    disabled={inviteScopeList.length === 0}
+                  >
+                    Create Link
+                  </Button>
+                </div>
+              </form>
+            {/if}
+          </Card.Content>
+        </Card.Root>
+      {/if}
+
+      <!-- Pending Invites -->
+      {#if activeInvites.length > 0 && !showCreateInvite && !showAddFollower}
+        <Card.Root>
+          <Card.Header class="pb-3">
+            <Card.Title class="text-base flex items-center gap-2">
+              <Link class="h-4 w-4" />
+              Pending Invites
+            </Card.Title>
+          </Card.Header>
+          <Card.Content class="space-y-3">
+            {#each activeInvites as invite (invite.id)}
+              <div class="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div class="space-y-1">
+                  <p class="text-sm font-medium">
+                    {invite.label ?? "Invite Link"}
+                  </p>
+                  <p class="text-xs text-muted-foreground">
+                    Expires {formatDate(invite.expiresAt)}
+                    {#if invite.maxUses}
+                      &middot; {invite.useCount}/{invite.maxUses} uses
+                    {/if}
+                  </p>
+                </div>
+                <form
+                  method="POST"
+                  action="?/revokeInvite"
+                  use:enhance={() => {
+                    return async ({ update }) => {
+                      await update();
+                      await invalidateAll();
+                    };
+                  }}
+                >
+                  <input type="hidden" name="invite_id" value={invite.id} />
+                  <Button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                    <Trash2 class="h-3.5 w-3.5" />
+                  </Button>
+                </form>
+              </div>
+            {/each}
+          </Card.Content>
+        </Card.Root>
+      {/if}
 
       {#if showAddFollower}
         <Card.Root>

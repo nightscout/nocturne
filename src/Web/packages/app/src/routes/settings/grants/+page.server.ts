@@ -77,6 +77,19 @@ export interface Grant {
   lastUsedAt: string | null;
 }
 
+export interface Invite {
+  id: string;
+  scopes: string[];
+  label: string | null;
+  expiresAt: string;
+  maxUses: number | null;
+  useCount: number;
+  createdAt: string;
+  isValid: boolean;
+  isExpired: boolean;
+  isRevoked: boolean;
+}
+
 export const load: PageServerLoad = async ({ url, locals, cookies }) => {
   if (!locals.isAuthenticated || !locals.user) {
     const returnUrl = encodeURIComponent(url.pathname + url.search);
@@ -85,23 +98,35 @@ export const load: PageServerLoad = async ({ url, locals, cookies }) => {
 
   const apiBaseUrl = getApiBaseUrl();
   let grants: Grant[] = [];
+  let invites: Invite[] = [];
 
   try {
-    const response = await fetch(`${apiBaseUrl}/oauth/grants`, {
-      headers: buildBackendHeaders(cookies),
-    });
+    // Fetch grants and invites in parallel
+    const [grantsResponse, invitesResponse] = await Promise.all([
+      fetch(`${apiBaseUrl}/oauth/grants`, {
+        headers: buildBackendHeaders(cookies),
+      }),
+      fetch(`${apiBaseUrl}/oauth/invites`, {
+        headers: buildBackendHeaders(cookies),
+      }),
+    ]);
 
-    if (response.ok) {
-      grants = await response.json();
-    } else if (response.status === 401) {
+    if (grantsResponse.ok) {
+      grants = await grantsResponse.json();
+    } else if (grantsResponse.status === 401) {
       throw redirect(303, "/auth/login");
+    }
+
+    if (invitesResponse.ok) {
+      const invitesData = await invitesResponse.json();
+      invites = invitesData.invites ?? [];
     }
   } catch (e) {
     if (e && typeof e === "object" && "status" in e) throw e;
-    console.error("Failed to fetch grants:", e);
+    console.error("Failed to fetch grants/invites:", e);
   }
 
-  return { grants };
+  return { grants, invites };
 };
 
 export const actions: Actions = {
@@ -297,6 +322,118 @@ export const actions: Actions = {
       console.error("Failed to update grant:", e);
       return fail(500, {
         action: "updateGrant" as const,
+        error: "Could not reach the server. Please try again.",
+      });
+    }
+  },
+
+  createInvite: async ({ request, cookies, locals }) => {
+    if (!locals.isAuthenticated) {
+      throw redirect(303, "/auth/login");
+    }
+
+    const formData = await request.formData();
+    const scopesRaw = (formData.get("scopes") as string) ?? "";
+    const label = (formData.get("label") as string)?.trim() || null;
+    const expiresInDays = parseInt((formData.get("expires_in_days") as string) ?? "7", 10);
+    const maxUsesRaw = formData.get("max_uses") as string;
+    const maxUses = maxUsesRaw ? parseInt(maxUsesRaw, 10) : null;
+
+    if (!scopesRaw) {
+      return fail(400, {
+        action: "createInvite" as const,
+        error: "At least one scope must be selected.",
+      });
+    }
+
+    const scopes = scopesRaw.split(",").filter(Boolean);
+    const apiBaseUrl = getApiBaseUrl();
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/oauth/invites`, {
+        method: "POST",
+        headers: buildBackendHeaders(cookies, "application/json"),
+        body: JSON.stringify({
+          scopes,
+          label,
+          expiresInDays,
+          maxUses,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          action: "createInvite" as const,
+          success: true,
+          inviteUrl: data.inviteUrl,
+          token: data.token,
+        };
+      }
+
+      if (response.status === 401) {
+        throw redirect(303, "/auth/login");
+      }
+
+      if (response.status === 400) {
+        const body = await response.json().catch(() => null);
+        return fail(400, {
+          action: "createInvite" as const,
+          error: body?.errorDescription ?? body?.message ?? "Invalid request.",
+        });
+      }
+
+      return fail(500, {
+        action: "createInvite" as const,
+        error: "An unexpected error occurred. Please try again.",
+      });
+    } catch (e) {
+      if (e && typeof e === "object" && "status" in e) throw e;
+      console.error("Failed to create invite:", e);
+      return fail(500, {
+        action: "createInvite" as const,
+        error: "Could not reach the server. Please try again.",
+      });
+    }
+  },
+
+  revokeInvite: async ({ request, cookies, locals }) => {
+    if (!locals.isAuthenticated) {
+      throw redirect(303, "/auth/login");
+    }
+
+    const formData = await request.formData();
+    const inviteId = (formData.get("invite_id") as string) ?? "";
+
+    if (!inviteId) {
+      return fail(400, { action: "revokeInvite" as const, error: "Missing invite ID." });
+    }
+
+    const apiBaseUrl = getApiBaseUrl();
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/oauth/invites/${encodeURIComponent(inviteId)}`, {
+        method: "DELETE",
+        headers: buildBackendHeaders(cookies),
+      });
+
+      if (response.ok || response.status === 204) {
+        return { action: "revokeInvite" as const, success: true };
+      }
+
+      if (response.status === 401) {
+        throw redirect(303, "/auth/login");
+      }
+
+      return fail(500, {
+        action: "revokeInvite" as const,
+        error: "An unexpected error occurred. Please try again.",
+      });
+    } catch (e) {
+      if (e && typeof e === "object" && "status" in e) throw e;
+      console.error("Failed to revoke invite:", e);
+      return fail(500, {
+        action: "revokeInvite" as const,
         error: "Could not reach the server. Please try again.",
       });
     }

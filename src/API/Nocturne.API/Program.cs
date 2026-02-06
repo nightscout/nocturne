@@ -224,6 +224,7 @@ builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 builder.Services.AddScoped<IOAuthGrantService, OAuthGrantService>();
 builder.Services.AddScoped<IOAuthTokenService, OAuthTokenService>();
 builder.Services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
+builder.Services.AddScoped<IFollowerInviteService, FollowerInviteService>();
 builder.Services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
 builder.Services.AddHostedService<OAuthCodeCleanupService>();
 

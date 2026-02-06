@@ -250,6 +250,11 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<OAuthAuthorizationCodeEntity> OAuthAuthorizationCodes { get; set; }
 
+    /// <summary>
+    /// Gets or sets the FollowerInvites table for shareable invite links
+    /// </summary>
+    public DbSet<FollowerInviteEntity> FollowerInvites { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1922,6 +1927,24 @@ public class NocturneDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.SubjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Configure Follower Invite entity
+        modelBuilder.Entity<FollowerInviteEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Scopes).HasDefaultValue(new List<string>());
+            entity.Property(e => e.UseCount).HasDefaultValue(0);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Owner)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerSubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TokenHash);
+            entity.HasIndex(e => e.OwnerSubjectId);
         });
 
         // Configure ClockFace entity
