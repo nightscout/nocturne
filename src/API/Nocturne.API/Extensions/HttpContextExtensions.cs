@@ -150,4 +150,22 @@ public static class HttpContextExtensions
         var grantedScopes = context.GetGrantedScopes();
         return OAuthScopes.SatisfiesScope(grantedScopes, scope);
     }
+
+    /// <summary>
+    /// Get the effective subject ID for data queries.
+    /// Returns the acting-as subject ID if the user is acting as a follower,
+    /// otherwise returns the authenticated user's subject ID.
+    /// </summary>
+    public static Guid? GetEffectiveSubjectId(this HttpContext context)
+    {
+        return context.GetAuthContext()?.EffectiveSubjectId;
+    }
+
+    /// <summary>
+    /// Check if the current request is a follower acting on behalf of a data owner.
+    /// </summary>
+    public static bool IsActingAsFollower(this HttpContext context)
+    {
+        return context.GetAuthContext()?.IsActingAsFollower ?? false;
+    }
 }

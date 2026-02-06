@@ -8,6 +8,7 @@
     AlertTriangle,
     ExternalLink,
     Check,
+    ShieldPlus,
   } from "lucide-svelte";
 
   const { data } = $props();
@@ -34,6 +35,27 @@
   const scopes = $derived(data.scope.split(" ").filter(Boolean));
   const hasFullAccess = $derived(scopes.includes("*"));
   const appName = $derived(data.clientInfo.displayName ?? data.clientId);
+
+  /** Previously-approved scopes parsed from the query parameter. */
+  const existingScopeSet = $derived(
+    new Set(data.existingScopes.split(" ").filter(Boolean))
+  );
+  const hasExistingScopes = $derived(existingScopeSet.size > 0);
+
+  /** Scopes that are newly requested (not previously approved). */
+  const newScopes = $derived(
+    scopes.filter((s: string) => !existingScopeSet.has(s))
+  );
+
+  /** Scopes that were previously approved. */
+  const previouslyApprovedScopes = $derived(
+    scopes.filter((s: string) => existingScopeSet.has(s))
+  );
+
+  /** Whether this is a scope upgrade (has both new and existing scopes). */
+  const isScopeUpgrade = $derived(
+    hasExistingScopes && newScopes.length > 0
+  );
 </script>
 
 <svelte:head>
@@ -49,11 +71,16 @@
         <Shield class="h-6 w-6 text-primary" />
       </div>
       <Card.Title class="text-2xl font-bold">
-        Authorize Application
+        {isScopeUpgrade ? "Additional Permissions" : "Authorize Application"}
       </Card.Title>
       <Card.Description>
-        <span class="font-semibold text-foreground">{appName}</span> wants to access
-        your Nocturne data.
+        {#if isScopeUpgrade}
+          <span class="font-semibold text-foreground">{appName}</span> is requesting
+          additional access to your Nocturne data.
+        {:else}
+          <span class="font-semibold text-foreground">{appName}</span> wants to access
+          your Nocturne data.
+        {/if}
       </Card.Description>
     </Card.Header>
 
@@ -88,21 +115,76 @@
 
       <Separator />
 
-      <div>
-        <p class="mb-3 text-sm font-medium text-foreground">
-          This application is requesting permission to:
-        </p>
-        <ul class="space-y-2">
-          {#each scopes as scope}
-            <li class="flex items-start gap-3 text-sm">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <span class="text-muted-foreground">
-                {scopeDescriptions[scope] ?? scope}
-              </span>
-            </li>
-          {/each}
-        </ul>
-      </div>
+      {#if isScopeUpgrade}
+        <!-- Scope upgrade: show new and existing scopes separately -->
+
+        <!-- New permissions section -->
+        <div>
+          <div class="mb-3 flex items-center gap-2">
+            <ShieldPlus class="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <p class="text-sm font-medium text-foreground">
+              New permissions requested
+            </p>
+          </div>
+          <div
+            class="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20"
+          >
+            <ul class="space-y-2">
+              {#each newScopes as scope}
+                <li class="flex items-start gap-3 text-sm">
+                  <ShieldAlert
+                    class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                  />
+                  <span class="text-amber-900 dark:text-amber-100">
+                    {scopeDescriptions[scope] ?? scope}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        </div>
+
+        <!-- Previously approved section -->
+        {#if previouslyApprovedScopes.length > 0}
+          <div class="opacity-60">
+            <div class="mb-3 flex items-center gap-2">
+              <Check class="h-4 w-4 text-muted-foreground" />
+              <p class="text-sm font-medium text-muted-foreground">
+                Previously approved
+              </p>
+            </div>
+            <ul class="space-y-2">
+              {#each previouslyApprovedScopes as scope}
+                <li class="flex items-start gap-3 text-sm">
+                  <Check
+                    class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                  />
+                  <span class="text-muted-foreground">
+                    {scopeDescriptions[scope] ?? scope}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+      {:else}
+        <!-- First-time auth or no existing scopes: single list (current behavior) -->
+        <div>
+          <p class="mb-3 text-sm font-medium text-foreground">
+            This application is requesting permission to:
+          </p>
+          <ul class="space-y-2">
+            {#each scopes as scope}
+              <li class="flex items-start gap-3 text-sm">
+                <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <span class="text-muted-foreground">
+                  {scopeDescriptions[scope] ?? scope}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
 
       {#if !hasFullAccess}
         <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">

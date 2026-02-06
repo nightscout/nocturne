@@ -224,6 +224,8 @@ builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
 builder.Services.AddScoped<IOAuthGrantService, OAuthGrantService>();
 builder.Services.AddScoped<IOAuthTokenService, OAuthTokenService>();
 builder.Services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
+builder.Services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
+builder.Services.AddHostedService<OAuthCodeCleanupService>();
 
 // Local identity provider services (built-in authentication without external OIDC)
 builder.Services.AddScoped<ILocalIdentityService, LocalIdentityService>();
@@ -247,6 +249,38 @@ builder.Services.AddHttpClient(
         client.Timeout = TimeSpan.FromSeconds(30);
     }
 );
+
+// Rate limiting for OAuth endpoints
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("oauth-token", opt =>
+    {
+        opt.PermitLimit = 30;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("oauth-device", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("oauth-device-approve", opt =>
+    {
+        opt.PermitLimit = 20;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "rate_limit_exceeded",
+            error_description = "Too many requests. Please try again later.",
+        }, ct);
+    };
+});
 
 // Statistics service for analytics and calculations
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
@@ -499,9 +533,15 @@ app.UseMiddleware<JsonExtensionMiddleware>();
 // Add Nightscout authentication middleware
 app.UseMiddleware<AuthenticationMiddleware>();
 
+// Add follower access middleware (handles X-Acting-As header for data sharing)
+app.UseMiddleware<FollowerAccessMiddleware>();
+
 // Add authentication and authorization middleware
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Add rate limiting
+app.UseRateLimiter();
 
 // Map native API controllers
 app.MapControllers();

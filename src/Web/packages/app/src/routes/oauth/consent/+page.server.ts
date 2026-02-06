@@ -114,6 +114,9 @@ export const load: PageServerLoad = async ({ url, locals, cookies }) => {
     console.error("Failed to fetch client info:", e);
   }
 
+  // Optional: previously-approved scopes for scope upgrade flows
+  const existingScopes = url.searchParams.get("existing_scopes") ?? "";
+
   return {
     clientId,
     redirectUri,
@@ -121,6 +124,7 @@ export const load: PageServerLoad = async ({ url, locals, cookies }) => {
     state,
     codeChallenge,
     clientInfo,
+    existingScopes,
   };
 };
 

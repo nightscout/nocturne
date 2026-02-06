@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models.Authorization;
@@ -21,6 +22,8 @@ public class OAuthController : ControllerBase
     private readonly IOAuthTokenService _tokenService;
     private readonly IOAuthDeviceCodeService _deviceCodeService;
     private readonly ISubjectService _subjectService;
+    private readonly IJwtService _jwtService;
+    private readonly IOAuthTokenRevocationCache _revocationCache;
     private readonly ILogger<OAuthController> _logger;
 
     /// <summary>
@@ -32,6 +35,8 @@ public class OAuthController : ControllerBase
         IOAuthTokenService tokenService,
         IOAuthDeviceCodeService deviceCodeService,
         ISubjectService subjectService,
+        IJwtService jwtService,
+        IOAuthTokenRevocationCache revocationCache,
         ILogger<OAuthController> logger
     )
     {
@@ -40,6 +45,8 @@ public class OAuthController : ControllerBase
         _tokenService = tokenService;
         _deviceCodeService = deviceCodeService;
         _subjectService = subjectService;
+        _jwtService = jwtService;
+        _revocationCache = revocationCache;
         _logger = logger;
     }
 
@@ -157,8 +164,11 @@ public class OAuthController : ControllerBase
             }
         }
 
-        // Redirect to consent page
-        var consentUrl = BuildConsentUrl(client_id, redirect_uri, scope, state, code_challenge);
+        // Redirect to consent page, passing existing scopes for the upgrade UI
+        var existingScopeString = existingGrant != null
+            ? string.Join(" ", existingGrant.Scopes)
+            : null;
+        var consentUrl = BuildConsentUrl(client_id, redirect_uri, scope, state, code_challenge, existingScopeString);
         return Redirect(consentUrl);
     }
 
@@ -233,6 +243,7 @@ public class OAuthController : ControllerBase
     /// </summary>
     [HttpPost("token")]
     [AllowAnonymous]
+    [EnableRateLimiting("oauth-token")]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(typeof(OAuthTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
@@ -335,6 +346,7 @@ public class OAuthController : ControllerBase
     /// </summary>
     [HttpPost("device")]
     [AllowAnonymous]
+    [EnableRateLimiting("oauth-device")]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(typeof(OAuthDeviceAuthorizationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
@@ -431,6 +443,7 @@ public class OAuthController : ControllerBase
     /// Called by the device approval page.
     /// </summary>
     [HttpPost("device-approve")]
+    [EnableRateLimiting("oauth-device-approve")]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -580,7 +593,8 @@ public class OAuthController : ControllerBase
         string redirectUri,
         string scope,
         string? state,
-        string codeChallenge
+        string codeChallenge,
+        string? existingScopes = null
     )
     {
         var qs = $"client_id={Uri.EscapeDataString(clientId)}" +
@@ -591,6 +605,11 @@ public class OAuthController : ControllerBase
         if (!string.IsNullOrEmpty(state))
         {
             qs += $"&state={Uri.EscapeDataString(state)}";
+        }
+
+        if (!string.IsNullOrEmpty(existingScopes))
+        {
+            qs += $"&existing_scopes={Uri.EscapeDataString(existingScopes)}";
         }
 
         return $"/oauth/consent?{qs}";
@@ -828,6 +847,105 @@ public class OAuthController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// List data owners that the authenticated user can view as a follower.
+    /// Used by the frontend to populate the "Viewing data for:" selector.
+    /// </summary>
+    [HttpGet("follower-targets")]
+    [ProducesResponseType(typeof(FollowerTargetListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<FollowerTargetListResponse>> GetFollowerTargets()
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        var grants = await _grantService.GetGrantsAsFollowerAsync(subjectId.Value);
+
+        var targets = new List<FollowerTargetDto>();
+        foreach (var grant in grants)
+        {
+            // Look up the data owner's info
+            var owner = await _subjectService.GetSubjectByIdAsync(grant.SubjectId);
+            targets.Add(new FollowerTargetDto
+            {
+                SubjectId = grant.SubjectId,
+                DisplayName = owner?.Name,
+                Email = owner?.Email,
+                Scopes = grant.Scopes,
+                Label = grant.Label,
+            });
+        }
+
+        return Ok(new FollowerTargetListResponse { Targets = targets });
+    }
+
+    /// <summary>
+    /// Token introspection endpoint (RFC 7662).
+    /// Returns metadata about a token including its active status, scopes, and subject.
+    /// Per RFC 7662, always returns 200 OK; invalid tokens get active=false.
+    /// </summary>
+    [HttpPost("introspect")]
+    [AllowAnonymous]
+    [EnableRateLimiting("oauth-token")]
+    [Consumes("application/x-www-form-urlencoded")]
+    [ProducesResponseType(typeof(TokenIntrospectionResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TokenIntrospectionResponse>> Introspect(
+        [FromForm] string token,
+        [FromForm] string? token_type_hint = null)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return Ok(new TokenIntrospectionResponse { Active = false });
+        }
+
+        // Try as JWT access token
+        if (token.Contains('.'))
+        {
+            var validation = _jwtService.ValidateAccessToken(token);
+            if (validation.IsValid && validation.Claims != null)
+            {
+                var claims = validation.Claims;
+
+                // Check revocation cache
+                if (!string.IsNullOrEmpty(claims.JwtId) &&
+                    await _revocationCache.IsRevokedAsync(claims.JwtId))
+                {
+                    return Ok(new TokenIntrospectionResponse { Active = false });
+                }
+
+                return Ok(new TokenIntrospectionResponse
+                {
+                    Active = true,
+                    Scope = claims.Scopes.Count > 0 ? string.Join(" ", claims.Scopes) : null,
+                    ClientId = claims.ClientId,
+                    Sub = claims.SubjectId.ToString(),
+                    Exp = claims.ExpiresAt.ToUnixTimeSeconds(),
+                    Iat = claims.IssuedAt.ToUnixTimeSeconds(),
+                    Jti = claims.JwtId,
+                    TokenType = "access_token",
+                });
+            }
+        }
+
+        // Non-JWT tokens (e.g. refresh tokens) are not introspectable in this implementation.
+        return Ok(new TokenIntrospectionResponse { Active = false });
+    }
+
     private static OAuthGrantDto MapToDto(OAuthGrantInfo info) => new()
     {
         Id = info.Id,
@@ -1005,6 +1123,41 @@ public class UpdateGrantRequest
 {
     public string? Label { get; set; }
     public List<string>? Scopes { get; set; }
+}
+
+/// <summary>
+/// DTO for a data owner that the current user can view as a follower
+/// </summary>
+public class FollowerTargetDto
+{
+    public Guid SubjectId { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+    public List<string> Scopes { get; set; } = new();
+    public string? Label { get; set; }
+}
+
+/// <summary>
+/// Response containing a list of follower targets
+/// </summary>
+public class FollowerTargetListResponse
+{
+    public List<FollowerTargetDto> Targets { get; set; } = new();
+}
+
+/// <summary>
+/// Token introspection response (RFC 7662)
+/// </summary>
+public class TokenIntrospectionResponse
+{
+    public bool Active { get; set; }
+    public string? Scope { get; set; }
+    public string? ClientId { get; set; }
+    public string? Sub { get; set; }
+    public long? Exp { get; set; }
+    public long? Iat { get; set; }
+    public string? Jti { get; set; }
+    public string? TokenType { get; set; }
 }
 
 #endregion

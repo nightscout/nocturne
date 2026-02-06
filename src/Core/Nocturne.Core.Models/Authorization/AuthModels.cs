@@ -115,6 +115,27 @@ public class AuthContext
     public DateTimeOffset? ExpiresAt { get; set; }
 
     /// <summary>
+    /// When a follower is acting on behalf of a data owner, this is the data owner's subject ID.
+    /// Null when acting as self.
+    /// </summary>
+    public Guid? ActingAsSubjectId { get; set; }
+
+    /// <summary>
+    /// When a follower is acting on behalf of a data owner, this is the data owner's display name.
+    /// </summary>
+    public string? ActingAsSubjectName { get; set; }
+
+    /// <summary>
+    /// The effective subject ID for data queries. Returns ActingAsSubjectId if set, otherwise SubjectId.
+    /// </summary>
+    public Guid? EffectiveSubjectId => ActingAsSubjectId ?? SubjectId;
+
+    /// <summary>
+    /// Whether the current request is acting on behalf of another user.
+    /// </summary>
+    public bool IsActingAsFollower => ActingAsSubjectId.HasValue;
+
+    /// <summary>
     /// Create an unauthenticated context
     /// </summary>
     public static AuthContext Unauthenticated() =>

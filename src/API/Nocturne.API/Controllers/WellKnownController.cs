@@ -140,6 +140,7 @@ public class WellKnownController : ControllerBase
                 TokenEndpoint = $"{baseUrl}/oauth/token",
                 DeviceAuthorizationEndpoint = $"{baseUrl}/oauth/device",
                 RevocationEndpoint = $"{baseUrl}/oauth/revoke",
+                IntrospectionEndpoint = $"{baseUrl}/oauth/introspect",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
                 ResponseTypesSupported = new[] { "code" },
                 GrantTypesSupported = new[]

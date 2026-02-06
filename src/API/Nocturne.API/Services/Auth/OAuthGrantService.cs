@@ -69,9 +69,9 @@ public class OAuthGrantService : IOAuthGrantService
 
             await _dbContext.SaveChangesAsync(ct);
 
-            _logger.LogDebug(
-                "Updated existing OAuth grant {GrantId} for client {ClientEntityId} and subject {SubjectId} with {ScopeCount} scopes",
-                existingGrant.Id, clientEntityId, subjectId, mergedScopes.Count);
+            _logger.LogInformation(
+                "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
+                "grant_updated", existingGrant.Id, subjectId, clientEntityId, string.Join(" ", mergedScopes));
 
             return MapToInfo(existingGrant);
         }
@@ -97,9 +97,9 @@ public class OAuthGrantService : IOAuthGrantService
             .Reference(e => e.Client)
             .LoadAsync(ct);
 
-        _logger.LogDebug(
-            "Created new OAuth grant {GrantId} for client {ClientEntityId} and subject {SubjectId} with {ScopeCount} scopes",
-            entity.Id, clientEntityId, subjectId, scopeList.Count);
+        _logger.LogInformation(
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
+            "grant_created", entity.Id, subjectId, clientEntityId, string.Join(" ", scopeList));
 
         return MapToInfo(entity);
     }
@@ -173,8 +173,8 @@ public class OAuthGrantService : IOAuthGrantService
         await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Revoked OAuth grant {GrantId} and {TokenCount} associated refresh tokens",
-            grantId, refreshTokens.Count);
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount}",
+            "grant_revoked", grantId, grant.SubjectId, refreshTokens.Count);
     }
 
     /// <inheritdoc />
@@ -267,9 +267,9 @@ public class OAuthGrantService : IOAuthGrantService
                 .Reference(e => e.FollowerSubject)
                 .LoadAsync(ct);
 
-            _logger.LogDebug(
-                "Updated existing follower grant {GrantId} for owner {OwnerId} and follower {FollowerId} with {ScopeCount} scopes",
-                existingGrant.Id, dataOwnerSubjectId, followerSubjectId, mergedScopes.Count);
+            _logger.LogInformation(
+                "OAuthAudit: {Event} grant_id={GrantId} owner_id={OwnerId} follower_id={FollowerId} scopes={Scopes}",
+                "follower_grant_updated", existingGrant.Id, dataOwnerSubjectId, followerSubjectId, string.Join(" ", mergedScopes));
 
             return MapToInfo(existingGrant);
         }
@@ -299,9 +299,9 @@ public class OAuthGrantService : IOAuthGrantService
             .Reference(e => e.FollowerSubject)
             .LoadAsync(ct);
 
-        _logger.LogDebug(
-            "Created new follower grant {GrantId} for owner {OwnerId} and follower {FollowerId} with {ScopeCount} scopes",
-            entity.Id, dataOwnerSubjectId, followerSubjectId, normalizedScopes.Count);
+        _logger.LogInformation(
+            "OAuthAudit: {Event} grant_id={GrantId} owner_id={OwnerId} follower_id={FollowerId} scopes={Scopes}",
+            "follower_grant_created", entity.Id, dataOwnerSubjectId, followerSubjectId, string.Join(" ", normalizedScopes));
 
         return MapToInfo(entity);
     }
@@ -378,9 +378,9 @@ public class OAuthGrantService : IOAuthGrantService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        _logger.LogDebug(
-            "Updated OAuth grant {GrantId} for subject {SubjectId}",
-            grantId, ownerSubjectId);
+        _logger.LogInformation(
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId}",
+            "grant_modified", grantId, ownerSubjectId);
 
         return MapToInfo(grant);
     }

@@ -272,7 +272,9 @@ public class OAuthTokenService : IOAuthTokenService
             {
                 refreshToken.RevokedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync(ct);
-                _logger.LogDebug("Revoked OAuth refresh token {TokenId}", refreshToken.Id);
+                _logger.LogInformation(
+                    "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
+                    "refresh_token_revoked", refreshToken.Id, refreshToken.GrantId);
                 return;
             }
         }
@@ -378,10 +380,9 @@ public class OAuthTokenService : IOAuthTokenService
 
         await _grantService.UpdateLastUsedAsync(entity.GrantId.Value, null, null, ct);
 
-        _logger.LogDebug(
-            "Device code exchange succeeded for client {ClientId}, subject {SubjectId}",
-            clientId,
-            grantEntity.SubjectId
+        _logger.LogInformation(
+            "OAuthAudit: {Event} grant_id={GrantId} client_id={ClientId} subject_id={SubjectId}",
+            "device_code_exchanged", entity.GrantId, clientId, grantEntity.SubjectId
         );
 
         return result;
@@ -433,6 +434,10 @@ public class OAuthTokenService : IOAuthTokenService
 
         _db.OAuthRefreshTokens.Add(refreshTokenEntity);
         await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "OAuthAudit: {Event} grant_id={GrantId} client_id={ClientId} subject_id={SubjectId} scopes={Scopes}",
+            "token_issued", grant.Id, grant.ClientId, grant.SubjectId, string.Join(" ", grant.Scopes));
 
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
         var scope = string.Join(" ", grant.Scopes);
