@@ -245,6 +245,11 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<OAuthDeviceCodeEntity> OAuthDeviceCodes { get; set; }
 
+    /// <summary>
+    /// Gets or sets the OAuthAuthorizationCodes table for Authorization Code + PKCE flow (RFC 7636)
+    /// </summary>
+    public DbSet<OAuthAuthorizationCodeEntity> OAuthAuthorizationCodes { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1148,6 +1153,23 @@ public class NocturneDbContext : DbContext
             .HasIndex(d => d.ExpiresAt)
             .HasDatabaseName("ix_oauth_device_codes_expires_at");
 
+        // OAuth Authorization Code indexes
+        modelBuilder
+            .Entity<OAuthAuthorizationCodeEntity>()
+            .HasIndex(c => c.CodeHash)
+            .HasDatabaseName("ix_oauth_authorization_codes_code_hash")
+            .IsUnique();
+
+        modelBuilder
+            .Entity<OAuthAuthorizationCodeEntity>()
+            .HasIndex(c => c.ExpiresAt)
+            .HasDatabaseName("ix_oauth_authorization_codes_expires_at");
+
+        modelBuilder
+            .Entity<OAuthAuthorizationCodeEntity>()
+            .HasIndex(c => c.SubjectId)
+            .HasDatabaseName("ix_oauth_authorization_codes_subject_id");
+
         // ClockFaces indexes - optimized for user queries and public lookups
         modelBuilder
             .Entity<ClockFaceEntity>()
@@ -1862,6 +1884,26 @@ public class NocturneDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Configure OAuth Authorization Code entity
+        modelBuilder.Entity<OAuthAuthorizationCodeEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Scopes).HasDefaultValue(new List<string>());
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Configure ClockFace entity
         modelBuilder.Entity<ClockFaceEntity>(entity =>
         {
@@ -2114,6 +2156,13 @@ public class NocturneDbContext : DbContext
                 if (entry.State == EntityState.Added)
                 {
                     oauthDeviceCodeEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is OAuthAuthorizationCodeEntity oauthAuthCodeEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    oauthAuthCodeEntity.CreatedAt = utcNow;
                 }
             }
             else if (entry.Entity is ClockFaceEntity clockFaceEntity)

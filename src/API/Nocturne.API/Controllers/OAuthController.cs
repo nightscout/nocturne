@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers;
@@ -14,13 +16,24 @@ namespace Nocturne.API.Controllers;
 [Tags("OAuth")]
 public class OAuthController : ControllerBase
 {
+    private readonly IOAuthClientService _clientService;
+    private readonly IOAuthGrantService _grantService;
+    private readonly IOAuthTokenService _tokenService;
     private readonly ILogger<OAuthController> _logger;
 
     /// <summary>
     /// Creates a new instance of OAuthController
     /// </summary>
-    public OAuthController(ILogger<OAuthController> logger)
+    public OAuthController(
+        IOAuthClientService clientService,
+        IOAuthGrantService grantService,
+        IOAuthTokenService tokenService,
+        ILogger<OAuthController> logger
+    )
     {
+        _clientService = clientService;
+        _grantService = grantService;
+        _tokenService = tokenService;
         _logger = logger;
     }
 
@@ -28,18 +41,11 @@ public class OAuthController : ControllerBase
     /// Authorization endpoint (Authorization Code + PKCE flow).
     /// Redirects to login if not authenticated, then shows consent screen.
     /// </summary>
-    /// <param name="client_id">Client identifier</param>
-    /// <param name="redirect_uri">Redirect URI for the authorization code</param>
-    /// <param name="response_type">Must be "code"</param>
-    /// <param name="scope">Space-delimited requested scopes</param>
-    /// <param name="state">Opaque state for CSRF protection</param>
-    /// <param name="code_challenge">PKCE code challenge</param>
-    /// <param name="code_challenge_method">Must be "S256"</param>
     [HttpGet("authorize")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult Authorize(
+    public async Task<ActionResult> Authorize(
         [FromQuery] string client_id,
         [FromQuery] string redirect_uri,
         [FromQuery] string response_type,
@@ -81,23 +87,138 @@ public class OAuthController : ControllerBase
             });
         }
 
-        // Phase 2 will implement:
-        // 1. Check if user is authenticated (redirect to login if not)
-        // 2. Check if an active grant exists for this client+user with sufficient scopes
-        // 3. If grant exists, issue code immediately
-        // 4. If not, show consent screen
-        // For now, return not implemented
-        _logger.LogInformation(
-            "OAuth authorize request: client_id={ClientId}, scopes={Scopes}",
-            client_id,
-            scope
-        );
-
-        return StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
+        if (requestedScopes.Length == 0)
         {
-            Error = "server_error",
-            ErrorDescription = "Authorization code flow will be implemented in Phase 2.",
-        });
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = "At least one scope must be requested.",
+            });
+        }
+
+        // Find or create the client
+        var client = await _clientService.FindOrCreateClientAsync(client_id);
+
+        // Validate redirect URI
+        if (!await _clientService.ValidateRedirectUriAsync(client_id, redirect_uri))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Invalid redirect_uri for this client.",
+            });
+        }
+
+        // Check if user is authenticated
+        if (!HttpContext.IsAuthenticated())
+        {
+            // Redirect to login, preserving the OAuth params to return to after login
+            var returnUrl = $"/oauth/authorize{Request.QueryString}";
+            return Redirect($"/auth/local/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        // Normalize the requested scopes
+        var normalizedScopes = OAuthScopes.Normalize(requestedScopes);
+
+        // Check if an active grant exists with sufficient scopes
+        var existingGrant = await _grantService.GetActiveGrantAsync(client.Id, subjectId.Value);
+        if (existingGrant != null)
+        {
+            var existingSet = new HashSet<string>(existingGrant.Scopes);
+            var allSatisfied = normalizedScopes.All(s => OAuthScopes.SatisfiesScope(existingSet, s));
+
+            if (allSatisfied)
+            {
+                // Silent approval: existing grant covers all requested scopes
+                return await IssueAuthorizationCode(
+                    client.Id,
+                    subjectId.Value,
+                    normalizedScopes,
+                    redirect_uri,
+                    code_challenge,
+                    state
+                );
+            }
+        }
+
+        // Redirect to consent page
+        var consentUrl = BuildConsentUrl(client_id, redirect_uri, scope, state, code_challenge);
+        return Redirect(consentUrl);
+    }
+
+    /// <summary>
+    /// Consent approval endpoint. Called by the consent page when the user approves.
+    /// </summary>
+    [HttpPost("authorize")]
+    [ProducesResponseType(StatusCodes.Status302Found)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> ApproveConsent([FromForm] ConsentApprovalRequest request)
+    {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
+        // If user denied
+        if (!request.Approved)
+        {
+            return RedirectWithError(
+                request.RedirectUri,
+                "access_denied",
+                "The user denied the authorization request.",
+                request.State
+            );
+        }
+
+        // Validate scopes
+        var scopes = request.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
+        var normalizedScopes = OAuthScopes.Normalize(scopes);
+
+        if (normalizedScopes.Count == 0)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_scope",
+                ErrorDescription = "No valid scopes were approved.",
+            });
+        }
+
+        // Find the client
+        var client = await _clientService.FindOrCreateClientAsync(request.ClientId);
+
+        // Generate authorization code
+        return await IssueAuthorizationCode(
+            client.Id,
+            subjectId.Value,
+            normalizedScopes,
+            request.RedirectUri,
+            request.CodeChallenge,
+            request.State
+        );
     }
 
     /// <summary>
@@ -109,7 +230,7 @@ public class OAuthController : ControllerBase
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(typeof(OAuthTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
-    public ActionResult<OAuthTokenResponse> Token([FromForm] OAuthTokenRequest request)
+    public async Task<ActionResult> Token([FromForm] OAuthTokenRequest request)
     {
         _logger.LogInformation(
             "OAuth token request: grant_type={GrantType}, client_id={ClientId}",
@@ -117,29 +238,79 @@ public class OAuthController : ControllerBase
             request.ClientId
         );
 
-        return request.GrantType switch
+        OAuthTokenResult result;
+
+        switch (request.GrantType)
         {
-            "authorization_code" => StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
+            case "authorization_code":
+                if (string.IsNullOrEmpty(request.Code) ||
+                    string.IsNullOrEmpty(request.CodeVerifier) ||
+                    string.IsNullOrEmpty(request.RedirectUri) ||
+                    string.IsNullOrEmpty(request.ClientId))
+                {
+                    return BadRequest(new OAuthError
+                    {
+                        Error = "invalid_request",
+                        ErrorDescription = "Missing required parameters: code, code_verifier, redirect_uri, client_id.",
+                    });
+                }
+
+                result = await _tokenService.ExchangeAuthorizationCodeAsync(
+                    request.Code,
+                    request.CodeVerifier,
+                    request.RedirectUri,
+                    request.ClientId
+                );
+                break;
+
+            case "refresh_token":
+                if (string.IsNullOrEmpty(request.RefreshToken))
+                {
+                    return BadRequest(new OAuthError
+                    {
+                        Error = "invalid_request",
+                        ErrorDescription = "Missing required parameter: refresh_token.",
+                    });
+                }
+
+                result = await _tokenService.RefreshAccessTokenAsync(
+                    request.RefreshToken,
+                    request.ClientId
+                );
+                break;
+
+            case "urn:ietf:params:oauth:grant-type:device_code":
+                return StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
+                {
+                    Error = "server_error",
+                    ErrorDescription = "Device code exchange will be implemented in Phase 3.",
+                });
+
+            default:
+                return BadRequest(new OAuthError
+                {
+                    Error = "unsupported_grant_type",
+                    ErrorDescription = $"Unsupported grant_type: {request.GrantType}",
+                });
+        }
+
+        if (!result.Success)
+        {
+            return BadRequest(new OAuthError
             {
-                Error = "server_error",
-                ErrorDescription = "Authorization code exchange will be implemented in Phase 2.",
-            }),
-            "refresh_token" => StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
-            {
-                Error = "server_error",
-                ErrorDescription = "Refresh token rotation will be implemented in Phase 2.",
-            }),
-            "urn:ietf:params:oauth:grant-type:device_code" => StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
-            {
-                Error = "server_error",
-                ErrorDescription = "Device code exchange will be implemented in Phase 3.",
-            }),
-            _ => BadRequest(new OAuthError
-            {
-                Error = "unsupported_grant_type",
-                ErrorDescription = $"Unsupported grant_type: {request.GrantType}",
-            }),
-        };
+                Error = result.Error!,
+                ErrorDescription = result.ErrorDescription,
+            });
+        }
+
+        return Ok(new OAuthTokenResponse
+        {
+            AccessToken = result.AccessToken!,
+            TokenType = "Bearer",
+            ExpiresIn = result.ExpiresIn,
+            RefreshToken = result.RefreshToken,
+            Scope = result.Scope,
+        });
     }
 
     /// <summary>
@@ -156,7 +327,6 @@ public class OAuthController : ControllerBase
         [FromForm] string? scope = null
     )
     {
-        // Validate scopes
         var requestedScopes = scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
         var invalidScopes = requestedScopes.Where(s => !OAuthScopes.IsValid(s)).ToList();
         if (invalidScopes.Count > 0)
@@ -168,13 +338,6 @@ public class OAuthController : ControllerBase
             });
         }
 
-        _logger.LogInformation(
-            "OAuth device authorization request: client_id={ClientId}, scopes={Scopes}",
-            client_id,
-            scope
-        );
-
-        // Phase 3 will implement the full device flow
         return StatusCode(StatusCodes.Status501NotImplemented, new OAuthError
         {
             Error = "server_error",
@@ -184,26 +347,107 @@ public class OAuthController : ControllerBase
 
     /// <summary>
     /// Token revocation endpoint (RFC 7009).
-    /// Revokes an access or refresh token.
     /// </summary>
     [HttpPost("revoke")]
     [AllowAnonymous]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
-    public ActionResult Revoke(
+    public async Task<ActionResult> Revoke(
         [FromForm] string token,
         [FromForm] string? token_type_hint = null
     )
     {
-        _logger.LogInformation(
-            "OAuth revoke request: token_type_hint={TokenTypeHint}",
-            token_type_hint
+        await _tokenService.RevokeTokenAsync(token, token_type_hint);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Get client info for the consent page.
+    /// </summary>
+    [HttpGet("client-info")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(OAuthClientInfoResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<OAuthClientInfoResponse>> GetClientInfo(
+        [FromQuery] string client_id
+    )
+    {
+        var client = await _clientService.FindOrCreateClientAsync(client_id);
+        var knownEntry = KnownOAuthClients.Match(client_id);
+
+        return Ok(new OAuthClientInfoResponse
+        {
+            ClientId = client.ClientId,
+            DisplayName = client.DisplayName,
+            IsKnown = client.IsKnown,
+            Homepage = knownEntry?.Homepage,
+        });
+    }
+
+    private async Task<ActionResult> IssueAuthorizationCode(
+        Guid clientEntityId,
+        Guid subjectId,
+        IReadOnlySet<string> scopes,
+        string redirectUri,
+        string codeChallenge,
+        string? state
+    )
+    {
+        var code = await _tokenService.GenerateAuthorizationCodeAsync(
+            clientEntityId,
+            subjectId,
+            scopes,
+            redirectUri,
+            codeChallenge
         );
 
-        // Phase 2 will implement token revocation
-        // Per RFC 7009, the server MUST respond with HTTP 200 even if the token is invalid
-        return Ok();
+        var separator = redirectUri.Contains('?') ? '&' : '?';
+        var redirectUrl = $"{redirectUri}{separator}code={Uri.EscapeDataString(code)}";
+
+        if (!string.IsNullOrEmpty(state))
+        {
+            redirectUrl += $"&state={Uri.EscapeDataString(state)}";
+        }
+
+        return Redirect(redirectUrl);
+    }
+
+    private ActionResult RedirectWithError(
+        string redirectUri,
+        string error,
+        string errorDescription,
+        string? state
+    )
+    {
+        var separator = redirectUri.Contains('?') ? '&' : '?';
+        var redirectUrl = $"{redirectUri}{separator}error={Uri.EscapeDataString(error)}&error_description={Uri.EscapeDataString(errorDescription)}";
+
+        if (!string.IsNullOrEmpty(state))
+        {
+            redirectUrl += $"&state={Uri.EscapeDataString(state)}";
+        }
+
+        return Redirect(redirectUrl);
+    }
+
+    private static string BuildConsentUrl(
+        string clientId,
+        string redirectUri,
+        string scope,
+        string? state,
+        string codeChallenge
+    )
+    {
+        var qs = $"client_id={Uri.EscapeDataString(clientId)}" +
+                 $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                 $"&scope={Uri.EscapeDataString(scope)}" +
+                 $"&code_challenge={Uri.EscapeDataString(codeChallenge)}";
+
+        if (!string.IsNullOrEmpty(state))
+        {
+            qs += $"&state={Uri.EscapeDataString(state)}";
+        }
+
+        return $"/oauth/consent?{qs}";
     }
 }
 
@@ -272,6 +516,41 @@ public class OAuthDeviceAuthorizationResponse
     public string? VerificationUriComplete { get; set; }
     public int ExpiresIn { get; set; }
     public int Interval { get; set; } = 5;
+}
+
+/// <summary>
+/// Consent approval request (submitted by the consent page)
+/// </summary>
+public class ConsentApprovalRequest
+{
+    [FromForm(Name = "client_id")]
+    public string ClientId { get; set; } = string.Empty;
+
+    [FromForm(Name = "redirect_uri")]
+    public string RedirectUri { get; set; } = string.Empty;
+
+    [FromForm(Name = "scope")]
+    public string? Scope { get; set; }
+
+    [FromForm(Name = "state")]
+    public string? State { get; set; }
+
+    [FromForm(Name = "code_challenge")]
+    public string CodeChallenge { get; set; } = string.Empty;
+
+    [FromForm(Name = "approved")]
+    public bool Approved { get; set; }
+}
+
+/// <summary>
+/// Client info response for the consent page
+/// </summary>
+public class OAuthClientInfoResponse
+{
+    public string ClientId { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public bool IsKnown { get; set; }
+    public string? Homepage { get; set; }
 }
 
 #endregion
