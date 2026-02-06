@@ -7,6 +7,12 @@ namespace Nocturne.Core.Models.Authorization;
 /// </summary>
 public static class OAuthScopes
 {
+    // Grant types
+    /// <summary>App grant: third-party application authorized by the user.</summary>
+    public const string GrantTypeApp = "app";
+    /// <summary>Follower grant: user-to-user data sharing (data owner grants access to follower).</summary>
+    public const string GrantTypeFollower = "follower";
+
     // Core health data scopes
     public const string EntriesRead = "entries.read";
     public const string EntriesReadWrite = "entries.readwrite";

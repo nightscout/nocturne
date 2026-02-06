@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -121,10 +122,10 @@ public class OAuthGrantEntity
 }
 
 /// <summary>
-/// Grant type constants
+/// Grant type constants. References OAuthScopes for the canonical values.
 /// </summary>
 public static class OAuthGrantTypes
 {
-    public const string App = "app";
-    public const string Follower = "follower";
+    public const string App = OAuthScopes.GrantTypeApp;
+    public const string Follower = OAuthScopes.GrantTypeFollower;
 }

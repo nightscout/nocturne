@@ -40,7 +40,7 @@ public class OAuthGrantService : IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = "app",
+        string grantType = OAuthScopes.GrantTypeApp,
         string? label = null,
         CancellationToken ct = default)
     {

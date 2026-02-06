@@ -45,7 +45,18 @@ public class AuthResult
 }
 
 /// <summary>
-/// Authentication context containing user identity and permissions
+/// Authentication context containing user identity and permissions.
+///
+/// Follower Access Pattern:
+/// When a user (the "follower") has been granted access to another user's (the "data owner's")
+/// data via a follower grant, they can make requests on behalf of the data owner. In this case:
+/// - SubjectId remains the follower's own ID (who is making the request)
+/// - ActingAsSubjectId is set to the data owner's ID (whose data is being accessed)
+/// - EffectiveSubjectId returns ActingAsSubjectId for use in data queries
+/// - Scopes are limited to what the data owner granted to the follower
+///
+/// Controllers should use EffectiveSubjectId when querying user-specific data to ensure
+/// followers see the data owner's data, not their own.
 /// </summary>
 public class AuthContext
 {

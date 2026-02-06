@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Contracts;
 
 /// <summary>
@@ -13,7 +15,7 @@ public interface IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = "app",
+        string grantType = OAuthScopes.GrantTypeApp,
         string? label = null,
         CancellationToken ct = default
     );
@@ -101,7 +103,7 @@ public class OAuthGrantInfo
     public string? ClientDisplayName { get; set; }
     public bool IsKnownClient { get; set; }
     public Guid SubjectId { get; set; }
-    public string GrantType { get; set; } = "app";
+    public string GrantType { get; set; } = OAuthScopes.GrantTypeApp;
     public List<string> Scopes { get; set; } = new();
     public string? Label { get; set; }
     public Guid? FollowerSubjectId { get; set; }
