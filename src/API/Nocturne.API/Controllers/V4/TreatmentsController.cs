@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
@@ -59,6 +60,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Array of treatments ordered by most recent first</returns>
     [HttpGet]
     [AllowAnonymous]
+    [RemoteQuery]
     [ProducesResponseType(typeof(Treatment[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<Treatment[]>> GetTreatments(
         [FromQuery] string? eventType = null,
@@ -107,6 +109,7 @@ public class TreatmentsController : ControllerBase
     /// the tracker instance will be automatically started/restarted.
     /// </summary>
     [HttpPost]
+    [RemoteCommand(Invalidates = ["GetTreatments"])]
     [ProducesResponseType(typeof(Treatment), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Treatment>> CreateTreatment(
@@ -151,6 +154,7 @@ public class TreatmentsController : ControllerBase
     /// Create multiple treatments with tracker integration.
     /// </summary>
     [HttpPost("bulk")]
+    [RemoteCommand(Invalidates = ["GetTreatments"])]
     [ProducesResponseType(typeof(Treatment[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Treatment[]>> CreateTreatments(
@@ -211,6 +215,7 @@ public class TreatmentsController : ControllerBase
     /// </summary>
     [HttpGet("{id}")]
     [AllowAnonymous]
+    [RemoteQuery]
     [ProducesResponseType(typeof(Treatment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Treatment>> GetTreatment(
@@ -230,6 +235,7 @@ public class TreatmentsController : ControllerBase
     /// Update an existing treatment by ID
     /// </summary>
     [HttpPut("{id}")]
+    [RemoteCommand(Invalidates = ["GetTreatments", "GetTreatment"])]
     [ProducesResponseType(typeof(Treatment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -266,6 +272,7 @@ public class TreatmentsController : ControllerBase
     /// Delete a treatment by ID
     /// </summary>
     [HttpDelete("{id}")]
+    [RemoteCommand(Invalidates = ["GetTreatments"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteTreatment(

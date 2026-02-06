@@ -9468,7 +9468,7 @@ export class StateSpansClient {
     /**
      * Delete a state span
      */
-    deleteStateSpan(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deleteStateSpan(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/state-spans/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -9479,7 +9479,6 @@ export class StateSpansClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -9488,26 +9487,19 @@ export class StateSpansClient {
         });
     }
 
-    protected processDeleteStateSpan(response: Response): Promise<FileResponse> {
+    protected processDeleteStateSpan(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 }
 
@@ -10190,7 +10182,7 @@ export class TrackersClient {
     /**
      * Delete a tracker definition
      */
-    deleteDefinition(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deleteDefinition(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/definitions/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -10201,7 +10193,6 @@ export class TrackersClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -10210,26 +10201,19 @@ export class TrackersClient {
         });
     }
 
-    protected processDeleteDefinition(response: Response): Promise<FileResponse> {
+    protected processDeleteDefinition(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
@@ -10442,7 +10426,7 @@ export class TrackersClient {
     /**
      * Acknowledge/snooze a tracker notification
      */
-    ackInstance(id: string, request: AckTrackerRequest, signal?: AbortSignal): Promise<FileResponse> {
+    ackInstance(id: string, request: AckTrackerRequest, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}/ack";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -10457,7 +10441,6 @@ export class TrackersClient {
             signal,
             headers: {
                 "Content-Type": "application/json",
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -10466,32 +10449,25 @@ export class TrackersClient {
         });
     }
 
-    protected processAckInstance(response: Response): Promise<FileResponse> {
+    protected processAckInstance(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
      * Delete a tracker instance
      */
-    deleteInstance(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deleteInstance(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -10502,7 +10478,6 @@ export class TrackersClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -10511,26 +10486,19 @@ export class TrackersClient {
         });
     }
 
-    protected processDeleteInstance(response: Response): Promise<FileResponse> {
+    protected processDeleteInstance(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
@@ -10659,7 +10627,7 @@ export class TrackersClient {
     /**
      * Delete a preset
      */
-    deletePreset(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deletePreset(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/presets/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -10670,7 +10638,6 @@ export class TrackersClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -10679,26 +10646,19 @@ export class TrackersClient {
         });
     }
 
-    protected processDeletePreset(response: Response): Promise<FileResponse> {
+    protected processDeletePreset(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 }
 

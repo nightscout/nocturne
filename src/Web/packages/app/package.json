@@ -24,6 +24,7 @@
     "start": "node server.js",
     "dev": "vite dev",
     "generate-api-client": "dotnet build -t:GenerateClient ../../../API/Nocturne.API/Nocturne.API.csproj",
+    "generate:remote": "pnpm --filter @nocturne/remote-function-codegen generate",
     "dev:install": "pnpm install && pnpm run dev",
     "dev:install:fresh": "pnpm install --force && pnpm run dev",
     "dev:demo": "vite dev --mode demo",

@@ -6810,7 +6810,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -6841,7 +6842,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStateSpans"
+        ]
       }
     },
     "/api/v4/state-spans/pump-modes": {
@@ -7333,7 +7338,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -7375,7 +7381,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStateSpans",
+          "GetStateSpan"
+        ]
       },
       "delete": {
         "tags": [
@@ -7395,18 +7406,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStateSpans"
+        ]
       }
     },
     "/api/v4/Status": {
@@ -7740,7 +7747,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -7771,7 +7779,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDefinitions"
+        ]
       }
     },
     "/api/v4/trackers/definitions/{id}": {
@@ -7804,7 +7816,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -7847,7 +7860,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDefinitions",
+          "GetDefinition"
+        ]
       },
       "delete": {
         "tags": [
@@ -7868,18 +7886,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDefinitions"
+        ]
       }
     },
     "/api/v4/trackers/instances": {
@@ -7903,7 +7917,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -7934,7 +7949,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/instances/history": {
@@ -7970,7 +7989,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/trackers/instances/upcoming": {
@@ -8016,7 +8036,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/trackers/instances/{id}/complete": {
@@ -8061,7 +8082,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances",
+          "GetInstanceHistory"
+        ]
       }
     },
     "/api/v4/trackers/instances/{id}/ack": {
@@ -8096,18 +8122,14 @@
           "x-position": 2
         },
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/instances/{id}": {
@@ -8130,18 +8152,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/presets": {
@@ -8165,7 +8183,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8196,7 +8215,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPresets"
+        ]
       }
     },
     "/api/v4/trackers/presets/{id}/apply": {
@@ -8240,7 +8263,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/presets/{id}": {
@@ -8263,18 +8290,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPresets"
+        ]
       }
     },
     "/api/v4/treatments/{id}/foods": {
@@ -8566,7 +8589,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8607,7 +8631,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments"
+        ]
       }
     },
     "/api/v4/treatments/bulk": {
@@ -8656,7 +8684,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments"
+        ]
       }
     },
     "/api/v4/treatments/{id}": {
@@ -8698,7 +8730,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8760,7 +8793,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments",
+          "GetTreatment"
+        ]
       },
       "delete": {
         "tags": [
@@ -8793,7 +8831,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments"
+        ]
       }
     },
     "/api/v4/ui-settings": {

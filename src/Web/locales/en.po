@@ -491,6 +491,7 @@ msgstr "Expired"
 #: src/lib/stores/settings-store.svelte.ts
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
+#: src/routes/settings/data-quality/+page.svelte
 #: src/routes/settings/features/+page.svelte
 msgid "Failed to load settings"
 msgstr "Failed to load settings"
@@ -654,6 +655,9 @@ msgstr "In Range"
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/calendar/+page.svelte
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -673,6 +677,9 @@ msgstr "Low"
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/calendar/+page.svelte
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -1062,6 +1069,11 @@ msgstr "Comparison Error"
 #: src/routes/dashboard/analyses/[id]/+page.svelte
 #: src/routes/reports/battery/+page.svelte
 #: src/routes/reports/battery/+page.svelte
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
@@ -1422,6 +1434,10 @@ msgstr "Method"
 #: src/routes/compatibility/+page.svelte
 #: src/routes/compatibility/+page.svelte
 #: src/routes/meals/+page.svelte
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "All"
 msgstr "All"
 
@@ -5860,11 +5876,15 @@ msgstr "<0/> Additional Properties <1/>"
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/clock/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "<0/> Delete"
 msgstr "<0/> Delete"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Medium"
 msgstr "Medium"
 
@@ -8062,6 +8082,8 @@ msgstr "Average (mg/dL)"
 msgid "Median (mg/dL)"
 msgstr "Median (mg/dL)"
 
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Lowest (mg/dL)"
 msgstr "Lowest (mg/dL)"
@@ -9837,6 +9859,9 @@ msgstr "Failed to start migration"
 msgid "Failed to cancel migration"
 msgstr "Failed to cancel migration"
 
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/compression-lows/review/+page.server.ts
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Pending"
 msgstr "Pending"
@@ -9941,6 +9966,8 @@ msgstr ""
 "Leave empty to import all data, or specify a range to import\n"
 "partial data."
 
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Start Date"
 msgstr "Start Date"
@@ -12876,3 +12903,440 @@ msgstr "({0} before expiration)"
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Exceeds tracker lifespan"
 msgstr "Exceeds tracker lifespan"
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr "Validation error"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "MMM d"
+msgstr "MMM d"
+
+#. placeholder {0}: format(date, 'MMM d')
+#. placeholder {1}: format(nextDay, 'd, yyyy')
+#. placeholder {0}: dateStr
+#. placeholder {1}: nextDayStr
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Night of {0}-{1}"
+msgstr "Night of {0}-{1}"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "Compression Low Review"
+msgstr "Compression Low Review"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "Review and confirm detected compression lows"
+msgstr "Review and confirm detected compression lows"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "No pending suggestions"
+msgstr "No pending suggestions"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "There are no compression lows waiting for review."
+msgstr "There are no compression lows waiting for review."
+
+#~ msgid "Select date to test"
+#~ msgstr "Select date to test"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Run Detection"
+msgstr "<0/> Run Detection"
+
+#. placeholder {0}: suggestion.lowestGlucose.toFixed(0)
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "Low: {0} mg/dL"
+msgstr "Low: {0} mg/dL"
+
+#. placeholder {0}: suggestion.recoveryMinutes
+#: src/routes/reports/compression-lows/review/+page.svelte
+msgid "Recovery: {0}min"
+msgstr "Recovery: {0}min"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Drop Rate (mg/dL/min)"
+msgstr "Drop Rate (mg/dL/min)"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Recovery (min)"
+msgstr "Recovery (min)"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Selected Range"
+msgstr "Selected Range"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Drag the handles on the chart to adjust"
+msgstr "Drag the handles on the chart to adjust"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Accept"
+msgstr "<0/> Accept"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Dismiss"
+msgstr "<0/> Dismiss"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Signature Secret"
+msgstr "Signature Secret"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret already configured"
+msgstr "Secret already configured"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret will be generated on save"
+msgstr "Secret will be generated on save"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "The API signs each webhook with HMAC-SHA256 using this secret."
+msgstr "The API signs each webhook with HMAC-SHA256 using this secret."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhook settings saved."
+msgstr "Webhook settings saved."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to save webhook settings."
+msgstr "Failed to save webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test sent to all webhooks."
+msgstr "Test sent to all webhooks."
+
+#. placeholder {0}: response.failedUrls.join(", ")
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed: {0}"
+msgstr "Failed: {0}"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test failed."
+msgstr "Test failed."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to test webhook settings."
+msgstr "Failed to test webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhooks"
+msgstr "Webhooks"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Send alert events to external services"
+msgstr "Send alert events to external services"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+msgid "Webhook URLs"
+msgstr "Webhook URLs"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Webhook Settings"
+msgstr "Webhook Settings"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Configure URLs and signature secrets for alarm notifications."
+msgstr "Configure URLs and signature secrets for alarm notifications."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Send Test"
+msgstr "Send Test"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr "No webhook URLs configured."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
+msgstr "<0/> Add URL"
+
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "End Date (optional)"
+msgstr "End Date (optional)"
+
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
+#: src/routes/reports/compression-lows/review/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Found {0} compression low(s) across {1} night(s)"
+msgstr "Found {0} compression low(s) across {1} night(s)"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Data Quality"
+msgstr "Data Quality"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Data Quality - Settings - Nocturne"
+msgstr "Data Quality - Settings - Nocturne"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Configure how Nocturne handles data quality and analysis"
+msgstr "Configure how Nocturne handles data quality and analysis"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "<0/> Sleep Schedule"
+msgstr "<0/> Sleep Schedule"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Your typical sleep times are used for overnight analysis features"
+msgstr "Your typical sleep times are used for overnight analysis features"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Typical bedtime"
+msgstr "Typical bedtime"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Typical wake time"
+msgstr "Typical wake time"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "<0/> Compression Low Detection"
+msgstr "<0/> Compression Low Detection"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Automatically detect potential compression lows during sleep"
+msgstr "Automatically detect potential compression lows during sleep"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Enable automatic detection"
+msgstr "Enable automatic detection"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid ""
+"Nocturne will analyze your overnight data and notify you when potential compression\n"
+"lows are detected"
+msgstr ""
+"Nocturne will analyze your overnight data and notify you when potential compression\n"
+"lows are detected"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Exclude from statistics"
+msgstr "Exclude from statistics"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid ""
+"Don't include accepted compression lows when calculating Time in Range and other\n"
+"statistics"
+msgstr ""
+"Don't include accepted compression lows when calculating Time in Range and other\n"
+"statistics"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid ""
+"Compression lows are falsely low CGM readings caused by sleeping on your sensor. When\n"
+"detected, you'll be notified to review and confirm them."
+msgstr ""
+"Compression lows are falsely low CGM readings caused by sleeping on your sensor. When\n"
+"detected, you'll be notified to review and confirm them."
+
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "MMM d, yyyy"
+msgstr "MMM d, yyyy"
+
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "Compression Low History - Nocturne"
+msgstr "Compression Low History - Nocturne"
+
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "Compression Low History"
+msgstr "Compression Low History"
+
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "View past compression low detections and their outcomes"
+msgstr "View past compression low detections and their outcomes"
+
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "<0/> Review Pending"
+msgstr "<0/> Review Pending"
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Status:"
+msgstr "Status:"
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Accepted"
+msgstr "Accepted"
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Dismissed"
+msgstr "Dismissed"
+
+#. placeholder {0}: filteredSuggestions().length
+#. placeholder {1}: filteredSuggestions().length !== 1 ? 's' : ''
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "{0} result{1}"
+msgstr "{0} result{1}"
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "No compression lows detected yet"
+msgstr "No compression lows detected yet"
+
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "When compression lows are detected during your sleep, they'll appear here."
+msgstr "When compression lows are detected during your sleep, they'll appear here."
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "No matching results"
+msgstr "No matching results"
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Try changing your filter criteria."
+msgstr "Try changing your filter criteria."
+
+#: src/routes/reports/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Unknown date"
+msgstr "Unknown date"
+
+#. placeholder {0}: suggestion.lowestGlucose ?? '—'
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "Lowest: {0} mg/dL"
+msgstr "Lowest: {0} mg/dL"
+
+#. placeholder {0}: getConfidenceLabel(suggestion.confidence ?? 0)
+#: src/routes/reports/compression-lows/+page.svelte
+msgid "Confidence: {0}"
+msgstr "Confidence: {0}"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Data Quality - Nocturne"
+msgstr "Data Quality - Nocturne"
+
+#~ msgid "Review data quality issues and exclusions"
+#~ msgstr "Review data quality issues and exclusions"
+
+#~ msgid "<0/> Review Pending ({0})"
+#~ msgstr "<0/> Review Pending ({0})"
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Compression Lows"
+msgstr "Compression Lows"
+
+#~ msgid "Failed to load suggestions"
+#~ msgstr "Failed to load suggestions"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Error Loading Data Quality Report"
+msgstr "Error Loading Data Quality Report"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "When compression lows are detected during your sleep, they will appear here."
+msgstr "When compression lows are detected during your sleep, they will appear here."
+
+#~ msgid "Error Loading Pending Suggestions"
+#~ msgstr "Error Loading Pending Suggestions"
+
+#~ msgid "Review Compression Lows - Nocturne"
+#~ msgstr "Review Compression Lows - Nocturne"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Error Loading Compression Low History"
+msgstr "Error Loading Compression Low History"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Compression Lows - Nocturne"
+msgstr "Compression Lows - Nocturne"
+
+#. placeholder {0}: pendingCount
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "{0} pending review"
+msgstr "{0} pending review"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Review history and manage exclusions"
+msgstr "Review history and manage exclusions"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Exclusion Range"
+msgstr "Exclusion Range"
+
+#~ msgid "This compression low has been {0}."
+#~ msgstr "This compression low has been {0}."
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Select a compression low to view details"
+msgstr "Select a compression low to view details"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Monitor and manage data exclusions"
+msgstr "Monitor and manage data exclusions"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Pending Review"
+msgstr "Pending Review"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Data Quality Categories"
+msgstr "Data Quality Categories"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Falsely low readings from sleeping on sensor"
+msgstr "Falsely low readings from sleeping on sensor"
+
+#. placeholder {0}: pendingCount
+#: src/routes/reports/data-quality/+page.svelte
+msgid "{0} pending"
+msgstr "{0} pending"
+
+#~ msgid "{0} total detected"
+#~ msgstr "{0} total detected"
+
+#~ msgid "{0} excluded from stats"
+#~ msgstr "{0} excluded from stats"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Additional data quality categories coming soon"
+msgstr "Additional data quality categories coming soon"
+
+#~ msgid "You have {0} item{1} waiting for review"
+#~ msgstr "You have {0} item{1} waiting for review"
+
+#~ msgid "Review detected compression lows to improve your statistics accuracy"
+#~ msgstr "Review detected compression lows to improve your statistics accuracy"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Review Now"
+msgstr "Review Now"
+
+#. placeholder {0}: pendingCount
+#. placeholder {1}: pendingCount !== 1 ? "s" : ""
+#: src/routes/reports/data-quality/+page.svelte
+msgid ""
+"You have {0} item{1} waiting\n"
+"for review"
+msgstr ""
+"You have {0} item{1} waiting\n"
+"for review"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid ""
+"Review detected compression lows to improve your statistics\n"
+"accuracy"
+msgstr ""
+"Review detected compression lows to improve your statistics\n"
+"accuracy"
+
+#. placeholder {0}: acceptedCount
+#: src/routes/reports/data-quality/+page.svelte
+msgid "{0} events"
+msgstr "{0} events"

@@ -30,6 +30,7 @@ using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.API.OpenApi;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -148,6 +149,9 @@ builder.Services.AddOpenApi();
 // Add OpenAPI document generation with NSwag
 builder.Services.AddOpenApiDocument(config =>
 {
+    // Add remote function metadata processor
+    config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
+
     config.PostProcess = document =>
     {
         document.Info.Version = "v1";
