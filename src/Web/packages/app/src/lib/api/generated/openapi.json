@@ -7406,16 +7406,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         },
         "x-remote-type": "command",
@@ -7894,16 +7886,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         },
         "x-remote-type": "command",
@@ -8138,16 +8122,8 @@
           "x-position": 2
         },
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         },
         "x-remote-type": "command",
@@ -8176,16 +8152,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         },
         "x-remote-type": "command",
@@ -8322,16 +8290,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
         },
         "x-remote-type": "command",

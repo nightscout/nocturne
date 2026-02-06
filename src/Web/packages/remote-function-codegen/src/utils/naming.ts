@@ -10,26 +10,30 @@ export function operationIdToFunctionName(operationId: string): string {
 }
 
 /**
- * Convert tag to file name.
+ * Convert tag to file name with proper pluralization.
  * "Note" -> "notes"
  * "V4 Notes" -> "notes"
  * "Trackers" -> "trackers"
+ * "Battery" -> "batteries"
  */
 export function tagToFileName(tag: string): string {
   const cleaned = tag.replace(/^V\d+\s*/i, '');
   const lower = cleaned.toLowerCase();
-  if (lower.endsWith('s')) return lower;
-  return lower + 's';
-}
 
-/**
- * Convert tag to apiClient property name.
- * "Note" -> "notes"
- * "V4 Notes" -> "notes"
- * "Trackers" -> "trackers"
- */
-export function tagToClientProperty(tag: string): string {
-  return tagToFileName(tag);
+  // Already ends with 's' (plural or uncountable like "status")
+  if (lower.endsWith('s')) return lower;
+
+  // Consonant + y -> ies (e.g., "battery" -> "batteries")
+  if (lower.endsWith('y') && !/[aeiou]y$/.test(lower)) {
+    return lower.slice(0, -1) + 'ies';
+  }
+
+  // Sibilant endings -> es (e.g., "match" -> "matches")
+  if (/(?:sh|ch|x|z)$/.test(lower)) {
+    return lower + 'es';
+  }
+
+  return lower + 's';
 }
 
 /**

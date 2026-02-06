@@ -10,13 +10,6 @@ type OperationWithExtensions = OpenAPIV3.OperationObject & {
 export function parseOpenApiSpec(spec: OpenAPIV3.Document): ParsedSpec {
   const operations: OperationInfo[] = [];
   const tagsSet = new Set<string>();
-  const schemas = new Map<string, string>();
-
-  if (spec.components?.schemas) {
-    for (const schemaName of Object.keys(spec.components.schemas)) {
-      schemas.set(schemaName, `${schemaName}Schema`);
-    }
-  }
 
   for (const [path, pathItem] of Object.entries(spec.paths ?? {})) {
     if (!pathItem) continue;
@@ -35,9 +28,23 @@ export function parseOpenApiSpec(spec: OpenAPIV3.Document): ParsedSpec {
 
       const invalidates = operation['x-remote-invalidates'] ?? [];
 
-      const parameters = parseParameters(operation.parameters ?? [], pathItem.parameters ?? []);
-      const requestBodySchema = parseRequestBody(operation.requestBody as OpenAPIV3.RequestBodyObject | undefined);
-      const responseSchema = parseResponse(operation.responses?.['200'] as OpenAPIV3.ResponseObject | undefined);
+      const parameters = parseParameters(
+        operation.parameters ?? [],
+        pathItem.parameters ?? [],
+        spec.components
+      );
+      const requestBodyResult = parseRequestBody(operation.requestBody as OpenAPIV3.RequestBodyObject | undefined);
+      const requestBodySchema = requestBodyResult?.schema;
+      const isArrayBody = requestBodyResult?.isArray ?? false;
+
+      // Check success response codes in priority order (200, 201, 202)
+      const responseSchema =
+        parseResponse(operation.responses?.['200'] as OpenAPIV3.ResponseObject | undefined) ??
+        parseResponse(operation.responses?.['201'] as OpenAPIV3.ResponseObject | undefined) ??
+        parseResponse(operation.responses?.['202'] as OpenAPIV3.ResponseObject | undefined);
+
+      // Detect void response: commands with no JSON response body (204 No Content, or 200 with no body)
+      const isVoidResponse = !responseSchema && remoteType === 'command';
 
       operations.push({
         operationId: operation.operationId ?? `${method}_${path}`,
@@ -48,7 +55,9 @@ export function parseOpenApiSpec(spec: OpenAPIV3.Document): ParsedSpec {
         invalidates,
         parameters,
         requestBodySchema,
+        isArrayBody,
         responseSchema,
+        isVoidResponse,
         summary: operation.summary,
       });
     }
@@ -57,13 +66,13 @@ export function parseOpenApiSpec(spec: OpenAPIV3.Document): ParsedSpec {
   return {
     operations,
     tags: Array.from(tagsSet),
-    schemas,
   };
 }
 
 function parseParameters(
   opParams: (OpenAPIV3.ParameterObject | OpenAPIV3.ReferenceObject)[],
-  pathParams: (OpenAPIV3.ParameterObject | OpenAPIV3.ReferenceObject)[]
+  pathParams: (OpenAPIV3.ParameterObject | OpenAPIV3.ReferenceObject)[],
+  components?: OpenAPIV3.ComponentsObject
 ): ParameterInfo[] {
   const allParams = [...pathParams, ...opParams];
   const result: ParameterInfo[] = [];
@@ -71,24 +80,111 @@ function parseParameters(
   for (const param of allParams) {
     if ('$ref' in param) continue;
 
-    result.push({
+    const schema = param.schema as OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined;
+    const resolved = resolveSchema(schema, components);
+
+    const paramInfo: ParameterInfo = {
       name: param.name,
       in: param.in as 'query' | 'path' | 'header',
       required: param.required ?? false,
-      type: getSchemaType(param.schema as OpenAPIV3.SchemaObject | undefined),
-    });
+      type: getSchemaType(resolved),
+    };
+
+    // Check if the resolved schema is an enum
+    if (resolved?.enum) {
+      const enumName = findEnumName(schema, components);
+      if (enumName) {
+        paramInfo.enumName = enumName;
+      }
+    }
+
+    result.push(paramInfo);
   }
 
   return result;
 }
 
-function parseRequestBody(body: OpenAPIV3.RequestBodyObject | undefined): string | undefined {
+/**
+ * Resolve a schema through $ref and oneOf to get the underlying schema object.
+ */
+function resolveSchema(
+  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
+  components?: OpenAPIV3.ComponentsObject
+): OpenAPIV3.SchemaObject | undefined {
+  if (!schema) return undefined;
+
+  if ('$ref' in schema) {
+    const refName = schema.$ref.split('/').pop();
+    if (refName && components?.schemas?.[refName]) {
+      return components.schemas[refName] as OpenAPIV3.SchemaObject;
+    }
+    return undefined;
+  }
+
+  // Handle oneOf wrapping (NSwag nullable enums)
+  const schemaObj = schema as OpenAPIV3.SchemaObject;
+  if (schemaObj.oneOf) {
+    for (const item of schemaObj.oneOf) {
+      const resolved = resolveSchema(
+        item as OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+        components
+      );
+      if (resolved?.type || resolved?.enum) return resolved;
+    }
+  }
+
+  return schemaObj;
+}
+
+/**
+ * Find the enum type name from a schema that may be wrapped in oneOf/$ref.
+ */
+function findEnumName(
+  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
+  components?: OpenAPIV3.ComponentsObject
+): string | undefined {
+  if (!schema) return undefined;
+
+  if ('$ref' in schema) {
+    const refName = schema.$ref.split('/').pop();
+    if (refName && components?.schemas?.[refName]) {
+      const resolved = components.schemas[refName] as OpenAPIV3.SchemaObject;
+      if (resolved.enum) return refName;
+    }
+    return undefined;
+  }
+
+  const schemaObj = schema as OpenAPIV3.SchemaObject;
+  if (schemaObj.oneOf) {
+    for (const item of schemaObj.oneOf) {
+      const name = findEnumName(
+        item as OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+        components
+      );
+      if (name) return name;
+    }
+  }
+
+  return undefined;
+}
+
+function parseRequestBody(body: OpenAPIV3.RequestBodyObject | undefined): { schema: string; isArray: boolean } | undefined {
   if (!body?.content?.['application/json']?.schema) return undefined;
 
   const schema = body.content['application/json'].schema;
   if ('$ref' in schema) {
     const refName = schema.$ref.split('/').pop();
-    return refName ? `${refName}Schema` : undefined;
+    return refName ? { schema: `${refName}Schema`, isArray: false } : undefined;
+  }
+
+  // Handle array request bodies (e.g., Treatment[])
+  const schemaObj = schema as OpenAPIV3.SchemaObject;
+  if (schemaObj.type === 'array' && schemaObj.items) {
+    const items = schemaObj.items as OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject;
+    if ('$ref' in items) {
+      const itemName = items.$ref.split('/').pop();
+      return itemName ? { schema: `${itemName}Schema`, isArray: true } : undefined;
+    }
   }
 
   return undefined;
@@ -99,8 +195,17 @@ function parseResponse(response: OpenAPIV3.ResponseObject | undefined): string |
 
   const schema = response.content['application/json'].schema;
   if ('$ref' in schema) {
-    const refName = schema.$ref.split('/').pop();
-    return refName;
+    return schema.$ref.split('/').pop();
+  }
+
+  // Handle array responses (e.g., TrackerDefinitionDto[])
+  const schemaObj = schema as OpenAPIV3.SchemaObject;
+  if (schemaObj.type === 'array' && schemaObj.items) {
+    const items = schemaObj.items as OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject;
+    if ('$ref' in items) {
+      const itemName = items.$ref.split('/').pop();
+      return itemName ? `${itemName}[]` : undefined;
+    }
   }
 
   return undefined;

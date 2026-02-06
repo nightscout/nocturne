@@ -5,7 +5,7 @@ export interface ParameterInfo {
   in: 'query' | 'path' | 'header';
   required: boolean;
   type: string;
-  schema?: string;
+  enumName?: string;
 }
 
 export interface OperationInfo {
@@ -17,12 +17,13 @@ export interface OperationInfo {
   invalidates: string[];
   parameters: ParameterInfo[];
   requestBodySchema?: string;
+  isArrayBody?: boolean;
   responseSchema?: string;
+  isVoidResponse: boolean;
   summary?: string;
 }
 
 export interface ParsedSpec {
   operations: OperationInfo[];
   tags: string[];
-  schemas: Map<string, string>;
 }

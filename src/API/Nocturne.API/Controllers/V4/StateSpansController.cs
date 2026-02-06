@@ -253,6 +253,7 @@ public class StateSpansController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [RemoteCommand(Invalidates = ["GetStateSpans"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
     {
         var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);

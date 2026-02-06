@@ -325,6 +325,7 @@ public class TrackersController : ControllerBase
     [HttpDelete("definitions/{id:guid}")]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetDefinitions"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteDefinition(Guid id)
     {
         var existing = await _repository.GetDefinitionByIdAsync(id, HttpContext.RequestAborted);
@@ -515,6 +516,7 @@ public class TrackersController : ControllerBase
     [HttpPost("instances/{id:guid}/ack")]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> AckInstance(Guid id, [FromBody] AckTrackerRequest request)
     {
         var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
@@ -549,6 +551,7 @@ public class TrackersController : ControllerBase
     [HttpDelete("instances/{id:guid}")]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteInstance(Guid id)
     {
         var existing = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
@@ -667,6 +670,7 @@ public class TrackersController : ControllerBase
     [HttpDelete("presets/{id:guid}")]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetPresets"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeletePreset(Guid id)
     {
         var existing = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);

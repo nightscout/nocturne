@@ -5,6 +5,7 @@ import {
   tagToFileName,
   resolveInvalidation,
 } from '../utils/naming.js';
+import { getClientPropertyName } from '../utils/client-mapping.js';
 
 export function generateRemoteFunctions(parsed: ParsedSpec): Map<string, string> {
   const fileContents = new Map<string, string>();
@@ -20,7 +21,7 @@ export function generateRemoteFunctions(parsed: ParsedSpec): Map<string, string>
   // Generate file for each tag
   for (const [tag, operations] of byTag) {
     const fileName = `${tagToFileName(tag)}.remote.generated.ts`;
-    const content = generateTagFile(tag, operations, parsed);
+    const content = generateTagFile(tag, operations);
     fileContents.set(fileName, content);
   }
 
@@ -31,17 +32,22 @@ export function generateRemoteFunctions(parsed: ParsedSpec): Map<string, string>
   return fileContents;
 }
 
-function generateTagFile(tag: string, operations: OperationInfo[], parsed: ParsedSpec): string {
+function generateTagFile(tag: string, operations: OperationInfo[]): string {
   const schemaImports = new Set<string>();
   const typeImports = new Set<string>();
+  const enumImports = new Set<string>();
 
-  // Collect schema imports for request bodies and type imports for casting
+  // Collect imports
   for (const op of operations) {
     if (op.requestBodySchema) {
       schemaImports.add(op.requestBodySchema);
-      // Also import the type for casting (schema name without 'Schema' suffix)
       const typeName = op.requestBodySchema.replace(/Schema$/, '');
       typeImports.add(typeName);
+    }
+    for (const param of op.parameters) {
+      if (param.enumName) {
+        enumImports.add(param.enumName);
+      }
     }
   }
 
@@ -49,9 +55,17 @@ function generateTagFile(tag: string, operations: OperationInfo[], parsed: Parse
     ? `import { ${Array.from(schemaImports).join(', ')} } from '$lib/api/generated/schemas';\n`
     : '';
 
-  const typeImportLine = typeImports.size > 0
-    ? `import type { ${Array.from(typeImports).join(', ')} } from '$api';\n`
-    : '';
+  // Build $api import line with both value imports (enums) and type imports (DTOs)
+  let apiImportLine = '';
+  const valueImports = Array.from(enumImports);
+  const typeOnlyImports = Array.from(typeImports);
+  if (valueImports.length > 0 || typeOnlyImports.length > 0) {
+    const parts = [
+      ...valueImports,
+      ...typeOnlyImports.map(t => `type ${t}`),
+    ];
+    apiImportLine = `import { ${parts.join(', ')} } from '$api';\n`;
+  }
 
   const functions = operations.map(op => generateFunction(op, tag, operations)).join('\n\n');
 
@@ -62,14 +76,14 @@ function generateTagFile(tag: string, operations: OperationInfo[], parsed: Parse
 import { getRequestEvent, query, command } from '$app/server';
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
-${schemaImportLine}${typeImportLine}
+${schemaImportLine}${apiImportLine}
 ${functions}
 `;
 }
 
 function generateFunction(op: OperationInfo, tag: string, allOpsInTag: OperationInfo[]): string {
   const functionName = operationIdToFunctionName(op.operationId);
-  const clientProperty = getClientProperty(tag);
+  const clientProperty = getClientPropertyName(tag);
   const methodName = getMethodName(op.operationId, tag);
 
   if (op.remoteType === 'query') {
@@ -88,11 +102,24 @@ function generateQueryFunction(
   const { schemaArg, paramList, apiCallArgs } = buildParameterMapping(op);
   const comment = op.summary ? `/** ${op.summary} */\n` : '';
 
-  return `${comment}export const ${functionName} = query(${schemaArg}, async (${paramList}) => {
+  if (schemaArg) {
+    return `${comment}export const ${functionName} = query(${schemaArg}, async (${paramList}) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
     return await apiClient.${clientProperty}.${methodName}(${apiCallArgs});
+  } catch (err) {
+    console.error('Error in ${clientProperty}.${methodName}:', err);
+    throw error(500, 'Failed to ${functionName.replace(/([A-Z])/g, ' $1').toLowerCase().trim()}');
+  }
+});`;
+  }
+
+  return `${comment}export const ${functionName} = query(async () => {
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
+  try {
+    return await apiClient.${clientProperty}.${methodName}();
   } catch (err) {
     console.error('Error in ${clientProperty}.${methodName}:', err);
     throw error(500, 'Failed to ${functionName.replace(/([A-Z])/g, ' $1').toLowerCase().trim()}');
@@ -120,9 +147,8 @@ function generateCommandFunction(
   const localFunctionNames = new Set(allOpsInTag.map(o => operationIdToFunctionName(o.operationId)));
   const localInvalidations = invalidations.filter(fn => localFunctionNames.has(fn));
 
-  // Build refresh calls - use the actual id for single-item queries when available
+  // Build refresh calls
   const refreshCallsArr = localInvalidations.map(fn => {
-    // If this is a "get single item" query (like getDefinition) and we have an id, pass it
     const isSingleItemQuery = fn.match(/^get[A-Z][a-z]+$/) && !fn.endsWith('s');
     if (isSingleItemQuery && hasPathId) {
       return `${fn}(id).refresh()`;
@@ -131,20 +157,38 @@ function generateCommandFunction(
   });
 
   const refreshCalls = refreshCallsArr.length > 0
-    ? `
-    await Promise.all([
+    ? `\n    await Promise.all([
       ${refreshCallsArr.join(',\n      ')}
     ]);`
     : '';
 
   const comment = op.summary ? `/** ${op.summary} */\n` : '';
 
-  return `${comment}export const ${functionName} = command(${schemaArg}, async (${paramList}) => {
+  // Handle void responses (204 No Content)
+  const apiCall = op.isVoidResponse
+    ? `    await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
+    return { success: true };`
+    : `    const result = await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
+    return result;`;
+
+  if (schemaArg) {
+    return `${comment}export const ${functionName} = command(${schemaArg}, async (${paramList}) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    const result = await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
-    return result;
+${apiCall}
+  } catch (err) {
+    console.error('Error in ${clientProperty}.${methodName}:', err);
+    throw error(500, 'Failed to ${functionName.replace(/([A-Z])/g, ' $1').toLowerCase().trim()}');
+  }
+});`;
+  }
+
+  return `${comment}export const ${functionName} = command(async () => {
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
+  try {
+${apiCall}
   } catch (err) {
     console.error('Error in ${clientProperty}.${methodName}:', err);
     throw error(500, 'Failed to ${functionName.replace(/([A-Z])/g, ' $1').toLowerCase().trim()}');
@@ -162,20 +206,29 @@ function buildParameterMapping(op: OperationInfo): {
   const queryParams = op.parameters.filter(p => p.in === 'query');
   const hasPathId = pathParams.some(p => p.name === 'id');
 
-  // Simple case: single path param (e.g., GET /notes/{id})
+  // Single path param only (e.g., GET /trackers/{id})
   if (pathParams.length === 1 && queryParams.length === 0 && !op.requestBodySchema) {
     const param = pathParams[0];
+    const zodType = param.enumName ? `z.enum(${param.enumName})` : 'z.string()';
     return {
-      schemaArg: 'z.string()',
+      schemaArg: zodType,
       paramList: param.name,
       apiCallArgs: param.name,
       hasPathId,
     };
   }
 
-  // Request body only
+  // Request body only (e.g., POST /trackers or POST /treatments/bulk)
   if (pathParams.length === 0 && queryParams.length === 0 && op.requestBodySchema) {
     const typeName = op.requestBodySchema.replace(/Schema$/, '');
+    if (op.isArrayBody) {
+      return {
+        schemaArg: `z.array(${op.requestBodySchema})`,
+        paramList: 'request',
+        apiCallArgs: `request as ${typeName}[]`,
+        hasPathId,
+      };
+    }
     return {
       schemaArg: op.requestBodySchema,
       paramList: 'request',
@@ -184,22 +237,23 @@ function buildParameterMapping(op: OperationInfo): {
     };
   }
 
-  // Path param + request body (e.g., PUT /notes/{id})
+  // Path param + request body (e.g., PUT /trackers/{id})
+  // Uses nested pattern: { id, request: RequestSchema }
   if (pathParams.length === 1 && op.requestBodySchema) {
     const param = pathParams[0];
     const typeName = op.requestBodySchema.replace(/Schema$/, '');
     return {
-      schemaArg: `z.object({ ${param.name}: z.string() }).merge(${op.requestBodySchema})`,
-      paramList: `{ ${param.name}, ...request }`,
+      schemaArg: `z.object({ ${param.name}: z.string(), request: ${op.requestBodySchema} })`,
+      paramList: `{ ${param.name}, request }`,
       apiCallArgs: `${param.name}, request as ${typeName}`,
       hasPathId,
     };
   }
 
-  // Query params only
+  // Query params only (e.g., GET /trackers?category=X)
   if (queryParams.length > 0 && !op.requestBodySchema) {
     const fields = queryParams.map(p => {
-      const zodType = getZodType(p.type);
+      const zodType = p.enumName ? `z.enum(${p.enumName})` : getZodType(p.type);
       return `${p.name}: ${zodType}${p.required ? '' : '.optional()'}`;
     });
 
@@ -212,8 +266,8 @@ function buildParameterMapping(op: OperationInfo): {
 
   // No params
   return {
-    schemaArg: 'z.void().optional()',
-    paramList: '_',
+    schemaArg: '',
+    paramList: '',
     apiCallArgs: '',
     hasPathId,
   };
@@ -230,57 +284,13 @@ function getZodType(type: string): string {
 }
 
 /**
- * Get the apiClient property name for a tag.
- * This needs to match the existing api-client.ts property names.
- */
-function getClientProperty(tag: string): string {
-  // Handle common versioned tags
-  const cleaned = tag.replace(/^V\d+\s*/i, '');
-
-  // Map tag names to api-client property names
-  const tagToProperty: Record<string, string> = {
-    'Trackers': 'trackers',
-    'Entries': 'entries',
-    'Treatments': 'treatments',
-    'Profile': 'profile',
-    'Settings': 'settings',
-    'Status': 'status',
-    'StateSpans': 'stateSpans',
-    'ChartData': 'chartData',
-    'Notifications': 'v2Notifications',
-    'Services': 'services',
-    'Battery': 'battery',
-    'Prediction': 'predictions',
-    'Retrospective': 'retrospective',
-    'UISettings': 'uiSettings',
-    'ClockFaces': 'clockFaces',
-    'Foods': 'foodsV4',
-    'Food': 'food',
-    'TreatmentFoods': 'treatmentFoods',
-    'MealMatching': 'mealMatching',
-    'Migration': 'migration',
-    'Compatibility': 'compatibility',
-    'Discrepancy': 'discrepancy',
-    'Deduplication': 'deduplication',
-    'Metadata': 'metadata',
-    'Authentication': 'authentication',
-    'Authorization': 'authorization',
-  };
-
-  return tagToProperty[cleaned] ?? cleaned.charAt(0).toLowerCase() + cleaned.slice(1);
-}
-
-/**
  * Get the method name from operationId.
  * NSwag generates method names by removing the tag prefix.
  * "Trackers_GetDefinitions" -> "getDefinitions"
  */
 function getMethodName(operationId: string, tag: string): string {
-  // Remove tag prefix if present
   const parts = operationId.split('_');
   const name = parts.length > 1 ? parts.slice(1).join('_') : parts[0];
-
-  // Convert to camelCase
   return name.charAt(0).toLowerCase() + name.slice(1);
 }
 

@@ -6,11 +6,11 @@ import { getRequestEvent, query, command } from '$app/server';
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 import { CreateTrackerDefinitionRequestSchema, UpdateTrackerDefinitionRequestSchema, StartTrackerInstanceRequestSchema, CompleteTrackerInstanceRequestSchema, AckTrackerRequestSchema, CreateTrackerPresetRequestSchema, ApplyPresetRequestSchema } from '$lib/api/generated/schemas';
-import type { CreateTrackerDefinitionRequest, UpdateTrackerDefinitionRequest, StartTrackerInstanceRequest, CompleteTrackerInstanceRequest, AckTrackerRequest, CreateTrackerPresetRequest, ApplyPresetRequest } from '$api';
+import { TrackerCategory, type CreateTrackerDefinitionRequest, type UpdateTrackerDefinitionRequest, type StartTrackerInstanceRequest, type CompleteTrackerInstanceRequest, type AckTrackerRequest, type CreateTrackerPresetRequest, type ApplyPresetRequest } from '$api';
 
 /** Get all tracker definitions. Returns public trackers for unauthenticated users,
 or all visible trackers for authenticated users. */
-export const getDefinitions = query(z.object({ category: z.string().optional() }).optional(), async (params) => {
+export const getDefinitions = query(z.object({ category: z.enum(TrackerCategory).optional() }).optional(), async (params) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
@@ -50,7 +50,7 @@ export const getDefinition = query(z.string(), async (id) => {
 });
 
 /** Update a tracker definition */
-export const updateDefinition = command(z.object({ id: z.string() }).merge(UpdateTrackerDefinitionRequestSchema), async ({ id, ...request }) => {
+export const updateDefinition = command(z.object({ id: z.string(), request: UpdateTrackerDefinitionRequestSchema }), async ({ id, request }) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
@@ -71,11 +71,11 @@ export const deleteDefinition = command(z.string(), async (id) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    const result = await apiClient.trackers.deleteDefinition(id);
+    await apiClient.trackers.deleteDefinition(id);
     await Promise.all([
       getDefinitions(undefined).refresh()
     ]);
-    return result;
+    return { success: true };
   } catch (err) {
     console.error('Error in trackers.deleteDefinition:', err);
     throw error(500, 'Failed to delete definition');
@@ -83,7 +83,7 @@ export const deleteDefinition = command(z.string(), async (id) => {
 });
 
 /** Get active tracker instances */
-export const getActiveInstances = query(z.void().optional(), async (_) => {
+export const getActiveInstances = query(async () => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
@@ -135,7 +135,7 @@ export const getUpcomingInstances = query(z.object({ from: z.coerce.date().optio
 });
 
 /** Complete a tracker instance */
-export const completeInstance = command(z.object({ id: z.string() }).merge(CompleteTrackerInstanceRequestSchema), async ({ id, ...request }) => {
+export const completeInstance = command(z.object({ id: z.string(), request: CompleteTrackerInstanceRequestSchema }), async ({ id, request }) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
@@ -152,15 +152,15 @@ export const completeInstance = command(z.object({ id: z.string() }).merge(Compl
 });
 
 /** Acknowledge/snooze a tracker notification */
-export const ackInstance = command(z.object({ id: z.string() }).merge(AckTrackerRequestSchema), async ({ id, ...request }) => {
+export const ackInstance = command(z.object({ id: z.string(), request: AckTrackerRequestSchema }), async ({ id, request }) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    const result = await apiClient.trackers.ackInstance(id, request as AckTrackerRequest);
+    await apiClient.trackers.ackInstance(id, request as AckTrackerRequest);
     await Promise.all([
       getActiveInstances(undefined).refresh()
     ]);
-    return result;
+    return { success: true };
   } catch (err) {
     console.error('Error in trackers.ackInstance:', err);
     throw error(500, 'Failed to ack instance');
@@ -172,11 +172,11 @@ export const deleteInstance = command(z.string(), async (id) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    const result = await apiClient.trackers.deleteInstance(id);
+    await apiClient.trackers.deleteInstance(id);
     await Promise.all([
       getActiveInstances(undefined).refresh()
     ]);
-    return result;
+    return { success: true };
   } catch (err) {
     console.error('Error in trackers.deleteInstance:', err);
     throw error(500, 'Failed to delete instance');
@@ -184,7 +184,7 @@ export const deleteInstance = command(z.string(), async (id) => {
 });
 
 /** Get all presets for the current user */
-export const getPresets = query(z.void().optional(), async (_) => {
+export const getPresets = query(async () => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
@@ -212,7 +212,7 @@ export const createPreset = command(CreateTrackerPresetRequestSchema, async (req
 });
 
 /** Apply a preset (starts a new instance) */
-export const applyPreset = command(z.object({ id: z.string() }).merge(ApplyPresetRequestSchema), async ({ id, ...request }) => {
+export const applyPreset = command(z.object({ id: z.string(), request: ApplyPresetRequestSchema }), async ({ id, request }) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
@@ -232,11 +232,11 @@ export const deletePreset = command(z.string(), async (id) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    const result = await apiClient.trackers.deletePreset(id);
+    await apiClient.trackers.deletePreset(id);
     await Promise.all([
       getPresets(undefined).refresh()
     ]);
-    return result;
+    return { success: true };
   } catch (err) {
     console.error('Error in trackers.deletePreset:', err);
     throw error(500, 'Failed to delete preset');
