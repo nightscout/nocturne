@@ -226,6 +226,16 @@ public class OAuthController : ControllerBase
         // Find the client
         var client = await _clientService.FindOrCreateClientAsync(request.ClientId);
 
+        // Re-validate redirect URI to prevent manipulation between GET and POST
+        if (!await _clientService.ValidateRedirectUriAsync(request.ClientId, request.RedirectUri))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Invalid redirect_uri for this client.",
+            });
+        }
+
         // Generate authorization code
         return await IssueAuthorizationCode(
             client.Id,
