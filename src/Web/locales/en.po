@@ -12876,3 +12876,7 @@ msgstr "({0} before expiration)"
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Exceeds tracker lifespan"
 msgstr "Exceeds tracker lifespan"
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr "Validation error"

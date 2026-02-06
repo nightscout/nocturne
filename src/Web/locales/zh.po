@@ -14989,3 +14989,7 @@ msgstr ""
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Exceeds tracker lifespan"
 msgstr ""
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr ""
