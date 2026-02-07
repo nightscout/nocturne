@@ -48,7 +48,12 @@ function getHashedApiSecret(): string | null {
 function createServerApiClient(
   baseUrl: string,
   fetchFn: typeof fetch,
-  options?: { accessToken?: string; refreshToken?: string; hashedSecret?: string | null }
+  options?: {
+    accessToken?: string;
+    refreshToken?: string;
+    hashedSecret?: string | null;
+    extraHeaders?: Record<string, string>;
+  }
 ): ApiClient {
   const httpClient = {
     fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
@@ -57,6 +62,13 @@ function createServerApiClient(
       // Add the hashed API secret as authentication
       if (options?.hashedSecret) {
         headers.set("api-secret", options.hashedSecret);
+      }
+
+      // Forward extra headers (e.g., X-Acting-As for follower context)
+      if (options?.extraHeaders) {
+        for (const [key, value] of Object.entries(options.extraHeaders)) {
+          headers.set(key, value);
+        }
       }
 
       // Forward auth cookies if provided (both access and refresh for token refresh flow)
@@ -218,12 +230,19 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
 
+  // Forward X-Acting-As header if present (follower context)
+  const extraHeaders: Record<string, string> = {};
+  const actingAs = event.request.headers.get("x-acting-as");
+  if (actingAs) {
+    extraHeaders["X-Acting-As"] = actingAs;
+  }
 
   // Create API client with SvelteKit's fetch, auth headers, and both tokens
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
     hashedSecret: getHashedApiSecret(),
+    extraHeaders,
   });
 
   return resolve(event);
