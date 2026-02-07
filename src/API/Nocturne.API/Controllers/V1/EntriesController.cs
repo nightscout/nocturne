@@ -1379,7 +1379,10 @@ public class EntriesController : ControllerBase
 
     private string GetUserId()
     {
-        return HttpContext.GetSubjectIdString()
+        // Use effective subject ID (supports follower access via X-Acting-As header)
+        var authContext = HttpContext.GetAuthContext();
+        return authContext?.EffectiveSubjectId?.ToString()
+            ?? HttpContext.GetSubjectIdString()
             ?? "00000000-0000-0000-0000-000000000001";
     }
 }

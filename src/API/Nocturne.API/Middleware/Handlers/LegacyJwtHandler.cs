@@ -124,6 +124,14 @@ public class LegacyJwtHandler : IAuthHandler
             var permissions = ParseListClaim(permissionsClaim);
             var roles = ParseListClaim(rolesClaim);
 
+            // Extract OAuth scopes if present (space-delimited per RFC 6749)
+            var scopeClaim = principal.FindFirst("scope")?.Value;
+            var scopes = string.IsNullOrEmpty(scopeClaim)
+                ? new List<string>()
+                : scopeClaim
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .ToList();
+
             // Create auth context
             var authContext = new AuthContext
             {
@@ -133,6 +141,7 @@ public class LegacyJwtHandler : IAuthHandler
                 SubjectName = subjectName,
                 Permissions = permissions,
                 Roles = roles,
+                Scopes = scopes,
                 RawToken = token,
                 ExpiresAt = jwtToken.ValidTo,
             };

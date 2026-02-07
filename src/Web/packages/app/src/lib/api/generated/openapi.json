@@ -1398,6 +1398,807 @@
         }
       }
     },
+    "/oauth/authorize": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Authorization endpoint (Authorization Code + PKCE flow).\nRedirects to login if not authenticated, then shows consent screen.",
+        "operationId": "OAuth_Authorize",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 2
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 3
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 4
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 5
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 7
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Consent approval endpoint. Called by the consent page when the user approves.",
+        "operationId": "OAuth_ApproveConsent",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "scope": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "state": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "code_challenge": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "approved": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "302": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/token": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Token endpoint. Handles authorization code exchange, refresh token rotation,\nand device code polling.",
+        "operationId": "OAuth_Token",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "grant_type": {
+                    "type": "string"
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "code": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "refresh_token": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "device_code": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "scope": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/device": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Device Authorization endpoint (RFC 8628).\nUsed by headless clients (CLI tools, scripts, IoT devices, pump rigs).",
+        "operationId": "OAuth_DeviceAuthorization",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "scope": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthDeviceAuthorizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/device-info": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Get device code info for the approval page.",
+        "operationId": "OAuth_GetDeviceInfo",
+        "parameters": [
+          {
+            "name": "user_code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCodeInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/device-approve": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Approve or deny a device authorization request.\nCalled by the device approval page.",
+        "operationId": "OAuth_DeviceApprove",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "user_code": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "approved": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/revoke": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Token revocation endpoint (RFC 7009).",
+        "operationId": "OAuth_Revoke",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "token_type_hint": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/oauth/client-info": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Get client info for the consent page.",
+        "operationId": "OAuth_GetClientInfo",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClientInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/grants": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "List all active grants for the authenticated user.",
+        "operationId": "OAuth_GetGrants",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthGrantListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/grants/{grantId}": {
+      "delete": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Revoke (delete) a specific grant owned by the authenticated user.",
+        "operationId": "OAuth_DeleteGrant",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Update a grant's label and/or scopes.",
+        "operationId": "OAuth_UpdateGrant",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGrantRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthGrantDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/grants/follower": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Create a follower grant (share data with another user by email).",
+        "operationId": "OAuth_CreateFollowerGrant",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFollowerGrantRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthGrantDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/follower-targets": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "List data owners that the authenticated user can view as a follower.\nUsed by the frontend to populate the \"Viewing data for:\" selector.",
+        "operationId": "OAuth_GetFollowerTargets",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowerTargetListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/invites": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Create a follower invite link.\nThe link can be shared with someone who doesn't have an account yet.",
+        "operationId": "OAuth_CreateInvite",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInviteRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateInviteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "List invites created by the authenticated user.",
+        "operationId": "OAuth_ListInvites",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/invites/{inviteId}": {
+      "delete": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Revoke an invite so it can no longer be used.",
+        "operationId": "OAuth_RevokeInvite",
+        "parameters": [
+          {
+            "name": "inviteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/invites/{token}/info": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Get invite details by token (for the accept page).\nThis is a public endpoint so invitees can see what they're accepting.",
+        "operationId": "OAuth_GetInviteInfo",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteInfoResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/invites/{token}/accept": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Accept an invite and create the follower grant.\nRequires authentication - the invitee must be logged in.",
+        "operationId": "OAuth_AcceptInvite",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptInviteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/introspect": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "summary": "Token introspection endpoint (RFC 7662).\nReturns metadata about a token including its active status, scopes, and subject.\nPer RFC 7662, always returns 200 OK; invalid tokens get active=false.",
+        "operationId": "OAuth_Introspect",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "token_type_hint": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenIntrospectionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/providers": {
       "get": {
         "tags": [
@@ -2689,7 +3490,7 @@
         "tags": [
           "OIDC Discovery"
         ],
-        "summary": "OAuth 2.0 Authorization Server Metadata",
+        "summary": "OAuth 2.0 Authorization Server Metadata (RFC 8414).\nIncludes Nocturne's OAuth scope taxonomy and supported grant types.",
         "operationId": "WellKnown_GetOAuthMetadata",
         "responses": {
           "200": {
@@ -16705,6 +17506,495 @@
           "Large"
         ]
       },
+      "OAuthTokenResponse": {
+        "type": "object",
+        "description": "OAuth 2.0 token response (RFC 6749 Section 5.1)",
+        "additionalProperties": false,
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "tokenType": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "OAuthError": {
+        "type": "object",
+        "description": "OAuth 2.0 error response (RFC 6749 Section 5.2)",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "errorDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "errorUri": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "OAuthDeviceAuthorizationResponse": {
+        "type": "object",
+        "description": "Device Authorization Response (RFC 8628 Section 3.2)",
+        "additionalProperties": false,
+        "properties": {
+          "deviceCode": {
+            "type": "string"
+          },
+          "userCode": {
+            "type": "string"
+          },
+          "verificationUri": {
+            "type": "string"
+          },
+          "verificationUriComplete": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DeviceCodeInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "userCode": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isKnownClient": {
+            "type": "boolean"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isExpired": {
+            "type": "boolean"
+          },
+          "isApproved": {
+            "type": "boolean"
+          },
+          "isDenied": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OAuthClientInfoResponse": {
+        "type": "object",
+        "description": "Client info response for the consent page",
+        "additionalProperties": false,
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isKnown": {
+            "type": "boolean"
+          },
+          "homepage": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "OAuthGrantListResponse": {
+        "type": "object",
+        "description": "Response containing a list of OAuth grants",
+        "additionalProperties": false,
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OAuthGrantDto"
+            }
+          }
+        }
+      },
+      "OAuthGrantDto": {
+        "type": "object",
+        "description": "DTO representing an OAuth grant for the management UI",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "grantType": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isKnownClient": {
+            "type": "boolean"
+          },
+          "followerSubjectId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "followerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "followerEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastUsedUserAgent": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreateFollowerGrantRequest": {
+        "type": "object",
+        "description": "Request to create a follower grant (share data with another user)",
+        "additionalProperties": false,
+        "properties": {
+          "followerEmail": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UpdateGrantRequest": {
+        "type": "object",
+        "description": "Request to update an existing grant's label and/or scopes",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FollowerTargetListResponse": {
+        "type": "object",
+        "description": "Response containing a list of follower targets",
+        "additionalProperties": false,
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FollowerTargetDto"
+            }
+          }
+        }
+      },
+      "FollowerTargetDto": {
+        "type": "object",
+        "description": "DTO for a data owner that the current user can view as a follower",
+        "additionalProperties": false,
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreateInviteResponse": {
+        "type": "object",
+        "description": "Response after creating an invite",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "inviteUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateInviteRequest": {
+        "type": "object",
+        "description": "Request to create a follower invite link",
+        "additionalProperties": false,
+        "properties": {
+          "scopes": {
+            "type": "array",
+            "description": "Scopes to grant when the invite is accepted",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional label for the grant (e.g., \"Mom\", \"Endocrinologist\")",
+            "nullable": true
+          },
+          "expiresInDays": {
+            "type": "integer",
+            "description": "Days until the invite expires (default: 7)",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxUses": {
+            "type": "integer",
+            "description": "Maximum number of times the invite can be used (null = unlimited)",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "InviteListResponse": {
+        "type": "object",
+        "description": "Response containing a list of invites",
+        "additionalProperties": false,
+        "properties": {
+          "invites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteDto"
+            }
+          }
+        }
+      },
+      "InviteDto": {
+        "type": "object",
+        "description": "DTO for an invite in list responses",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "useCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "isExpired": {
+            "type": "boolean"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "InviteInfoResponse": {
+        "type": "object",
+        "description": "Response for invite info (for the accept page)",
+        "additionalProperties": false,
+        "properties": {
+          "ownerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "isExpired": {
+            "type": "boolean"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AcceptInviteResponse": {
+        "type": "object",
+        "description": "Response after accepting an invite",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "grantId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          }
+        }
+      },
+      "TokenIntrospectionResponse": {
+        "type": "object",
+        "description": "Token introspection response (RFC 7662)",
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "sub": {
+            "type": "string",
+            "nullable": true
+          },
+          "exp": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "iat": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "jti": {
+            "type": "string",
+            "nullable": true
+          },
+          "tokenType": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "OidcProviderInfo": {
         "type": "object",
         "description": "OIDC provider info for login page",
@@ -19561,6 +20851,10 @@
           },
           "tokenEndpoint": {
             "type": "string"
+          },
+          "deviceAuthorizationEndpoint": {
+            "type": "string",
+            "nullable": true
           },
           "revocationEndpoint": {
             "type": "string",
