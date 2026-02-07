@@ -139,6 +139,9 @@ internal static class Program
         // Credential store
         services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
 
+        // OAuth service
+        services.AddSingleton<IOAuthService, OAuthService>();
+
         // API client
         services.AddSingleton<INocturneApiClient, NocturneApiClient>();
 

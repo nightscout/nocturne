@@ -9,7 +9,8 @@ using Nocturne.Widget.Contracts;
 namespace Nocturne.Widget.Windows11;
 
 /// <summary>
-/// Implements the Windows 11 Widget provider interface for Nocturne
+/// Implements the Windows 11 Widget provider interface for Nocturne.
+/// Uses OAuth Device Authorization Grant for secure authentication.
 /// </summary>
 [ComVisible(true)]
 [ComDefaultInterface(typeof(IWidgetProvider))]
@@ -22,7 +23,11 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 
     private readonly ICredentialStore _credentialStore;
     private readonly INocturneApiClient _apiClient;
+    private readonly IOAuthService _oauthService;
     private readonly ILogger<NocturneWidgetProvider> _logger;
+
+    // Polling cancellation
+    private CancellationTokenSource? _pollCts;
 
     private static readonly string TemplatesPath = Path.Combine(AppContext.BaseDirectory, "Templates");
 
@@ -42,9 +47,18 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     }
 
     /// <summary>
+    /// Customization states
+    /// </summary>
+    private enum CustomizationState
+    {
+        None,
+        EnterServerUrl,
+        AwaitingAuthorization,
+    }
+
+    /// <summary>
     /// Initializes a new instance of the NocturneWidgetProvider.
     /// Required parameterless constructor for COM activation.
-    /// NOTE: Keep constructor minimal - heavy initialization blocks DCOM registration.
     /// </summary>
     public NocturneWidgetProvider()
     {
@@ -53,10 +67,8 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         // Resolve services from the static service provider
         _credentialStore = Program.Services.GetRequiredService<ICredentialStore>();
         _apiClient = Program.Services.GetRequiredService<INocturneApiClient>();
+        _oauthService = Program.Services.GetRequiredService<IOAuthService>();
         _logger = Program.Services.GetRequiredService<ILogger<NocturneWidgetProvider>>();
-
-        // Don't call RecoverRunningWidgets here - it blocks DCOM registration
-        // Existing widgets will be handled on first Activate/Create call
     }
 
     private void RecoverRunningWidgets()
@@ -104,7 +116,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             _activeWidgets[widgetId] = new WidgetInfo(widgetId, definitionId);
         }
 
-        // Send initial content
         UpdateWidget(widgetId);
     }
 
@@ -117,7 +128,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         {
             _activeWidgets.Remove(widgetId);
 
-            // Signal to exit if no widgets remain
             if (_activeWidgets.Count == 0)
             {
                 Program.SignalEmptyWidgetList();
@@ -144,8 +154,20 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                 HandleOpenAppAction(data);
                 break;
 
-            case "saveConfig":
-                HandleSaveConfigAction(widgetId, data);
+            case "startAuth":
+                _ = HandleStartAuthAsync(widgetId, data);
+                break;
+
+            case "openVerification":
+                HandleOpenVerificationUrl();
+                break;
+
+            case "cancelAuth":
+                HandleCancelAuth(widgetId);
+                break;
+
+            case "signOut":
+                _ = HandleSignOutAsync(widgetId);
                 break;
 
             case "exitCustomization":
@@ -163,8 +185,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     {
         var widgetId = contextChangedArgs.WidgetContext.Id;
         Console.WriteLine($"Widget context changed for {widgetId}");
-
-        // Refresh the widget with the new context
         UpdateWidget(widgetId);
     }
 
@@ -182,7 +202,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             }
         }
 
-        // Refresh data when widget becomes visible
         UpdateWidget(widgetId);
     }
 
@@ -210,7 +229,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         {
             if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
             {
-                widgetInfo.InCustomization = true;
+                widgetInfo.CustomizationMode = CustomizationState.EnterServerUrl;
                 UpdateWidget(widgetId);
             }
         }
@@ -218,7 +237,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 
     private void UpdateWidget(string widgetId)
     {
-        // Fire and forget async update
         _ = UpdateWidgetAsync(widgetId);
     }
 
@@ -239,55 +257,65 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             string template;
             JsonObject dataNode;
 
-            // Check if we're in customization mode
-            if (widgetInfo.InCustomization)
+            switch (widgetInfo.CustomizationMode)
             {
-                // Show customization card with input fields
-                var credentials = await _credentialStore.GetCredentialsAsync();
-                template = GetCustomizationTemplate();
-                dataNode = new JsonObject
-                {
-                    ["apiUrl"] = credentials?.ApiUrl ?? "",
-                    ["token"] = credentials?.Token ?? ""
-                };
-                _logger.LogInformation("Showing customization card for widget {WidgetId}", widgetId);
-            }
-            else
-            {
-                // Check if we have credentials configured
-                var hasCredentials = await _credentialStore.HasCredentialsAsync();
-
-                if (!hasCredentials)
-                {
-                    // Show setup card
-                    template = GetSetupTemplate();
-                    dataNode = new JsonObject();
-                    _logger.LogInformation("Showing setup card for widget {WidgetId}", widgetId);
-                }
-                else
-                {
-                    // Fetch data from API
-                    var summary = await _apiClient.GetSummaryAsync(hours: 0, includePredictions: false);
-
-                    if (summary is null)
+                case CustomizationState.EnterServerUrl:
+                    template = GetServerUrlTemplate();
+                    var pendingAuth = await _credentialStore.GetDeviceAuthStateAsync();
+                    var existingCreds = await _credentialStore.GetCredentialsAsync();
+                    dataNode = new JsonObject
                     {
-                        // Show error card
-                        template = GetErrorTemplate();
-                        dataNode = new JsonObject
-                        {
-                            ["errorMessage"] = "Unable to connect to Nocturne server"
-                        };
-                        _logger.LogWarning("Failed to fetch data for widget {WidgetId}", widgetId);
+                        ["apiUrl"] = pendingAuth?.ApiUrl ?? existingCreds?.ApiUrl ?? "",
+                        ["hasCredentials"] = existingCreds != null,
+                    };
+                    break;
+
+                case CustomizationState.AwaitingAuthorization:
+                    var authState = await _credentialStore.GetDeviceAuthStateAsync();
+                    if (authState == null)
+                    {
+                        widgetInfo.CustomizationMode = CustomizationState.EnterServerUrl;
+                        template = GetServerUrlTemplate();
+                        dataNode = new JsonObject { ["apiUrl"] = "" };
                     }
                     else
                     {
-                        // Show glucose card with real data
-                        template = GetGlucoseTemplate(widgetInfo.DefinitionId);
-                        dataNode = CreateGlucoseData(summary);
-                        _logger.LogDebug("Updated widget {WidgetId} with glucose: {Glucose}",
-                            widgetId, summary.CurrentGlucose);
+                        template = GetAuthorizationPendingTemplate();
+                        dataNode = new JsonObject
+                        {
+                            ["userCode"] = authState.UserCode,
+                            ["verificationUri"] = authState.VerificationUri,
+                        };
                     }
-                }
+                    break;
+
+                default:
+                    var hasCredentials = await _credentialStore.HasCredentialsAsync();
+
+                    if (!hasCredentials)
+                    {
+                        template = GetSetupTemplate();
+                        dataNode = new JsonObject();
+                    }
+                    else
+                    {
+                        var summary = await _apiClient.GetSummaryAsync(hours: 0, includePredictions: false);
+
+                        if (summary is null)
+                        {
+                            template = GetErrorTemplate();
+                            dataNode = new JsonObject
+                            {
+                                ["errorMessage"] = "Unable to connect to Nocturne server"
+                            };
+                        }
+                        else
+                        {
+                            template = GetGlucoseTemplate(widgetInfo.DefinitionId);
+                            dataNode = CreateGlucoseData(summary);
+                        }
+                    }
+                    break;
             }
 
             var updateOptions = new WidgetUpdateRequestOptions(widgetId)
@@ -297,9 +325,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                 CustomState = widgetInfo.CustomState ?? string.Empty,
             };
 
-            _logger.LogDebug("Sending update to widget {WidgetId}", widgetId);
             WidgetManager.GetDefault().UpdateWidget(updateOptions);
-            _logger.LogDebug("Widget {WidgetId} updated successfully", widgetId);
         }
         catch (Exception ex)
         {
@@ -307,7 +333,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         }
     }
 
-    private static string GetCustomizationTemplate()
+    private static string GetServerUrlTemplate()
     {
         return """
             {
@@ -317,9 +343,16 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                 "body": [
                     {
                         "type": "TextBlock",
-                        "text": "Configure Nocturne",
+                        "text": "Connect to Nocturne",
                         "size": "Medium",
                         "weight": "Bolder"
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "Enter your Nocturne server URL to begin authentication.",
+                        "size": "Small",
+                        "wrap": true,
+                        "isSubtle": true
                     },
                     {
                         "type": "Input.Text",
@@ -328,27 +361,81 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         "placeholder": "https://your-nocturne-server.com",
                         "value": "${apiUrl}",
                         "isRequired": true
-                    },
-                    {
-                        "type": "Input.Text",
-                        "id": "token",
-                        "label": "API Token",
-                        "placeholder": "Your API secret or token",
-                        "value": "${token}",
-                        "style": "password",
-                        "isRequired": true
                     }
                 ],
                 "actions": [
                     {
                         "type": "Action.Execute",
-                        "title": "Save",
-                        "verb": "saveConfig"
+                        "title": "Connect",
+                        "verb": "startAuth"
                     },
                     {
                         "type": "Action.Execute",
                         "title": "Cancel",
                         "verb": "exitCustomization"
+                    }
+                ]
+            }
+            """;
+    }
+
+    private static string GetAuthorizationPendingTemplate()
+    {
+        return """
+            {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "text": "Authorization Required",
+                        "size": "Medium",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Center"
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "Visit the URL below and enter this code:",
+                        "size": "Small",
+                        "wrap": true,
+                        "horizontalAlignment": "Center"
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "${userCode}",
+                        "size": "ExtraLarge",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Center",
+                        "color": "Accent",
+                        "spacing": "Medium"
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "${verificationUri}",
+                        "size": "Small",
+                        "horizontalAlignment": "Center",
+                        "spacing": "Medium"
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "Waiting for authorization...",
+                        "size": "Small",
+                        "isSubtle": true,
+                        "horizontalAlignment": "Center",
+                        "spacing": "Large"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Execute",
+                        "title": "Open in Browser",
+                        "verb": "openVerification"
+                    },
+                    {
+                        "type": "Action.Execute",
+                        "title": "Cancel",
+                        "verb": "cancelAuth"
                     }
                 ]
             }
@@ -382,7 +469,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                             },
                             {
                                 "type": "TextBlock",
-                                "text": "Click the ... menu and select Customize to configure",
+                                "text": "Click the ... menu and select Customize to connect to your Nocturne server",
                                 "size": "Small",
                                 "horizontalAlignment": "Center",
                                 "wrap": true,
@@ -436,11 +523,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         "type": "Action.Execute",
                         "title": "Retry",
                         "verb": "refresh"
-                    },
-                    {
-                        "type": "Action.Execute",
-                        "title": "Configure",
-                        "verb": "configure"
                     }
                 ]
             }
@@ -449,7 +531,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 
     private static string GetGlucoseTemplate(string definitionId)
     {
-        // Return appropriate template based on widget size
         return """
             {
                 "type": "AdaptiveCard",
@@ -522,69 +603,17 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         return $"{sign}{delta:F1}";
     }
 
-    private string GetTemplate(string definitionId)
-    {
-        // Always use fallback template for now to avoid file path issues
-        Console.WriteLine($"Using fallback template for {definitionId}");
-        return GetFallbackTemplate(definitionId);
-    }
-
-    private static string GetFallbackTemplate(string definitionId)
-    {
-        // Minimal fallback Adaptive Card template
-        return """
-            {
-                "type": "AdaptiveCard",
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.5",
-                "body": [
-                    {
-                        "type": "TextBlock",
-                        "text": "${glucose}",
-                        "size": "ExtraLarge",
-                        "weight": "Bolder",
-                        "horizontalAlignment": "Center"
-                    },
-                    {
-                        "type": "TextBlock",
-                        "text": "${direction}",
-                        "size": "Large",
-                        "horizontalAlignment": "Center"
-                    }
-                ]
-            }
-            """;
-    }
-
-    private static Dictionary<string, object?> CreateSampleCardData(string definitionId)
-    {
-        // Sample data for testing - will be replaced with real API data
-        var data = new Dictionary<string, object?>
-        {
-            ["glucose"] = "120",
-            ["direction"] = "\u2192", // Right arrow (flat)
-            ["delta"] = "+2.5",
-            ["lastUpdate"] = "2m ago",
-            ["iob"] = "1.5",
-            ["cob"] = "25",
-            ["glucoseColor"] = "#00AA00", // Green for in range
-            ["stale"] = false,
-        };
-
-        return data;
-    }
-
     private static string GetDirectionArrow(string? direction)
     {
         return direction?.ToUpperInvariant() switch
         {
-            "DOUBLEUP" or "DOUBLE_UP" => "\u21C8",        // Double up arrow
-            "SINGLEUP" or "SINGLE_UP" or "UP" => "\u2191", // Up arrow
-            "FORTYFIVEUP" or "FORTY_FIVE_UP" => "\u2197",  // Diagonal up-right
-            "FLAT" => "\u2192",                             // Right arrow (flat)
-            "FORTYFIVEDOWN" or "FORTY_FIVE_DOWN" => "\u2198", // Diagonal down-right
-            "SINGLEDOWN" or "SINGLE_DOWN" or "DOWN" => "\u2193", // Down arrow
-            "DOUBLEDOWN" or "DOUBLE_DOWN" => "\u21CA",     // Double down arrow
+            "DOUBLEUP" or "DOUBLE_UP" => "\u21C8",
+            "SINGLEUP" or "SINGLE_UP" or "UP" => "\u2191",
+            "FORTYFIVEUP" or "FORTY_FIVE_UP" => "\u2197",
+            "FLAT" => "\u2192",
+            "FORTYFIVEDOWN" or "FORTY_FIVE_DOWN" => "\u2198",
+            "SINGLEDOWN" or "SINGLE_DOWN" or "DOWN" => "\u2193",
+            "DOUBLEDOWN" or "DOUBLE_DOWN" => "\u21CA",
             "NOT_COMPUTABLE" or "NONE" or null => "?",
             _ => direction ?? "?"
         };
@@ -592,21 +621,14 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 
     private void HandleOpenAppAction(string data)
     {
-        _logger.LogInformation("Open app action with data: {Data}", data);
-
-        // Launch the Nocturne app via protocol activation
         try
         {
-            var uri = string.IsNullOrEmpty(data)
-                ? "nocturne://"
-                : $"nocturne://{data}";
-
+            var uri = string.IsNullOrEmpty(data) ? "nocturne://" : $"nocturne://{data}";
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = uri,
                 UseShellExecute = true,
             };
-
             System.Diagnostics.Process.Start(psi);
         }
         catch (Exception ex)
@@ -615,47 +637,184 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         }
     }
 
-    private void HandleSaveConfigAction(string widgetId, string data)
+    private async Task HandleStartAuthAsync(string widgetId, string data)
     {
-        _logger.LogInformation("Saving configuration for widget {WidgetId}", widgetId);
-
-        // Parse the form data from the action
-        // The data comes as JSON with the input values
         try
         {
             var formData = JsonSerializer.Deserialize<JsonElement>(data);
             var apiUrl = formData.TryGetProperty("apiUrl", out var urlProp) ? urlProp.GetString() : null;
-            var token = formData.TryGetProperty("token", out var tokenProp) ? tokenProp.GetString() : null;
 
-            if (string.IsNullOrWhiteSpace(apiUrl) || string.IsNullOrWhiteSpace(token))
+            if (string.IsNullOrWhiteSpace(apiUrl))
             {
-                _logger.LogWarning("Invalid configuration: missing apiUrl or token");
+                _logger.LogWarning("Missing API URL for authentication");
                 return;
             }
 
-            // Save credentials
-            _ = SaveCredentialsAndRefreshAsync(widgetId, apiUrl, token);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to parse configuration data");
-        }
-    }
+            _logger.LogInformation("Starting OAuth device flow for {ApiUrl}", apiUrl);
 
-    private async Task SaveCredentialsAndRefreshAsync(string widgetId, string apiUrl, string token)
-    {
-        try
-        {
-            var credentials = new NocturneCredentials(apiUrl, token);
-            await _credentialStore.SaveCredentialsAsync(credentials);
-            _logger.LogInformation("Credentials saved successfully");
+            var result = await _oauthService.InitiateDeviceAuthorizationAsync(apiUrl);
 
-            // Exit customization mode and refresh widget
+            if (!result.Success)
+            {
+                _logger.LogWarning("Failed to initiate device authorization: {Error}", result.Error);
+                // TODO: Show error in widget
+                return;
+            }
+
             lock (_widgetLock)
             {
                 if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
                 {
-                    widgetInfo.InCustomization = false;
+                    widgetInfo.CustomizationMode = CustomizationState.AwaitingAuthorization;
+                }
+            }
+
+            UpdateWidget(widgetId);
+
+            // Start polling for authorization
+            _ = PollForAuthorizationAsync(widgetId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting authentication");
+        }
+    }
+
+    private async Task PollForAuthorizationAsync(string widgetId)
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var ct = _pollCts.Token;
+
+        try
+        {
+            var authState = await _credentialStore.GetDeviceAuthStateAsync();
+            if (authState == null)
+            {
+                return;
+            }
+
+            var interval = Math.Max(authState.Interval, 5);
+
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(interval), ct);
+
+                if (ct.IsCancellationRequested) break;
+
+                var result = await _oauthService.PollForAuthorizationAsync();
+
+                if (result.Success)
+                {
+                    _logger.LogInformation("OAuth authorization completed successfully");
+
+                    lock (_widgetLock)
+                    {
+                        if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+                        {
+                            widgetInfo.CustomizationMode = CustomizationState.None;
+                        }
+                    }
+
+                    UpdateWidget(widgetId);
+                    return;
+                }
+
+                if (result.SlowDown)
+                {
+                    interval = Math.Min(interval + 5, 30);
+                    _logger.LogDebug("Slowing down polling to {Interval}s", interval);
+                }
+
+                if (result.Expired || result.AccessDenied)
+                {
+                    _logger.LogWarning("Authorization failed: Expired={Expired}, Denied={Denied}",
+                        result.Expired, result.AccessDenied);
+
+                    await _credentialStore.ClearDeviceAuthStateAsync();
+
+                    lock (_widgetLock)
+                    {
+                        if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+                        {
+                            widgetInfo.CustomizationMode = CustomizationState.EnterServerUrl;
+                        }
+                    }
+
+                    UpdateWidget(widgetId);
+                    return;
+                }
+
+                if (!result.Pending)
+                {
+                    _logger.LogWarning("Unexpected poll result: {Error}", result.Error);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("Authorization polling cancelled");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during authorization polling");
+        }
+    }
+
+    private void HandleOpenVerificationUrl()
+    {
+        _ = OpenVerificationUrlAsync();
+    }
+
+    private async Task OpenVerificationUrlAsync()
+    {
+        try
+        {
+            var authState = await _credentialStore.GetDeviceAuthStateAsync();
+            if (authState == null) return;
+
+            var url = authState.VerificationUriComplete ?? authState.VerificationUri;
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            };
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open verification URL");
+        }
+    }
+
+    private void HandleCancelAuth(string widgetId)
+    {
+        _pollCts?.Cancel();
+        _ = _credentialStore.ClearDeviceAuthStateAsync();
+
+        lock (_widgetLock)
+        {
+            if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+            {
+                widgetInfo.CustomizationMode = CustomizationState.EnterServerUrl;
+            }
+        }
+
+        UpdateWidget(widgetId);
+    }
+
+    private async Task HandleSignOutAsync(string widgetId)
+    {
+        try
+        {
+            await _oauthService.SignOutAsync();
+            _logger.LogInformation("Signed out successfully");
+
+            lock (_widgetLock)
+            {
+                if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+                {
+                    widgetInfo.CustomizationMode = CustomizationState.None;
                 }
             }
 
@@ -663,7 +822,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save credentials");
+            _logger.LogError(ex, "Error during sign out");
         }
     }
 
@@ -671,11 +830,13 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     {
         _logger.LogInformation("Exiting customization for widget {WidgetId}", widgetId);
 
+        _pollCts?.Cancel();
+
         lock (_widgetLock)
         {
             if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
             {
-                widgetInfo.InCustomization = false;
+                widgetInfo.CustomizationMode = CustomizationState.None;
             }
         }
 
@@ -691,14 +852,14 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         public string DefinitionId { get; }
         public bool IsActive { get; set; }
         public string? CustomState { get; set; }
-        public bool InCustomization { get; set; }
+        public CustomizationState CustomizationMode { get; set; }
 
         public WidgetInfo(string widgetId, string definitionId)
         {
             WidgetId = widgetId;
             DefinitionId = definitionId;
             IsActive = true;
-            InCustomization = false;
+            CustomizationMode = CustomizationState.None;
         }
     }
 }

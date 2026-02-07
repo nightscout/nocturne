@@ -89,6 +89,18 @@ public static class KnownOAuthClients
                 OAuthScopes.ProfileRead,
             ],
         },
+        new()
+        {
+            ClientIdPattern = "nocturne-widget-windows11",
+            DisplayName = "Nocturne Windows Widget",
+            Homepage = "https://github.com/nightscout/nocturne",
+            TypicalScopes = [
+                OAuthScopes.EntriesRead,
+                OAuthScopes.TreatmentsRead,
+                OAuthScopes.DeviceStatusRead,
+                OAuthScopes.ProfileRead,
+            ],
+        },
     };
 
     /// <summary>

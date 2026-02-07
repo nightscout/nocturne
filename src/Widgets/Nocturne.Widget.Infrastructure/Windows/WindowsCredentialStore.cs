@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Widget.Contracts;
 
@@ -10,8 +11,41 @@ namespace Nocturne.Widget.Infrastructure.Windows;
 /// </summary>
 public class WindowsCredentialStore : ICredentialStore
 {
-    private const string CredentialTargetName = "Nocturne.Widget.Credentials";
+    private const string CredentialTargetName = "Nocturne.Widget.OAuth";
+    private const string DeviceAuthTargetName = "Nocturne.Widget.DeviceAuth";
     private readonly ILogger<WindowsCredentialStore> _logger;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+    };
+
+    /// <summary>
+    /// Internal storage format for credentials
+    /// </summary>
+    private record CredentialData
+    {
+        public string ApiUrl { get; init; } = string.Empty;
+        public string AccessToken { get; init; } = string.Empty;
+        public string RefreshToken { get; init; } = string.Empty;
+        public long ExpiresAtUnix { get; init; }
+        public List<string> Scopes { get; init; } = new();
+    }
+
+    /// <summary>
+    /// Internal storage format for device auth state
+    /// </summary>
+    private record DeviceAuthData
+    {
+        public string ApiUrl { get; init; } = string.Empty;
+        public string DeviceCode { get; init; } = string.Empty;
+        public string UserCode { get; init; } = string.Empty;
+        public string VerificationUri { get; init; } = string.Empty;
+        public string? VerificationUriComplete { get; init; }
+        public long ExpiresAtUnix { get; init; }
+        public int Interval { get; init; }
+    }
 
     /// <summary>
     /// Initializes a new instance of the WindowsCredentialStore
@@ -27,47 +61,29 @@ public class WindowsCredentialStore : ICredentialStore
     {
         try
         {
-            if (!CredRead(CredentialTargetName, CredentialType.Generic, 0, out var credentialPtr))
+            var json = ReadCredential(CredentialTargetName);
+            if (json is null)
             {
-                var error = Marshal.GetLastWin32Error();
-                if (error == ErrorNotFound)
-                {
-                    _logger.LogDebug("No credentials found in credential store");
-                    return Task.FromResult<NocturneCredentials?>(null);
-                }
-
-                _logger.LogWarning("Failed to read credentials, error code: {ErrorCode}", error);
                 return Task.FromResult<NocturneCredentials?>(null);
             }
 
-            try
+            var data = JsonSerializer.Deserialize<CredentialData>(json, JsonOptions);
+            if (data is null)
             {
-                var credential = Marshal.PtrToStructure<CREDENTIAL>(credentialPtr);
-                var passwordBytes = new byte[credential.CredentialBlobSize];
-                Marshal.Copy(
-                    credential.CredentialBlob,
-                    passwordBytes,
-                    0,
-                    (int)credential.CredentialBlobSize
-                );
-                var credentialData = Encoding.Unicode.GetString(passwordBytes);
-
-                // Parse stored data (format: "apiUrl|token")
-                var parts = credentialData.Split('|', 2);
-                if (parts.Length != 2)
-                {
-                    _logger.LogWarning("Invalid credential format in store");
-                    return Task.FromResult<NocturneCredentials?>(null);
-                }
-
-                return Task.FromResult<NocturneCredentials?>(
-                    new NocturneCredentials(parts[0], parts[1])
-                );
+                _logger.LogWarning("Failed to deserialize credentials");
+                return Task.FromResult<NocturneCredentials?>(null);
             }
-            finally
+
+            var credentials = new NocturneCredentials
             {
-                CredFree(credentialPtr);
-            }
+                ApiUrl = data.ApiUrl,
+                AccessToken = data.AccessToken,
+                RefreshToken = data.RefreshToken,
+                ExpiresAt = DateTimeOffset.FromUnixTimeSeconds(data.ExpiresAtUnix),
+                Scopes = data.Scopes.AsReadOnly(),
+            };
+
+            return Task.FromResult<NocturneCredentials?>(credentials);
         }
         catch (Exception ex)
         {
@@ -83,43 +99,22 @@ public class WindowsCredentialStore : ICredentialStore
 
         try
         {
-            // Store as "apiUrl|token"
-            var credentialData = $"{credentials.ApiUrl}|{credentials.Token}";
-            var passwordBytes = Encoding.Unicode.GetBytes(credentialData);
-
-            var credential = new CREDENTIAL
+            var data = new CredentialData
             {
-                Type = CredentialType.Generic,
-                TargetName = CredentialTargetName,
-                CredentialBlobSize = (uint)passwordBytes.Length,
-                CredentialBlob = Marshal.AllocHGlobal(passwordBytes.Length),
-                Persist = CredentialPersistence.LocalMachine,
-                UserName = "NocturneWidget",
+                ApiUrl = credentials.ApiUrl,
+                AccessToken = credentials.AccessToken,
+                RefreshToken = credentials.RefreshToken,
+                ExpiresAtUnix = credentials.ExpiresAt.ToUnixTimeSeconds(),
+                Scopes = credentials.Scopes.ToList(),
             };
 
-            try
-            {
-                Marshal.Copy(passwordBytes, 0, credential.CredentialBlob, passwordBytes.Length);
-
-                if (!CredWrite(ref credential, 0))
-                {
-                    var error = Marshal.GetLastWin32Error();
-                    _logger.LogError("Failed to save credentials, error code: {ErrorCode}", error);
-                    throw new InvalidOperationException(
-                        $"Failed to save credentials to Windows Credential Manager. Error: {error}"
-                    );
-                }
-
-                _logger.LogInformation("Credentials saved successfully");
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(credential.CredentialBlob);
-            }
+            var json = JsonSerializer.Serialize(data, JsonOptions);
+            WriteCredential(CredentialTargetName, json);
+            _logger.LogInformation("OAuth credentials saved successfully");
 
             return Task.CompletedTask;
         }
-        catch (Exception ex) when (ex is not InvalidOperationException)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error saving credentials to Windows Credential Manager");
             throw;
@@ -127,26 +122,34 @@ public class WindowsCredentialStore : ICredentialStore
     }
 
     /// <inheritdoc />
+    public async Task UpdateTokensAsync(string accessToken, string? refreshToken, int expiresIn)
+    {
+        var existing = await GetCredentialsAsync();
+        if (existing is null)
+        {
+            throw new InvalidOperationException("No existing credentials to update");
+        }
+
+        var updated = new NocturneCredentials
+        {
+            ApiUrl = existing.ApiUrl,
+            AccessToken = accessToken,
+            RefreshToken = refreshToken ?? existing.RefreshToken,
+            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn),
+            Scopes = existing.Scopes,
+        };
+
+        await SaveCredentialsAsync(updated);
+        _logger.LogInformation("OAuth tokens refreshed successfully");
+    }
+
+    /// <inheritdoc />
     public Task DeleteCredentialsAsync()
     {
         try
         {
-            if (!CredDelete(CredentialTargetName, CredentialType.Generic, 0))
-            {
-                var error = Marshal.GetLastWin32Error();
-                if (error != ErrorNotFound)
-                {
-                    _logger.LogWarning(
-                        "Failed to delete credentials, error code: {ErrorCode}",
-                        error
-                    );
-                }
-            }
-            else
-            {
-                _logger.LogInformation("Credentials deleted successfully");
-            }
-
+            DeleteCredential(CredentialTargetName);
+            _logger.LogInformation("Credentials deleted successfully");
             return Task.CompletedTask;
         }
         catch (Exception ex)
@@ -162,6 +165,171 @@ public class WindowsCredentialStore : ICredentialStore
         var credentials = await GetCredentialsAsync();
         return credentials is not null;
     }
+
+    /// <inheritdoc />
+    public Task SaveDeviceAuthStateAsync(DeviceAuthorizationState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        try
+        {
+            var data = new DeviceAuthData
+            {
+                ApiUrl = state.ApiUrl,
+                DeviceCode = state.DeviceCode,
+                UserCode = state.UserCode,
+                VerificationUri = state.VerificationUri,
+                VerificationUriComplete = state.VerificationUriComplete,
+                ExpiresAtUnix = state.ExpiresAt.ToUnixTimeSeconds(),
+                Interval = state.Interval,
+            };
+
+            var json = JsonSerializer.Serialize(data, JsonOptions);
+            WriteCredential(DeviceAuthTargetName, json);
+            _logger.LogDebug("Device auth state saved");
+
+            return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving device auth state");
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<DeviceAuthorizationState?> GetDeviceAuthStateAsync()
+    {
+        try
+        {
+            var json = ReadCredential(DeviceAuthTargetName);
+            if (json is null)
+            {
+                return Task.FromResult<DeviceAuthorizationState?>(null);
+            }
+
+            var data = JsonSerializer.Deserialize<DeviceAuthData>(json, JsonOptions);
+            if (data is null)
+            {
+                return Task.FromResult<DeviceAuthorizationState?>(null);
+            }
+
+            var state = new DeviceAuthorizationState
+            {
+                ApiUrl = data.ApiUrl,
+                DeviceCode = data.DeviceCode,
+                UserCode = data.UserCode,
+                VerificationUri = data.VerificationUri,
+                VerificationUriComplete = data.VerificationUriComplete,
+                ExpiresAt = DateTimeOffset.FromUnixTimeSeconds(data.ExpiresAtUnix),
+                Interval = data.Interval,
+            };
+
+            return Task.FromResult<DeviceAuthorizationState?>(state);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading device auth state");
+            return Task.FromResult<DeviceAuthorizationState?>(null);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task ClearDeviceAuthStateAsync()
+    {
+        try
+        {
+            DeleteCredential(DeviceAuthTargetName);
+            _logger.LogDebug("Device auth state cleared");
+            return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing device auth state");
+            throw;
+        }
+    }
+
+    #region Windows Credential Manager Helpers
+
+    private string? ReadCredential(string targetName)
+    {
+        if (!CredRead(targetName, CredentialType.Generic, 0, out var credentialPtr))
+        {
+            var error = Marshal.GetLastWin32Error();
+            if (error == ErrorNotFound)
+            {
+                _logger.LogDebug("No credential found for {TargetName}", targetName);
+                return null;
+            }
+
+            _logger.LogWarning("Failed to read credential {TargetName}, error: {Error}", targetName, error);
+            return null;
+        }
+
+        try
+        {
+            var credential = Marshal.PtrToStructure<CREDENTIAL>(credentialPtr);
+            var passwordBytes = new byte[credential.CredentialBlobSize];
+            Marshal.Copy(
+                credential.CredentialBlob,
+                passwordBytes,
+                0,
+                (int)credential.CredentialBlobSize
+            );
+            return Encoding.Unicode.GetString(passwordBytes);
+        }
+        finally
+        {
+            CredFree(credentialPtr);
+        }
+    }
+
+    private void WriteCredential(string targetName, string data)
+    {
+        var dataBytes = Encoding.Unicode.GetBytes(data);
+
+        var credential = new CREDENTIAL
+        {
+            Type = CredentialType.Generic,
+            TargetName = targetName,
+            CredentialBlobSize = (uint)dataBytes.Length,
+            CredentialBlob = Marshal.AllocHGlobal(dataBytes.Length),
+            Persist = CredentialPersistence.LocalMachine,
+            UserName = "NocturneWidget",
+        };
+
+        try
+        {
+            Marshal.Copy(dataBytes, 0, credential.CredentialBlob, dataBytes.Length);
+
+            if (!CredWrite(ref credential, 0))
+            {
+                var error = Marshal.GetLastWin32Error();
+                throw new InvalidOperationException(
+                    $"Failed to write credential {targetName}. Error: {error}"
+                );
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(credential.CredentialBlob);
+        }
+    }
+
+    private void DeleteCredential(string targetName)
+    {
+        if (!CredDelete(targetName, CredentialType.Generic, 0))
+        {
+            var error = Marshal.GetLastWin32Error();
+            if (error != ErrorNotFound)
+            {
+                _logger.LogWarning("Failed to delete credential {TargetName}, error: {Error}", targetName, error);
+            }
+        }
+    }
+
+    #endregion
 
     #region Windows Credential Manager P/Invoke
 

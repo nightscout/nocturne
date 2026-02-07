@@ -7,12 +7,14 @@ using Nocturne.Widget.Contracts;
 namespace Nocturne.Widget.Infrastructure;
 
 /// <summary>
-/// Implementation of the Nocturne API client providing HTTP and SignalR connectivity
+/// Implementation of the Nocturne API client providing HTTP and SignalR connectivity.
+/// Uses OAuth Bearer tokens for authentication with automatic token refresh.
 /// </summary>
 public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly ICredentialStore _credentialStore;
+    private readonly IOAuthService _oauthService;
     private readonly ILogger<NocturneApiClient> _logger;
     private HubConnection? _hubConnection;
     private bool _disposed;
@@ -28,16 +30,18 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
     /// </summary>
     /// <param name="httpClient">The HTTP client for API requests</param>
     /// <param name="credentialStore">The credential store for authentication</param>
+    /// <param name="oauthService">The OAuth service for token management</param>
     /// <param name="logger">The logger instance</param>
     public NocturneApiClient(
         HttpClient httpClient,
         ICredentialStore credentialStore,
+        IOAuthService oauthService,
         ILogger<NocturneApiClient> logger
     )
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _credentialStore =
-            credentialStore ?? throw new ArgumentNullException(nameof(credentialStore));
+        _credentialStore = credentialStore ?? throw new ArgumentNullException(nameof(credentialStore));
+        _oauthService = oauthService ?? throw new ArgumentNullException(nameof(oauthService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -61,10 +65,17 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
     {
         try
         {
+            // Ensure we have a valid token (refresh if needed)
+            if (!await _oauthService.EnsureValidTokenAsync())
+            {
+                _logger.LogWarning("No valid credentials available for API request");
+                return null;
+            }
+
             var credentials = await _credentialStore.GetCredentialsAsync();
             if (credentials is null)
             {
-                _logger.LogWarning("No credentials available for API request");
+                _logger.LogWarning("No credentials available after token validation");
                 return null;
             }
 
@@ -72,9 +83,38 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
                 $"{credentials.ApiUrl.TrimEnd('/')}/api/v4/summary?hours={hours}&predictions={includePredictions}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            request.Headers.Add("api-secret", credentials.Token);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer",
+                credentials.AccessToken
+            );
 
             using var response = await _httpClient.SendAsync(request);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                // Token might have been invalidated, try to refresh once
+                _logger.LogDebug("Received 401, attempting token refresh");
+                var refreshResult = await _oauthService.RefreshTokenAsync();
+                if (refreshResult.Success)
+                {
+                    credentials = await _credentialStore.GetCredentialsAsync();
+                    if (credentials is not null)
+                    {
+                        using var retryRequest = new HttpRequestMessage(HttpMethod.Get, requestUri);
+                        retryRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                            "Bearer",
+                            credentials.AccessToken
+                        );
+                        using var retryResponse = await _httpClient.SendAsync(retryRequest);
+                        if (retryResponse.IsSuccessStatusCode)
+                        {
+                            return await retryResponse.Content.ReadFromJsonAsync<V4SummaryResponse>(JsonOptions);
+                        }
+                    }
+                }
+                _logger.LogWarning("API request failed after token refresh attempt");
+                return null;
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -103,6 +143,13 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
             return;
         }
 
+        // Ensure we have a valid token
+        if (!await _oauthService.EnsureValidTokenAsync())
+        {
+            _logger.LogWarning("No valid credentials available for SignalR connection");
+            return;
+        }
+
         var credentials = await _credentialStore.GetCredentialsAsync();
         if (credentials is null)
         {
@@ -119,7 +166,13 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
                     hubUrl,
                     options =>
                     {
-                        options.Headers.Add("api-secret", credentials.Token);
+                        // Use Bearer token for SignalR authentication
+                        options.AccessTokenProvider = async () =>
+                        {
+                            await _oauthService.EnsureValidTokenAsync();
+                            var creds = await _credentialStore.GetCredentialsAsync();
+                            return creds?.AccessToken;
+                        };
                     }
                 )
                 .WithAutomaticReconnect()
