@@ -32,7 +32,8 @@ public class OAuthCodeCleanupService : BackgroundService
     /// <param name="logger">Logger</param>
     public OAuthCodeCleanupService(
         IServiceScopeFactory scopeFactory,
-        ILogger<OAuthCodeCleanupService> logger)
+        ILogger<OAuthCodeCleanupService> logger
+    )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -61,13 +62,13 @@ public class OAuthCodeCleanupService : BackgroundService
             {
                 await CleanupExpiredCodesAsync(stoppingToken);
             }
-            catch (DbUpdateException dbEx)
-            {
-                _logger.LogError(dbEx, "Database update error during OAuth code cleanup");
-            }
             catch (DbUpdateConcurrencyException dbCx)
             {
                 _logger.LogError(dbCx, "Database concurrency error during OAuth code cleanup");
+            }
+            catch (DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "Database update error during OAuth code cleanup");
             }
             catch (Exception ex)
             {
@@ -91,19 +92,21 @@ public class OAuthCodeCleanupService : BackgroundService
 
         var cutoff = DateTime.UtcNow.Subtract(RetentionBuffer);
 
-        var deletedDeviceCodes = await db.OAuthDeviceCodes
-            .Where(d => d.ExpiresAt < cutoff)
+        var deletedDeviceCodes = await db
+            .OAuthDeviceCodes.Where(d => d.ExpiresAt < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        var deletedAuthCodes = await db.OAuthAuthorizationCodes
-            .Where(c => c.ExpiresAt < cutoff)
+        var deletedAuthCodes = await db
+            .OAuthAuthorizationCodes.Where(c => c.ExpiresAt < cutoff)
             .ExecuteDeleteAsync(ct);
 
         if (deletedDeviceCodes > 0 || deletedAuthCodes > 0)
         {
             _logger.LogInformation(
                 "OAuth code cleanup: removed {DeviceCodes} device codes and {AuthCodes} authorization codes",
-                deletedDeviceCodes, deletedAuthCodes);
+                deletedDeviceCodes,
+                deletedAuthCodes
+            );
         }
     }
 

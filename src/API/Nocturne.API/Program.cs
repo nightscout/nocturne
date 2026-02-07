@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.OpenApi;
@@ -254,32 +255,59 @@ builder.Services.AddHttpClient(
 // Rate limiting for OAuth endpoints
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("oauth-token", opt =>
-    {
-        opt.PermitLimit = 30;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("oauth-device", opt =>
-    {
-        opt.PermitLimit = 10;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("oauth-device-approve", opt =>
-    {
-        opt.PermitLimit = 20;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
-    });
+    options.AddPolicy(
+        "oauth-token",
+        context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }
+            )
+    );
+
+    options.AddPolicy(
+        "oauth-device",
+        context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }
+            )
+    );
+
+    options.AddPolicy(
+        "oauth-device-approve",
+        context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }
+            )
+    );
+
     options.OnRejected = async (context, ct) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        await context.HttpContext.Response.WriteAsJsonAsync(new
-        {
-            error = "rate_limit_exceeded",
-            error_description = "Too many requests. Please try again later.",
-        }, ct);
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new
+            {
+                error = "rate_limit_exceeded",
+                error_description = "Too many requests. Please try again later.",
+            },
+            ct
+        );
     };
 });
 
