@@ -3839,11 +3839,12 @@ export class ChartDataClient {
     }
 
     /**
-     * Get dashboard chart data with pre-calculated IOB, COB, and basal time series
-     * @param startTime (optional) Start time in Unix milliseconds
-     * @param endTime (optional) End time in Unix milliseconds
-     * @param intervalMinutes (optional) Interval for IOB/COB calculations (default: 5)
-     * @return Chart data with all calculated series
+     * Get complete dashboard chart data in a single call.
+    Returns pre-calculated IOB, COB, basal series, categorized treatment markers,
+    state spans, system events, tracker markers, and glucose readings.
+     * @param startTime (optional) 
+     * @param endTime (optional) 
+     * @param intervalMinutes (optional) 
      */
     getDashboardChartData(startTime?: number | undefined, endTime?: number | undefined, intervalMinutes?: number | undefined, signal?: AbortSignal): Promise<DashboardChartData> {
         let url_ = this.baseUrl + "/api/v4/ChartData/dashboard?";
@@ -19311,63 +19312,204 @@ export interface ChargeCycle {
     isComplete?: boolean;
 }
 
-/** Dashboard chart data response with all calculated series */
 export interface DashboardChartData {
-    /** IOB (Insulin on Board) time series */
     iobSeries?: TimeSeriesPoint[];
-    /** COB (Carbs on Board) time series */
     cobSeries?: TimeSeriesPoint[];
-    /** Basal rate time series with temp basal indicators */
     basalSeries?: BasalPoint[];
-    /** Default basal rate from profile (U/hr) */
     defaultBasalRate?: number;
-    /** Maximum basal rate in the series (for Y-axis scaling) */
     maxBasalRate?: number;
-    /** Maximum IOB in the series (for Y-axis scaling) */
     maxIob?: number;
-    /** Maximum COB in the series (for Y-axis scaling) */
     maxCob?: number;
-    /** Pump mode state spans for chart background coloring */
-    pumpModeSpans?: StateSpan[];
-    /** Basal delivery state spans (pump-confirmed delivery data) */
-    basalDeliverySpans?: StateSpan[];
-    /** Profile state spans showing active profile changes */
-    profileSpans?: StateSpan[];
+    glucoseData?: GlucosePointDto[];
+    thresholds?: ChartThresholdsDto;
+    bolusMarkers?: BolusMarkerDto[];
+    carbMarkers?: CarbMarkerDto[];
+    deviceEventMarkers?: DeviceEventMarkerDto[];
+    pumpModeSpans?: ChartStateSpanDto[];
+    profileSpans?: ChartStateSpanDto[];
+    overrideSpans?: ChartStateSpanDto[];
+    activitySpans?: ChartStateSpanDto[];
+    tempBasalSpans?: ChartStateSpanDto[];
+    basalDeliverySpans?: BasalDeliverySpanDto[];
+    systemEventMarkers?: SystemEventMarkerDto[];
+    trackerMarkers?: TrackerMarkerDto[];
 }
 
-/** Time series data point with timestamp and value */
 export interface TimeSeriesPoint {
-    /** Timestamp in Unix milliseconds */
     timestamp?: number;
-    /** Value at this timestamp */
     value?: number;
 }
 
-/** Basal rate data point */
 export interface BasalPoint {
-    /** Timestamp in Unix milliseconds */
     timestamp?: number;
-    /** Effective basal rate in U/hr */
     rate?: number;
-    /** Scheduled basal rate from profile in U/hr */
     scheduledRate?: number;
-    /** Origin of this basal rate - where it came from */
     origin?: BasalDeliveryOrigin;
+    fillColor?: ChartColor;
+    strokeColor?: ChartColor;
 }
 
-export interface StateSpan {
-    id?: string | undefined;
+export enum ChartColor {
+    GlucoseVeryLow = "glucose-very-low",
+    GlucoseLow = "glucose-low",
+    GlucoseInRange = "glucose-in-range",
+    GlucoseHigh = "glucose-high",
+    GlucoseVeryHigh = "glucose-very-high",
+    InsulinBolus = "insulin-bolus",
+    InsulinBasal = "insulin-basal",
+    InsulinTempBasal = "insulin-temp-basal",
+    Carbs = "carbs",
+    PumpModeAutomatic = "pump-mode-automatic",
+    PumpModeLimited = "pump-mode-limited",
+    PumpModeManual = "pump-mode-manual",
+    PumpModeBoost = "pump-mode-boost",
+    PumpModeEaseOff = "pump-mode-ease-off",
+    PumpModeSleep = "pump-mode-sleep",
+    PumpModeExercise = "pump-mode-exercise",
+    PumpModeSuspended = "pump-mode-suspended",
+    PumpModeOff = "pump-mode-off",
+    SystemEventAlarm = "system-event-alarm",
+    SystemEventHazard = "system-event-hazard",
+    SystemEventWarning = "system-event-warning",
+    SystemEventInfo = "system-event-info",
+    ActivitySleep = "activity-sleep",
+    ActivityExercise = "activity-exercise",
+    ActivityIllness = "activity-illness",
+    ActivityTravel = "activity-travel",
+    TrackerSensor = "tracker-sensor",
+    TrackerCannula = "tracker-cannula",
+    TrackerReservoir = "tracker-reservoir",
+    TrackerBattery = "tracker-battery",
+    TrackerConsumable = "tracker-consumable",
+    TrackerAppointment = "tracker-appointment",
+    TrackerReminder = "tracker-reminder",
+    TrackerCustom = "tracker-custom",
+    Profile = "chart-1",
+    Override = "chart-2",
+    MutedForeground = "muted-foreground",
+    Primary = "primary",
+}
+
+export interface GlucosePointDto {
+    time?: number;
+    sgv?: number;
+    direction?: string | undefined;
+}
+
+export interface ChartThresholdsDto {
+    low?: number;
+    high?: number;
+    veryLow?: number;
+    veryHigh?: number;
+    glucoseYMax?: number;
+}
+
+export interface BolusMarkerDto {
+    time?: number;
+    insulin?: number;
+    treatmentId?: string | undefined;
+    bolusType?: BolusType;
+    isOverride?: boolean;
+}
+
+export enum BolusType {
+    Bolus = "Bolus",
+    MealBolus = "MealBolus",
+    CorrectionBolus = "CorrectionBolus",
+    SnackBolus = "SnackBolus",
+    BolusWizard = "BolusWizard",
+    ComboBolus = "ComboBolus",
+    Smb = "Smb",
+    AutomaticBolus = "AutomaticBolus",
+}
+
+export interface CarbMarkerDto {
+    time?: number;
+    carbs?: number;
+    label?: string | undefined;
+    treatmentId?: string | undefined;
+    isOffset?: boolean;
+}
+
+export interface DeviceEventMarkerDto {
+    time?: number;
+    eventType?: DeviceEventType;
+    notes?: string | undefined;
+    color?: ChartColor;
+}
+
+export enum DeviceEventType {
+    SensorStart = "SensorStart",
+    SensorChange = "SensorChange",
+    SensorStop = "SensorStop",
+    SiteChange = "SiteChange",
+    InsulinChange = "InsulinChange",
+    PumpBatteryChange = "PumpBatteryChange",
+}
+
+export interface ChartStateSpanDto {
+    id?: string;
     category?: StateSpanCategory;
-    state?: string | undefined;
+    state?: string;
     startMills?: number;
     endMills?: number | undefined;
-    source?: string | undefined;
+    color?: ChartColor;
     metadata?: { [key: string]: any; } | undefined;
-    originalId?: string | undefined;
-    createdAt?: Date | undefined;
-    updatedAt?: Date | undefined;
-    canonicalId?: string | undefined;
-    sources?: string[] | undefined;
+}
+
+export interface BasalDeliverySpanDto {
+    id?: string;
+    startMills?: number;
+    endMills?: number | undefined;
+    rate?: number;
+    origin?: BasalDeliveryOrigin;
+    source?: string | undefined;
+    fillColor?: ChartColor;
+    strokeColor?: ChartColor;
+}
+
+export interface SystemEventMarkerDto {
+    id?: string;
+    time?: number;
+    eventType?: SystemEventType;
+    category?: SystemEventCategory;
+    code?: string | undefined;
+    description?: string | undefined;
+    color?: ChartColor;
+}
+
+export enum SystemEventType {
+    Alarm = "Alarm",
+    Hazard = "Hazard",
+    Warning = "Warning",
+    Info = "Info",
+}
+
+export enum SystemEventCategory {
+    Pump = "Pump",
+    Cgm = "Cgm",
+    Connectivity = "Connectivity",
+}
+
+export interface TrackerMarkerDto {
+    id?: string;
+    definitionId?: string;
+    name?: string;
+    category?: TrackerCategory;
+    time?: number;
+    icon?: string | undefined;
+    color?: ChartColor;
+}
+
+export enum TrackerCategory {
+    Consumable = "Consumable",
+    Reservoir = "Reservoir",
+    Appointment = "Appointment",
+    Reminder = "Reminder",
+    Custom = "Custom",
+    Sensor = "Sensor",
+    Cannula = "Cannula",
+    Battery = "Battery",
 }
 
 export interface ClockFacePublicDto {
@@ -20564,6 +20706,21 @@ export interface ConnectorSyncStatus {
     queriedAt?: Date;
 }
 
+export interface StateSpan {
+    id?: string | undefined;
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    startMills?: number;
+    endMills?: number | undefined;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+    canonicalId?: string | undefined;
+    sources?: string[] | undefined;
+}
+
 export interface CreateStateSpanRequest {
     category?: StateSpanCategory;
     state?: string | undefined;
@@ -20615,19 +20772,6 @@ export interface SystemEvent {
     createdAt?: Date | undefined;
 }
 
-export enum SystemEventType {
-    Alarm = "Alarm",
-    Hazard = "Hazard",
-    Warning = "Warning",
-    Info = "Info",
-}
-
-export enum SystemEventCategory {
-    Pump = "Pump",
-    Cgm = "Cgm",
-    Connectivity = "Connectivity",
-}
-
 export interface CreateSystemEventRequest {
     eventType?: SystemEventType;
     category?: SystemEventCategory;
@@ -20676,17 +20820,6 @@ export interface TrackerDefinitionDto {
     mode?: TrackerMode;
     createdAt?: Date;
     updatedAt?: Date | undefined;
-}
-
-export enum TrackerCategory {
-    Consumable = "Consumable",
-    Reservoir = "Reservoir",
-    Appointment = "Appointment",
-    Reminder = "Reminder",
-    Custom = "Custom",
-    Sensor = "Sensor",
-    Cannula = "Cannula",
-    Battery = "Battery",
 }
 
 export interface NotificationThresholdDto {

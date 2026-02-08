@@ -2,46 +2,62 @@
   import { Tooltip } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin, type BasalPoint, type Treatment } from "$lib/api";
-  import type { TimeSeriesPoint } from "$lib/data/chart-data.remote";
-  import type {
-    StateSpanChartData,
-    BasalDeliveryChartData,
-    SystemEventChartData,
-  } from "$lib/data/state-spans.remote";
+  import { BasalDeliveryOrigin, type BasalPoint } from "$lib/api";
 
-  // Extended types for chart-specific data
+  // Local types for tooltip data shapes
+  interface TimeSeriesPoint {
+    time: Date;
+    value: number;
+  }
+
   type DisplaySpan<T> = T & { displayStart: Date; displayEnd: Date };
+
+  interface StateSpan {
+    id?: string;
+    category?: string;
+    state?: string;
+    startTime: Date;
+    endTime: Date | null;
+    color: string;
+  }
 
   interface BolusMarker {
     time: Date;
-    insulin: number;
-    treatment: Treatment;
+    insulin?: number;
   }
 
   interface CarbMarker {
     time: Date;
-    carbs: number;
-    treatment: Treatment;
-    label: string | null;
-    isOffset?: boolean;
+    carbs?: number;
   }
 
   interface DeviceEventMarker {
     time: Date;
-    eventType: string;
-    notes?: string;
-    config: { color: string };
+    eventType?: string;
+    notes?: string | null;
+    color: string;
   }
 
-  // Profile span extends StateSpanChartData with profileName
-  type ProfileSpan = DisplaySpan<StateSpanChartData> & { profileName: string };
+  type ProfileSpan = DisplaySpan<StateSpan> & { profileName: string };
 
-  // Temp basal span extends StateSpanChartData with rate/percent
-  type TempBasalSpan = DisplaySpan<StateSpanChartData> & {
+  type TempBasalSpan = DisplaySpan<StateSpan> & {
     rate: number | null;
     percent: number | null;
   };
+
+  interface BasalDeliverySpan {
+    startTime: Date;
+    endTime: Date | null;
+    rate?: number;
+    origin?: BasalDeliveryOrigin;
+  }
+
+  interface SystemEvent {
+    eventType?: string;
+    code?: string | null;
+    description?: string | null;
+    color: string;
+  }
 
   interface Props {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,13 +69,13 @@
     findNearbyBolus: (time: Date) => BolusMarker | undefined;
     findNearbyCarbs: (time: Date) => CarbMarker | undefined;
     findNearbyDeviceEvent: (time: Date) => DeviceEventMarker | undefined;
-    findActivePumpMode: (time: Date) => DisplaySpan<StateSpanChartData> | undefined;
-    findActiveOverride: (time: Date) => DisplaySpan<StateSpanChartData> | undefined;
+    findActivePumpMode: (time: Date) => DisplaySpan<StateSpan> | undefined;
+    findActiveOverride: (time: Date) => DisplaySpan<StateSpan> | undefined;
     findActiveProfile: (time: Date) => ProfileSpan | undefined;
-    findActiveActivities: (time: Date) => DisplaySpan<StateSpanChartData>[];
+    findActiveActivities: (time: Date) => DisplaySpan<StateSpan>[];
     findActiveTempBasal: (time: Date) => TempBasalSpan | undefined;
-    findActiveBasalDelivery: (time: Date) => DisplaySpan<BasalDeliveryChartData> | undefined;
-    findNearbySystemEvent: (time: Date) => SystemEventChartData | undefined;
+    findActiveBasalDelivery: (time: Date) => DisplaySpan<BasalDeliverySpan> | undefined;
+    findNearbySystemEvent: (time: Date) => SystemEvent | undefined;
     // Visibility toggles
     showBolus: boolean;
     showCarbs: boolean;
@@ -143,7 +159,7 @@
       {#if showBolus && nearbyBolus}
         <Tooltip.Item
           label="Bolus"
-          value={`${nearbyBolus.insulin.toFixed(1)}U`}
+          value={`${(nearbyBolus.insulin ?? 0).toFixed(1)}U`}
           color="var(--insulin-bolus)"
           class="font-medium"
         />
@@ -151,7 +167,7 @@
       {#if showCarbs && nearbyCarbs}
         <Tooltip.Item
           label="Carbs"
-          value={`${nearbyCarbs.carbs}g`}
+          value={`${nearbyCarbs.carbs ?? 0}g`}
           color="var(--carbs)"
           class="font-medium"
         />
@@ -160,7 +176,7 @@
         <Tooltip.Item
           label={nearbyDeviceEvent.eventType}
           value={nearbyDeviceEvent.notes || ""}
-          color={nearbyDeviceEvent.config.color}
+          color={nearbyDeviceEvent.color}
           class="font-medium"
         />
       {/if}
@@ -195,7 +211,7 @@
                   : "Basal"}
           <Tooltip.Item
             label={basalLabel}
-            value={activeBasalDelivery.rate}
+            value={activeBasalDelivery.rate ?? 0}
             format={"decimal"}
             color={isAdjusted || activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
               ? "var(--insulin-temp-basal)"
@@ -283,7 +299,7 @@
       {#if showActivitySpans}
         {#each activeActivities as activity (activity.id)}
           <Tooltip.Item
-            label={activity.category}
+            label={activity.category ?? ""}
             value={activity.state}
             color={activity.color}
             class="font-medium"

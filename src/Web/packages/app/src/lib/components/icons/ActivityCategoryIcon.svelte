@@ -7,7 +7,7 @@
   import CircleHelp from "lucide-svelte/icons/circle-help";
 
   interface Props {
-    category: StateSpanCategory;
+    category?: StateSpanCategory;
     class?: string;
     size?: number;
     strokeWidth?: number;

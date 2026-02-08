@@ -2968,13 +2968,12 @@
         "tags": [
           "V4 Chart Data"
         ],
-        "summary": "Get dashboard chart data with pre-calculated IOB, COB, and basal time series",
+        "summary": "Get complete dashboard chart data in a single call.\nReturns pre-calculated IOB, COB, basal series, categorized treatment markers,\nstate spans, system events, tracker markers, and glucose readings.",
         "operationId": "ChartData_GetDashboardChartData",
         "parameters": [
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in Unix milliseconds",
             "schema": {
               "type": "integer",
               "format": "int64"
@@ -2984,7 +2983,6 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in Unix milliseconds",
             "schema": {
               "type": "integer",
               "format": "int64"
@@ -2994,7 +2992,6 @@
           {
             "name": "intervalMinutes",
             "in": "query",
-            "description": "Interval for IOB/COB calculations (default: 5)",
             "schema": {
               "type": "integer",
               "format": "int32",
@@ -3005,7 +3002,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Chart data with all calculated series",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -19899,134 +19896,413 @@
       },
       "DashboardChartData": {
         "type": "object",
-        "description": "Dashboard chart data response with all calculated series",
         "additionalProperties": false,
         "properties": {
           "iobSeries": {
             "type": "array",
-            "description": "IOB (Insulin on Board) time series",
             "items": {
               "$ref": "#/components/schemas/TimeSeriesPoint"
             }
           },
           "cobSeries": {
             "type": "array",
-            "description": "COB (Carbs on Board) time series",
             "items": {
               "$ref": "#/components/schemas/TimeSeriesPoint"
             }
           },
           "basalSeries": {
             "type": "array",
-            "description": "Basal rate time series with temp basal indicators",
             "items": {
               "$ref": "#/components/schemas/BasalPoint"
             }
           },
           "defaultBasalRate": {
             "type": "number",
-            "description": "Default basal rate from profile (U/hr)",
             "format": "double"
           },
           "maxBasalRate": {
             "type": "number",
-            "description": "Maximum basal rate in the series (for Y-axis scaling)",
             "format": "double"
           },
           "maxIob": {
             "type": "number",
-            "description": "Maximum IOB in the series (for Y-axis scaling)",
             "format": "double"
           },
           "maxCob": {
             "type": "number",
-            "description": "Maximum COB in the series (for Y-axis scaling)",
             "format": "double"
+          },
+          "glucoseData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucosePointDto"
+            }
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/ChartThresholdsDto"
+          },
+          "bolusMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BolusMarkerDto"
+            }
+          },
+          "carbMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CarbMarkerDto"
+            }
+          },
+          "deviceEventMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceEventMarkerDto"
+            }
           },
           "pumpModeSpans": {
             "type": "array",
-            "description": "Pump mode state spans for chart background coloring",
             "items": {
-              "$ref": "#/components/schemas/StateSpan"
-            }
-          },
-          "basalDeliverySpans": {
-            "type": "array",
-            "description": "Basal delivery state spans (pump-confirmed delivery data)",
-            "items": {
-              "$ref": "#/components/schemas/StateSpan"
+              "$ref": "#/components/schemas/ChartStateSpanDto"
             }
           },
           "profileSpans": {
             "type": "array",
-            "description": "Profile state spans showing active profile changes",
             "items": {
-              "$ref": "#/components/schemas/StateSpan"
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "overrideSpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "activitySpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "tempBasalSpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "basalDeliverySpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasalDeliverySpanDto"
+            }
+          },
+          "systemEventMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemEventMarkerDto"
+            }
+          },
+          "trackerMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackerMarkerDto"
             }
           }
         }
       },
       "TimeSeriesPoint": {
         "type": "object",
-        "description": "Time series data point with timestamp and value",
         "additionalProperties": false,
         "properties": {
           "timestamp": {
             "type": "integer",
-            "description": "Timestamp in Unix milliseconds",
             "format": "int64"
           },
           "value": {
             "type": "number",
-            "description": "Value at this timestamp",
             "format": "double"
           }
         }
       },
       "BasalPoint": {
         "type": "object",
-        "description": "Basal rate data point",
         "additionalProperties": false,
         "properties": {
           "timestamp": {
             "type": "integer",
-            "description": "Timestamp in Unix milliseconds",
             "format": "int64"
           },
           "rate": {
             "type": "number",
-            "description": "Effective basal rate in U/hr",
             "format": "double"
           },
           "scheduledRate": {
             "type": "number",
-            "description": "Scheduled basal rate from profile in U/hr",
             "format": "double"
           },
           "origin": {
-            "description": "Origin of this basal rate - where it came from",
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/BasalDeliveryOrigin"
-              }
-            ]
+            "$ref": "#/components/schemas/BasalDeliveryOrigin"
+          },
+          "fillColor": {
+            "$ref": "#/components/schemas/ChartColor"
+          },
+          "strokeColor": {
+            "$ref": "#/components/schemas/ChartColor"
           }
         }
       },
-      "StateSpan": {
+      "ChartColor": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "GlucoseVeryLow",
+          "GlucoseLow",
+          "GlucoseInRange",
+          "GlucoseHigh",
+          "GlucoseVeryHigh",
+          "InsulinBolus",
+          "InsulinBasal",
+          "InsulinTempBasal",
+          "Carbs",
+          "PumpModeAutomatic",
+          "PumpModeLimited",
+          "PumpModeManual",
+          "PumpModeBoost",
+          "PumpModeEaseOff",
+          "PumpModeSleep",
+          "PumpModeExercise",
+          "PumpModeSuspended",
+          "PumpModeOff",
+          "SystemEventAlarm",
+          "SystemEventHazard",
+          "SystemEventWarning",
+          "SystemEventInfo",
+          "ActivitySleep",
+          "ActivityExercise",
+          "ActivityIllness",
+          "ActivityTravel",
+          "TrackerSensor",
+          "TrackerCannula",
+          "TrackerReservoir",
+          "TrackerBattery",
+          "TrackerConsumable",
+          "TrackerAppointment",
+          "TrackerReminder",
+          "TrackerCustom",
+          "Profile",
+          "Override",
+          "MutedForeground",
+          "Primary"
+        ],
+        "enum": [
+          "glucose-very-low",
+          "glucose-low",
+          "glucose-in-range",
+          "glucose-high",
+          "glucose-very-high",
+          "insulin-bolus",
+          "insulin-basal",
+          "insulin-temp-basal",
+          "carbs",
+          "pump-mode-automatic",
+          "pump-mode-limited",
+          "pump-mode-manual",
+          "pump-mode-boost",
+          "pump-mode-ease-off",
+          "pump-mode-sleep",
+          "pump-mode-exercise",
+          "pump-mode-suspended",
+          "pump-mode-off",
+          "system-event-alarm",
+          "system-event-hazard",
+          "system-event-warning",
+          "system-event-info",
+          "activity-sleep",
+          "activity-exercise",
+          "activity-illness",
+          "activity-travel",
+          "tracker-sensor",
+          "tracker-cannula",
+          "tracker-reservoir",
+          "tracker-battery",
+          "tracker-consumable",
+          "tracker-appointment",
+          "tracker-reminder",
+          "tracker-custom",
+          "chart-1",
+          "chart-2",
+          "muted-foreground",
+          "primary"
+        ]
+      },
+      "GlucosePointDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sgv": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ChartThresholdsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "low": {
+            "type": "number",
+            "format": "double"
+          },
+          "high": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "glucoseYMax": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "BolusMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "insulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "treatmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "bolusType": {
+            "$ref": "#/components/schemas/BolusType"
+          },
+          "isOverride": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BolusType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Bolus",
+          "MealBolus",
+          "CorrectionBolus",
+          "SnackBolus",
+          "BolusWizard",
+          "ComboBolus",
+          "Smb",
+          "AutomaticBolus"
+        ],
+        "enum": [
+          "Bolus",
+          "MealBolus",
+          "CorrectionBolus",
+          "SnackBolus",
+          "BolusWizard",
+          "ComboBolus",
+          "Smb",
+          "AutomaticBolus"
+        ]
+      },
+      "CarbMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "carbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "treatmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "isOffset": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DeviceEventMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/DeviceEventType"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "DeviceEventType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "SensorStart",
+          "SensorChange",
+          "SensorStop",
+          "SiteChange",
+          "InsulinChange",
+          "PumpBatteryChange"
+        ],
+        "enum": [
+          "SensorStart",
+          "SensorChange",
+          "SensorStop",
+          "SiteChange",
+          "InsulinChange",
+          "PumpBatteryChange"
+        ]
+      },
+      "ChartStateSpanDto": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "category": {
             "$ref": "#/components/schemas/StateSpanCategory"
           },
           "state": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "startMills": {
             "type": "integer",
@@ -20037,42 +20313,163 @@
             "format": "int64",
             "nullable": true
           },
-          "source": {
-            "type": "string",
-            "nullable": true
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
           },
           "metadata": {
             "type": "object",
             "nullable": true,
             "additionalProperties": {}
-          },
-          "originalId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "canonicalId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "sources": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
           }
         }
+      },
+      "BasalDeliverySpanDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/BasalDeliveryOrigin"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "fillColor": {
+            "$ref": "#/components/schemas/ChartColor"
+          },
+          "strokeColor": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "SystemEventMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/SystemEventType"
+          },
+          "category": {
+            "$ref": "#/components/schemas/SystemEventCategory"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "SystemEventType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Alarm",
+          "Hazard",
+          "Warning",
+          "Info"
+        ],
+        "enum": [
+          "Alarm",
+          "Hazard",
+          "Warning",
+          "Info"
+        ]
+      },
+      "SystemEventCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pump",
+          "Cgm",
+          "Connectivity"
+        ],
+        "enum": [
+          "Pump",
+          "Cgm",
+          "Connectivity"
+        ]
+      },
+      "TrackerMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "definitionId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "TrackerCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ],
+        "enum": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ]
       },
       "ClockFacePublicDto": {
         "type": "object",
@@ -23703,6 +24100,67 @@
           }
         }
       },
+      "StateSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "canonicalId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "sources": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "CreateStateSpanRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -23896,36 +24354,6 @@
           }
         }
       },
-      "SystemEventType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Alarm",
-          "Hazard",
-          "Warning",
-          "Info"
-        ],
-        "enum": [
-          "Alarm",
-          "Hazard",
-          "Warning",
-          "Info"
-        ]
-      },
-      "SystemEventCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Pump",
-          "Cgm",
-          "Connectivity"
-        ],
-        "enum": [
-          "Pump",
-          "Cgm",
-          "Connectivity"
-        ]
-      },
       "CreateSystemEventRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -24093,30 +24521,6 @@
             "nullable": true
           }
         }
-      },
-      "TrackerCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ],
-        "enum": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ]
       },
       "NotificationThresholdDto": {
         "type": "object",

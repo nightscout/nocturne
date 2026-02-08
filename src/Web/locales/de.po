@@ -33,19 +33,16 @@ msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Meal Bolus"
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Snack Bolus"
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Correction Bolus"
 msgstr ""
@@ -70,9 +67,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 msgid "Site Change"
@@ -82,9 +76,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Insulin Change"
@@ -99,9 +90,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
 msgid "Sensor Start"
@@ -111,9 +99,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
 msgid "Sensor Change"
@@ -123,9 +108,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Pump Battery Change"
 msgstr ""
@@ -3211,6 +3193,8 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
@@ -3435,7 +3419,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -3445,19 +3428,15 @@ msgid "Bolus"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Bolus Wizard"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Combo Bolus"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Sensor Stop"
 msgstr ""
@@ -3467,9 +3446,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3479,7 +3455,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Site"
 msgstr ""
@@ -3487,7 +3462,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Reservoir"
@@ -3496,7 +3470,6 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3505,7 +3478,6 @@ msgid "Battery"
 msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3516,7 +3488,6 @@ msgstr ""
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock/ClockFaceRenderer.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "Tracker"
@@ -14988,4 +14959,110 @@ msgstr ""
 
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Exceeds tracker lifespan"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhook settings saved."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to save webhook settings."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test sent to all webhooks."
+msgstr ""
+
+#. placeholder {0}: response.failedUrls.join(", ")
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed: {0}"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test failed."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to test webhook settings."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhooks"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Send alert events to external services"
+msgstr ""
+
+#: src/lib/stores/settings-store.svelte.ts
+msgid "Validation error"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Webhook Settings"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Configure URLs and signature secrets for alarm notifications."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Send Test"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorStart"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorChange"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SiteChange"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "InsulinChange"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "PumpBatteryChange"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+msgid "Webhook URLs"
+msgstr ""
+
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorStop"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Signature Secret"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret already configured"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret will be generated on save"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "The API signs each webhook with HMAC-SHA256 using this secret."
 msgstr ""

@@ -1,32 +1,23 @@
 <script lang="ts">
   import { Group, Polygon, Text } from "layerchart";
-  import type { Treatment } from "$lib/api";
 
   interface Props {
     xPos: number;
     yPos: number;
     insulin: number;
-    treatment: Treatment;
-    onMarkerClick: (treatment: Treatment) => void;
+    isOverride: boolean;
+    treatmentId: string;
+    onMarkerClick: (treatmentId: string) => void;
   }
 
-  let { xPos, yPos, insulin, treatment, onMarkerClick }: Props = $props();
-
-  // Determine if this bolus was a manual override of a suggestion
-  const suggestedTotal = $derived(
-    (treatment.insulinRecommendationForCarbs ?? 0) +
-      (treatment.insulinRecommendationForCorrection ?? 0)
-  );
-  const hasSuggestion = $derived(suggestedTotal > 0);
-  const isOverride = $derived(
-    hasSuggestion && Math.abs(suggestedTotal - insulin) > 0.05
-  );
+  let { xPos, yPos, insulin, isOverride, treatmentId, onMarkerClick }: Props =
+    $props();
 </script>
 
 <Group
   x={xPos}
   y={yPos + 0}
-  onclick={() => onMarkerClick(treatment)}
+  onclick={() => onMarkerClick(treatmentId)}
   class="cursor-pointer"
 >
   {#if isOverride}
@@ -46,7 +37,11 @@
       class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
     />
   {/if}
-  <Text y={-14} textAnchor="middle" class="text-[8px] fill-insulin-bolus font-medium">
+  <Text
+    y={-14}
+    textAnchor="middle"
+    class="text-[8px] fill-insulin-bolus font-medium"
+  >
     {insulin.toFixed(1)}U
   </Text>
 </Group>

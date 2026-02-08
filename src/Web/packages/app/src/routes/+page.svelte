@@ -6,13 +6,11 @@
     RecentTreatmentsCard,
     WidgetGrid,
   } from "$lib/components/dashboard";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { isWidgetEnabled } from "$lib/types/dashboard-widgets";
 
-  const realtimeStore = getRealtimeStore();
   const settingsStore = getSettingsStore();
 
   // Get widgets array from settings (for main section visibility)
@@ -43,8 +41,6 @@
 
   {#if isMainEnabled(WidgetId.GlucoseChart)}
     <GlucoseChartCard
-      entries={realtimeStore.entries}
-      treatments={realtimeStore.treatments}
       showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
       defaultFocusHours={focusHours}
     />

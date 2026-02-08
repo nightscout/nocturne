@@ -6,7 +6,7 @@
   import InfoIcon from "./InfoIcon.svelte";
 
   interface Props {
-    eventType: SystemEventType;
+    eventType?: SystemEventType;
     class?: string;
     size?: number;
     strokeWidth?: number;
