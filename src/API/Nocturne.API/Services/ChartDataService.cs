@@ -94,7 +94,7 @@ public class ChartDataService : IChartDataService
             (
                 await _treatmentService.GetTreatmentsAsync(
                     find: treatmentFind,
-                    count: null,
+                    count: int.MaxValue,
                     cancellationToken: cancellationToken
                 )
             )?.ToList() ?? new List<Treatment>();
@@ -104,7 +104,7 @@ public class ChartDataService : IChartDataService
             (
                 await _entryService.GetEntriesAsync(
                     find: entryFind,
-                    count: null,
+                    count: int.MaxValue,
                     cancellationToken: cancellationToken
                 )
             )?.ToList() ?? new List<Entry>();
@@ -112,7 +112,7 @@ public class ChartDataService : IChartDataService
         var deviceStatusList =
             (
                 await _deviceStatusService.GetDeviceStatusAsync(
-                    count: 1000,
+                    count: int.MaxValue,
                     skip: 0,
                     cancellationToken: cancellationToken
                 )
