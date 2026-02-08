@@ -223,6 +223,11 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<ClockFaceEntity> ClockFaces { get; set; }
 
+    /// <summary>
+    /// Gets or sets the CompressionLowSuggestions table for compression low detection
+    /// </summary>
+    public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1073,6 +1078,17 @@ public class NocturneDbContext : DbContext
             .HasIndex(cf => new { cf.UserId, cf.CreatedAt })
             .HasDatabaseName("ix_clock_faces_user_created_at")
             .IsDescending(false, true);
+
+        // CompressionLowSuggestions indexes
+        modelBuilder
+            .Entity<CompressionLowSuggestionEntity>()
+            .HasIndex(e => e.NightOf)
+            .HasDatabaseName("ix_compression_low_suggestions_night_of");
+
+        modelBuilder
+            .Entity<CompressionLowSuggestionEntity>()
+            .HasIndex(e => e.Status)
+            .HasDatabaseName("ix_compression_low_suggestions_status");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1204,6 +1220,11 @@ public class NocturneDbContext : DbContext
 
         modelBuilder
             .Entity<ConnectorConfigurationEntity>()
+            .Property(c => c.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        modelBuilder
+            .Entity<CompressionLowSuggestionEntity>()
             .Property(c => c.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 

@@ -51,6 +51,10 @@
   --system-event-hazard: oklch(0.646 0.222 41.116); /* Orange - hazard */
   --system-event-warning: oklch(0.769 0.188 70.08); /* Yellow - warning */
   --system-event-info: oklch(0.6 0.118 184.704); /* Green - informational */
+
+  /* Data Exclusion - semi-transparent overlays for excluded data regions */
+  --data-exclusion-compression-low: rgba(255, 165, 0, 0.15); /* Orange tint for compression lows */
+  --data-exclusion-sensor-error: rgba(255, 0, 0, 0.1); /* Red tint for sensor errors */
 }
 
 .dark {
@@ -63,6 +67,10 @@
   --iob-basal: rgba(60, 160, 255, 0.8);
   --iob-bolus: rgba(30, 150, 252, 1);
   --iob-temporary: rgba(100, 180, 255, 0.85);
+
+  /* Data Exclusion - Dark Mode - slightly higher opacity for visibility on dark backgrounds */
+  --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);
+  --data-exclusion-sensor-error: rgba(255, 0, 0, 0.15);
 }
 
 /* Tailwind theme integration */

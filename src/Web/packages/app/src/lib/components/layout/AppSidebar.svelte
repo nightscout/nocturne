@@ -40,6 +40,7 @@
     Timer,
     Layers,
     Bug,
+    ShieldCheck,
   } from "lucide-svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -125,6 +126,11 @@
           href: "/reports/site-change-impact",
           icon: Syringe,
         },
+        {
+          title: "Data Quality",
+          href: "/reports/data-quality",
+          icon: ShieldCheck,
+        },
       ],
     },
     {
@@ -167,6 +173,7 @@
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         { title: "Features", href: "/settings/features", icon: Sparkles },
+        { title: "Data Quality", href: "/settings/data-quality", icon: ShieldCheck },
         { title: "Alarms", href: "/settings/alarms", icon: Bell },
         {
           title: "Notifications & Trackers",

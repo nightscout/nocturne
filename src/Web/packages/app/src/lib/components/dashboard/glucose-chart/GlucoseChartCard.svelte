@@ -11,7 +11,7 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { Chart, Svg, Axis, ChartClipPath, Highlight } from "layerchart";
+  import { Chart, Svg, Axis, ChartClipPath, Highlight, BrushContext } from "layerchart";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
   import { bisector } from "d3";
   import { scaleTime, scaleLinear } from "d3-scale";
@@ -68,6 +68,10 @@
     compact?: boolean;
     /** Custom height class override (e.g., "h-[300px]") */
     heightClass?: string;
+    /** Initial selection domain for brush selection mode */
+    selectionDomain?: [Date, Date] | null;
+    /** Callback when brush selection changes (enables selection mode) */
+    onSelectionChange?: (domain: [Date, Date] | null) => void;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -91,7 +95,12 @@
     compact = false,
     heightClass,
     defaultFocusHours,
+    selectionDomain,
+    onSelectionChange,
   }: ComponentProps = $props();
+
+  // Selection mode is enabled when onSelectionChange callback is provided
+  const isSelectionMode = $derived(!!onSelectionChange);
 
   // ===== STATE =====
   let predictionData = $state<PredictionData | null>(null);
@@ -1006,6 +1015,24 @@
           {/if}
         </ChartClipPath>
       </Svg>
+
+      <!-- Selection brush for selection mode -->
+      {#if isSelectionMode}
+        <BrushContext
+          axis="x"
+          mode="separated"
+          xDomain={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
+          onChange={(e: { xDomain: unknown }) => {
+            if (e.xDomain && Array.isArray(e.xDomain) && e.xDomain.length === 2) {
+              onSelectionChange?.([new Date(e.xDomain[0] as number), new Date(e.xDomain[1] as number)]);
+            }
+          }}
+          classes={{
+            range: 'bg-warning/30 border border-warning/60 rounded',
+            handle: 'bg-warning hover:bg-warning/80 rounded-sm'
+          }}
+        />
+      {/if}
 
       <ChartTooltip
         {context}
