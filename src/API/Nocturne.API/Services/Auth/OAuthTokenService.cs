@@ -41,6 +41,7 @@ public class OAuthTokenService : IOAuthTokenService
         IEnumerable<string> scopes,
         string redirectUri,
         string codeChallenge,
+        bool limitTo24Hours = false,
         CancellationToken ct = default
     )
     {
@@ -56,15 +57,17 @@ public class OAuthTokenService : IOAuthTokenService
             RedirectUri = redirectUri,
             CodeChallenge = codeChallenge,
             ExpiresAt = DateTime.UtcNow.Add(AuthorizationCodeLifetime),
+            LimitTo24Hours = limitTo24Hours,
         };
 
         _db.OAuthAuthorizationCodes.Add(entity);
         await _db.SaveChangesAsync(ct);
 
         _logger.LogDebug(
-            "Generated authorization code for client entity {ClientEntityId}, subject {SubjectId}",
+            "Generated authorization code for client entity {ClientEntityId}, subject {SubjectId}, limitTo24Hours={LimitTo24Hours}",
             clientEntityId,
-            subjectId
+            subjectId,
+            limitTo24Hours
         );
 
         return code;
@@ -132,11 +135,12 @@ public class OAuthTokenService : IOAuthTokenService
         // Mark as redeemed
         authCode.RedeemedAt = DateTime.UtcNow;
 
-        // Create or update grant
+        // Create or update grant with 24-hour limit if specified
         var grant = await _grantService.CreateOrUpdateGrantAsync(
             authCode.ClientEntityId,
             authCode.SubjectId,
             authCode.Scopes,
+            limitTo24Hours: authCode.LimitTo24Hours,
             ct: ct
         );
 
@@ -417,7 +421,8 @@ public class OAuthTokenService : IOAuthTokenService
             permissions,
             roles,
             grant.Scopes,
-            grant.ClientId
+            grant.ClientId,
+            grant.LimitTo24Hours
         );
 
         // Generate and store refresh token

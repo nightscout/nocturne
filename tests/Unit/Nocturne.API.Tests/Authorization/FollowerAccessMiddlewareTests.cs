@@ -257,7 +257,7 @@ public class FollowerAccessMiddlewareTests
 
         _mockSubjectService
             .Setup(s => s.GetSubjectByIdAsync(_ownerSubjectId))
-            .ReturnsAsync(new Subject { Id = _ownerSubjectId, Name = "Data Owner" });
+            .ReturnsAsync(new Core.Models.Authorization.Subject { Id = _ownerSubjectId, Name = "Data Owner" });
 
         var broadScopes = OAuthScopes.Normalize(new[] { OAuthScopes.FullAccess });
         var authContext = CreateAuthenticatedContext();
@@ -296,7 +296,7 @@ public class FollowerAccessMiddlewareTests
 
         _mockSubjectService
             .Setup(s => s.GetSubjectByIdAsync(_ownerSubjectId))
-            .ReturnsAsync(new Subject { Id = _ownerSubjectId, Name = "Owner" });
+            .ReturnsAsync(new Core.Models.Authorization.Subject { Id = _ownerSubjectId, Name = "Owner" });
 
         // User has broad scopes (full access)
         var broadScopes = OAuthScopes.Normalize(new[] { OAuthScopes.FullAccess });
@@ -376,7 +376,7 @@ public class FollowerAccessMiddlewareTests
 
         _mockSubjectService
             .Setup(s => s.GetSubjectByIdAsync(_ownerSubjectId))
-            .ReturnsAsync(new Subject { Id = _ownerSubjectId, Name = "Owner" });
+            .ReturnsAsync(new Core.Models.Authorization.Subject { Id = _ownerSubjectId, Name = "Owner" });
 
         // User only has entries.read scope
         var userScopes = OAuthScopes.Normalize(new[] { OAuthScopes.EntriesRead });
@@ -412,7 +412,7 @@ public class FollowerAccessMiddlewareTests
 
         _mockSubjectService
             .Setup(s => s.GetSubjectByIdAsync(_ownerSubjectId))
-            .ReturnsAsync(new Subject { Id = _ownerSubjectId, Name = "Owner" });
+            .ReturnsAsync(new Core.Models.Authorization.Subject { Id = _ownerSubjectId, Name = "Owner" });
 
         // User has entries.readwrite (which implies entries.read via SatisfiesScope)
         var userScopes = OAuthScopes.Normalize(new[] { OAuthScopes.EntriesReadWrite });
@@ -440,7 +440,7 @@ public class FollowerAccessMiddlewareTests
 
         _mockSubjectService
             .Setup(s => s.GetSubjectByIdAsync(_ownerSubjectId))
-            .ReturnsAsync((Subject?)null);
+            .ReturnsAsync((Core.Models.Authorization.Subject?)null);
 
         var broadScopes = OAuthScopes.Normalize(new[] { OAuthScopes.FullAccess });
         var authContext = CreateAuthenticatedContext();

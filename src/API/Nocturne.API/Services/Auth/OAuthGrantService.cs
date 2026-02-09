@@ -42,6 +42,7 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string> scopes,
         string grantType = OAuthScopes.GrantTypeApp,
         string? label = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         var existingGrant = await _dbContext.OAuthGrants
@@ -67,11 +68,14 @@ public class OAuthGrantService : IOAuthGrantService
                 existingGrant.Label = label;
             }
 
+            // Update 24-hour limit flag
+            existingGrant.LimitTo24Hours = limitTo24Hours;
+
             await _dbContext.SaveChangesAsync(ct);
 
             _logger.LogInformation(
-                "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
-                "grant_updated", existingGrant.Id, subjectId, clientEntityId, string.Join(" ", mergedScopes));
+                "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes} limit_24h={Limit24Hours}",
+                "grant_updated", existingGrant.Id, subjectId, clientEntityId, string.Join(" ", mergedScopes), existingGrant.LimitTo24Hours);
 
             return MapToInfo(existingGrant);
         }
@@ -86,7 +90,8 @@ public class OAuthGrantService : IOAuthGrantService
             GrantType = grantType,
             Scopes = scopeList,
             Label = label,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            LimitTo24Hours = limitTo24Hours
         };
 
         _dbContext.OAuthGrants.Add(entity);
@@ -98,8 +103,8 @@ public class OAuthGrantService : IOAuthGrantService
             .LoadAsync(ct);
 
         _logger.LogInformation(
-            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
-            "grant_created", entity.Id, subjectId, clientEntityId, string.Join(" ", scopeList));
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes} limit_24h={Limit24Hours}",
+            "grant_created", entity.Id, subjectId, clientEntityId, string.Join(" ", scopeList), entity.LimitTo24Hours);
 
         return MapToInfo(entity);
     }
@@ -216,7 +221,8 @@ public class OAuthGrantService : IOAuthGrantService
             LastUsedAt = entity.LastUsedAt,
             LastUsedIp = entity.LastUsedIp,
             LastUsedUserAgent = entity.LastUsedUserAgent,
-            IsRevoked = entity.IsRevoked
+            IsRevoked = entity.IsRevoked,
+            LimitTo24Hours = entity.LimitTo24Hours
         };
     }
 
@@ -227,6 +233,7 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string> scopes,
         string? label = null,
         Guid? createdFromInviteId = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         if (followerSubjectId == dataOwnerSubjectId)
@@ -267,6 +274,9 @@ public class OAuthGrantService : IOAuthGrantService
                 existingGrant.CreatedFromInviteId = createdFromInviteId;
             }
 
+            // Update 24-hour limit flag
+            existingGrant.LimitTo24Hours = limitTo24Hours;
+
             await _dbContext.SaveChangesAsync(ct);
 
             // Load FollowerSubject navigation for the return DTO
@@ -275,8 +285,8 @@ public class OAuthGrantService : IOAuthGrantService
                 .LoadAsync(ct);
 
             _logger.LogInformation(
-                "OAuthAudit: {Event} grant_id={GrantId} owner_id={OwnerId} follower_id={FollowerId} scopes={Scopes}",
-                "follower_grant_updated", existingGrant.Id, dataOwnerSubjectId, followerSubjectId, string.Join(" ", mergedScopes));
+                "OAuthAudit: {Event} grant_id={GrantId} owner_id={OwnerId} follower_id={FollowerId} scopes={Scopes} limit_24h={Limit24Hours}",
+                "follower_grant_updated", existingGrant.Id, dataOwnerSubjectId, followerSubjectId, string.Join(" ", mergedScopes), existingGrant.LimitTo24Hours);
 
             return MapToInfo(existingGrant);
         }
@@ -293,7 +303,8 @@ public class OAuthGrantService : IOAuthGrantService
             Label = label,
             FollowerSubjectId = followerSubjectId,
             CreatedFromInviteId = createdFromInviteId,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            LimitTo24Hours = limitTo24Hours
         };
 
         _dbContext.OAuthGrants.Add(entity);
@@ -308,8 +319,8 @@ public class OAuthGrantService : IOAuthGrantService
             .LoadAsync(ct);
 
         _logger.LogInformation(
-            "OAuthAudit: {Event} grant_id={GrantId} owner_id={OwnerId} follower_id={FollowerId} scopes={Scopes}",
-            "follower_grant_created", entity.Id, dataOwnerSubjectId, followerSubjectId, string.Join(" ", normalizedScopes));
+            "OAuthAudit: {Event} grant_id={GrantId} owner_id={OwnerId} follower_id={FollowerId} scopes={Scopes} limit_24h={Limit24Hours}",
+            "follower_grant_created", entity.Id, dataOwnerSubjectId, followerSubjectId, string.Join(" ", normalizedScopes), entity.LimitTo24Hours);
 
         return MapToInfo(entity);
     }
@@ -354,6 +365,7 @@ public class OAuthGrantService : IOAuthGrantService
         Guid ownerSubjectId,
         string? label = null,
         IEnumerable<string>? scopes = null,
+        bool? limitTo24Hours = null,
         CancellationToken ct = default)
     {
         var grant = await _dbContext.OAuthGrants
@@ -384,11 +396,17 @@ public class OAuthGrantService : IOAuthGrantService
             grant.Scopes = scopeList.Distinct().OrderBy(s => s).ToList();
         }
 
+        // Update 24-hour limit if provided
+        if (limitTo24Hours.HasValue)
+        {
+            grant.LimitTo24Hours = limitTo24Hours.Value;
+        }
+
         await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId}",
-            "grant_modified", grantId, ownerSubjectId);
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} limit_24h={Limit24Hours}",
+            "grant_modified", grantId, ownerSubjectId, grant.LimitTo24Hours);
 
         return MapToInfo(grant);
     }

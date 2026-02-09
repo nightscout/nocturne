@@ -249,7 +249,8 @@ public class OAuthController : ControllerBase
             normalizedScopes,
             request.RedirectUri,
             request.CodeChallenge,
-            request.State
+            request.State,
+            request.LimitTo24Hours
         );
     }
 
@@ -555,7 +556,8 @@ public class OAuthController : ControllerBase
         IReadOnlySet<string> scopes,
         string redirectUri,
         string codeChallenge,
-        string? state
+        string? state,
+        bool limitTo24Hours = false
     )
     {
         var code = await _tokenService.GenerateAuthorizationCodeAsync(
@@ -563,7 +565,8 @@ public class OAuthController : ControllerBase
             subjectId,
             scopes,
             redirectUri,
-            codeChallenge
+            codeChallenge,
+            limitTo24Hours
         );
 
         var separator = redirectUri.Contains('?') ? '&' : '?';
@@ -1014,7 +1017,8 @@ public class OAuthController : ControllerBase
                 request.Scopes,
                 request.Label,
                 expiresIn,
-                request.MaxUses);
+                request.MaxUses,
+                request.LimitTo24Hours);
 
             return StatusCode(StatusCodes.Status201Created, new CreateInviteResponse
             {
@@ -1076,6 +1080,7 @@ public class OAuthController : ControllerBase
                 IsValid = i.IsValid,
                 IsExpired = i.IsExpired,
                 IsRevoked = i.IsRevoked,
+                LimitTo24Hours = i.LimitTo24Hours,
                 UsedBy = i.UsedBy.Select(u => new InviteUsageDto
                 {
                     FollowerSubjectId = u.FollowerSubjectId,
@@ -1149,6 +1154,7 @@ public class OAuthController : ControllerBase
             IsValid = invite.IsValid,
             IsExpired = invite.IsExpired,
             IsRevoked = invite.IsRevoked,
+            LimitTo24Hours = invite.LimitTo24Hours,
         });
     }
 
@@ -1265,6 +1271,7 @@ public class OAuthController : ControllerBase
         CreatedAt = info.CreatedAt,
         LastUsedAt = info.LastUsedAt,
         LastUsedUserAgent = info.LastUsedUserAgent,
+        LimitTo24Hours = info.LimitTo24Hours,
     };
 }
 
@@ -1357,6 +1364,12 @@ public class ConsentApprovalRequest
 
     [FromForm(Name = "approved")]
     public bool Approved { get; set; }
+
+    /// <summary>
+    /// When true, limits data access to 24 hours from the grant creation time.
+    /// </summary>
+    [FromForm(Name = "limit_to_24_hours")]
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -1400,6 +1413,11 @@ public class OAuthGrantDto
     public DateTime CreatedAt { get; set; }
     public DateTime? LastUsedAt { get; set; }
     public string? LastUsedUserAgent { get; set; }
+    /// <summary>
+    /// When true, this grant only allows access to data from the last 24 hours
+    /// (rolling window from each request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -1490,6 +1508,12 @@ public class CreateInviteRequest
     /// Maximum number of times the invite can be used (null = unlimited)
     /// </summary>
     public int? MaxUses { get; set; }
+
+    /// <summary>
+    /// When true, grants created from this invite will only allow access to
+    /// the last 24 hours of data (rolling window from each request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -1518,6 +1542,7 @@ public class InviteDto
     public bool IsValid { get; set; }
     public bool IsExpired { get; set; }
     public bool IsRevoked { get; set; }
+    public bool LimitTo24Hours { get; set; }
     public List<InviteUsageDto> UsedBy { get; set; } = new();
 }
 
@@ -1553,6 +1578,7 @@ public class InviteInfoResponse
     public bool IsValid { get; set; }
     public bool IsExpired { get; set; }
     public bool IsRevoked { get; set; }
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>

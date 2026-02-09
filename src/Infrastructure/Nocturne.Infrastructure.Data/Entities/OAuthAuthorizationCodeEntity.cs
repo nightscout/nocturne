@@ -81,6 +81,13 @@ public class OAuthAuthorizationCodeEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// When true, the resulting grant will limit data access to the last 24 hours
+    /// (rolling window from each request time).
+    /// </summary>
+    [Column("limit_to_24_hours")]
+    public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
     /// Whether this authorization code has expired
     /// </summary>
     [NotMapped]

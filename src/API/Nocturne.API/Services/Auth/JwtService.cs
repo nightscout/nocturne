@@ -132,6 +132,7 @@ public class JwtService : IJwtService
         IEnumerable<string> roles,
         IEnumerable<string> scopes,
         string? clientId = null,
+        bool limitTo24Hours = false,
         TimeSpan? lifetime = null
     )
     {
@@ -179,6 +180,12 @@ public class JwtService : IJwtService
         if (!string.IsNullOrEmpty(clientId))
         {
             claims.Add(new Claim("client_id", clientId));
+        }
+
+        // Add 24-hour limit flag if enabled
+        if (limitTo24Hours)
+        {
+            claims.Add(new Claim("limit_24h", "true", ClaimValueTypes.Boolean));
         }
 
         // Add OAuth scopes as space-delimited string (RFC 6749 Section 3.3)
@@ -262,6 +269,10 @@ public class JwtService : IJwtService
                 ? new List<string>()
                 : scopeClaim.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
 
+            // Parse 24-hour limit claim
+            var limit24hClaim = principal.FindFirst("limit_24h")?.Value;
+            var limitTo24Hours = limit24hClaim == "true";
+
             var claims = new JwtClaims
             {
                 SubjectId = subjectId,
@@ -271,6 +282,7 @@ public class JwtService : IJwtService
                 Permissions = principal.FindAll("permission").Select(c => c.Value).ToList(),
                 Scopes = scopeList,
                 ClientId = principal.FindFirst("client_id")?.Value,
+                LimitTo24Hours = limitTo24Hours,
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),
                 ExpiresAt = new DateTimeOffset(jwtToken.ValidTo, TimeSpan.Zero),

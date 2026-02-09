@@ -113,7 +113,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_activities_type_mills");
 
-                    b.ToTable("activities");
+                    b.ToTable("activities", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertHistoryEntity", b =>
@@ -250,7 +250,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_alert_history_user_trigger_time");
 
-                    b.ToTable("alert_history");
+                    b.ToTable("alert_history", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", b =>
@@ -370,7 +370,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId", "IsEnabled")
                         .HasDatabaseName("ix_alert_rules_user_enabled");
 
-                    b.ToTable("alert_rules");
+                    b.ToTable("alert_rules", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AuthAuditLogEntity", b =>
@@ -449,7 +449,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_auth_audit_log_subject_created");
 
-                    b.ToTable("auth_audit_log");
+                    b.ToTable("auth_audit_log", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ClockFaceEntity", b =>
@@ -514,7 +514,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_clock_faces_user_created_at");
 
-                    b.ToTable("clock_faces");
+                    b.ToTable("clock_faces", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.CompressionLowSuggestionEntity", b =>
@@ -577,7 +577,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_compression_low_suggestions_status");
 
-                    b.ToTable("compression_low_suggestions");
+                    b.ToTable("compression_low_suggestions", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorConfigurationEntity", b =>
@@ -629,7 +629,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_connector_configurations_connector_name");
 
-                    b.ToTable("connector_configurations");
+                    b.ToTable("connector_configurations", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorFoodEntryEntity", b =>
@@ -750,7 +750,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_connector_food_entries_source_entry");
 
-                    b.ToTable("connector_food_entries");
+                    b.ToTable("connector_food_entries", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DataSourceMetadataEntity", b =>
@@ -799,7 +799,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("IsArchived")
                         .HasDatabaseName("ix_data_source_metadata_is_archived");
 
-                    b.ToTable("data_source_metadata");
+                    b.ToTable("data_source_metadata", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DeviceHealthEntity", b =>
@@ -952,7 +952,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId", "Status")
                         .HasDatabaseName("ix_device_health_user_status");
 
-                    b.ToTable("device_health");
+                    b.ToTable("device_health", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DeviceStatusEntity", b =>
@@ -1085,7 +1085,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_devicestatus_device_mills");
 
-                    b.ToTable("devicestatus");
+                    b.ToTable("devicestatus", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DiscrepancyAnalysisEntity", b =>
@@ -1209,7 +1209,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_discrepancy_analyses_path_timestamp");
 
-                    b.ToTable("discrepancy_analyses");
+                    b.ToTable("discrepancy_analyses", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DiscrepancyDetailEntity", b =>
@@ -1270,7 +1270,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Severity")
                         .HasDatabaseName("ix_discrepancy_details_severity");
 
-                    b.ToTable("discrepancy_details");
+                    b.ToTable("discrepancy_details", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.EmergencyContactEntity", b =>
@@ -1350,7 +1350,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_emergency_contacts_user_id");
 
-                    b.ToTable("emergency_contacts");
+                    b.ToTable("emergency_contacts", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.EntryEntity", b =>
@@ -1519,7 +1519,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Device", "Type", "Sgv", "Mills")
                         .HasDatabaseName("ix_entries_duplicate_detection");
 
-                    b.ToTable("entries");
+                    b.ToTable("entries", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.FollowerInviteEntity", b =>
@@ -1580,7 +1580,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TokenHash");
 
-                    b.ToTable("follower_invites");
+                    b.ToTable("follower_invites", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.FoodEntity", b =>
@@ -1718,7 +1718,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Type", "Name")
                         .HasDatabaseName("ix_foods_type_name");
 
-                    b.ToTable("foods");
+                    b.ToTable("foods", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.InAppNotificationEntity", b =>
@@ -1819,7 +1819,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId", "Type", "IsArchived")
                         .HasDatabaseName("ix_in_app_notifications_user_type_archived");
 
-                    b.ToTable("in_app_notifications");
+                    b.ToTable("in_app_notifications", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.LinkedRecordEntity", b =>
@@ -1879,7 +1879,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("RecordType", "CanonicalId", "IsPrimary")
                         .HasDatabaseName("ix_linked_records_type_canonical_primary");
 
-                    b.ToTable("linked_records");
+                    b.ToTable("linked_records", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.LocalUserEntity", b =>
@@ -2001,7 +2001,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("local_users");
+                    b.ToTable("local_users", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MigrationRunEntity", b =>
@@ -2063,7 +2063,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SourceId", "State")
                         .HasDatabaseName("ix_migration_runs_source_state");
 
-                    b.ToTable("migration_runs");
+                    b.ToTable("migration_runs", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MigrationSourceEntity", b =>
@@ -2131,7 +2131,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_migration_sources_identifier");
 
-                    b.ToTable("migration_sources");
+                    b.ToTable("migration_sources", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.NotificationPreferencesEntity", b =>
@@ -2260,7 +2260,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_notification_preferences_user_id");
 
-                    b.ToTable("notification_preferences");
+                    b.ToTable("notification_preferences", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.OAuthAuthorizationCodeEntity", b =>
@@ -2330,7 +2330,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SubjectId")
                         .HasDatabaseName("ix_oauth_authorization_codes_subject_id");
 
-                    b.ToTable("oauth_authorization_codes");
+                    b.ToTable("oauth_authorization_codes", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.OAuthClientEntity", b =>
@@ -2381,7 +2381,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_oauth_clients_client_id");
 
-                    b.ToTable("oauth_clients");
+                    b.ToTable("oauth_clients", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.OAuthDeviceCodeEntity", b =>
@@ -2466,7 +2466,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_oauth_device_codes_user_code");
 
-                    b.ToTable("oauth_device_codes");
+                    b.ToTable("oauth_device_codes", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.OAuthGrantEntity", b =>
@@ -2560,7 +2560,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_oauth_grants_subject_follower")
                         .HasFilter("follower_subject_id IS NOT NULL AND revoked_at IS NULL");
 
-                    b.ToTable("oauth_grants");
+                    b.ToTable("oauth_grants", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.OAuthRefreshTokenEntity", b =>
@@ -2615,7 +2615,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_oauth_refresh_tokens_token_hash");
 
-                    b.ToTable("oauth_refresh_tokens");
+                    b.ToTable("oauth_refresh_tokens", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.OidcProviderEntity", b =>
@@ -2718,7 +2718,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_oidc_providers_issuer_url");
 
-                    b.ToTable("oidc_providers");
+                    b.ToTable("oidc_providers", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PasswordResetRequestEntity", b =>
@@ -2777,7 +2777,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("LocalUserId");
 
-                    b.ToTable("password_reset_requests");
+                    b.ToTable("password_reset_requests", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ProfileEntity", b =>
@@ -2869,7 +2869,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Units")
                         .HasDatabaseName("ix_profiles_units");
 
-                    b.ToTable("profiles");
+                    b.ToTable("profiles", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RefreshTokenEntity", b =>
@@ -2963,7 +2963,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_refresh_tokens_token_hash");
 
-                    b.ToTable("refresh_tokens");
+                    b.ToTable("refresh_tokens", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RoleEntity", b =>
@@ -3023,7 +3023,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_roles_name");
 
-                    b.ToTable("roles");
+                    b.ToTable("roles", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SettingsEntity", b =>
@@ -3128,7 +3128,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SysCreatedAt")
                         .HasDatabaseName("ix_settings_sys_created_at");
 
-                    b.ToTable("settings");
+                    b.ToTable("settings", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.StateSpanEntity", b =>
@@ -3202,7 +3202,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_state_spans_category_start");
 
-                    b.ToTable("state_spans");
+                    b.ToTable("state_spans", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SubjectEntity", b =>
@@ -3298,7 +3298,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_subjects_oidc_identity");
 
-                    b.ToTable("subjects");
+                    b.ToTable("subjects", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SubjectRoleEntity", b =>
@@ -3327,7 +3327,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("subject_roles");
+                    b.ToTable("subject_roles", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SystemEventEntity", b =>
@@ -3402,7 +3402,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_system_events_category_mills");
 
-                    b.ToTable("system_events");
+                    b.ToTable("system_events", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TrackerDefinitionEntity", b =>
@@ -3504,7 +3504,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId", "Category")
                         .HasDatabaseName("ix_tracker_definitions_user_category");
 
-                    b.ToTable("tracker_definitions");
+                    b.ToTable("tracker_definitions", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TrackerInstanceEntity", b =>
@@ -3586,7 +3586,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId", "CompletedAt")
                         .HasDatabaseName("ix_tracker_instances_user_completed");
 
-                    b.ToTable("tracker_instances");
+                    b.ToTable("tracker_instances", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TrackerNotificationThresholdEntity", b =>
@@ -3653,7 +3653,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TrackerDefinitionId", "DisplayOrder")
                         .HasDatabaseName("ix_tracker_notification_thresholds_def_order");
 
-                    b.ToTable("tracker_notification_thresholds");
+                    b.ToTable("tracker_notification_thresholds", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TrackerPresetEntity", b =>
@@ -3695,7 +3695,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_tracker_presets_user_id");
 
-                    b.ToTable("tracker_presets");
+                    b.ToTable("tracker_presets", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TreatmentEntity", b =>
@@ -4032,7 +4032,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_treatments_event_type_mills");
 
-                    b.ToTable("treatments");
+                    b.ToTable("treatments", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TreatmentFoodEntity", b =>
@@ -4089,7 +4089,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TreatmentId")
                         .HasDatabaseName("ix_treatment_foods_treatment_id");
 
-                    b.ToTable("treatment_foods");
+                    b.ToTable("treatment_foods", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.UserFoodFavoriteEntity", b =>
@@ -4126,7 +4126,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_user_food_favorites_user_food");
 
-                    b.ToTable("user_food_favorites");
+                    b.ToTable("user_food_favorites", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertHistoryEntity", b =>

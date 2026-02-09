@@ -2,6 +2,8 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Label } from "$lib/components/ui/label";
   import {
     Shield,
     ShieldAlert,
@@ -9,7 +11,9 @@
     ExternalLink,
     Check,
     ShieldPlus,
+    Clock,
   } from "lucide-svelte";
+  import { t } from "$lib/i18n";
 
   const { data } = $props();
 
@@ -56,6 +60,9 @@
   const isScopeUpgrade = $derived(
     hasExistingScopes && newScopes.length > 0
   );
+
+  /** State for the "limit to 24 hours" checkbox */
+  let limitTo24Hours = $state(false);
 </script>
 
 <svelte:head>
@@ -207,12 +214,35 @@
 
       <Separator />
 
+      <!-- Data access restriction option -->
+      <div class="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+        <Clock class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div class="flex-1 space-y-1">
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="limit-24-hours"
+              bind:checked={limitTo24Hours}
+              aria-describedby="limit-24-hours-description"
+            />
+            <Label for="limit-24-hours" class="text-sm font-medium cursor-pointer">
+              {$t("Only share data from last 24 hours")}
+            </Label>
+          </div>
+          <p id="limit-24-hours-description" class="text-xs text-muted-foreground">
+            {$t("When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited.")}
+          </p>
+        </div>
+      </div>
+
+      <Separator />
+
       <form method="POST" class="flex gap-3">
         <input type="hidden" name="client_id" value={data.clientId} />
         <input type="hidden" name="redirect_uri" value={data.redirectUri} />
         <input type="hidden" name="scope" value={data.scope} />
         <input type="hidden" name="state" value={data.state} />
         <input type="hidden" name="code_challenge" value={data.codeChallenge} />
+        <input type="hidden" name="limit_to_24_hours" value={limitTo24Hours ? "true" : "false"} />
 
         <Button
           type="submit"

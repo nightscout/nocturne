@@ -1552,6 +1552,9 @@
                   },
                   "approved": {
                     "type": "boolean"
+                  },
+                  "limit_to_24_hours": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -18095,6 +18098,10 @@
           "lastUsedUserAgent": {
             "type": "string",
             "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean",
+            "description": "When true, this grant only allows access to data from the last 24 hours\n(rolling window from each request time)."
           }
         }
       },
@@ -18235,6 +18242,10 @@
             "description": "Maximum number of times the invite can be used (null = unlimited)",
             "format": "int32",
             "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean",
+            "description": "When true, grants created from this invite will only allow access to\nthe last 24 hours of data (rolling window from each request time)."
           }
         }
       },
@@ -18294,6 +18305,9 @@
             "type": "boolean"
           },
           "isRevoked": {
+            "type": "boolean"
+          },
+          "limitTo24Hours": {
             "type": "boolean"
           },
           "usedBy": {
@@ -18361,6 +18375,9 @@
             "type": "boolean"
           },
           "isRevoked": {
+            "type": "boolean"
+          },
+          "limitTo24Hours": {
             "type": "boolean"
           }
         }

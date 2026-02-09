@@ -187,6 +187,7 @@ public class SessionCookieHandler : IAuthHandler
             Permissions = claims.Permissions,
             RawToken = token,
             ExpiresAt = claims.ExpiresAt,
+            LimitTo24Hours = claims.LimitTo24Hours,
         };
     }
 

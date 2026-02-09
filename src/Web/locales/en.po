@@ -14179,3 +14179,11 @@ msgstr "Manage data sources, set up new connections, and control app access"
 #: src/routes/settings/security/+page.svelte
 msgid "Followers & Sharing - Settings - Nocturne"
 msgstr "Followers & Sharing - Settings - Nocturne"
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Only share data from last 24 hours"
+msgstr "Only share data from last 24 hours"
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
+msgstr "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."

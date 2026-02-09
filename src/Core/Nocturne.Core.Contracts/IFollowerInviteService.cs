@@ -14,6 +14,7 @@ public interface IFollowerInviteService
     /// <param name="label">Optional label for the grant</param>
     /// <param name="expiresIn">How long until the invite expires (default: 7 days)</param>
     /// <param name="maxUses">Maximum uses (null = unlimited, 1 = single-use)</param>
+    /// <param name="limitTo24Hours">When true, grants created from this invite will only allow access to the last 24 hours of data</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>The created invite with the raw token (only returned once)</returns>
     Task<FollowerInviteResult> CreateInviteAsync(
@@ -22,6 +23,7 @@ public interface IFollowerInviteService
         string? label = null,
         TimeSpan? expiresIn = null,
         int? maxUses = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default);
 
     /// <summary>
@@ -163,6 +165,12 @@ public class FollowerInviteInfo
     /// Whether the invite has been revoked
     /// </summary>
     public bool IsRevoked { get; set; }
+
+    /// <summary>
+    /// When true, grants created from this invite will only allow access to
+    /// the last 24 hours of data (rolling window from each request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 
     /// <summary>
     /// List of users who have used this invite

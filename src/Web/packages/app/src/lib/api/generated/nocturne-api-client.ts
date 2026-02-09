@@ -1977,8 +1977,9 @@ export class OAuthClient {
      * @param state (optional) 
      * @param code_challenge (optional) 
      * @param approved (optional) 
+     * @param limit_to_24_hours (optional) 
      */
-    approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
+    approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, limit_to_24_hours?: boolean | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/oauth/authorize";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -1997,6 +1998,10 @@ export class OAuthClient {
             throw new globalThis.Error("The parameter 'approved' cannot be null.");
         else
             content_.append("approved", approved.toString());
+        if (limit_to_24_hours === null || limit_to_24_hours === undefined)
+            throw new globalThis.Error("The parameter 'limit_to_24_hours' cannot be null.");
+        else
+            content_.append("limit_to_24_hours", limit_to_24_hours.toString());
 
         let options_: RequestInit = {
             body: content_,
@@ -19611,6 +19616,9 @@ export interface OAuthGrantDto {
     createdAt?: Date;
     lastUsedAt?: Date | undefined;
     lastUsedUserAgent?: string | undefined;
+    /** When true, this grant only allows access to data from the last 24 hours
+(rolling window from each request time). */
+    limitTo24Hours?: boolean;
 }
 
 /** Request to create a follower grant (share data with another user) */
@@ -19660,6 +19668,9 @@ export interface CreateInviteRequest {
     expiresInDays?: number | undefined;
     /** Maximum number of times the invite can be used (null = unlimited) */
     maxUses?: number | undefined;
+    /** When true, grants created from this invite will only allow access to
+the last 24 hours of data (rolling window from each request time). */
+    limitTo24Hours?: boolean;
 }
 
 /** Response containing a list of invites */
@@ -19679,6 +19690,7 @@ export interface InviteDto {
     isValid?: boolean;
     isExpired?: boolean;
     isRevoked?: boolean;
+    limitTo24Hours?: boolean;
     usedBy?: InviteUsageDto[];
 }
 
@@ -19700,6 +19712,7 @@ export interface InviteInfoResponse {
     isValid?: boolean;
     isExpired?: boolean;
     isRevoked?: boolean;
+    limitTo24Hours?: boolean;
 }
 
 /** Response after accepting an invite */

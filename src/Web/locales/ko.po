@@ -16262,3 +16262,11 @@ msgstr ""
 #: src/routes/settings/connectors/+page.svelte
 msgid "Manage data sources, set up new connections, and control app access"
 msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Only share data from last 24 hours"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
+msgstr ""
