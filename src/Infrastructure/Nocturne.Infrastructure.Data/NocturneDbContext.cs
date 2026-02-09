@@ -12,13 +12,6 @@ namespace Nocturne.Infrastructure.Data;
 /// </summary>
 public class NocturneDbContext : DbContext
 {
-    // Static default values to avoid EF Core PendingModelChangesWarning
-    // Using instance-creating expressions like new List<string>() causes EF to detect
-    // "model changes" on every build since it compares by reference
-    private static readonly List<string> EmptyStringList = [];
-    private static readonly List<string> DefaultOidcScopes = ["openid", "profile", "email"];
-    private static readonly List<string> DefaultOidcRoles = ["readable"];
-
     /// <summary>
     /// Initializes a new instance of the NocturneDbContext class
     /// </summary>
@@ -1723,7 +1716,7 @@ public class NocturneDbContext : DbContext
         // Configure Role entity defaults
         modelBuilder.Entity<RoleEntity>(entity =>
         {
-            entity.Property(e => e.Permissions).HasDefaultValue(EmptyStringList);
+            entity.Property(e => e.Permissions).HasDefaultValueSql("'[]'::jsonb");
             entity.Property(e => e.IsSystemRole).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity
@@ -1763,8 +1756,8 @@ public class NocturneDbContext : DbContext
         {
             entity
                 .Property(e => e.Scopes)
-                .HasDefaultValue(DefaultOidcScopes);
-            entity.Property(e => e.DefaultRoles).HasDefaultValue(DefaultOidcRoles);
+                .HasDefaultValueSql("'[\"openid\",\"profile\",\"email\"]'::jsonb");
+            entity.Property(e => e.DefaultRoles).HasDefaultValueSql("'[\"readable\"]'::jsonb");
             entity.Property(e => e.ClaimMappingsJson).HasDefaultValue("{}");
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
@@ -1888,7 +1881,7 @@ public class NocturneDbContext : DbContext
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
             entity.Property(e => e.GrantType).HasDefaultValue(OAuthGrantTypes.App);
-            entity.Property(e => e.Scopes).HasDefaultValue(EmptyStringList);
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
@@ -1934,7 +1927,7 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<OAuthDeviceCodeEntity>(entity =>
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
-            entity.Property(e => e.Scopes).HasDefaultValue(EmptyStringList);
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
             entity.Property(e => e.Interval).HasDefaultValue(5);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -1949,7 +1942,7 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<OAuthAuthorizationCodeEntity>(entity =>
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
-            entity.Property(e => e.Scopes).HasDefaultValue(EmptyStringList);
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
@@ -1969,7 +1962,7 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<FollowerInviteEntity>(entity =>
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
-            entity.Property(e => e.Scopes).HasDefaultValue(EmptyStringList);
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
             entity.Property(e => e.UseCount).HasDefaultValue(0);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 

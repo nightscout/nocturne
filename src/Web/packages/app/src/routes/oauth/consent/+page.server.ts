@@ -1,69 +1,8 @@
 import type { PageServerLoad, Actions } from "./$types";
 import { redirect, error } from "@sveltejs/kit";
-import { env } from "$env/dynamic/private";
-import { env as publicEnv } from "$env/dynamic/public";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { createHash } from "crypto";
+import { getClientInfo } from "../oauth.remote";
 
-/**
- * Get the API base URL from environment configuration.
- */
-function getApiBaseUrl(): string {
-  const url = env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL;
-  if (!url) {
-    throw error(500, "API URL not configured");
-  }
-  return url;
-}
-
-/**
- * Get the hashed API secret for backend authentication.
- */
-function getHashedApiSecret(): string | null {
-  const apiSecret = env.API_SECRET;
-  return apiSecret
-    ? createHash("sha1").update(apiSecret).digest("hex").toLowerCase()
-    : null;
-}
-
-/**
- * Build request headers that include auth cookies and the API secret,
- * matching the pattern used by the proxy handler in hooks.server.ts.
- */
-function buildBackendHeaders(
-  cookies: import("@sveltejs/kit").Cookies,
-  contentType?: string
-): Record<string, string> {
-  const headers: Record<string, string> = {};
-
-  if (contentType) {
-    headers["Content-Type"] = contentType;
-  }
-
-  // Forward auth cookies
-  const accessToken = cookies.get(AUTH_COOKIE_NAMES.accessToken);
-  const refreshToken = cookies.get(AUTH_COOKIE_NAMES.refreshToken);
-  const cookieParts: string[] = [];
-  if (accessToken) {
-    cookieParts.push(`${AUTH_COOKIE_NAMES.accessToken}=${accessToken}`);
-  }
-  if (refreshToken) {
-    cookieParts.push(`${AUTH_COOKIE_NAMES.refreshToken}=${refreshToken}`);
-  }
-  if (cookieParts.length > 0) {
-    headers["Cookie"] = cookieParts.join("; ");
-  }
-
-  // Include API secret if configured
-  const hashedSecret = getHashedApiSecret();
-  if (hashedSecret) {
-    headers["api-secret"] = hashedSecret;
-  }
-
-  return headers;
-}
-
-export const load: PageServerLoad = async ({ url, locals, cookies }) => {
+export const load: PageServerLoad = async ({ url, locals }) => {
   // The OAuth authorize endpoint redirects here only after confirming
   // the user is authenticated. Redirect to login if the session expired.
   if (!locals.isAuthenticated || !locals.user) {
@@ -81,38 +20,8 @@ export const load: PageServerLoad = async ({ url, locals, cookies }) => {
     throw error(400, "Missing required OAuth parameters.");
   }
 
-  // Fetch client info from the backend
-  const apiBaseUrl = getApiBaseUrl();
-  const clientInfoUrl = `${apiBaseUrl}/oauth/client-info?client_id=${encodeURIComponent(clientId)}`;
-
-  let clientInfo: {
-    clientId: string;
-    displayName: string | null;
-    isKnown: boolean;
-    homepage: string | null;
-  } = {
-    clientId,
-    displayName: null,
-    isKnown: false,
-    homepage: null,
-  };
-
-  try {
-    const response = await fetch(clientInfoUrl, {
-      headers: buildBackendHeaders(cookies),
-    });
-    if (response.ok) {
-      const data = await response.json();
-      clientInfo = {
-        clientId: data.clientId ?? clientId,
-        displayName: data.displayName ?? null,
-        isKnown: data.isKnown ?? false,
-        homepage: data.homepage ?? null,
-      };
-    }
-  } catch (e) {
-    console.error("Failed to fetch client info:", e);
-  }
+  // Fetch client info using the remote function
+  const clientInfo = await getClientInfo({ clientId });
 
   // Optional: previously-approved scopes for scope upgrade flows
   const existingScopes = url.searchParams.get("existing_scopes") ?? "";
@@ -123,21 +32,26 @@ export const load: PageServerLoad = async ({ url, locals, cookies }) => {
     scope,
     state,
     codeChallenge,
-    clientInfo,
+    clientInfo: {
+      clientId: clientInfo.clientId ?? clientId,
+      displayName: clientInfo.displayName ?? null,
+      isKnown: clientInfo.isKnown ?? false,
+      homepage: clientInfo.homepage ?? null,
+    },
     existingScopes,
   };
 };
 
 export const actions: Actions = {
-  default: async ({ request, cookies, locals }) => {
+  default: async ({ request, fetch, locals }) => {
     if (!locals.isAuthenticated) {
       throw redirect(303, "/auth/login");
     }
 
     const formData = await request.formData();
-    const apiBaseUrl = getApiBaseUrl();
+    const { apiClient } = locals;
 
-    // Build URL-encoded body matching ConsentApprovalRequest field names
+    // Build URL-encoded body for the OAuth authorize endpoint
     const body = new URLSearchParams();
     body.set("client_id", (formData.get("client_id") as string) ?? "");
     body.set("redirect_uri", (formData.get("redirect_uri") as string) ?? "");
@@ -146,9 +60,13 @@ export const actions: Actions = {
     body.set("code_challenge", (formData.get("code_challenge") as string) ?? "");
     body.set("approved", (formData.get("approved") as string) ?? "false");
 
-    const response = await fetch(`${apiBaseUrl}/oauth/authorize`, {
+    // Use the apiClient's baseUrl but make a direct fetch with redirect: "manual"
+    // because the NSwag client doesn't support capturing 302 redirects
+    const response = await fetch(`${apiClient.baseUrl}/oauth/authorize`, {
       method: "POST",
-      headers: buildBackendHeaders(cookies, "application/x-www-form-urlencoded"),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
       body: body.toString(),
       redirect: "manual",
     });

@@ -196,6 +196,8 @@ msgstr "Reason for this treatment"
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -1055,6 +1057,7 @@ msgstr "Comparison Error"
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/grants/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Unknown"
@@ -9194,6 +9197,7 @@ msgid "Description of this role's purpose"
 msgstr "Description of this role's purpose"
 
 #: src/routes/settings/admin/+page.svelte
+#: src/routes/settings/grants/+page.svelte
 msgid "Permissions"
 msgstr "Permissions"
 
@@ -11263,6 +11267,7 @@ msgid "Safe to run multiple times"
 msgstr "Safe to run multiple times"
 
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/grants/+page.svelte
 msgid "Done"
 msgstr "Done"
 
@@ -13312,3 +13317,569 @@ msgstr "<0/> Viewing data for"
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "My Data"
 msgstr "My Data"
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Content-Type"
+msgstr "Content-Type"
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Cookie"
+msgstr "Cookie"
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "Missing grant ID."
+msgstr "Missing grant ID."
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Grant not found. It may have already been revoked."
+msgstr "Grant not found. It may have already been revoked."
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "An unexpected error occurred. Please try again."
+msgstr "An unexpected error occurred. Please try again."
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "Could not reach the server. Please try again."
+msgstr "Could not reach the server. Please try again."
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Email address is required."
+msgstr "Email address is required."
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "At least one scope must be selected."
+msgstr "At least one scope must be selected."
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Invalid request. Please check the details."
+msgstr "Invalid request. Please check the details."
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "A follower grant already exists for this email."
+msgstr "A follower grant already exists for this email."
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Grant not found."
+msgstr "Grant not found."
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "Invalid request."
+msgstr "Invalid request."
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Missing invite ID."
+msgstr "Missing invite ID."
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View glucose readings"
+msgstr "View glucose readings"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View and record glucose readings"
+msgstr "View and record glucose readings"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View treatments"
+msgstr "View treatments"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View and record treatments"
+msgstr "View and record treatments"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View device status"
+msgstr "View device status"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View and update device status"
+msgstr "View and update device status"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View profile settings"
+msgstr "View profile settings"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View and update profile settings"
+msgstr "View and update profile settings"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View notifications"
+msgstr "View notifications"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "Manage notifications"
+msgstr "Manage notifications"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View reports and analytics"
+msgstr "View reports and analytics"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View basic account info"
+msgstr "View basic account info"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "Manage sharing settings"
+msgstr "Manage sharing settings"
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "View all health data (read-only)"
+msgstr "View all health data (read-only)"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "Full access including delete"
+msgstr "Full access including delete"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Grants - Settings - Nocturne"
+msgstr "Grants - Settings - Nocturne"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Grants"
+msgstr "Grants"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Manage applications and followers that have access to your data"
+msgstr "Manage applications and followers that have access to your data"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Grant revoked successfully."
+msgstr "Grant revoked successfully."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Follower added successfully."
+msgstr "Follower added successfully."
+
+#~ msgid "Grant updated successfully."
+#~ msgstr "Grant updated successfully."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Connected Apps"
+msgstr "<0/> Connected Apps"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Followers"
+msgstr "<0/> Followers"
+
+#: src/routes/settings/grants/+page.svelte
+msgid ""
+"No connected applications. When you authorize apps to access your\n"
+"data, they will appear here."
+msgstr ""
+"No connected applications. When you authorize apps to access your\n"
+"data, they will appear here."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Verified"
+msgstr "<0/> Verified"
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Revoke"
+msgstr "<0/> Revoke"
+
+#. placeholder {0}: formatDate(grant.createdAt)
+#. placeholder {0}: formatDate(grant.createdAt)
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Created {0}"
+msgstr "<0/> Created {0}"
+
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Last used {0}"
+msgstr "<0/> Last used {0}"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Share your data with caregivers and family members"
+msgstr "Share your data with caregivers and family members"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Create Invite Link"
+msgstr "<0/> Create Invite Link"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Add by Email"
+msgstr "<0/> Add by Email"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Create Invite Link"
+msgstr "Create Invite Link"
+
+#: src/routes/settings/grants/+page.svelte
+msgid ""
+"Generate a shareable link. Anyone with this link can accept the invite\n"
+"after signing in."
+msgstr ""
+"Generate a shareable link. Anyone with this link can accept the invite\n"
+"after signing in."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Invite link created! Share it with your friend or family member."
+msgstr "Invite link created! Share it with your friend or family member."
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "Label (optional)"
+msgstr "Label (optional)"
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "Data to share"
+msgstr "Data to share"
+
+#~ msgid "Create Link"
+#~ msgstr "Create Link"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Pending Invites"
+msgstr "<0/> Pending Invites"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Invite Link"
+msgstr "Invite Link"
+
+#. placeholder {0}: invite.useCount
+#. placeholder {1}: invite.maxUses
+#: src/routes/settings/grants/+page.svelte
+msgid "· {0}/{1} uses"
+msgstr "· {0}/{1} uses"
+
+#. placeholder {0}: formatDate(invite.expiresAt)
+#: src/routes/settings/grants/+page.svelte
+msgid "Expires {0} <0/>"
+msgstr "Expires {0} <0/>"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Add a Follower"
+msgstr "Add a Follower"
+
+#: src/routes/settings/grants/+page.svelte
+msgid ""
+"Grant someone read access to your data by entering their email\n"
+"and selecting which data to share."
+msgstr ""
+"Grant someone read access to your data by entering their email\n"
+"and selecting which data to share."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Email address"
+msgstr "Email address"
+
+#~ msgid "Add Follower"
+#~ msgstr "Add Follower"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "No followers. Share your data with caregivers by adding a follower."
+msgstr "No followers. Share your data with caregivers by adding a follower."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Shared Data"
+msgstr "Shared Data"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Failed to revoke grant. Please try again."
+msgstr "Failed to revoke grant. Please try again."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Failed to add follower. Please try again."
+msgstr "Failed to add follower. Please try again."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Failed to create invite. Please try again."
+msgstr "Failed to create invite. Please try again."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Invite revoked successfully."
+msgstr "Invite revoked successfully."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Failed to revoke invite. Please try again."
+msgstr "Failed to revoke invite. Please try again."
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Create Link"
+msgstr "<0/> Create Link"
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Add Follower"
+msgstr "<0/> Add Follower"
+
+#: src/routes/invite/[token]/+page.server.ts
+msgid "Invite not found or has expired."
+msgstr "Invite not found or has expired."
+
+#: src/routes/invite/[token]/+page.server.ts
+msgid "Failed to accept invite."
+msgstr "Failed to accept invite."
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Accept Invite - Nocturne"
+msgstr "Accept Invite - Nocturne"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Not Found"
+msgstr "Invite Not Found"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link is invalid or has expired."
+msgstr "This invite link is invalid or has expired."
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/invite/[token]/+page.svelte
+msgid "Go to Login"
+msgstr "Go to Login"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Expired"
+msgstr "Invite Expired"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Revoked"
+msgstr "Invite Revoked"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Unavailable"
+msgstr "Invite Unavailable"
+
+#. placeholder {0}: invite.ownerName ?? "the data owner"
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link has expired. Please ask {0} for a new invite."
+msgstr "This invite link has expired. Please ask {0} for a new invite."
+
+#. placeholder {0}: invite.ownerName ?? "the data owner"
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link has been revoked by {0}."
+msgstr "This invite link has been revoked by {0}."
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link is no longer available."
+msgstr "This invite link is no longer available."
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "You're Invited"
+msgstr "You're Invited"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Someone"
+msgstr "Someone"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "<0/> wants to share their health data with you <1/>"
+msgstr "<0/> wants to share their health data with you <1/>"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "You'll be able to see:"
+msgstr "You'll be able to see:"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "<0/> Accept Invite"
+msgstr "<0/> Accept Invite"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Sign in or create an account to accept this invite"
+msgstr "Sign in or create an account to accept this invite"
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Sign In to Accept"
+msgstr "Sign In to Accept"
+
+#. placeholder {0}: new Date(invite.expiresAt).toLocaleDateString()
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite expires on {0}"
+msgstr "This invite expires on {0}"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "View your glucose readings"
+msgstr "View your glucose readings"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "View your treatments"
+msgstr "View your treatments"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "View your profile settings"
+msgstr "View your profile settings"
+
+#. placeholder {0}: appName
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorize {0}"
+msgstr "Authorize {0}"
+
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Link a Device"
+msgstr "Link a Device"
+
+#. placeholder {0}: deviceInfo ? `Authorize ${appName}` : "Link a Device"
+#: src/routes/oauth/device/+page.svelte
+msgid "{0} - Nocturne"
+msgstr "{0} - Nocturne"
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Device Authorized"
+msgstr "Device Authorized"
+
+#: src/routes/oauth/device/+page.svelte
+msgid "You can close this window and return to your device."
+msgstr "You can close this window and return to your device."
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorization Denied"
+msgstr "Authorization Denied"
+
+#: src/routes/oauth/device/+page.svelte
+msgid "The device will not be granted access."
+msgstr "The device will not be granted access."
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorize Application"
+msgstr "Authorize Application"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"<0/> wants to access\n"
+"your Nocturne data."
+msgstr ""
+"<0/> wants to access\n"
+"your Nocturne data."
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"This application is not in the Nocturne known app directory. Only\n"
+"approve if you trust this application."
+msgstr ""
+"This application is not in the Nocturne known app directory. Only\n"
+"approve if you trust this application."
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "This application is requesting permission to:"
+msgstr "This application is requesting permission to:"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "This app cannot delete your data."
+msgstr "This app cannot delete your data."
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"This app is requesting full access, including the ability to delete\n"
+"data."
+msgstr ""
+"This app is requesting full access, including the ability to delete\n"
+"data."
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Deny"
+msgstr "Deny"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Approve"
+msgstr "Approve"
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Enter the code shown on your device"
+msgstr "Enter the code shown on your device"
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Continue"
+msgstr "Continue"
+
+#. placeholder {0}: appName
+#: src/routes/oauth/consent/+page.svelte
+msgid "Authorize {0} - Nocturne"
+msgstr "Authorize {0} - Nocturne"
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Additional Permissions"
+msgstr "Additional Permissions"
+
+#: src/routes/oauth/consent/+page.svelte
+msgid ""
+"<0/> is requesting\n"
+"additional access to your Nocturne data."
+msgstr ""
+"<0/> is requesting\n"
+"additional access to your Nocturne data."
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "New permissions requested"
+msgstr "New permissions requested"
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Previously approved"
+msgstr "Previously approved"
+
+#: src/routes/oauth/device/+page.server.ts
+msgid "Please enter a device code."
+msgstr "Please enter a device code."
+
+#: src/routes/oauth/device/+page.server.ts
+msgid "Invalid or expired device code. Please check the code and try again."
+msgstr "Invalid or expired device code. Please check the code and try again."
+
+#~ msgid "Could not reach the authorization server. Please try again."
+#~ msgstr "Could not reach the authorization server. Please try again."
+
+#: src/routes/oauth/device/+page.server.ts
+#: src/routes/oauth/device/+page.server.ts
+msgid "The device code has expired or is no longer valid."
+msgstr "The device code has expired or is no longer valid."
+
+#: src/routes/oauth/consent/+page.server.ts
+msgid "Location"
+msgstr "Location"

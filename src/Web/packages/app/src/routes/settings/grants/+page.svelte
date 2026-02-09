@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { invalidateAll } from "$app/navigation";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as Tabs from "$lib/components/ui/tabs";
@@ -19,11 +17,17 @@
     Clock,
     Link,
     Copy,
+    Loader2,
   } from "lucide-svelte";
   import { formatDate } from "$lib/utils/formatting";
-  import type { Grant, Invite } from "./+page.server";
-
-  const { data, form } = $props();
+  import {
+    getGrants,
+    getInvites,
+    revokeGrant,
+    addFollower,
+    createInvite,
+    revokeInvite,
+  } from "./grants.remote";
 
   /** Human-readable descriptions for each OAuth scope. */
   const scopeDescriptions: Record<string, string> = {
@@ -54,12 +58,18 @@
     "reports.read",
   ] as const;
 
-  const grants = $derived((data.grants ?? []) as Grant[]);
-  const invites = $derived((data.invites ?? []) as Invite[]);
+  // Remote queries
+  const grantsQuery = $derived(getGrants());
+  const invitesQuery = $derived(getInvites());
+
+  // Derived data from queries
+  const grants = $derived(grantsQuery.current ?? []);
+  const invites = $derived(invitesQuery.current ?? []);
   const activeInvites = $derived(invites.filter((i) => i.isValid));
   const appGrants = $derived(grants.filter((g) => g.grantType === "app"));
   const followerGrants = $derived(grants.filter((g) => g.grantType === "follower"));
 
+  // UI state
   let activeTab = $state("apps");
   let showAddFollower = $state(false);
   let showCreateInvite = $state(false);
@@ -85,6 +95,14 @@
   let createdInviteUrl = $state<string | null>(null);
   let copiedInvite = $state(false);
 
+  // Loading/error states
+  let isRevoking = $state<string | null>(null);
+  let isAddingFollower = $state(false);
+  let isCreatingInvite = $state(false);
+  let isRevokingInvite = $state<string | null>(null);
+  let errorMessage = $state<string | null>(null);
+  let successMessage = $state<string | null>(null);
+
   const selectedScopeList = $derived(
     Object.entries(selectedScopes)
       .filter(([, v]) => v)
@@ -96,29 +114,6 @@
       .filter(([, v]) => v)
       .map(([k]) => k)
   );
-
-  const formError = $derived(
-    form && "error" in form ? (form.error as string) : null
-  );
-
-  const formAction = $derived(
-    form && "action" in form ? (form.action as string) : null
-  );
-
-  const formSuccess = $derived(
-    form && "success" in form && form.success === true
-  );
-
-  const inviteUrl = $derived(
-    form && "inviteUrl" in form ? (form.inviteUrl as string) : null
-  );
-
-  // Show invite URL when created
-  $effect(() => {
-    if (formAction === "createInvite" && formSuccess && inviteUrl) {
-      createdInviteUrl = inviteUrl;
-    }
-  });
 
   /** Reset the add-follower form to its defaults. */
   function resetFollowerForm() {
@@ -133,6 +128,7 @@
       "reports.read": false,
     };
     showAddFollower = false;
+    errorMessage = null;
   }
 
   /** Reset the create-invite form to its defaults. */
@@ -148,6 +144,7 @@
     };
     showCreateInvite = false;
     createdInviteUrl = null;
+    errorMessage = null;
   }
 
   /** Copy invite URL to clipboard */
@@ -156,6 +153,86 @@
       await navigator.clipboard.writeText(createdInviteUrl);
       copiedInvite = true;
       setTimeout(() => (copiedInvite = false), 2000);
+    }
+  }
+
+  /** Clear messages after a delay */
+  function clearMessages() {
+    setTimeout(() => {
+      successMessage = null;
+      errorMessage = null;
+    }, 3000);
+  }
+
+  /** Handle revoking a grant */
+  async function handleRevokeGrant(grantId: string) {
+    isRevoking = grantId;
+    errorMessage = null;
+    try {
+      await revokeGrant({ grantId });
+      successMessage = "Grant revoked successfully.";
+      clearMessages();
+    } catch (err) {
+      errorMessage = "Failed to revoke grant. Please try again.";
+      clearMessages();
+    } finally {
+      isRevoking = null;
+    }
+  }
+
+  /** Handle adding a follower */
+  async function handleAddFollower() {
+    isAddingFollower = true;
+    errorMessage = null;
+    try {
+      await addFollower({
+        followerEmail,
+        scopes: selectedScopeList,
+        label: followerLabel || undefined,
+      });
+      successMessage = "Follower added successfully.";
+      resetFollowerForm();
+      clearMessages();
+    } catch (err) {
+      errorMessage = "Failed to add follower. Please try again.";
+    } finally {
+      isAddingFollower = false;
+    }
+  }
+
+  /** Handle creating an invite */
+  async function handleCreateInvite() {
+    isCreatingInvite = true;
+    errorMessage = null;
+    try {
+      const result = await createInvite({
+        scopes: inviteScopeList,
+        label: inviteLabel || undefined,
+        expiresInDays: 7,
+      });
+      if (result.inviteUrl) {
+        createdInviteUrl = result.inviteUrl;
+      }
+    } catch (err) {
+      errorMessage = "Failed to create invite. Please try again.";
+    } finally {
+      isCreatingInvite = false;
+    }
+  }
+
+  /** Handle revoking an invite */
+  async function handleRevokeInvite(inviteId: string) {
+    isRevokingInvite = inviteId;
+    errorMessage = null;
+    try {
+      await revokeInvite({ inviteId });
+      successMessage = "Invite revoked successfully.";
+      clearMessages();
+    } catch (err) {
+      errorMessage = "Failed to revoke invite. Please try again.";
+      clearMessages();
+    } finally {
+      isRevokingInvite = null;
     }
   }
 </script>
@@ -172,44 +249,22 @@
     </p>
   </div>
 
-  {#if formError}
+  {#if errorMessage}
     <div
       class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
     >
       <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-      <p class="text-sm text-destructive">{formError}</p>
+      <p class="text-sm text-destructive">{errorMessage}</p>
     </div>
   {/if}
 
-  {#if formSuccess && formAction === "revoke"}
+  {#if successMessage}
     <div
       class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
     >
       <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
       <p class="text-sm text-green-800 dark:text-green-200">
-        Grant revoked successfully.
-      </p>
-    </div>
-  {/if}
-
-  {#if formSuccess && formAction === "addFollower"}
-    <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
-    >
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">
-        Follower added successfully.
-      </p>
-    </div>
-  {/if}
-
-  {#if formSuccess && formAction === "updateGrant"}
-    <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
-    >
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">
-        Grant updated successfully.
+        {successMessage}
       </p>
     </div>
   {/if}
@@ -263,22 +318,21 @@
                     <Card.Description>{grant.label}</Card.Description>
                   {/if}
                 </div>
-                <form
-                  method="POST"
-                  action="?/revoke"
-                  use:enhance={() => {
-                    return async ({ update }) => {
-                      await update();
-                      await invalidateAll();
-                    };
-                  }}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
+                  disabled={isRevoking === grant.id}
+                  onclick={() => handleRevokeGrant(grant.id!)}
                 >
-                  <input type="hidden" name="grant_id" value={grant.id} />
-                  <Button type="submit" variant="outline" size="sm" class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0">
+                  {#if isRevoking === grant.id}
+                    <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  {:else}
                     <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-                    Revoke
-                  </Button>
-                </form>
+                  {/if}
+                  Revoke
+                </Button>
               </div>
             </Card.Header>
             <Card.Content class="space-y-4">
@@ -287,7 +341,7 @@
                   Permissions
                 </p>
                 <ul class="space-y-1.5">
-                  {#each grant.scopes as scope}
+                  {#each grant.scopes ?? [] as scope}
                     <li class="flex items-start gap-2 text-sm">
                       <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                       <span class="text-muted-foreground">
@@ -397,25 +451,12 @@
               </div>
             {:else}
               <!-- Show the create invite form -->
-              <form
-                method="POST"
-                action="?/createInvite"
-                use:enhance={() => {
-                  return async ({ result, update }) => {
-                    await update();
-                    if (result.type === "success") {
-                      await invalidateAll();
-                    }
-                  };
-                }}
-                class="space-y-4"
-              >
+              <div class="space-y-4">
                 <div class="space-y-2">
                   <Label for="invite-label">Label (optional)</Label>
                   <Input
                     id="invite-label"
                     type="text"
-                    name="label"
                     placeholder="e.g. Mom, Endocrinologist"
                     bind:value={inviteLabel}
                   />
@@ -444,18 +485,6 @@
                   </div>
                 </div>
 
-                <input type="hidden" name="scopes" value={inviteScopeList.join(",")} />
-                <input type="hidden" name="expires_in_days" value="7" />
-
-                {#if formError && formAction === "createInvite"}
-                  <div
-                    class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-                  >
-                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                    <p class="text-sm text-destructive">{formError}</p>
-                  </div>
-                {/if}
-
                 <div class="flex gap-3">
                   <Button
                     type="button"
@@ -466,14 +495,18 @@
                     Cancel
                   </Button>
                   <Button
-                    type="submit"
+                    type="button"
                     class="flex-1"
-                    disabled={inviteScopeList.length === 0}
+                    disabled={inviteScopeList.length === 0 || isCreatingInvite}
+                    onclick={handleCreateInvite}
                   >
+                    {#if isCreatingInvite}
+                      <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+                    {/if}
                     Create Link
                   </Button>
                 </div>
-              </form>
+              </div>
             {/if}
           </Card.Content>
         </Card.Root>
@@ -502,21 +535,20 @@
                     {/if}
                   </p>
                 </div>
-                <form
-                  method="POST"
-                  action="?/revokeInvite"
-                  use:enhance={() => {
-                    return async ({ update }) => {
-                      await update();
-                      await invalidateAll();
-                    };
-                  }}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="text-destructive hover:text-destructive"
+                  disabled={isRevokingInvite === invite.id}
+                  onclick={() => handleRevokeInvite(invite.id!)}
                 >
-                  <input type="hidden" name="invite_id" value={invite.id} />
-                  <Button type="submit" variant="ghost" size="sm" class="text-destructive hover:text-destructive">
+                  {#if isRevokingInvite === invite.id}
+                    <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                  {:else}
                     <Trash2 class="h-3.5 w-3.5" />
-                  </Button>
-                </form>
+                  {/if}
+                </Button>
               </div>
             {/each}
           </Card.Content>
@@ -533,28 +565,13 @@
             </Card.Description>
           </Card.Header>
           <Card.Content>
-            <form
-              method="POST"
-              action="?/addFollower"
-              use:enhance={() => {
-                return async ({ result, update }) => {
-                  await update();
-                  if (result.type === "success") {
-                    resetFollowerForm();
-                    await invalidateAll();
-                  }
-                };
-              }}
-              class="space-y-4"
-            >
+            <div class="space-y-4">
               <div class="space-y-2">
                 <Label for="follower-email">Email address</Label>
                 <Input
                   id="follower-email"
                   type="email"
-                  name="follower_email"
                   placeholder="caregiver@example.com"
-                  required
                   bind:value={followerEmail}
                 />
               </div>
@@ -564,7 +581,6 @@
                 <Input
                   id="follower-label"
                   type="text"
-                  name="label"
                   placeholder="e.g. Mom, Endocrinologist"
                   bind:value={followerLabel}
                 />
@@ -593,17 +609,6 @@
                 </div>
               </div>
 
-              <input type="hidden" name="scopes" value={selectedScopeList.join(",")} />
-
-              {#if formError && formAction === "addFollower"}
-                <div
-                  class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-                >
-                  <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                  <p class="text-sm text-destructive">{formError}</p>
-                </div>
-              {/if}
-
               <div class="flex gap-3">
                 <Button
                   type="button"
@@ -614,14 +619,18 @@
                   Cancel
                 </Button>
                 <Button
-                  type="submit"
+                  type="button"
                   class="flex-1"
-                  disabled={selectedScopeList.length === 0 || !followerEmail}
+                  disabled={selectedScopeList.length === 0 || !followerEmail || isAddingFollower}
+                  onclick={handleAddFollower}
                 >
+                  {#if isAddingFollower}
+                    <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+                  {/if}
                   Add Follower
                 </Button>
               </div>
-            </form>
+            </div>
           </Card.Content>
         </Card.Root>
       {/if}
@@ -662,22 +671,21 @@
                     {/if}
                   </Card.Description>
                 </div>
-                <form
-                  method="POST"
-                  action="?/revoke"
-                  use:enhance={() => {
-                    return async ({ update }) => {
-                      await update();
-                      await invalidateAll();
-                    };
-                  }}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
+                  disabled={isRevoking === grant.id}
+                  onclick={() => handleRevokeGrant(grant.id!)}
                 >
-                  <input type="hidden" name="grant_id" value={grant.id} />
-                  <Button type="submit" variant="outline" size="sm" class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0">
+                  {#if isRevoking === grant.id}
+                    <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  {:else}
                     <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-                    Revoke
-                  </Button>
-                </form>
+                  {/if}
+                  Revoke
+                </Button>
               </div>
             </Card.Header>
             <Card.Content class="space-y-4">
@@ -686,7 +694,7 @@
                   Shared Data
                 </p>
                 <ul class="space-y-1.5">
-                  {#each grant.scopes as scope}
+                  {#each grant.scopes ?? [] as scope}
                     <li class="flex items-start gap-2 text-sm">
                       <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                       <span class="text-muted-foreground">
