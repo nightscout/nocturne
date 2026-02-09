@@ -1,14 +1,12 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
-  import * as Tabs from "$lib/components/ui/tabs";
   import { Badge } from "$lib/components/ui/badge";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import {
-    Shield,
     Users,
     Trash2,
     Plus,
@@ -27,7 +25,7 @@
     addFollower,
     createInvite,
     revokeInvite,
-  } from "./grants.remote";
+  } from "$lib/data/oauth.remote";
 
   /** Human-readable descriptions for each OAuth scope. */
   const scopeDescriptions: Record<string, string> = {
@@ -66,15 +64,16 @@
   const grants = $derived(grantsQuery.current ?? []);
   const invites = $derived(invitesQuery.current ?? []);
   const activeInvites = $derived(invites.filter((i) => i.isValid));
-  const appGrants = $derived(grants.filter((g) => g.grantType === "app"));
   const followerGrants = $derived(grants.filter((g) => g.grantType === "follower"));
 
   // UI state
-  let activeTab = $state("apps");
   let showAddFollower = $state(false);
   let showCreateInvite = $state(false);
   let followerEmail = $state("");
   let followerLabel = $state("");
+  let followerDisplayName = $state("");
+  let createNewAccount = $state(false);
+  let temporaryPassword = $state("");
   let inviteLabel = $state("");
   let selectedScopes = $state<Record<string, boolean>>({
     "entries.read": true,
@@ -92,6 +91,7 @@
     "notifications.read": false,
     "reports.read": false,
   });
+  let allowMultipleUses = $state(false);
   let createdInviteUrl = $state<string | null>(null);
   let copiedInvite = $state(false);
 
@@ -119,6 +119,9 @@
   function resetFollowerForm() {
     followerEmail = "";
     followerLabel = "";
+    followerDisplayName = "";
+    createNewAccount = false;
+    temporaryPassword = "";
     selectedScopes = {
       "entries.read": true,
       "treatments.read": false,
@@ -142,6 +145,7 @@
       "notifications.read": false,
       "reports.read": false,
     };
+    allowMultipleUses = false;
     showCreateInvite = false;
     createdInviteUrl = null;
     errorMessage = null;
@@ -189,6 +193,8 @@
         followerEmail,
         scopes: selectedScopeList,
         label: followerLabel || undefined,
+        temporaryPassword: createNewAccount ? temporaryPassword : undefined,
+        followerDisplayName: createNewAccount ? followerDisplayName : undefined,
       });
       successMessage = "Follower added successfully.";
       resetFollowerForm();
@@ -209,6 +215,7 @@
         scopes: inviteScopeList,
         label: inviteLabel || undefined,
         expiresInDays: 7,
+        maxUses: allowMultipleUses ? undefined : 1,
       });
       if (result.inviteUrl) {
         createdInviteUrl = result.inviteUrl;
@@ -238,14 +245,14 @@
 </script>
 
 <svelte:head>
-  <title>Grants - Settings - Nocturne</title>
+  <title>Followers & Sharing - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="w-full py-6 space-y-6">
   <div class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight">Grants</h1>
+    <h1 class="text-2xl font-bold tracking-tight">Followers & Sharing</h1>
     <p class="text-muted-foreground">
-      Manage applications and followers that have access to your data
+      Share your data with caregivers and family members
     </p>
   </div>
 
@@ -269,111 +276,7 @@
     </div>
   {/if}
 
-  <Tabs.Root bind:value={activeTab}>
-    <Tabs.List class="w-full">
-      <Tabs.Trigger value="apps">
-        <Shield class="h-4 w-4" />
-        Connected Apps
-      </Tabs.Trigger>
-      <Tabs.Trigger value="followers">
-        <Users class="h-4 w-4" />
-        Followers
-      </Tabs.Trigger>
-    </Tabs.List>
-
-    <!-- Connected Apps Tab -->
-    <Tabs.Content value="apps" class="space-y-4 pt-4">
-      {#if appGrants.length === 0}
-        <Card.Root>
-          <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
-            <div
-              class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-            >
-              <Shield class="h-6 w-6 text-muted-foreground" />
-            </div>
-            <p class="text-sm text-muted-foreground max-w-sm">
-              No connected applications. When you authorize apps to access your
-              data, they will appear here.
-            </p>
-          </Card.Content>
-        </Card.Root>
-      {:else}
-        {#each appGrants as grant (grant.id)}
-          <Card.Root>
-            <Card.Header>
-              <div class="flex items-start justify-between gap-4">
-                <div class="space-y-1 flex-1 min-w-0">
-                  <Card.Title class="flex items-center gap-2 flex-wrap">
-                    <span class="truncate">
-                      {grant.clientDisplayName ?? grant.clientId}
-                    </span>
-                    {#if grant.isKnownClient}
-                      <Badge variant="secondary" class="shrink-0">
-                        <Check class="mr-1 h-3 w-3" />
-                        Verified
-                      </Badge>
-                    {/if}
-                  </Card.Title>
-                  {#if grant.label}
-                    <Card.Description>{grant.label}</Card.Description>
-                  {/if}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
-                  disabled={isRevoking === grant.id}
-                  onclick={() => handleRevokeGrant(grant.id!)}
-                >
-                  {#if isRevoking === grant.id}
-                    <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  {:else}
-                    <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-                  {/if}
-                  Revoke
-                </Button>
-              </div>
-            </Card.Header>
-            <Card.Content class="space-y-4">
-              <div>
-                <p class="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Permissions
-                </p>
-                <ul class="space-y-1.5">
-                  {#each grant.scopes ?? [] as scope}
-                    <li class="flex items-start gap-2 text-sm">
-                      <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span class="text-muted-foreground">
-                        {scopeDescriptions[scope] ?? scope}
-                      </span>
-                    </li>
-                  {/each}
-                </ul>
-              </div>
-
-              <Separator />
-
-              <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-                <span class="flex items-center gap-1.5">
-                  <Clock class="h-3 w-3" />
-                  Created {formatDate(grant.createdAt)}
-                </span>
-                {#if grant.lastUsedAt}
-                  <span class="flex items-center gap-1.5">
-                    <Clock class="h-3 w-3" />
-                    Last used {formatDate(grant.lastUsedAt)}
-                  </span>
-                {/if}
-              </div>
-            </Card.Content>
-          </Card.Root>
-        {/each}
-      {/if}
-    </Tabs.Content>
-
-    <!-- Followers Tab -->
-    <Tabs.Content value="followers" class="space-y-4 pt-4">
+  <div class="space-y-4">
       <div class="flex items-center justify-between gap-4">
         <p class="text-sm text-muted-foreground">
           Share your data with caregivers and family members
@@ -485,6 +388,27 @@
                   </div>
                 </div>
 
+                <div class="flex items-start gap-2 rounded-md border p-3 bg-muted/30">
+                  <Checkbox
+                    id="allow-multiple-uses"
+                    checked={allowMultipleUses}
+                    onCheckedChange={(checked) => {
+                      allowMultipleUses = checked === true;
+                    }}
+                  />
+                  <div class="flex-1">
+                    <label
+                      for="allow-multiple-uses"
+                      class="text-sm font-medium cursor-pointer select-none"
+                    >
+                      Allow multiple uses
+                    </label>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                      By default, invite links can only be used once. Enable this to allow unlimited uses.
+                    </p>
+                  </div>
+                </div>
+
                 <div class="flex gap-3">
                   <Button
                     type="button"
@@ -524,7 +448,7 @@
           <Card.Content class="space-y-3">
             {#each activeInvites as invite (invite.id)}
               <div class="flex items-center justify-between gap-4 rounded-md border p-3">
-                <div class="space-y-1">
+                <div class="space-y-1 flex-1 min-w-0">
                   <p class="text-sm font-medium">
                     {invite.label ?? "Invite Link"}
                   </p>
@@ -532,14 +456,32 @@
                     Expires {formatDate(invite.expiresAt)}
                     {#if invite.maxUses}
                       &middot; {invite.useCount}/{invite.maxUses} uses
+                    {:else}
+                      &middot; {invite.useCount} {invite.useCount === 1 ? 'use' : 'uses'}
                     {/if}
                   </p>
+                  {#if invite.usedBy && invite.usedBy.length > 0}
+                    <div class="mt-2 pt-2 border-t space-y-1">
+                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Used by
+                      </p>
+                      {#each invite.usedBy as usage}
+                        <p class="text-xs text-foreground">
+                          <Check class="inline h-3 w-3 mr-1 text-primary" />
+                          {usage.followerName ?? usage.followerEmail ?? "Unknown"}
+                          <span class="text-muted-foreground ml-1">
+                            on {formatDate(usage.usedAt)}
+                          </span>
+                        </p>
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  class="text-destructive hover:text-destructive"
+                  class="text-destructive hover:text-destructive shrink-0"
                   disabled={isRevokingInvite === invite.id}
                   onclick={() => handleRevokeInvite(invite.id!)}
                 >
@@ -586,6 +528,54 @@
                 />
               </div>
 
+              <div class="space-y-3 rounded-md border p-4">
+                <div class="flex items-center gap-2">
+                  <Checkbox
+                    id="create-new-account"
+                    checked={createNewAccount}
+                    onCheckedChange={(checked) => {
+                      createNewAccount = checked === true;
+                      if (!checked) {
+                        temporaryPassword = "";
+                        followerDisplayName = "";
+                      }
+                    }}
+                  />
+                  <label
+                    for="create-new-account"
+                    class="text-sm font-medium cursor-pointer select-none"
+                  >
+                    Create new account with temporary password
+                  </label>
+                </div>
+
+                {#if createNewAccount}
+                  <div class="space-y-3 pl-6">
+                    <div class="space-y-2">
+                      <Label for="follower-display-name">Display name (optional)</Label>
+                      <Input
+                        id="follower-display-name"
+                        type="text"
+                        placeholder="e.g. Mom"
+                        bind:value={followerDisplayName}
+                      />
+                    </div>
+                    <div class="space-y-2">
+                      <Label for="temporary-password">Temporary password</Label>
+                      <Input
+                        id="temporary-password"
+                        type="password"
+                        placeholder="Enter a temporary password"
+                        bind:value={temporaryPassword}
+                      />
+                      <p class="text-xs text-muted-foreground">
+                        The follower will be required to change this password on first login.
+                      </p>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+
               <div class="space-y-3">
                 <Label>Data to share</Label>
                 <div class="grid gap-3 sm:grid-cols-2">
@@ -621,7 +611,7 @@
                 <Button
                   type="button"
                   class="flex-1"
-                  disabled={selectedScopeList.length === 0 || !followerEmail || isAddingFollower}
+                  disabled={selectedScopeList.length === 0 || !followerEmail || isAddingFollower || (createNewAccount && !temporaryPassword)}
                   onclick={handleAddFollower}
                 >
                   {#if isAddingFollower}
@@ -723,6 +713,5 @@
           </Card.Root>
         {/each}
       {/if}
-    </Tabs.Content>
-  </Tabs.Root>
+  </div>
 </div>

@@ -163,6 +163,37 @@ public class FollowerInviteInfo
     /// Whether the invite has been revoked
     /// </summary>
     public bool IsRevoked { get; set; }
+
+    /// <summary>
+    /// List of users who have used this invite
+    /// </summary>
+    public List<InviteUsage> UsedBy { get; set; } = new();
+}
+
+/// <summary>
+/// Information about who used an invite.
+/// </summary>
+public class InviteUsage
+{
+    /// <summary>
+    /// The follower's subject ID
+    /// </summary>
+    public Guid FollowerSubjectId { get; set; }
+
+    /// <summary>
+    /// The follower's display name
+    /// </summary>
+    public string? FollowerName { get; set; }
+
+    /// <summary>
+    /// The follower's email
+    /// </summary>
+    public string? FollowerEmail { get; set; }
+
+    /// <summary>
+    /// When the invite was used
+    /// </summary>
+    public DateTime UsedAt { get; set; }
 }
 
 /// <summary>

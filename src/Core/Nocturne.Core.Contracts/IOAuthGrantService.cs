@@ -60,6 +60,7 @@ public interface IOAuthGrantService
         Guid followerSubjectId,
         IEnumerable<string> scopes,
         string? label = null,
+        Guid? createdFromInviteId = null,
         CancellationToken ct = default
     );
 

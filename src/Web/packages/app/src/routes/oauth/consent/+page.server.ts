@@ -62,7 +62,7 @@ export const actions: Actions = {
 
     // Use the apiClient's baseUrl but make a direct fetch with redirect: "manual"
     // because the NSwag client doesn't support capturing 302 redirects
-    const response = await fetch(`${apiClient.baseUrl}/oauth/authorize`, {
+    const response = await fetch(`${apiClient.baseUrl}/api/oauth/authorize`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

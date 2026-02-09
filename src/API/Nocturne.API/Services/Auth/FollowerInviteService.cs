@@ -176,12 +176,13 @@ public class FollowerInviteService : IFollowerInviteService
         if (existingGrant != null)
             return AcceptInviteResult.Failed("already_following", "You are already following this user.");
 
-        // Create the follower grant
+        // Create the follower grant with invite linkage
         var grant = await _grantService.CreateFollowerGrantAsync(
             entity.OwnerSubjectId,
             followerSubjectId,
             entity.Scopes,
             entity.Label,
+            entity.Id,
             ct);
 
         // Increment use count
@@ -202,6 +203,8 @@ public class FollowerInviteService : IFollowerInviteService
     {
         var entities = await _dbContext.FollowerInvites
             .Include(i => i.Owner)
+            .Include(i => i.CreatedGrants)
+                .ThenInclude(g => g.FollowerSubject)
             .Where(i => i.OwnerSubjectId == ownerSubjectId)
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(ct);
@@ -250,6 +253,16 @@ public class FollowerInviteService : IFollowerInviteService
             IsValid = entity.IsValid,
             IsExpired = entity.IsExpired,
             IsRevoked = entity.IsRevoked,
+            UsedBy = entity.CreatedGrants
+                .Where(g => g.RevokedAt == null)
+                .Select(g => new InviteUsage
+                {
+                    FollowerSubjectId = g.FollowerSubjectId ?? Guid.Empty,
+                    FollowerName = g.FollowerSubject?.Name,
+                    FollowerEmail = g.FollowerSubject?.Email,
+                    UsedAt = g.CreatedAt,
+                })
+                .ToList(),
         };
     }
 }

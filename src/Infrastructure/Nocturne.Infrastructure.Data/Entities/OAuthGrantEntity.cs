@@ -86,6 +86,12 @@ public class OAuthGrantEntity
     public Guid? FollowerSubjectId { get; set; }
 
     /// <summary>
+    /// For follower grants created from an invite: the invite ID
+    /// </summary>
+    [Column("created_from_invite_id")]
+    public Guid? CreatedFromInviteId { get; set; }
+
+    /// <summary>
     /// When this grant was revoked (soft delete for audit trail)
     /// </summary>
     [Column("revoked_at")]
@@ -113,6 +119,11 @@ public class OAuthGrantEntity
     /// The follower subject (for follower grants only)
     /// </summary>
     public SubjectEntity? FollowerSubject { get; set; }
+
+    /// <summary>
+    /// The invite this grant was created from (for follower grants only)
+    /// </summary>
+    public FollowerInviteEntity? CreatedFromInvite { get; set; }
 
     /// <summary>
     /// Refresh tokens issued under this grant

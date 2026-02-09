@@ -106,4 +106,9 @@ public class FollowerInviteEntity
     /// The data owner who created this invite
     /// </summary>
     public SubjectEntity? Owner { get; set; }
+
+    /// <summary>
+    /// Grants that were created from this invite
+    /// </summary>
+    public ICollection<OAuthGrantEntity> CreatedGrants { get; set; } = new List<OAuthGrantEntity>();
 }

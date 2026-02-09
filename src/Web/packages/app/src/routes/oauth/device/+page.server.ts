@@ -33,7 +33,15 @@ export const actions: Actions = {
     }
 
     try {
-      const deviceInfo = await getDeviceInfo({ userCode });
+      // Type assertion needed until NSwag client is regenerated with aspire run
+      const deviceInfo = (await getDeviceInfo({ userCode })) as {
+        userCode?: string;
+        clientId?: string;
+        displayName?: string | null;
+        isKnown?: boolean;
+        homepage?: string | null;
+        scopes?: string[];
+      };
       return {
         action: "lookup" as const,
         deviceInfo: {

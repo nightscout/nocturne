@@ -1,5 +1,6 @@
 /**
  * Remote functions for OAuth grants and invites management
+ * Shared across connectors and grants pages
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { z } from "zod";
@@ -75,8 +76,10 @@ export const addFollower = command(
     followerEmail: z.string().email("Valid email is required"),
     scopes: z.array(z.string()).min(1, "At least one scope is required"),
     label: z.string().optional(),
+    temporaryPassword: z.string().optional(),
+    followerDisplayName: z.string().optional(),
   }),
-  async ({ followerEmail, scopes, label }) => {
+  async ({ followerEmail, scopes, label, temporaryPassword, followerDisplayName }) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
@@ -85,6 +88,8 @@ export const addFollower = command(
         followerEmail,
         scopes,
         label: label || undefined,
+        temporaryPassword: temporaryPassword || undefined,
+        followerDisplayName: followerDisplayName || undefined,
       });
       await getGrants().refresh();
       return { success: true };

@@ -1911,7 +1911,7 @@ export class OAuthClient {
      * @param code_challenge_method (optional) 
      */
     authorize(client_id?: string | undefined, redirect_uri?: string | undefined, response_type?: string | undefined, scope?: string | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, code_challenge_method?: string | null | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/authorize?";
+        let url_ = this.baseUrl + "/api/oauth/authorize?";
         if (client_id === null)
             throw new globalThis.Error("The parameter 'client_id' cannot be null.");
         else if (client_id !== undefined)
@@ -1979,7 +1979,7 @@ export class OAuthClient {
      * @param approved (optional) 
      */
     approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/authorize";
+        let url_ = this.baseUrl + "/api/oauth/authorize";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2045,7 +2045,7 @@ export class OAuthClient {
      * @param scope (optional) 
      */
     token(grant_type?: string | undefined, client_id?: string | null | undefined, code?: string | null | undefined, redirect_uri?: string | null | undefined, code_verifier?: string | null | undefined, refresh_token?: string | null | undefined, device_code?: string | null | undefined, scope?: string | null | undefined, signal?: AbortSignal): Promise<OAuthTokenResponse> {
-        let url_ = this.baseUrl + "/oauth/token";
+        let url_ = this.baseUrl + "/api/oauth/token";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2112,7 +2112,7 @@ export class OAuthClient {
      * @param scope (optional) 
      */
     deviceAuthorization(client_id?: string | null | undefined, scope?: string | null | undefined, signal?: AbortSignal): Promise<OAuthDeviceAuthorizationResponse> {
-        let url_ = this.baseUrl + "/oauth/device";
+        let url_ = this.baseUrl + "/api/oauth/device";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2163,7 +2163,7 @@ export class OAuthClient {
      * @param user_code (optional) 
      */
     getDeviceInfo(user_code?: string | undefined, signal?: AbortSignal): Promise<DeviceCodeInfo> {
-        let url_ = this.baseUrl + "/oauth/device-info?";
+        let url_ = this.baseUrl + "/api/oauth/device-info?";
         if (user_code === null)
             throw new globalThis.Error("The parameter 'user_code' cannot be null.");
         else if (user_code !== undefined)
@@ -2213,7 +2213,7 @@ export class OAuthClient {
      * @param approved (optional) 
      */
     deviceApprove(user_code?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/device-approve";
+        let url_ = this.baseUrl + "/api/oauth/device-approve";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2264,7 +2264,7 @@ export class OAuthClient {
      * @param token_type_hint (optional) 
      */
     revoke(token?: string | null | undefined, token_type_hint?: string | null | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/revoke";
+        let url_ = this.baseUrl + "/api/oauth/revoke";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2306,7 +2306,7 @@ export class OAuthClient {
      * @param client_id (optional) 
      */
     getClientInfo(client_id?: string | undefined, signal?: AbortSignal): Promise<OAuthClientInfoResponse> {
-        let url_ = this.baseUrl + "/oauth/client-info?";
+        let url_ = this.baseUrl + "/api/oauth/client-info?";
         if (client_id === null)
             throw new globalThis.Error("The parameter 'client_id' cannot be null.");
         else if (client_id !== undefined)
@@ -2347,7 +2347,7 @@ export class OAuthClient {
      * List all active grants for the authenticated user.
      */
     getGrants(signal?: AbortSignal): Promise<OAuthGrantListResponse> {
-        let url_ = this.baseUrl + "/oauth/grants";
+        let url_ = this.baseUrl + "/api/oauth/grants";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -2384,7 +2384,7 @@ export class OAuthClient {
      * Revoke (delete) a specific grant owned by the authenticated user.
      */
     deleteGrant(grantId: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/grants/{grantId}";
+        let url_ = this.baseUrl + "/api/oauth/grants/{grantId}";
         if (grantId === undefined || grantId === null)
             throw new globalThis.Error("The parameter 'grantId' must be defined.");
         url_ = url_.replace("{grantId}", encodeURIComponent("" + grantId));
@@ -2427,7 +2427,7 @@ export class OAuthClient {
      * Update a grant's label and/or scopes.
      */
     updateGrant(grantId: string, request: UpdateGrantRequest, signal?: AbortSignal): Promise<OAuthGrantDto> {
-        let url_ = this.baseUrl + "/oauth/grants/{grantId}";
+        let url_ = this.baseUrl + "/api/oauth/grants/{grantId}";
         if (grantId === undefined || grantId === null)
             throw new globalThis.Error("The parameter 'grantId' must be defined.");
         url_ = url_.replace("{grantId}", encodeURIComponent("" + grantId));
@@ -2477,7 +2477,7 @@ export class OAuthClient {
      * Create a follower grant (share data with another user by email).
      */
     createFollowerGrant(request: CreateFollowerGrantRequest, signal?: AbortSignal): Promise<OAuthGrantDto> {
-        let url_ = this.baseUrl + "/oauth/grants/follower";
+        let url_ = this.baseUrl + "/api/oauth/grants/follower";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = JSON.stringify(request);
@@ -2525,7 +2525,7 @@ export class OAuthClient {
     Used by the frontend to populate the "Viewing data for:" selector.
      */
     getFollowerTargets(signal?: AbortSignal): Promise<FollowerTargetListResponse> {
-        let url_ = this.baseUrl + "/oauth/follower-targets";
+        let url_ = this.baseUrl + "/api/oauth/follower-targets";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -2563,7 +2563,7 @@ export class OAuthClient {
     The link can be shared with someone who doesn't have an account yet.
      */
     createInvite(request: CreateInviteRequest, signal?: AbortSignal): Promise<CreateInviteResponse> {
-        let url_ = this.baseUrl + "/oauth/invites";
+        let url_ = this.baseUrl + "/api/oauth/invites";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = JSON.stringify(request);
@@ -2610,7 +2610,7 @@ export class OAuthClient {
      * List invites created by the authenticated user.
      */
     listInvites(signal?: AbortSignal): Promise<InviteListResponse> {
-        let url_ = this.baseUrl + "/oauth/invites";
+        let url_ = this.baseUrl + "/api/oauth/invites";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -2647,7 +2647,7 @@ export class OAuthClient {
      * Revoke an invite so it can no longer be used.
      */
     revokeInvite(inviteId: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/invites/{inviteId}";
+        let url_ = this.baseUrl + "/api/oauth/invites/{inviteId}";
         if (inviteId === undefined || inviteId === null)
             throw new globalThis.Error("The parameter 'inviteId' must be defined.");
         url_ = url_.replace("{inviteId}", encodeURIComponent("" + inviteId));
@@ -2691,7 +2691,7 @@ export class OAuthClient {
     This is a public endpoint so invitees can see what they're accepting.
      */
     getInviteInfo(token: string, signal?: AbortSignal): Promise<InviteInfoResponse> {
-        let url_ = this.baseUrl + "/oauth/invites/{token}/info";
+        let url_ = this.baseUrl + "/api/oauth/invites/{token}/info";
         if (token === undefined || token === null)
             throw new globalThis.Error("The parameter 'token' must be defined.");
         url_ = url_.replace("{token}", encodeURIComponent("" + token));
@@ -2738,7 +2738,7 @@ export class OAuthClient {
     Requires authentication - the invitee must be logged in.
      */
     acceptInvite(token: string, signal?: AbortSignal): Promise<AcceptInviteResponse> {
-        let url_ = this.baseUrl + "/oauth/invites/{token}/accept";
+        let url_ = this.baseUrl + "/api/oauth/invites/{token}/accept";
         if (token === undefined || token === null)
             throw new globalThis.Error("The parameter 'token' must be defined.");
         url_ = url_.replace("{token}", encodeURIComponent("" + token));
@@ -2788,7 +2788,7 @@ export class OAuthClient {
      * @param token_type_hint (optional) 
      */
     introspect(token?: string | null | undefined, token_type_hint?: string | null | undefined, signal?: AbortSignal): Promise<TokenIntrospectionResponse> {
-        let url_ = this.baseUrl + "/oauth/introspect";
+        let url_ = this.baseUrl + "/api/oauth/introspect";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -19618,6 +19618,8 @@ export interface CreateFollowerGrantRequest {
     followerEmail?: string;
     scopes?: string[];
     label?: string | undefined;
+    temporaryPassword?: string | undefined;
+    followerDisplayName?: string | undefined;
 }
 
 /** Request to update an existing grant's label and/or scopes */
@@ -19677,6 +19679,15 @@ export interface InviteDto {
     isValid?: boolean;
     isExpired?: boolean;
     isRevoked?: boolean;
+    usedBy?: InviteUsageDto[];
+}
+
+/** DTO for invite usage information */
+export interface InviteUsageDto {
+    followerSubjectId?: string;
+    followerName?: string | undefined;
+    followerEmail?: string | undefined;
+    usedAt?: Date;
 }
 
 /** Response for invite info (for the accept page) */
@@ -22440,6 +22451,7 @@ export interface UISettingsConfiguration {
     notifications?: NotificationSettings;
     services?: ServicesSettings;
     dataQuality?: DataQualitySettings;
+    security?: SecuritySettings;
 }
 
 export interface DeviceSettings {
@@ -22760,6 +22772,11 @@ export interface SleepScheduleSettings {
 export interface CompressionLowDetectionSettings {
     enabled?: boolean;
     excludeFromStatistics?: boolean;
+}
+
+export interface SecuritySettings {
+    requireAuthForPublicAccess?: boolean;
+    hideGlucoseInFavicon?: boolean;
 }
 
 /** User preferences response */

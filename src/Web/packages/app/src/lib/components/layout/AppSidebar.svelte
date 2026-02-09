@@ -249,8 +249,8 @@
           href: "/settings/trackers",
           icon: Timer,
         },
-        { title: "Connectors", href: "/settings/connectors", icon: Plug },
-        { title: "Grants & Sharing", href: "/settings/grants", icon: Shield },
+        { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
+        { title: "Followers & Sharing", href: "/settings/security", icon: Shield },
         {
           title: "Support & Community",
           href: "/settings/support",

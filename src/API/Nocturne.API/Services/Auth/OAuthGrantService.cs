@@ -226,6 +226,7 @@ public class OAuthGrantService : IOAuthGrantService
         Guid followerSubjectId,
         IEnumerable<string> scopes,
         string? label = null,
+        Guid? createdFromInviteId = null,
         CancellationToken ct = default)
     {
         if (followerSubjectId == dataOwnerSubjectId)
@@ -260,6 +261,12 @@ public class OAuthGrantService : IOAuthGrantService
                 existingGrant.Label = label;
             }
 
+            // Update invite linkage if provided and not already set
+            if (createdFromInviteId.HasValue && !existingGrant.CreatedFromInviteId.HasValue)
+            {
+                existingGrant.CreatedFromInviteId = createdFromInviteId;
+            }
+
             await _dbContext.SaveChangesAsync(ct);
 
             // Load FollowerSubject navigation for the return DTO
@@ -285,6 +292,7 @@ public class OAuthGrantService : IOAuthGrantService
             Scopes = normalizedScopes,
             Label = label,
             FollowerSubjectId = followerSubjectId,
+            CreatedFromInviteId = createdFromInviteId,
             CreatedAt = DateTime.UtcNow
         };
 

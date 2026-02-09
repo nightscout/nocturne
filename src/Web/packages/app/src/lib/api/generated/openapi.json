@@ -1435,7 +1435,7 @@
         }
       }
     },
-    "/oauth/authorize": {
+    "/api/oauth/authorize": {
       "get": {
         "tags": [
           "OAuth"
@@ -1575,7 +1575,7 @@
         }
       }
     },
-    "/oauth/token": {
+    "/api/oauth/token": {
       "post": {
         "tags": [
           "OAuth"
@@ -1647,7 +1647,7 @@
         }
       }
     },
-    "/oauth/device": {
+    "/api/oauth/device": {
       "post": {
         "tags": [
           "OAuth"
@@ -1696,7 +1696,7 @@
         }
       }
     },
-    "/oauth/device-info": {
+    "/api/oauth/device-info": {
       "get": {
         "tags": [
           "OAuth"
@@ -1737,7 +1737,7 @@
         }
       }
     },
-    "/oauth/device-approve": {
+    "/api/oauth/device-approve": {
       "post": {
         "tags": [
           "OAuth"
@@ -1778,7 +1778,7 @@
         }
       }
     },
-    "/oauth/revoke": {
+    "/api/oauth/revoke": {
       "post": {
         "tags": [
           "OAuth"
@@ -1810,7 +1810,7 @@
         }
       }
     },
-    "/oauth/client-info": {
+    "/api/oauth/client-info": {
       "get": {
         "tags": [
           "OAuth"
@@ -1841,7 +1841,7 @@
         }
       }
     },
-    "/oauth/grants": {
+    "/api/oauth/grants": {
       "get": {
         "tags": [
           "OAuth"
@@ -1862,7 +1862,7 @@
         }
       }
     },
-    "/oauth/grants/{grantId}": {
+    "/api/oauth/grants/{grantId}": {
       "delete": {
         "tags": [
           "OAuth"
@@ -1951,7 +1951,7 @@
         }
       }
     },
-    "/oauth/grants/follower": {
+    "/api/oauth/grants/follower": {
       "post": {
         "tags": [
           "OAuth"
@@ -1994,7 +1994,7 @@
         }
       }
     },
-    "/oauth/follower-targets": {
+    "/api/oauth/follower-targets": {
       "get": {
         "tags": [
           "OAuth"
@@ -2015,7 +2015,7 @@
         }
       }
     },
-    "/oauth/invites": {
+    "/api/oauth/invites": {
       "post": {
         "tags": [
           "OAuth"
@@ -2077,7 +2077,7 @@
         }
       }
     },
-    "/oauth/invites/{inviteId}": {
+    "/api/oauth/invites/{inviteId}": {
       "delete": {
         "tags": [
           "OAuth"
@@ -2113,7 +2113,7 @@
         }
       }
     },
-    "/oauth/invites/{token}/info": {
+    "/api/oauth/invites/{token}/info": {
       "get": {
         "tags": [
           "OAuth"
@@ -2155,7 +2155,7 @@
         }
       }
     },
-    "/oauth/invites/{token}/accept": {
+    "/api/oauth/invites/{token}/accept": {
       "post": {
         "tags": [
           "OAuth"
@@ -2197,7 +2197,7 @@
         }
       }
     },
-    "/oauth/introspect": {
+    "/api/oauth/introspect": {
       "post": {
         "tags": [
           "OAuth"
@@ -18115,6 +18115,14 @@
           "label": {
             "type": "string",
             "nullable": true
+          },
+          "temporaryPassword": {
+            "type": "string",
+            "nullable": true
+          },
+          "followerDisplayName": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -18287,6 +18295,35 @@
           },
           "isRevoked": {
             "type": "boolean"
+          },
+          "usedBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteUsageDto"
+            }
+          }
+        }
+      },
+      "InviteUsageDto": {
+        "type": "object",
+        "description": "DTO for invite usage information",
+        "additionalProperties": false,
+        "properties": {
+          "followerSubjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "followerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "followerEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "usedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -27090,6 +27127,9 @@
           },
           "dataQuality": {
             "$ref": "#/components/schemas/DataQualitySettings"
+          },
+          "security": {
+            "$ref": "#/components/schemas/SecuritySettings"
           }
         }
       },
@@ -28025,6 +28065,18 @@
             "type": "boolean"
           },
           "excludeFromStatistics": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SecuritySettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "requireAuthForPublicAccess": {
+            "type": "boolean"
+          },
+          "hideGlucoseInFavicon": {
             "type": "boolean"
           }
         }
