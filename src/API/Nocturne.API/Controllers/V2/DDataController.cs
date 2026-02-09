@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -12,6 +13,7 @@ namespace Nocturne.API.Controllers.V2;
 [Route("api/v2/ddata")]
 [Produces("application/json")]
 [Tags("V2 DData")]
+[ClientPropertyName("v2DData")]
 public class DDataController : ControllerBase
 {
     private readonly IDDataService _ddataService;

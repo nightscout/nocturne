@@ -15,7 +15,7 @@ namespace Nocturne.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("auth/local")]
-[Tags("Authentication")]
+[Tags("LocalAuth")]
 public class LocalAuthController : ControllerBase
 {
     private readonly ILocalIdentityService _identityService;
@@ -548,6 +548,7 @@ public class LocalAuthController : ControllerBase
     [HttpGet("admin/password-resets")]
     [Authorize]
     [RequireAdmin]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PasswordResetRequestListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PasswordResetRequestListResponse>> GetPendingPasswordResets()
     {
@@ -573,6 +574,7 @@ public class LocalAuthController : ControllerBase
     [HttpPost("admin/set-temporary-password")]
     [Authorize]
     [RequireAdmin]
+    [RemoteCommand(Invalidates = ["GetPendingPasswordResets"])]
     [ProducesResponseType(typeof(SetTemporaryPasswordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<SetTemporaryPasswordResponse>> SetTemporaryPassword(
@@ -613,6 +615,7 @@ public class LocalAuthController : ControllerBase
     [HttpPost("admin/handle-password-reset/{requestId:guid}")]
     [Authorize]
     [RequireAdmin]
+    [RemoteCommand(Invalidates = ["GetPendingPasswordResets"])]
     [ProducesResponseType(typeof(HandlePasswordResetResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<HandlePasswordResetResponse>> HandlePasswordReset(Guid requestId)

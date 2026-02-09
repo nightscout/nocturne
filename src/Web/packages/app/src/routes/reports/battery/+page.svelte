@@ -63,7 +63,7 @@
   });
 
   function fetchData() {
-    batteryResource.refetch();
+    batteryResource.refresh();
   }
 
   // Helper functions

@@ -29,7 +29,7 @@
     RefreshCw,
     Info,
   } from "lucide-svelte";
-  import * as migrationRemote from "$lib/data/migration.remote";
+  import * as migrationRemote from "$lib/data/generated/migrations.generated.remote";
   import {
     type MigrationJobInfo,
     type MigrationJobStatus,
@@ -82,8 +82,8 @@
     try {
       const [configResult, sourcesResult, historyResult] = await Promise.all([
         migrationRemote.getPendingConfig(),
-        migrationRemote.getMigrationSources(),
-        migrationRemote.getMigrationHistory(),
+        migrationRemote.getSources(),
+        migrationRemote.getHistory(),
       ]);
 
       pendingConfig = configResult;
@@ -132,7 +132,7 @@
     testingConnection = true;
     connectionTestResult = null;
     try {
-      const result = await migrationRemote.testMigrationConnection({
+      const result = await migrationRemote.testConnection({
         mode: mode,
         nightscoutUrl: mode === "Api" ? nightscoutUrl : undefined,
         nightscoutApiSecret: mode === "Api" ? nightscoutApiSecret : undefined,
@@ -190,7 +190,7 @@
     pollingActive = true;
     try {
       while (pollingActive) {
-        const status = await migrationRemote.getMigrationStatus({ jobId });
+        const status = await migrationRemote.getStatus(jobId);
         activeMigration = status;
 
         // Check if completed
@@ -218,7 +218,7 @@
     if (!activeMigration?.jobId) return;
     cancellingMigration = true;
     try {
-      await migrationRemote.cancelMigration({ jobId: activeMigration.jobId });
+      await migrationRemote.cancelMigration(activeMigration.jobId);
       pollingActive = false;
       await loadData();
     } catch (err) {

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
@@ -15,6 +16,7 @@ namespace Nocturne.API.Controllers.V4;
 [ApiController]
 [Route("api/v4/foods")]
 [Tags("V4 Foods")]
+[ClientPropertyName("foodsV4")]
 public class FoodsController : ControllerBase
 {
     private readonly NocturneDbContext _context;

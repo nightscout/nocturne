@@ -4,8 +4,17 @@
   import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
   import { BasalRateTrack } from "$lib/components/charts";
   import type { ProcessedSpan } from "../../../../routes/time-spans/data.remote";
-  import type { BasalDeliveryChartData } from "$lib/data/state-spans.remote";
   import { BasalDeliveryOrigin } from "$lib/api";
+
+  interface BasalDeliveryChartData {
+    id: string;
+    startTime: Date;
+    endTime: Date | null;
+    rate: number;
+    origin: BasalDeliveryOrigin;
+    source?: string;
+    color: string;
+  }
 
   interface TrackConfig {
     key: string;

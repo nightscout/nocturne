@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
@@ -14,6 +15,7 @@ namespace Nocturne.API.Controllers;
 [ApiController]
 [Route(".well-known")]
 [Tags("OIDC Discovery")]
+[ClientPropertyName("oidcDiscovery")]
 [AllowAnonymous]
 public class WellKnownController : ControllerBase
 {

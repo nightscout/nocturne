@@ -16,6 +16,9 @@
     <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Nocturne.API.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Alexa.NET" />
     <PackageReference Include="dotAPNS" />
     <PackageReference Include="HtmlSanitizer" />

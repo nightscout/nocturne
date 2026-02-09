@@ -13,8 +13,25 @@
   import { curveStepAfter } from "d3";
   import { scaleLinear } from "d3-scale";
   import { PumpModeIcon } from "$lib/components/icons";
-  import type { StateSpanChartData, BasalDeliveryChartData } from "$lib/data/state-spans.remote";
   import { BasalDeliveryOrigin } from "$lib/api";
+
+  interface StateSpanChartData {
+    id: string;
+    state: string;
+    startTime: Date;
+    endTime: Date | null;
+    color: string;
+  }
+
+  interface BasalDeliveryChartData {
+    id: string;
+    startTime: Date;
+    endTime: Date | null;
+    rate: number;
+    origin: BasalDeliveryOrigin;
+    source?: string;
+    color: string;
+  }
 
   interface BasalDataPoint {
     time: Date;

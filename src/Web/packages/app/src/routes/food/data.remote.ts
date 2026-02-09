@@ -79,7 +79,7 @@ export const getFoodData = query(async () => {
 /**
  * Create a new food record
  */
-export const createFood = command(FoodSchema.omit({ _id: true }), async (food) => {
+export const createFood = command(FoodSchema, async (food) => {
 	const { locals } = getRequestEvent();
 	const { apiClient } = locals;
 
@@ -98,12 +98,13 @@ export const createFood = command(FoodSchema.omit({ _id: true }), async (food) =
 export const updateFood = command(FoodSchema, async (food) => {
 	const { locals } = getRequestEvent();
 	const { apiClient } = locals;
+	const f = food as Food;
 
 	try {
-		if (!food._id) {
+		if (!f._id) {
 			return { success: false, error: 'Food ID is required for update' };
 		}
-		await apiClient.food.updateFood2(food._id, food as Food);
+		await apiClient.food.updateFood2(f._id, f);
 		return { success: true };
 	} catch (err) {
 		console.error('Error updating food:', err);

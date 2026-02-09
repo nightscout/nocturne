@@ -277,7 +277,12 @@ public enum InAppNotificationType
     /// <summary>
     /// Suggested tracker reset based on detected events (Site Change treatment or sensor warmup)
     /// </summary>
-    SuggestedTrackerMatch
+    SuggestedTrackerMatch,
+
+    /// <summary>
+    /// Pending compression low suggestions for user review
+    /// </summary>
+    CompressionLowReview
 }
 
 /// <summary>

@@ -1,23 +1,23 @@
 <script lang="ts">
   import { Group, Text } from "layerchart";
-  import type { Treatment } from "$lib/api";
 
   interface Props {
     xPos: number;
     yPos: number;
     carbs: number;
     label: string | null;
-    treatment: Treatment;
-    onMarkerClick: (treatment: Treatment) => void;
+    treatmentId: string;
+    onMarkerClick: (treatmentId: string) => void;
   }
 
-  let { xPos, yPos, carbs, label, treatment, onMarkerClick }: Props = $props();
+  let { xPos, yPos, carbs, label, treatmentId, onMarkerClick }: Props =
+    $props();
 </script>
 
 <Group
   x={xPos}
   y={yPos}
-  onclick={() => onMarkerClick(treatment)}
+  onclick={() => onMarkerClick(treatmentId)}
   class="cursor-pointer"
 >
   <!-- Food/meal label above the marker -->

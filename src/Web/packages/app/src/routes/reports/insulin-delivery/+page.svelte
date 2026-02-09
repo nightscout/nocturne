@@ -25,7 +25,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import type { Treatment, InsulinDeliveryStatistics } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
-  import { getMultiPeriodStatistics } from "$lib/data/statistics.remote";
+  import { getMultiPeriodStatistics } from "$lib/data/generated";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resource } from "runed";
@@ -55,7 +55,7 @@
   const multiPeriodStatsResource = resource(
     () => ({}),
     async () => {
-      return await getMultiPeriodStatistics({});
+      return await getMultiPeriodStatistics();
     },
     { debounce: 100 }
   );

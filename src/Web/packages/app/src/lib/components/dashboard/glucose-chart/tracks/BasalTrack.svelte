@@ -12,10 +12,19 @@
   } from "layerchart";
   import { curveStepAfter } from "d3";
   import type { ScaleLinear } from "d3-scale";
-  import { BasalDeliveryOrigin, type BasalPoint } from "$lib/api";
+  import { BasalDeliveryOrigin } from "$lib/api";
+
+  interface BasalDataPoint {
+    timestamp?: number;
+    rate?: number;
+    scheduledRate?: number;
+    origin?: BasalDeliveryOrigin;
+    fillColor: string;
+    strokeColor: string;
+  }
 
   interface TempBasalSpan {
-    id: string;
+    id?: string;
     displayStart: Date;
     displayEnd: Date;
     color: string;
@@ -29,7 +38,7 @@
   }
 
   interface Props {
-    basalData: BasalPoint[];
+    basalData: BasalDataPoint[];
     scheduledBasalData: { timestamp?: number; rate?: number }[];
     tempBasalSpans: TempBasalSpan[];
     staleBasalData: StaleBasalData | null;
@@ -62,7 +71,7 @@
   // Group consecutive basal points by origin for proper layered rendering
   // This ensures each origin type (Scheduled, Algorithm, Manual, Suspended) is rendered as a distinct segment
   const basalSegmentsByOrigin = $derived.by(() => {
-    type Segment = { origin: BasalDeliveryOrigin; points: BasalPoint[] };
+    type Segment = { origin: BasalDeliveryOrigin; points: BasalDataPoint[] };
     const segments: Segment[] = [];
     let currentSegment: Segment | null = null;
 
@@ -88,40 +97,6 @@
 
     return segments;
   });
-
-  // Get the fill color based on basal delivery origin
-  function getBasalFillColor(origin: BasalDeliveryOrigin): string {
-    switch (origin) {
-      case BasalDeliveryOrigin.Algorithm:
-        return "var(--insulin-basal)";
-      case BasalDeliveryOrigin.Manual:
-        return "var(--insulin-temp-basal)";
-      case BasalDeliveryOrigin.Suspended:
-        return "var(--pump-mode-suspended)";
-      case BasalDeliveryOrigin.Inferred:
-        return "var(--insulin-basal)";
-      case BasalDeliveryOrigin.Scheduled:
-      default:
-        return "var(--insulin-basal)";
-    }
-  }
-
-  // Get the stroke color based on basal delivery origin
-  function getBasalStrokeColor(origin: BasalDeliveryOrigin): string {
-    switch (origin) {
-      case BasalDeliveryOrigin.Algorithm:
-        return "var(--insulin-bolus)";
-      case BasalDeliveryOrigin.Manual:
-        return "var(--insulin-bolus)";
-      case BasalDeliveryOrigin.Suspended:
-        return "var(--pump-mode-suspended)";
-      case BasalDeliveryOrigin.Inferred:
-        return "var(--insulin-basal)";
-      case BasalDeliveryOrigin.Scheduled:
-      default:
-        return "var(--insulin-basal)";
-    }
-  }
 
   // Get opacity based on basal delivery origin
   function getBasalOpacity(origin: BasalDeliveryOrigin): number {
@@ -248,6 +223,8 @@
     {#each basalSegmentsByOrigin as segment, i (i)}
       {@const pattern = getBasalPattern(segment.origin)}
       {@const opacity = getBasalOpacity(segment.origin)}
+      {@const fillColor = segment.points[0].fillColor}
+      {@const strokeColor = segment.points[0].strokeColor}
       {#if pattern}
         <!-- Use AnnotationRange for segments with patterns (Inferred) -->
         {#each segment.points as point, pointIdx}
@@ -256,7 +233,7 @@
             <AnnotationRange
               x={[point.timestamp ?? 0, nextPoint.timestamp ?? 0]}
               y={[basalScale(point.rate ?? 0), basalZero]}
-              fill={getBasalFillColor(segment.origin)}
+              fill={fillColor}
               {pattern}
               style="opacity: {opacity}"
             />
@@ -270,8 +247,8 @@
           y0={() => basalZero}
           y1={(d) => basalScale(d.rate ?? 0)}
           curve={curveStepAfter}
-          fill={getBasalFillColor(segment.origin)}
-          stroke={getBasalStrokeColor(segment.origin)}
+          fill={fillColor}
+          stroke={strokeColor}
           class="stroke-1"
           style="opacity: {opacity}"
         />

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -24,6 +25,8 @@ public class StateSpansController : ControllerBase
     /// Query all state spans with optional filtering
     /// </summary>
     [HttpGet]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(IEnumerable<StateSpan>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<StateSpan>>> GetStateSpans(
         [FromQuery] StateSpanCategory? category = null,
         [FromQuery] string? state = null,
@@ -182,6 +185,8 @@ public class StateSpansController : ControllerBase
     /// Get a specific state span by ID
     /// </summary>
     [HttpGet("{id}")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     public async Task<ActionResult<StateSpan>> GetStateSpan(string id, CancellationToken cancellationToken = default)
     {
         var span = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
@@ -194,6 +199,7 @@ public class StateSpansController : ControllerBase
     /// Create a new state span (manual entry)
     /// </summary>
     [HttpPost]
+    [RemoteCommand(Invalidates = ["GetStateSpans"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status201Created)]
     public async Task<ActionResult<StateSpan>> CreateStateSpan(
         [FromBody] CreateStateSpanRequest request,
@@ -218,6 +224,8 @@ public class StateSpansController : ControllerBase
     /// Update an existing state span
     /// </summary>
     [HttpPut("{id}")]
+    [RemoteCommand(Invalidates = ["GetStateSpans", "GetStateSpan"])]
+    [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     public async Task<ActionResult<StateSpan>> UpdateStateSpan(
         string id,
         [FromBody] UpdateStateSpanRequest request,
@@ -247,6 +255,8 @@ public class StateSpansController : ControllerBase
     /// Delete a state span
     /// </summary>
     [HttpDelete("{id}")]
+    [RemoteCommand(Invalidates = ["GetStateSpans"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
     {
         var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);

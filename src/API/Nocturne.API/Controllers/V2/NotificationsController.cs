@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V2;
 [Route("api/v2/notifications")]
 [Produces("application/json")]
 [Tags("V2 Notifications")]
+[ClientPropertyName("v2Notifications")]
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationV2Service _notificationService;

@@ -517,6 +517,69 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("clock_faces");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.CompressionLowSuggestionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Confidence")
+                        .HasColumnType("double precision")
+                        .HasColumnName("confidence");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at");
+
+                    b.Property<double?>("DropRate")
+                        .HasColumnType("double precision")
+                        .HasColumnName("drop_rate");
+
+                    b.Property<long>("EndMills")
+                        .HasColumnType("bigint")
+                        .HasColumnName("end_mills");
+
+                    b.Property<double?>("LowestGlucose")
+                        .HasColumnType("double precision")
+                        .HasColumnName("lowest_glucose");
+
+                    b.Property<DateOnly>("NightOf")
+                        .HasColumnType("date")
+                        .HasColumnName("night_of");
+
+                    b.Property<int?>("RecoveryMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("recovery_minutes");
+
+                    b.Property<long?>("ReviewedAt")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<long>("StartMills")
+                        .HasColumnType("bigint")
+                        .HasColumnName("start_mills");
+
+                    b.Property<Guid?>("StateSpanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("state_span_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NightOf")
+                        .HasDatabaseName("ix_compression_low_suggestions_night_of");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_compression_low_suggestions_status");
+
+                    b.ToTable("compression_low_suggestions");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorConfigurationEntity", b =>
                 {
                     b.Property<Guid>("Id")

@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V1;
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
 [Tags("V1 IOB")]
+[ClientPropertyName("iob")]
 public class IobController : ControllerBase
 {
     private readonly IIobService _iobService;

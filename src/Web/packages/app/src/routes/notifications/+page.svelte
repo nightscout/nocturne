@@ -27,8 +27,8 @@
   import { cn } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
-  import * as trackersRemote from "$lib/data/trackers.remote";
-  import * as adminRemote from "$lib/data/admin.remote";
+  import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
+  import * as adminRemote from "$lib/data/generated/localauths.generated.remote";
   import {
     CompletionReason,
     type TrackerInstanceDto,

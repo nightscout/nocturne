@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { getRequestEvent, query, command } from "$app/server";
-import type { WebhookNotificationSettings } from "$lib/api";
+import type { WebhookNotificationSettings, WebhookTestResult } from "$lib/api";
 
 const WebhookSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -50,7 +50,7 @@ export const testWebhookSettings = command(
     const { apiClient } = locals;
 
     const client = apiClient.webhookSettings as {
-      testWebhookSettings?: (payload: unknown) => Promise<unknown>;
+      testWebhookSettings?: (payload: unknown) => Promise<WebhookTestResult>;
     };
 
     if (!client.testWebhookSettings) {
@@ -61,7 +61,7 @@ export const testWebhookSettings = command(
     }
 
     try {
-      return await client.testWebhookSettings(request as any);
+      return await client.testWebhookSettings(request as any) as WebhookTestResult;
     } catch (err) {
       console.error("Failed to test webhook settings:", err);
       throw error(500, "Failed to test webhook settings");
