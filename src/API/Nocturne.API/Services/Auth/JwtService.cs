@@ -126,6 +126,97 @@ public class JwtService : IJwtService
     }
 
     /// <inheritdoc />
+    public string GenerateAccessToken(
+        SubjectInfo subject,
+        IEnumerable<string> permissions,
+        IEnumerable<string> roles,
+        IEnumerable<string> scopes,
+        string? clientId = null,
+        TimeSpan? lifetime = null
+    )
+    {
+        var now = DateTimeOffset.UtcNow;
+        var expires = now.Add(
+            lifetime ?? TimeSpan.FromMinutes(_options.AccessTokenLifetimeMinutes)
+        );
+        var jti = Guid.CreateVersion7().ToString();
+
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, subject.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti, jti),
+            new(
+                JwtRegisteredClaimNames.Iat,
+                now.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64
+            ),
+        };
+
+        // Add name if present
+        if (!string.IsNullOrEmpty(subject.Name))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Name, subject.Name));
+        }
+
+        // Add email if present
+        if (!string.IsNullOrEmpty(subject.Email))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, subject.Email));
+        }
+
+        // Add OIDC claims if present
+        if (!string.IsNullOrEmpty(subject.OidcSubjectId))
+        {
+            claims.Add(new Claim("oidc_sub", subject.OidcSubjectId));
+        }
+
+        if (!string.IsNullOrEmpty(subject.OidcIssuer))
+        {
+            claims.Add(new Claim("oidc_iss", subject.OidcIssuer));
+        }
+
+        // Add OAuth client ID if present
+        if (!string.IsNullOrEmpty(clientId))
+        {
+            claims.Add(new Claim("client_id", clientId));
+        }
+
+        // Add OAuth scopes as space-delimited string (RFC 6749 Section 3.3)
+        var scopeList = scopes.ToList();
+        if (scopeList.Count > 0)
+        {
+            claims.Add(new Claim("scope", string.Join(" ", scopeList)));
+        }
+
+        // Add roles
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        // Add permissions as custom claim
+        foreach (var permission in permissions)
+        {
+            claims.Add(new Claim("permission", permission));
+        }
+
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(claims),
+            Expires = expires.UtcDateTime,
+            Issuer = _options.Issuer,
+            Audience = _options.Audience,
+            SigningCredentials = new SigningCredentials(
+                _signingKey,
+                SecurityAlgorithms.HmacSha256Signature
+            ),
+        };
+
+        var token = _tokenHandler.CreateToken(tokenDescriptor);
+        return _tokenHandler.WriteToken(token);
+    }
+
+    /// <inheritdoc />
     public JwtValidationResult ValidateAccessToken(string token)
     {
         try
@@ -165,6 +256,12 @@ public class JwtService : IJwtService
                 );
             }
 
+            // Parse scope claim (space-delimited per RFC 6749)
+            var scopeClaim = principal.FindFirst("scope")?.Value;
+            var scopeList = string.IsNullOrEmpty(scopeClaim)
+                ? new List<string>()
+                : scopeClaim.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+
             var claims = new JwtClaims
             {
                 SubjectId = subjectId,
@@ -172,6 +269,8 @@ public class JwtService : IJwtService
                 Email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value,
                 Roles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList(),
                 Permissions = principal.FindAll("permission").Select(c => c.Value).ToList(),
+                Scopes = scopeList,
+                ClientId = principal.FindFirst("client_id")?.Value,
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),
                 ExpiresAt = new DateTimeOffset(jwtToken.ValidTo, TimeSpan.Zero),

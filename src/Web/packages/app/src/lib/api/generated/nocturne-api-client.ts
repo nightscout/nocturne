@@ -1889,6 +1889,946 @@ export class MetadataClient {
     }
 }
 
+export class OAuthClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Authorization endpoint (Authorization Code + PKCE flow).
+    Redirects to login if not authenticated, then shows consent screen.
+     * @param client_id (optional) 
+     * @param redirect_uri (optional) 
+     * @param response_type (optional) 
+     * @param scope (optional) 
+     * @param state (optional) 
+     * @param code_challenge (optional) 
+     * @param code_challenge_method (optional) 
+     */
+    authorize(client_id?: string | undefined, redirect_uri?: string | undefined, response_type?: string | undefined, scope?: string | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, code_challenge_method?: string | null | undefined, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/authorize?";
+        if (client_id === null)
+            throw new globalThis.Error("The parameter 'client_id' cannot be null.");
+        else if (client_id !== undefined)
+            url_ += "client_id=" + encodeURIComponent("" + client_id) + "&";
+        if (redirect_uri === null)
+            throw new globalThis.Error("The parameter 'redirect_uri' cannot be null.");
+        else if (redirect_uri !== undefined)
+            url_ += "redirect_uri=" + encodeURIComponent("" + redirect_uri) + "&";
+        if (response_type === null)
+            throw new globalThis.Error("The parameter 'response_type' cannot be null.");
+        else if (response_type !== undefined)
+            url_ += "response_type=" + encodeURIComponent("" + response_type) + "&";
+        if (scope === null)
+            throw new globalThis.Error("The parameter 'scope' cannot be null.");
+        else if (scope !== undefined)
+            url_ += "scope=" + encodeURIComponent("" + scope) + "&";
+        if (state !== undefined && state !== null)
+            url_ += "state=" + encodeURIComponent("" + state) + "&";
+        if (code_challenge !== undefined && code_challenge !== null)
+            url_ += "code_challenge=" + encodeURIComponent("" + code_challenge) + "&";
+        if (code_challenge_method !== undefined && code_challenge_method !== null)
+            url_ += "code_challenge_method=" + encodeURIComponent("" + code_challenge_method) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAuthorize(_response);
+        });
+    }
+
+    protected processAuthorize(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 302) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Consent approval endpoint. Called by the consent page when the user approves.
+     * @param client_id (optional) 
+     * @param redirect_uri (optional) 
+     * @param scope (optional) 
+     * @param state (optional) 
+     * @param code_challenge (optional) 
+     * @param approved (optional) 
+     */
+    approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/authorize";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = new FormData();
+        if (client_id !== null && client_id !== undefined)
+            content_.append("client_id", client_id.toString());
+        if (redirect_uri !== null && redirect_uri !== undefined)
+            content_.append("redirect_uri", redirect_uri.toString());
+        if (scope !== null && scope !== undefined)
+            content_.append("scope", scope.toString());
+        if (state !== null && state !== undefined)
+            content_.append("state", state.toString());
+        if (code_challenge !== null && code_challenge !== undefined)
+            content_.append("code_challenge", code_challenge.toString());
+        if (approved === null || approved === undefined)
+            throw new globalThis.Error("The parameter 'approved' cannot be null.");
+        else
+            content_.append("approved", approved.toString());
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processApproveConsent(_response);
+        });
+    }
+
+    protected processApproveConsent(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 302) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Token endpoint. Handles authorization code exchange, refresh token rotation,
+    and device code polling.
+     * @param grant_type (optional) 
+     * @param client_id (optional) 
+     * @param code (optional) 
+     * @param redirect_uri (optional) 
+     * @param code_verifier (optional) 
+     * @param refresh_token (optional) 
+     * @param device_code (optional) 
+     * @param scope (optional) 
+     */
+    token(grant_type?: string | undefined, client_id?: string | null | undefined, code?: string | null | undefined, redirect_uri?: string | null | undefined, code_verifier?: string | null | undefined, refresh_token?: string | null | undefined, device_code?: string | null | undefined, scope?: string | null | undefined, signal?: AbortSignal): Promise<OAuthTokenResponse> {
+        let url_ = this.baseUrl + "/api/oauth/token";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = new FormData();
+        if (grant_type === null || grant_type === undefined)
+            throw new globalThis.Error("The parameter 'grant_type' cannot be null.");
+        else
+            content_.append("grant_type", grant_type.toString());
+        if (client_id !== null && client_id !== undefined)
+            content_.append("client_id", client_id.toString());
+        if (code !== null && code !== undefined)
+            content_.append("code", code.toString());
+        if (redirect_uri !== null && redirect_uri !== undefined)
+            content_.append("redirect_uri", redirect_uri.toString());
+        if (code_verifier !== null && code_verifier !== undefined)
+            content_.append("code_verifier", code_verifier.toString());
+        if (refresh_token !== null && refresh_token !== undefined)
+            content_.append("refresh_token", refresh_token.toString());
+        if (device_code !== null && device_code !== undefined)
+            content_.append("device_code", device_code.toString());
+        if (scope !== null && scope !== undefined)
+            content_.append("scope", scope.toString());
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processToken(_response);
+        });
+    }
+
+    protected processToken(response: Response): Promise<OAuthTokenResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthTokenResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthError;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<OAuthTokenResponse>(null as any);
+    }
+
+    /**
+     * Device Authorization endpoint (RFC 8628).
+    Used by headless clients (CLI tools, scripts, IoT devices, pump rigs).
+     * @param client_id (optional) 
+     * @param scope (optional) 
+     */
+    deviceAuthorization(client_id?: string | null | undefined, scope?: string | null | undefined, signal?: AbortSignal): Promise<OAuthDeviceAuthorizationResponse> {
+        let url_ = this.baseUrl + "/api/oauth/device";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = new FormData();
+        if (client_id !== null && client_id !== undefined)
+            content_.append("client_id", client_id.toString());
+        if (scope !== null && scope !== undefined)
+            content_.append("scope", scope.toString());
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeviceAuthorization(_response);
+        });
+    }
+
+    protected processDeviceAuthorization(response: Response): Promise<OAuthDeviceAuthorizationResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthDeviceAuthorizationResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthError;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<OAuthDeviceAuthorizationResponse>(null as any);
+    }
+
+    /**
+     * Get device code info for the approval page.
+     * @param user_code (optional) 
+     */
+    getDeviceInfo(user_code?: string | undefined, signal?: AbortSignal): Promise<DeviceCodeInfo> {
+        let url_ = this.baseUrl + "/api/oauth/device-info?";
+        if (user_code === null)
+            throw new globalThis.Error("The parameter 'user_code' cannot be null.");
+        else if (user_code !== undefined)
+            url_ += "user_code=" + encodeURIComponent("" + user_code) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceInfo(_response);
+        });
+    }
+
+    protected processGetDeviceInfo(response: Response): Promise<DeviceCodeInfo> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceCodeInfo;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceCodeInfo>(null as any);
+    }
+
+    /**
+     * Approve or deny a device authorization request.
+    Called by the device approval page.
+     * @param user_code (optional) 
+     * @param approved (optional) 
+     */
+    deviceApprove(user_code?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/device-approve";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = new FormData();
+        if (user_code !== null && user_code !== undefined)
+            content_.append("user_code", user_code.toString());
+        if (approved === null || approved === undefined)
+            throw new globalThis.Error("The parameter 'approved' cannot be null.");
+        else
+            content_.append("approved", approved.toString());
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeviceApprove(_response);
+        });
+    }
+
+    protected processDeviceApprove(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Token revocation endpoint (RFC 7009).
+     * @param token (optional) 
+     * @param token_type_hint (optional) 
+     */
+    revoke(token?: string | null | undefined, token_type_hint?: string | null | undefined, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/revoke";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = new FormData();
+        if (token !== null && token !== undefined)
+            content_.append("token", token.toString());
+        if (token_type_hint !== null && token_type_hint !== undefined)
+            content_.append("token_type_hint", token_type_hint.toString());
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processRevoke(_response);
+        });
+    }
+
+    protected processRevoke(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Get client info for the consent page.
+     * @param client_id (optional) 
+     */
+    getClientInfo(client_id?: string | undefined, signal?: AbortSignal): Promise<OAuthClientInfoResponse> {
+        let url_ = this.baseUrl + "/api/oauth/client-info?";
+        if (client_id === null)
+            throw new globalThis.Error("The parameter 'client_id' cannot be null.");
+        else if (client_id !== undefined)
+            url_ += "client_id=" + encodeURIComponent("" + client_id) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetClientInfo(_response);
+        });
+    }
+
+    protected processGetClientInfo(response: Response): Promise<OAuthClientInfoResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthClientInfoResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<OAuthClientInfoResponse>(null as any);
+    }
+
+    /**
+     * List all active grants for the authenticated user.
+     */
+    getGrants(signal?: AbortSignal): Promise<OAuthGrantListResponse> {
+        let url_ = this.baseUrl + "/api/oauth/grants";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetGrants(_response);
+        });
+    }
+
+    protected processGetGrants(response: Response): Promise<OAuthGrantListResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthGrantListResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<OAuthGrantListResponse>(null as any);
+    }
+
+    /**
+     * Revoke (delete) a specific grant owned by the authenticated user.
+     */
+    deleteGrant(grantId: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/grants/{grantId}";
+        if (grantId === undefined || grantId === null)
+            throw new globalThis.Error("The parameter 'grantId' must be defined.");
+        url_ = url_.replace("{grantId}", encodeURIComponent("" + grantId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteGrant(_response);
+        });
+    }
+
+    protected processDeleteGrant(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Update a grant's label and/or scopes.
+     */
+    updateGrant(grantId: string, request: UpdateGrantRequest, signal?: AbortSignal): Promise<OAuthGrantDto> {
+        let url_ = this.baseUrl + "/api/oauth/grants/{grantId}";
+        if (grantId === undefined || grantId === null)
+            throw new globalThis.Error("The parameter 'grantId' must be defined.");
+        url_ = url_.replace("{grantId}", encodeURIComponent("" + grantId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PATCH",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateGrant(_response);
+        });
+    }
+
+    protected processUpdateGrant(response: Response): Promise<OAuthGrantDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthGrantDto;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<OAuthGrantDto>(null as any);
+    }
+
+    /**
+     * Create a follower grant (share data with another user by email).
+     */
+    createFollowerGrant(request: CreateFollowerGrantRequest, signal?: AbortSignal): Promise<OAuthGrantDto> {
+        let url_ = this.baseUrl + "/api/oauth/grants/follower";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateFollowerGrant(_response);
+        });
+    }
+
+    protected processCreateFollowerGrant(response: Response): Promise<OAuthGrantDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthGrantDto;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthError;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<OAuthGrantDto>(null as any);
+    }
+
+    /**
+     * List data owners that the authenticated user can view as a follower.
+    Used by the frontend to populate the "Viewing data for:" selector.
+     */
+    getFollowerTargets(signal?: AbortSignal): Promise<FollowerTargetListResponse> {
+        let url_ = this.baseUrl + "/api/oauth/follower-targets";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetFollowerTargets(_response);
+        });
+    }
+
+    protected processGetFollowerTargets(response: Response): Promise<FollowerTargetListResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as FollowerTargetListResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FollowerTargetListResponse>(null as any);
+    }
+
+    /**
+     * Create a follower invite link.
+    The link can be shared with someone who doesn't have an account yet.
+     */
+    createInvite(request: CreateInviteRequest, signal?: AbortSignal): Promise<CreateInviteResponse> {
+        let url_ = this.baseUrl + "/api/oauth/invites";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateInvite(_response);
+        });
+    }
+
+    protected processCreateInvite(response: Response): Promise<CreateInviteResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CreateInviteResponse;
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthError;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<CreateInviteResponse>(null as any);
+    }
+
+    /**
+     * List invites created by the authenticated user.
+     */
+    listInvites(signal?: AbortSignal): Promise<InviteListResponse> {
+        let url_ = this.baseUrl + "/api/oauth/invites";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processListInvites(_response);
+        });
+    }
+
+    protected processListInvites(response: Response): Promise<InviteListResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InviteListResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InviteListResponse>(null as any);
+    }
+
+    /**
+     * Revoke an invite so it can no longer be used.
+     */
+    revokeInvite(inviteId: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/invites/{inviteId}";
+        if (inviteId === undefined || inviteId === null)
+            throw new globalThis.Error("The parameter 'inviteId' must be defined.");
+        url_ = url_.replace("{inviteId}", encodeURIComponent("" + inviteId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processRevokeInvite(_response);
+        });
+    }
+
+    protected processRevokeInvite(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Get invite details by token (for the accept page).
+    This is a public endpoint so invitees can see what they're accepting.
+     */
+    getInviteInfo(token: string, signal?: AbortSignal): Promise<InviteInfoResponse> {
+        let url_ = this.baseUrl + "/api/oauth/invites/{token}/info";
+        if (token === undefined || token === null)
+            throw new globalThis.Error("The parameter 'token' must be defined.");
+        url_ = url_.replace("{token}", encodeURIComponent("" + token));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetInviteInfo(_response);
+        });
+    }
+
+    protected processGetInviteInfo(response: Response): Promise<InviteInfoResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as InviteInfoResponse;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<InviteInfoResponse>(null as any);
+    }
+
+    /**
+     * Accept an invite and create the follower grant.
+    Requires authentication - the invitee must be logged in.
+     */
+    acceptInvite(token: string, signal?: AbortSignal): Promise<AcceptInviteResponse> {
+        let url_ = this.baseUrl + "/api/oauth/invites/{token}/accept";
+        if (token === undefined || token === null)
+            throw new globalThis.Error("The parameter 'token' must be defined.");
+        url_ = url_.replace("{token}", encodeURIComponent("" + token));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAcceptInvite(_response);
+        });
+    }
+
+    protected processAcceptInvite(response: Response): Promise<AcceptInviteResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AcceptInviteResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as OAuthError;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<AcceptInviteResponse>(null as any);
+    }
+
+    /**
+     * Token introspection endpoint (RFC 7662).
+    Returns metadata about a token including its active status, scopes, and subject.
+    Per RFC 7662, always returns 200 OK; invalid tokens get active=false.
+     * @param token (optional) 
+     * @param token_type_hint (optional) 
+     */
+    introspect(token?: string | null | undefined, token_type_hint?: string | null | undefined, signal?: AbortSignal): Promise<TokenIntrospectionResponse> {
+        let url_ = this.baseUrl + "/api/oauth/introspect";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = new FormData();
+        if (token !== null && token !== undefined)
+            content_.append("token", token.toString());
+        if (token_type_hint !== null && token_type_hint !== undefined)
+            content_.append("token_type_hint", token_type_hint.toString());
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processIntrospect(_response);
+        });
+    }
+
+    protected processIntrospect(response: Response): Promise<TokenIntrospectionResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TokenIntrospectionResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TokenIntrospectionResponse>(null as any);
+    }
+}
+
 export class OidcClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -3533,7 +4473,8 @@ export class WellKnownClient {
     }
 
     /**
-     * OAuth 2.0 Authorization Server Metadata
+     * OAuth 2.0 Authorization Server Metadata (RFC 8414).
+    Includes Nocturne's OAuth scope taxonomy and supported grant types.
      */
     getOAuthMetadata(signal?: AbortSignal): Promise<OAuthAuthorizationServerMetadata> {
         let url_ = this.baseUrl + "/.well-known/oauth-authorization-server";
@@ -18604,6 +19545,181 @@ export enum WidgetSize {
     Large = "Large",
 }
 
+/** OAuth 2.0 token response (RFC 6749 Section 5.1) */
+export interface OAuthTokenResponse {
+    accessToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+    refreshToken?: string | undefined;
+    scope?: string | undefined;
+}
+
+/** OAuth 2.0 error response (RFC 6749 Section 5.2) */
+export interface OAuthError {
+    error?: string;
+    errorDescription?: string | undefined;
+    errorUri?: string | undefined;
+}
+
+/** Device Authorization Response (RFC 8628 Section 3.2) */
+export interface OAuthDeviceAuthorizationResponse {
+    deviceCode?: string;
+    userCode?: string;
+    verificationUri?: string;
+    verificationUriComplete?: string | undefined;
+    expiresIn?: number;
+    interval?: number;
+}
+
+export interface DeviceCodeInfo {
+    id?: string;
+    userCode?: string;
+    clientId?: string;
+    clientDisplayName?: string | undefined;
+    isKnownClient?: boolean;
+    scopes?: string[];
+    isExpired?: boolean;
+    isApproved?: boolean;
+    isDenied?: boolean;
+}
+
+/** Client info response for the consent page */
+export interface OAuthClientInfoResponse {
+    clientId?: string;
+    displayName?: string | undefined;
+    isKnown?: boolean;
+    homepage?: string | undefined;
+}
+
+/** Response containing a list of OAuth grants */
+export interface OAuthGrantListResponse {
+    grants?: OAuthGrantDto[];
+}
+
+/** DTO representing an OAuth grant for the management UI */
+export interface OAuthGrantDto {
+    id?: string;
+    grantType?: string;
+    clientId?: string | undefined;
+    clientDisplayName?: string | undefined;
+    isKnownClient?: boolean;
+    followerSubjectId?: string | undefined;
+    followerName?: string | undefined;
+    followerEmail?: string | undefined;
+    scopes?: string[];
+    label?: string | undefined;
+    createdAt?: Date;
+    lastUsedAt?: Date | undefined;
+    lastUsedUserAgent?: string | undefined;
+}
+
+/** Request to create a follower grant (share data with another user) */
+export interface CreateFollowerGrantRequest {
+    followerEmail?: string;
+    scopes?: string[];
+    label?: string | undefined;
+    temporaryPassword?: string | undefined;
+    followerDisplayName?: string | undefined;
+}
+
+/** Request to update an existing grant's label and/or scopes */
+export interface UpdateGrantRequest {
+    label?: string | undefined;
+    scopes?: string[] | undefined;
+}
+
+/** Response containing a list of follower targets */
+export interface FollowerTargetListResponse {
+    targets?: FollowerTargetDto[];
+}
+
+/** DTO for a data owner that the current user can view as a follower */
+export interface FollowerTargetDto {
+    subjectId?: string;
+    displayName?: string | undefined;
+    email?: string | undefined;
+    scopes?: string[];
+    label?: string | undefined;
+}
+
+/** Response after creating an invite */
+export interface CreateInviteResponse {
+    id?: string;
+    token?: string;
+    inviteUrl?: string;
+    expiresAt?: Date;
+}
+
+/** Request to create a follower invite link */
+export interface CreateInviteRequest {
+    /** Scopes to grant when the invite is accepted */
+    scopes?: string[];
+    /** Optional label for the grant (e.g., "Mom", "Endocrinologist") */
+    label?: string | undefined;
+    /** Days until the invite expires (default: 7) */
+    expiresInDays?: number | undefined;
+    /** Maximum number of times the invite can be used (null = unlimited) */
+    maxUses?: number | undefined;
+}
+
+/** Response containing a list of invites */
+export interface InviteListResponse {
+    invites?: InviteDto[];
+}
+
+/** DTO for an invite in list responses */
+export interface InviteDto {
+    id?: string;
+    scopes?: string[];
+    label?: string | undefined;
+    expiresAt?: Date;
+    maxUses?: number | undefined;
+    useCount?: number;
+    createdAt?: Date;
+    isValid?: boolean;
+    isExpired?: boolean;
+    isRevoked?: boolean;
+    usedBy?: InviteUsageDto[];
+}
+
+/** DTO for invite usage information */
+export interface InviteUsageDto {
+    followerSubjectId?: string;
+    followerName?: string | undefined;
+    followerEmail?: string | undefined;
+    usedAt?: Date;
+}
+
+/** Response for invite info (for the accept page) */
+export interface InviteInfoResponse {
+    ownerName?: string | undefined;
+    ownerEmail?: string | undefined;
+    scopes?: string[];
+    label?: string | undefined;
+    expiresAt?: Date;
+    isValid?: boolean;
+    isExpired?: boolean;
+    isRevoked?: boolean;
+}
+
+/** Response after accepting an invite */
+export interface AcceptInviteResponse {
+    success?: boolean;
+    grantId?: string | undefined;
+}
+
+/** Token introspection response (RFC 7662) */
+export interface TokenIntrospectionResponse {
+    active?: boolean;
+    scope?: string | undefined;
+    clientId?: string | undefined;
+    sub?: string | undefined;
+    exp?: number | undefined;
+    iat?: number | undefined;
+    jti?: string | undefined;
+    tokenType?: string | undefined;
+}
+
 /** OIDC provider info for login page */
 export interface OidcProviderInfo {
     /** Provider ID */
@@ -19471,6 +20587,7 @@ export interface OAuthAuthorizationServerMetadata {
     issuer?: string;
     authorizationEndpoint?: string;
     tokenEndpoint?: string;
+    deviceAuthorizationEndpoint?: string | undefined;
     revocationEndpoint?: string | undefined;
     introspectionEndpoint?: string | undefined;
     jwksUri?: string;
@@ -21334,6 +22451,7 @@ export interface UISettingsConfiguration {
     notifications?: NotificationSettings;
     services?: ServicesSettings;
     dataQuality?: DataQualitySettings;
+    security?: SecuritySettings;
 }
 
 export interface DeviceSettings {
@@ -21654,6 +22772,11 @@ export interface SleepScheduleSettings {
 export interface CompressionLowDetectionSettings {
     enabled?: boolean;
     excludeFromStatistics?: boolean;
+}
+
+export interface SecuritySettings {
+    requireAuthForPublicAccess?: boolean;
+    hideGlucoseInFavicon?: boolean;
 }
 
 /** User preferences response */

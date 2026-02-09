@@ -44,6 +44,14 @@ declare global {
 			 * Whether the current request is authenticated
 			 */
 			isAuthenticated: boolean;
+			/**
+			 * Whether site security has been checked for this request
+			 */
+			siteSecurityChecked?: boolean;
+			/**
+			 * Whether site requires authentication (lockdown mode)
+			 */
+			requireAuthentication?: boolean;
 		}
 
 		// Base page data interface for the main app

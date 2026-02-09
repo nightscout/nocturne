@@ -327,6 +327,7 @@ public class StatusService : IStatusService
 
         // Auth settings
         settings["authDefaultRoles"] = _configuration["Auth:DefaultRoles"] ?? "readable";
+        settings["requireAuthentication"] = _configuration.GetValue<bool>("Security:RequireAuthentication", false);
 
         // Threshold values
         settings["thresholds"] = new Dictionary<string, object>

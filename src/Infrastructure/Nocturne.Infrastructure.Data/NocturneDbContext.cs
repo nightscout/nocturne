@@ -223,11 +223,42 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<ClockFaceEntity> ClockFaces { get; set; }
 
+    // OAuth 2.0 entities
+
+    /// <summary>
+    /// Gets or sets the OAuthClients table for registered/pinned OAuth client applications
+    /// </summary>
+    public DbSet<OAuthClientEntity> OAuthClients { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OAuthGrants table for user-approved authorization grants
+    /// </summary>
+    public DbSet<OAuthGrantEntity> OAuthGrants { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OAuthRefreshTokens table for OAuth refresh tokens (separate from legacy refresh tokens)
+    /// </summary>
+    public DbSet<OAuthRefreshTokenEntity> OAuthRefreshTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OAuthDeviceCodes table for Device Authorization Grant (RFC 8628)
+    /// </summary>
+    public DbSet<OAuthDeviceCodeEntity> OAuthDeviceCodes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the OAuthAuthorizationCodes table for Authorization Code + PKCE flow (RFC 7636)
+    /// </summary>
+    public DbSet<OAuthAuthorizationCodeEntity> OAuthAuthorizationCodes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the FollowerInvites table for shareable invite links
+    /// </summary>
+    public DbSet<FollowerInviteEntity> FollowerInvites { get; set; }
+
     /// <summary>
     /// Gets or sets the CompressionLowSuggestions table for compression low detection
     /// </summary>
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
-
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1008,7 +1039,12 @@ public class NocturneDbContext : DbContext
 
         modelBuilder
             .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.CanonicalId, l.IsPrimary })
+            .HasIndex(l => new
+            {
+                l.RecordType,
+                l.CanonicalId,
+                l.IsPrimary,
+            })
             .HasDatabaseName("ix_linked_records_type_canonical_primary");
 
         modelBuilder
@@ -1052,7 +1088,12 @@ public class NocturneDbContext : DbContext
 
         modelBuilder
             .Entity<InAppNotificationEntity>()
-            .HasIndex(n => new { n.UserId, n.Type, n.IsArchived })
+            .HasIndex(n => new
+            {
+                n.UserId,
+                n.Type,
+                n.IsArchived,
+            })
             .HasDatabaseName("ix_in_app_notifications_user_type_archived");
 
         modelBuilder
@@ -1060,6 +1101,106 @@ public class NocturneDbContext : DbContext
             .HasIndex(n => n.SourceId)
             .HasDatabaseName("ix_in_app_notifications_source_id")
             .HasFilter("source_id IS NOT NULL");
+
+        // OAuth Client indexes
+        modelBuilder
+            .Entity<OAuthClientEntity>()
+            .HasIndex(c => c.ClientId)
+            .HasDatabaseName("ix_oauth_clients_client_id")
+            .IsUnique();
+
+        // OAuth Grant indexes
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => g.ClientEntityId)
+            .HasDatabaseName("ix_oauth_grants_client_id");
+
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => g.SubjectId)
+            .HasDatabaseName("ix_oauth_grants_subject_id");
+
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => new { g.ClientEntityId, g.SubjectId })
+            .HasDatabaseName("ix_oauth_grants_client_subject");
+
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => g.RevokedAt)
+            .HasDatabaseName("ix_oauth_grants_revoked_at")
+            .HasFilter("revoked_at IS NULL");
+
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => g.FollowerSubjectId)
+            .HasDatabaseName("ix_oauth_grants_follower_subject_id")
+            .HasFilter("follower_subject_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<OAuthGrantEntity>()
+            .HasIndex(g => new { g.SubjectId, g.FollowerSubjectId })
+            .HasDatabaseName("ix_oauth_grants_subject_follower")
+            .HasFilter("follower_subject_id IS NOT NULL AND revoked_at IS NULL")
+            .IsUnique();
+
+        // OAuth Refresh Token indexes
+        modelBuilder
+            .Entity<OAuthRefreshTokenEntity>()
+            .HasIndex(t => t.TokenHash)
+            .HasDatabaseName("ix_oauth_refresh_tokens_token_hash")
+            .IsUnique();
+
+        modelBuilder
+            .Entity<OAuthRefreshTokenEntity>()
+            .HasIndex(t => t.GrantId)
+            .HasDatabaseName("ix_oauth_refresh_tokens_grant_id");
+
+        modelBuilder
+            .Entity<OAuthRefreshTokenEntity>()
+            .HasIndex(t => t.ExpiresAt)
+            .HasDatabaseName("ix_oauth_refresh_tokens_expires_at");
+
+        modelBuilder
+            .Entity<OAuthRefreshTokenEntity>()
+            .HasIndex(t => t.RevokedAt)
+            .HasDatabaseName("ix_oauth_refresh_tokens_revoked_at")
+            .HasFilter("revoked_at IS NULL");
+
+        // OAuth Device Code indexes
+        modelBuilder
+            .Entity<OAuthDeviceCodeEntity>()
+            .HasIndex(d => d.DeviceCodeHash)
+            .HasDatabaseName("ix_oauth_device_codes_device_code_hash")
+            .IsUnique();
+
+        modelBuilder
+            .Entity<OAuthDeviceCodeEntity>()
+            .HasIndex(d => d.UserCode)
+            .HasDatabaseName("ix_oauth_device_codes_user_code")
+            .IsUnique();
+
+        modelBuilder
+            .Entity<OAuthDeviceCodeEntity>()
+            .HasIndex(d => d.ExpiresAt)
+            .HasDatabaseName("ix_oauth_device_codes_expires_at");
+
+        // OAuth Authorization Code indexes
+        modelBuilder
+            .Entity<OAuthAuthorizationCodeEntity>()
+            .HasIndex(c => c.CodeHash)
+            .HasDatabaseName("ix_oauth_authorization_codes_code_hash")
+            .IsUnique();
+
+        modelBuilder
+            .Entity<OAuthAuthorizationCodeEntity>()
+            .HasIndex(c => c.ExpiresAt)
+            .HasDatabaseName("ix_oauth_authorization_codes_expires_at");
+
+        modelBuilder
+            .Entity<OAuthAuthorizationCodeEntity>()
+            .HasIndex(c => c.SubjectId)
+            .HasDatabaseName("ix_oauth_authorization_codes_subject_id");
 
         // ClockFaces indexes - optimized for user queries and public lookups
         modelBuilder
@@ -1241,7 +1382,6 @@ public class NocturneDbContext : DbContext
             .WithMany()
             .HasForeignKey(e => e.MatchedTreatmentId)
             .OnDelete(DeleteBehavior.SetNull);
-
 
         // Configure automatic timestamp updates
         modelBuilder
@@ -1576,7 +1716,7 @@ public class NocturneDbContext : DbContext
         // Configure Role entity defaults
         modelBuilder.Entity<RoleEntity>(entity =>
         {
-            entity.Property(e => e.Permissions).HasDefaultValue(new List<string>());
+            entity.Property(e => e.Permissions).HasDefaultValueSql("'[]'::jsonb");
             entity.Property(e => e.IsSystemRole).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity
@@ -1616,8 +1756,8 @@ public class NocturneDbContext : DbContext
         {
             entity
                 .Property(e => e.Scopes)
-                .HasDefaultValue(new List<string> { "openid", "profile", "email" });
-            entity.Property(e => e.DefaultRoles).HasDefaultValue(new List<string> { "readable" });
+                .HasDefaultValueSql("'[\"openid\",\"profile\",\"email\"]'::jsonb");
+            entity.Property(e => e.DefaultRoles).HasDefaultValueSql("'[\"readable\"]'::jsonb");
             entity.Property(e => e.ClaimMappingsJson).HasDefaultValue("{}");
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
@@ -1723,6 +1863,119 @@ public class NocturneDbContext : DbContext
             entity.Property(e => e.ArchiveReason).HasConversion<string>();
         });
 
+        // Configure OAuth Client entity
+        modelBuilder.Entity<OAuthClientEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.RedirectUris).HasDefaultValue("[]");
+            entity.Property(e => e.IsKnown).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity
+                .Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .ValueGeneratedOnAddOrUpdate();
+        });
+
+        // Configure OAuth Grant entity
+        modelBuilder.Entity<OAuthGrantEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.GrantType).HasDefaultValue(OAuthGrantTypes.App);
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Client)
+                .WithMany(c => c.Grants)
+                .HasForeignKey(e => e.ClientEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.FollowerSubject)
+                .WithMany()
+                .HasForeignKey(e => e.FollowerSubjectId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+        });
+
+        // Configure OAuth Refresh Token entity
+        modelBuilder.Entity<OAuthRefreshTokenEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.IssuedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Grant)
+                .WithMany(g => g.RefreshTokens)
+                .HasForeignKey(e => e.GrantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.ReplacedBy)
+                .WithMany()
+                .HasForeignKey(e => e.ReplacedById)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Configure OAuth Device Code entity
+        modelBuilder.Entity<OAuthDeviceCodeEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(e => e.Interval).HasDefaultValue(5);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Grant)
+                .WithMany()
+                .HasForeignKey(e => e.GrantId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Configure OAuth Authorization Code entity
+        modelBuilder.Entity<OAuthAuthorizationCodeEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity
+                .HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Configure Follower Invite entity
+        modelBuilder.Entity<FollowerInviteEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Scopes).HasDefaultValueSql("'{}'::text[]");
+            entity.Property(e => e.UseCount).HasDefaultValue(0);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity
+                .HasOne(e => e.Owner)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerSubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TokenHash);
+            entity.HasIndex(e => e.OwnerSubjectId);
+        });
+
         // Configure ClockFace entity
         modelBuilder.Entity<ClockFaceEntity>(entity =>
         {
@@ -1739,7 +1992,6 @@ public class NocturneDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .ValueGeneratedOnAddOrUpdate();
         });
-
     }
 
     /// <summary>
@@ -1946,6 +2198,43 @@ public class NocturneDbContext : DbContext
                     connectorConfigEntity.LastModified = DateTimeOffset.UtcNow;
                 }
                 connectorConfigEntity.SysUpdatedAt = utcNow;
+            }
+            // OAuth entities
+            else if (entry.Entity is OAuthClientEntity oauthClientEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    oauthClientEntity.CreatedAt = utcNow;
+                }
+                oauthClientEntity.UpdatedAt = utcNow;
+            }
+            else if (entry.Entity is OAuthGrantEntity oauthGrantEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    oauthGrantEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is OAuthRefreshTokenEntity oauthRefreshTokenEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    oauthRefreshTokenEntity.IssuedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is OAuthDeviceCodeEntity oauthDeviceCodeEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    oauthDeviceCodeEntity.CreatedAt = utcNow;
+                }
+            }
+            else if (entry.Entity is OAuthAuthorizationCodeEntity oauthAuthCodeEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    oauthAuthCodeEntity.CreatedAt = utcNow;
+                }
             }
             else if (entry.Entity is ClockFaceEntity clockFaceEntity)
             {

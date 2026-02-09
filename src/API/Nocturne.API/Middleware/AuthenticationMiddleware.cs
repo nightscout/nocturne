@@ -1,6 +1,8 @@
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
+using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
 
 namespace Nocturne.API.Middleware;
 
@@ -50,6 +52,25 @@ public class AuthenticationMiddleware
                 permissionTrie.Add(authContext.Permissions);
             }
             context.Items["PermissionTrie"] = permissionTrie;
+
+            // Resolve OAuth scopes from either explicit scopes (OAuth tokens) or
+            // translated from legacy permissions (api-secret, access tokens, etc.)
+            IReadOnlySet<string> grantedScopes;
+            if (authContext.IsAuthenticated && authContext.Scopes.Count > 0)
+            {
+                // OAuth token path: scopes came directly from the token claims
+                grantedScopes = OAuthScopes.Normalize(authContext.Scopes);
+            }
+            else if (authContext.IsAuthenticated && authContext.Permissions.Count > 0)
+            {
+                // Legacy path: translate Shiro-style permissions to scopes
+                grantedScopes = ScopeTranslator.FromPermissions(authContext.Permissions);
+            }
+            else
+            {
+                grantedScopes = new HashSet<string>();
+            }
+            context.Items["GrantedScopes"] = grantedScopes;
 
             // Also set the legacy AuthenticationContext for backward compatibility
             context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
@@ -142,6 +163,7 @@ public class AuthenticationMiddleware
         var authContext = AuthContext.Unauthenticated();
         context.Items["AuthContext"] = authContext;
         context.Items["PermissionTrie"] = new PermissionTrie();
+        context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
         context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
     }
 

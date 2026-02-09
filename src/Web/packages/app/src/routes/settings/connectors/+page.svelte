@@ -68,6 +68,7 @@
     Wrench,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
+  import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
   import Apple from "lucide-svelte/icons/apple";
   import TabletSmartphone from "lucide-svelte/icons/tablet-smartphone";
   import { getApiClient } from "$lib/api";
@@ -731,16 +732,16 @@
 </script>
 
 <svelte:head>
-  <title>Services - Settings - Nocturne</title>
+  <title>Connectors & Apps - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="container mx-auto p-6 max-w-4xl space-y-6">
   <!-- Header -->
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Data Sources & Services</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Connectors & Connected Apps</h1>
       <p class="text-muted-foreground">
-        See what's sending data to Nocturne and set up new connections
+        Manage data sources, set up new connections, and control app access
       </p>
     </div>
     <Button variant="outline" size="sm" onclick={refreshAll} class="gap-2">
@@ -1425,6 +1426,9 @@
         </div>
       </CardContent>
     </Card>
+
+    <!-- Connected Apps Section -->
+    <ConnectedApps />
   {/if}
 </div>
 

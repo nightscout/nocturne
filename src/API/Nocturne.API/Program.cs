@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.OpenApi;
@@ -224,6 +225,13 @@ builder.Services.AddScoped<ISubjectService, SubjectService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IOidcProviderService, OidcProviderService>();
 builder.Services.AddScoped<IOidcAuthService, OidcAuthService>();
+builder.Services.AddScoped<IOAuthClientService, OAuthClientService>();
+builder.Services.AddScoped<IOAuthGrantService, OAuthGrantService>();
+builder.Services.AddScoped<IOAuthTokenService, OAuthTokenService>();
+builder.Services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
+builder.Services.AddScoped<IFollowerInviteService, FollowerInviteService>();
+builder.Services.AddSingleton<IOAuthTokenRevocationCache, OAuthTokenRevocationCache>();
+builder.Services.AddHostedService<OAuthCodeCleanupService>();
 
 // Local identity provider services (built-in authentication without external OIDC)
 builder.Services.AddScoped<ILocalIdentityService, LocalIdentityService>();
@@ -247,6 +255,65 @@ builder.Services.AddHttpClient(
         client.Timeout = TimeSpan.FromSeconds(30);
     }
 );
+
+// Rate limiting for OAuth endpoints
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy(
+        "oauth-token",
+        context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }
+            )
+    );
+
+    options.AddPolicy(
+        "oauth-device",
+        context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }
+            )
+    );
+
+    options.AddPolicy(
+        "oauth-device-approve",
+        context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                }
+            )
+    );
+
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new
+            {
+                error = "rate_limit_exceeded",
+                error_description = "Too many requests. Please try again later.",
+            },
+            ct
+        );
+    };
+});
 
 // Statistics service for analytics and calculations
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
@@ -509,9 +576,18 @@ app.UseMiddleware<JsonExtensionMiddleware>();
 // Add Nightscout authentication middleware
 app.UseMiddleware<AuthenticationMiddleware>();
 
+// Add follower access middleware (handles X-Acting-As header for data sharing)
+app.UseMiddleware<FollowerAccessMiddleware>();
+
+// Add site security middleware (enforces authentication when site lockdown is enabled)
+app.UseMiddleware<SiteSecurityMiddleware>();
+
 // Add authentication and authorization middleware
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Add rate limiting
+app.UseRateLimiter();
 
 // Map native API controllers
 app.MapControllers();

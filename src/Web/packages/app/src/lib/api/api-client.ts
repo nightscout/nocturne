@@ -32,6 +32,7 @@ import {
   ServicesClient,
   LocalAuthClient,
   OidcClient,
+  OAuthClient,
   BatteryClient,
   PredictionClient,
   RetrospectiveClient,
@@ -91,6 +92,7 @@ export class ApiClient {
   public readonly services: ServicesClient;
   public readonly localAuth: LocalAuthClient;
   public readonly oidc: OidcClient;
+  public readonly oauth: OAuthClient;
   public readonly battery: BatteryClient;
   public readonly predictions: PredictionClient;
   public readonly retrospective: RetrospectiveClient;
@@ -149,6 +151,7 @@ export class ApiClient {
     this.services = new ServicesClient(apiBaseUrl, http);
     this.localAuth = new LocalAuthClient(apiBaseUrl, http);
     this.oidc = new OidcClient(apiBaseUrl, http);
+    this.oauth = new OAuthClient(apiBaseUrl, http);
     this.battery = new BatteryClient(apiBaseUrl, http);
     this.predictions = new PredictionClient(apiBaseUrl, http);
     this.retrospective = new RetrospectiveClient(apiBaseUrl, http);

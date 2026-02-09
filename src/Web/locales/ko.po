@@ -200,6 +200,10 @@ msgstr ""
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -1162,6 +1166,7 @@ msgstr ""
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1183,8 +1188,11 @@ msgstr ""
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/devices/+page.svelte
+#: src/routes/settings/grants/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Unknown"
@@ -3093,7 +3101,6 @@ msgid "Connect data sources like Dexcom, Libre, and more"
 msgstr ""
 
 #: src/lib/components/StepIndicator.svelte
-#: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/download/+page.svelte
 #: src/routes/settings/+page.svelte
 msgid "Connectors"
@@ -3114,12 +3121,13 @@ msgid "Administration"
 msgstr ""
 
 #: src/routes/settings/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 msgid "Manage subjects, roles, and access tokens"
 msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/routes/settings/+page.svelte
+#: src/routes/settings/admin/+page.svelte
+#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "Admin"
 msgstr ""
@@ -3896,7 +3904,6 @@ msgid "Waiting for data..."
 msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "Roles"
 msgstr ""
@@ -9246,55 +9253,45 @@ msgstr ""
 msgid "Administration - Settings - Nocturne"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Accounts <1/>"
-msgstr ""
+#~ msgid "<0/> Accounts <1/>"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Roles <1/>"
-msgstr ""
+#~ msgid "<0/> Roles <1/>"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Tokens"
-msgstr ""
+#~ msgid "<0/> Tokens"
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "<0/> Password Resets <1/>"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Subjects"
-msgstr ""
+#~ msgid "Subjects"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Users, devices, and services that can access the system"
-msgstr ""
+#~ msgid "Users, devices, and services that can access the system"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> New Subject"
-msgstr ""
+#~ msgid "<0/> New Subject"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "No subjects found"
-msgstr ""
+#~ msgid "No subjects found"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Create your first subject to get started"
-msgstr ""
+#~ msgid "Create your first subject to get started"
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "<0/> Unauthenticated Access"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Has Token"
-msgstr ""
+#~ msgid "Has Token"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Shows what users without login can see"
-msgstr ""
+#~ msgid "Shows what users without login can see"
+#~ msgstr ""
 
-#. placeholder {0}: subject.roles.join(", ")
+#. placeholder {0}: subject.roles.filter(r => r !== "admin").join(", ") || "Admin"
 #. placeholder {0}: subject.roles?.join(", ") || "None"
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -9305,70 +9302,53 @@ msgstr ""
 msgid "<0/> View Token"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Define permission sets that can be assigned to subjects"
-msgstr ""
+#~ msgid "Define permission sets that can be assigned to subjects"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> New Role"
-msgstr ""
+#~ msgid "<0/> New Role"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "No roles found"
-msgstr ""
+#~ msgid "No roles found"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Create your first role to get started"
-msgstr ""
+#~ msgid "Create your first role to get started"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "<0/> System"
 msgstr ""
 
-#. placeholder {0}: role.permissions.length
-#. placeholder {1}: role .permissions.length === 1 ? "" : "s"
-#: src/routes/settings/admin/+page.svelte
-msgid "{0} permission{1}"
-msgstr ""
+#~ msgid "{0} permission{1}"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "No permissions"
-msgstr ""
+#~ msgid "No permissions"
+#~ msgstr ""
 
-#. placeholder {0}: role.permissions.length - 3
-#: src/routes/settings/admin/+page.svelte
-msgid "+{0} more"
-msgstr ""
+#~ msgid "+{0} more"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "API Tokens"
-msgstr ""
+#~ msgid "API Tokens"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"Generate and manage access tokens for API access. Tokens are tied\n"
-"to subjects and inherit their permissions."
-msgstr ""
+#~ msgid ""
+#~ "Generate and manage access tokens for API access. Tokens are tied\n"
+#~ "to subjects and inherit their permissions."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"To generate an API token, create a new subject with the\n"
-"appropriate roles."
-msgstr ""
+#~ msgid ""
+#~ "To generate an API token, create a new subject with the\n"
+#~ "appropriate roles."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Create Subject with Token"
-msgstr ""
+#~ msgid "<0/> Create Subject with Token"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Subjects with Tokens"
-msgstr ""
+#~ msgid "Subjects with Tokens"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Copy Token"
-msgstr ""
+#~ msgid "<0/> Copy Token"
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "Pending Password Resets"
@@ -9400,56 +9380,47 @@ msgstr ""
 msgid "Generate Link"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "New Subject"
-msgstr ""
+#~ msgid "New Subject"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Edit Subject"
-msgstr ""
+#~ msgid "Edit Subject"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Create a new subject that can access the system."
-msgstr ""
+#~ msgid "Create a new subject that can access the system."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Update subject details and role assignments."
-msgstr ""
+#~ msgid "Update subject details and role assignments."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Description or notes about this subject"
-msgstr ""
+#~ msgid "Description or notes about this subject"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Create New Role"
-msgstr ""
+#~ msgid "<0/> Create New Role"
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "No roles available"
 msgstr ""
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
-#: src/routes/settings/admin/+page.svelte
 msgid "System"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"For fine-grained access control, create a custom role with only the\n"
-"necessary permissions."
-msgstr ""
+#~ msgid ""
+#~ "For fine-grained access control, create a custom role with only the\n"
+#~ "necessary permissions."
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "Full Admin Access"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"The selected role(s) grant complete control of this Nocturne\n"
-"instance, including the ability to create and delete other subjects,\n"
-"modify all data, and change system settings. Only assign this to\n"
-"trusted subjects."
-msgstr ""
+#~ msgid ""
+#~ "The selected role(s) grant complete control of this Nocturne\n"
+#~ "instance, including the ability to create and delete other subjects,\n"
+#~ "modify all data, and change system settings. Only assign this to\n"
+#~ "trusted subjects."
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "New Role"
@@ -9477,7 +9448,9 @@ msgstr ""
 msgid "Description of this role's purpose"
 msgstr ""
 
+#: src/lib/components/settings/ConnectedApps.svelte
 #: src/routes/settings/admin/+page.svelte
+#: src/routes/settings/grants/+page.svelte
 msgid "Permissions"
 msgstr ""
 
@@ -9494,13 +9467,11 @@ msgstr ""
 msgid "Selected Permissions ({0})"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Access Token"
-msgstr ""
+#~ msgid "Access Token"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Use this token to authenticate API requests."
-msgstr ""
+#~ msgid "Use this token to authenticate API requests."
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -9514,13 +9485,11 @@ msgstr ""
 msgid "<0/> Copy to Clipboard"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0>Important:</0> Store this token securely. Use it in the <1/> header or as an <2/> query parameter."
-msgstr ""
+#~ msgid "<0>Important:</0> Store this token securely. Use it in the <1/> header or as an <2/> query parameter."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "No access token available for this subject."
-msgstr ""
+#~ msgid "No access token available for this subject."
+#~ msgstr ""
 
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/lib/components/ui/dialog/dialog-content.svelte
@@ -10811,17 +10780,14 @@ msgstr ""
 msgid "Inactive"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Services - Settings - Nocturne"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Data Sources & Services"
 msgstr ""
 
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "See what's sending data to Nocturne and set up new connections"
 msgstr ""
@@ -12265,6 +12231,8 @@ msgid "Safe to run multiple times"
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Done"
 msgstr ""
@@ -15397,4 +15365,900 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "PumpBatteryChange"
+msgstr ""
+
+#~ msgid "Grants & Sharing"
+#~ msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "<0/> Viewing data for"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "My Data"
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Content-Type"
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Cookie"
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "Missing grant ID."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Grant not found. It may have already been revoked."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "An unexpected error occurred. Please try again."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "Could not reach the server. Please try again."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Email address is required."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "At least one scope must be selected."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Invalid request. Please check the details."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "A follower grant already exists for this email."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Grant not found."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+#: src/routes/settings/grants/+page.server.ts
+msgid "Invalid request."
+msgstr ""
+
+#: src/routes/settings/grants/+page.server.ts
+msgid "Missing invite ID."
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View glucose readings"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View and record glucose readings"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View treatments"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View and record treatments"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View device status"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View and update device status"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View profile settings"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View and update profile settings"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View notifications"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Manage notifications"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View reports and analytics"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View basic account info"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Manage sharing settings"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "View all health data (read-only)"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Full access including delete"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Grants - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Grants"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+msgid "Manage applications and followers that have access to your data"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Grant revoked successfully."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Follower added successfully."
+msgstr ""
+
+#~ msgid "Grant updated successfully."
+#~ msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Connected Apps"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Followers"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid ""
+"No connected applications. When you authorize apps to access your\n"
+"data, they will appear here."
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/grants/+page.svelte
+msgid "<0/> Verified"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Revoke"
+msgstr ""
+
+#. placeholder {0}: formatDate(grant.createdAt)
+#. placeholder {0}: formatDate(grant.createdAt)
+#. placeholder {0}: formatDate(grant.createdAt)
+#. placeholder {0}: formatDate(grant.createdAt)
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Created {0}"
+msgstr ""
+
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Last used {0}"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Share your data with caregivers and family members"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Create Invite Link"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Add by Email"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Create Invite Link"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid ""
+"Generate a shareable link. Anyone with this link can accept the invite\n"
+"after signing in."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Invite link created! Share it with your friend or family member."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Label (optional)"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Data to share"
+msgstr ""
+
+#~ msgid "Create Link"
+#~ msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Pending Invites"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Invite Link"
+msgstr ""
+
+#. placeholder {0}: invite.useCount
+#. placeholder {1}: invite.maxUses
+#. placeholder {0}: invite.useCount
+#. placeholder {1}: invite.maxUses
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "· {0}/{1} uses"
+msgstr ""
+
+#. placeholder {0}: formatDate(invite.expiresAt)
+#. placeholder {0}: formatDate(invite.expiresAt)
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Expires {0} <0/>"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Add a Follower"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid ""
+"Grant someone read access to your data by entering their email\n"
+"and selecting which data to share."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Email address"
+msgstr ""
+
+#~ msgid "Add Follower"
+#~ msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "No followers. Share your data with caregivers by adding a follower."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Shared Data"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to revoke grant. Please try again."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to add follower. Please try again."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to create invite. Please try again."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Invite revoked successfully."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to revoke invite. Please try again."
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Create Link"
+msgstr ""
+
+#: src/routes/settings/grants/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Add Follower"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.server.ts
+msgid "Invite not found or has expired."
+msgstr ""
+
+#: src/routes/invite/[token]/+page.server.ts
+msgid "Failed to accept invite."
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Accept Invite - Nocturne"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Not Found"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link is invalid or has expired."
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+#: src/routes/invite/[token]/+page.svelte
+msgid "Go to Login"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Expired"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Revoked"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Invite Unavailable"
+msgstr ""
+
+#. placeholder {0}: invite.ownerName ?? "the data owner"
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link has expired. Please ask {0} for a new invite."
+msgstr ""
+
+#. placeholder {0}: invite.ownerName ?? "the data owner"
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link has been revoked by {0}."
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite link is no longer available."
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "You're Invited"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Someone"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "<0/> wants to share their health data with you <1/>"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "You'll be able to see:"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "<0/> Accept Invite"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Sign in or create an account to accept this invite"
+msgstr ""
+
+#: src/routes/invite/[token]/+page.svelte
+msgid "Sign In to Accept"
+msgstr ""
+
+#. placeholder {0}: new Date(invite.expiresAt).toLocaleDateString()
+#: src/routes/invite/[token]/+page.svelte
+msgid "This invite expires on {0}"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "View your glucose readings"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "View your treatments"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "View your profile settings"
+msgstr ""
+
+#. placeholder {0}: appName
+#: src/routes/oauth/consent/+page.svelte
+msgid "Authorize {0} - Nocturne"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Additional Permissions"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorize Application"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid ""
+"<0/> is requesting\n"
+"additional access to your Nocturne data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"<0/> wants to access\n"
+"your Nocturne data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"This application is not in the Nocturne known app directory. Only\n"
+"approve if you trust this application."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "New permissions requested"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Previously approved"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "This application is requesting permission to:"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "This app cannot delete your data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"This app is requesting full access, including the ability to delete\n"
+"data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Deny"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Approve"
+msgstr ""
+
+#. placeholder {0}: appName
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorize {0}"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Link a Device"
+msgstr ""
+
+#. placeholder {0}: deviceInfo ? `Authorize ${appName}` : "Link a Device"
+#: src/routes/oauth/device/+page.svelte
+msgid "{0} - Nocturne"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Device Authorized"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "You can close this window and return to your device."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorization Denied"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "The device will not be granted access."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Enter the code shown on your device"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Continue"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Manage users, connected devices, and access control"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "<0/> Users <1/>"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "<0/> Connected Devices <1/>"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Users"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "User accounts and their roles. For device access, use OAuth device authorization flow."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "<0/> New User"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "No users found"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Create your first user account to get started"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Defines what unauthenticated users can access"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Revoke device access? This will log out the device and require re-authorization."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Connected Devices"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Devices and applications connected via OAuth. Users authorize devices using the device flow at /oauth/device."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Modern OAuth Device Authorization"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Devices connect using the OAuth Device Authorization Flow. Users visit <0>/oauth/device</0> to authorize devices with a simple code."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "This replaces manual API token generation. Devices get scoped access tokens that can be refreshed and revoked."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "No connected devices"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Devices will appear here after users authorize them"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Unknown Device"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Verified"
+msgstr ""
+
+#. placeholder {0}: grant.followerName
+#: src/routes/settings/admin/+page.svelte
+msgid "Follower: {0}"
+msgstr ""
+
+#. placeholder {0}: grant.clientId
+#: src/routes/settings/admin/+page.svelte
+msgid "User: {0}"
+msgstr ""
+
+#. placeholder {0}: grant.scopes.join(", ")
+#: src/routes/settings/admin/+page.svelte
+msgid "Scopes: {0}"
+msgstr ""
+
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#: src/routes/settings/admin/+page.svelte
+msgid "• Last used: {0}"
+msgstr ""
+
+#. placeholder {0}: formatDate(grant.createdAt)
+#: src/routes/settings/admin/+page.svelte
+msgid "Created: {0} <0/>"
+msgstr ""
+
+#. placeholder {0}: subjects.filter((s) => s.accessToken).length
+#: src/routes/settings/admin/+page.svelte
+msgid "Legacy API Tokens ({0})"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "These are legacy static tokens. Modern integrations should use OAuth device flow instead."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "New User"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Edit User"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Create a new user account."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Update user details and role assignments."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Additional information about this user"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Predefined"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Custom Roles"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Use predefined roles for standard access levels. OAuth scopes provide fine-grained device permissions."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid ""
+"This user will have complete control of this Nocturne instance,\n"
+"including the ability to manage other users, modify all data,\n"
+"and change system settings. Only assign admin access to trusted users."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Legacy API Token"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "This is a legacy static token. New integrations should use OAuth device flow instead."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Legacy Authentication Method"
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Static tokens cannot be refreshed or scoped. Consider migrating to OAuth device authorization for better security."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "Use in the <0/> header or as an <1/> query parameter."
+msgstr ""
+
+#: src/routes/settings/admin/+page.svelte
+msgid "No access token available for this user."
+msgstr ""
+
+#~ msgid "Security"
+#~ msgstr ""
+
+#~ msgid "Security - Settings - Nocturne"
+#~ msgstr ""
+
+#~ msgid "Manage site security, data sharing, and access control"
+#~ msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Allow multiple uses"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "By default, invite links can only be used once. Enable this to allow unlimited uses."
+msgstr ""
+
+#: src/routes/oauth/device/+page.server.ts
+msgid "Please enter a device code."
+msgstr ""
+
+#: src/routes/oauth/device/+page.server.ts
+msgid "Invalid or expired device code. Please check the code and try again."
+msgstr ""
+
+#: src/routes/oauth/device/+page.server.ts
+#: src/routes/oauth/device/+page.server.ts
+msgid "The device code has expired or is no longer valid."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.server.ts
+msgid "Location"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "App access revoked successfully."
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Failed to revoke access. Please try again."
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Connected Apps"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "OAuth applications that have been authorized to access your data"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Used by"
+msgstr ""
+
+#. placeholder {0}: formatDate(usage.usedAt)
+#: src/routes/settings/security/+page.svelte
+msgid "on {0}"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Create new account with temporary password"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Display name (optional)"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Temporary password"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Enter a temporary password"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "The follower will be required to change this password on first login."
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Connectors & Apps"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Followers & Sharing"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Followers & Sharing - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Connectors & Apps - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Connectors & Connected Apps"
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Manage data sources, set up new connections, and control app access"
 msgstr ""

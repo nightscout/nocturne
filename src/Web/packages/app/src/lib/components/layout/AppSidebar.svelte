@@ -1,7 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { invalidateAll } from "$app/navigation";
+  import { onMount } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as Select from "$lib/components/ui/select";
   import {
     SidebarGlucoseWidget,
     SidebarNotifications,
@@ -10,6 +13,11 @@
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$lib/data/user-preferences.remote";
   import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
+  import {
+    actingAs,
+    followerTargets,
+    type ActingAsTarget,
+  } from "$lib/stores/acting-as";
   import {
     Home,
     BarChart3,
@@ -40,6 +48,8 @@
     Timer,
     Layers,
     ShieldCheck,
+    Shield,
+    Eye,
   } from "lucide-svelte";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -50,6 +60,62 @@
 
   const { user = null }: Props = $props();
   const sidebar = Sidebar.useSidebar();
+
+  // Follower target selector state
+  let targets = $state<ActingAsTarget[]>([]);
+  let selectedValue = $state<string>("__self__");
+
+  /**
+   * Fetch available follower targets from the API. Gracefully handles 404 or
+   * errors (endpoint may not exist yet).
+   */
+  async function loadFollowerTargets() {
+    try {
+      const response = await fetch("/api/oauth/follower-targets", {
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const fetched: ActingAsTarget[] = data.targets ?? [];
+        targets = fetched;
+        followerTargets.set(fetched);
+      }
+    } catch {
+      // Silently fail - endpoint may not exist yet
+    }
+  }
+
+  function handleTargetChange(value: string | undefined) {
+    if (!value) return;
+    selectedValue = value;
+
+    if (value === "__self__") {
+      actingAs.set(null);
+    } else {
+      const target = targets.find((t) => t.subjectId === value);
+      if (target) {
+        actingAs.set(target);
+      }
+    }
+
+    // Refresh all page data to reflect the new context
+    invalidateAll();
+  }
+
+  /**
+   * Format a target for display. Shows "{displayName} ({label})" if label is
+   * present, otherwise just "{displayName}".
+   */
+  function formatTargetLabel(target: ActingAsTarget): string {
+    const name = target.displayName || target.email || "Unknown";
+    return target.label ? `${name} (${target.label})` : name;
+  }
+
+  onMount(() => {
+    if (user) {
+      loadFollowerTargets();
+    }
+  });
 
   type NavItem = {
     title: string;
@@ -161,7 +227,7 @@
           title: "Test Endpoint Compatibility",
           href: "/compatibility/test",
           icon: TestTube,
-        }
+        },
       ],
     },
     {
@@ -172,14 +238,19 @@
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         { title: "Features", href: "/settings/features", icon: Sparkles },
-        { title: "Data Quality", href: "/settings/data-quality", icon: ShieldCheck },
+        {
+          title: "Data Quality",
+          href: "/settings/data-quality",
+          icon: ShieldCheck,
+        },
         { title: "Alarms", href: "/settings/alarms", icon: Bell },
         {
           title: "Notifications & Trackers",
           href: "/settings/trackers",
           icon: Timer,
         },
-        { title: "Connectors", href: "/settings/connectors", icon: Plug },
+        { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
+        { title: "Followers & Sharing", href: "/settings/security", icon: Shield },
         {
           title: "Support & Community",
           href: "/settings/support",
@@ -212,11 +283,11 @@
     }
 
     if (item.href) {
-      return page.url.pathname.startsWith(item.href)
+      return page.url.pathname.startsWith(item.href);
     }
 
     if (item.children) {
-      return item.children.some(child => isActive(child));
+      return item.children.some((child) => isActive(child));
     }
 
     return false;
@@ -259,6 +330,43 @@
   </Sidebar.Group>
 
   <Sidebar.Separator />
+
+  <!-- Follower target selector (only visible when targets are available) -->
+  {#if targets.length > 0}
+    <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
+      <p
+        class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
+      >
+        <Eye class="h-3 w-3" />
+        Viewing data for
+      </p>
+      <Select.Root
+        type="single"
+        value={selectedValue}
+        onValueChange={handleTargetChange}
+      >
+        <Select.Trigger size="sm" class="w-full">
+          {#if selectedValue === "__self__"}
+            My Data
+          {:else}
+            {#each targets as target}
+              {#if target.subjectId === selectedValue}
+                {formatTargetLabel(target)}
+              {/if}
+            {/each}
+          {/if}
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Item value="__self__">My Data</Select.Item>
+          {#each targets as target}
+            <Select.Item value={target.subjectId}>
+              {formatTargetLabel(target)}
+            </Select.Item>
+          {/each}
+        </Select.Content>
+      </Select.Root>
+    </div>
+  {/if}
 
   <Sidebar.Content>
     <!-- Navigation -->
@@ -334,7 +442,8 @@
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
           <LanguageSelector
             onLanguageChange={user
-              ? (locale: string) => updateLanguagePreference({ preferredLanguage: locale })
+              ? (locale: string) =>
+                  updateLanguagePreference({ preferredLanguage: locale })
               : undefined}
           />
         </Sidebar.MenuItem>

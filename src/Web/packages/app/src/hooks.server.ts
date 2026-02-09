@@ -48,7 +48,12 @@ function getHashedApiSecret(): string | null {
 function createServerApiClient(
   baseUrl: string,
   fetchFn: typeof fetch,
-  options?: { accessToken?: string; refreshToken?: string; hashedSecret?: string | null }
+  options?: {
+    accessToken?: string;
+    refreshToken?: string;
+    hashedSecret?: string | null;
+    extraHeaders?: Record<string, string>;
+  }
 ): ApiClient {
   const httpClient = {
     fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
@@ -57,6 +62,13 @@ function createServerApiClient(
       // Add the hashed API secret as authentication
       if (options?.hashedSecret) {
         headers.set("api-secret", options.hashedSecret);
+      }
+
+      // Forward extra headers (e.g., X-Acting-As for follower context)
+      if (options?.extraHeaders) {
+        for (const [key, value] of Object.entries(options.extraHeaders)) {
+          headers.set(key, value);
+        }
       }
 
       // Forward auth cookies if provided (both access and refresh for token refresh flow)
@@ -133,6 +145,64 @@ const authHandle: Handle = async ({ event, resolve }) => {
   } catch (error) {
     // Log but don't fail the request - user will be treated as unauthenticated
     console.error("Failed to validate session:", error);
+  }
+
+  return resolve(event);
+};
+
+/**
+ * Site security handler - checks if site lockdown is enabled and enforces authentication
+ */
+const siteSecurityHandle: Handle = async ({ event, resolve }) => {
+  const apiBaseUrl = getApiBaseUrl();
+
+  if (!apiBaseUrl) {
+    return resolve(event);
+  }
+
+  // Skip security check for public routes (auth pages, API, static assets)
+  const path = event.url.pathname;
+  if (
+    path.startsWith("/auth") ||
+    path.startsWith("/api") ||
+    path.startsWith("/_app") ||
+    path.startsWith("/assets") ||
+    path === "/" ||
+    path === "/favicon.ico"
+  ) {
+    return resolve(event);
+  }
+
+  try {
+    // Fetch site status to check if authentication is required
+    // Cache this check in locals to avoid multiple API calls
+    if (!event.locals.siteSecurityChecked) {
+      const apiClient = createServerApiClient(apiBaseUrl, fetch, {
+        hashedSecret: getHashedApiSecret(),
+      });
+
+      // Get status with security settings
+      const status = await apiClient.status.getStatus();
+      const requireAuth = status?.settings?.["requireAuthentication"] === true;
+
+      event.locals.requireAuthentication = requireAuth;
+      event.locals.siteSecurityChecked = true;
+    }
+
+    // If authentication is required and user is not authenticated, redirect to login
+    if (event.locals.requireAuthentication && !event.locals.isAuthenticated) {
+      const returnUrl = encodeURIComponent(event.url.pathname + event.url.search);
+      return new Response(null, {
+        status: 303,
+        headers: {
+          Location: `/auth/login?returnUrl=${returnUrl}`,
+        },
+      });
+    }
+  } catch (error) {
+    // If we can't check security settings, allow the request to proceed
+    // This prevents site lockout if the API is temporarily unavailable
+    console.error("Failed to check site security settings:", error);
   }
 
   return resolve(event);
@@ -218,12 +288,19 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
 
+  // Forward X-Acting-As header if present (follower context)
+  const extraHeaders: Record<string, string> = {};
+  const actingAs = event.request.headers.get("x-acting-as");
+  if (actingAs) {
+    extraHeaders["X-Acting-As"] = actingAs;
+  }
 
   // Create API client with SvelteKit's fetch, auth headers, and both tokens
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
     hashedSecret: getHashedApiSecret(),
+    extraHeaders,
   });
 
   return resolve(event);
@@ -344,5 +421,5 @@ export const locale: Handle = async ({ event, resolve }) => {
   return await runWithLocale(locale, () => resolve(event));
 }
 
-// Chain the auth handler, proxy handler, and API client handler
-export const handle: Handle = sequence(authHandle, proxyHandle, apiClientHandle, locale);
+// Chain the auth handler, site security handler, proxy handler, and API client handler
+export const handle: Handle = sequence(authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
