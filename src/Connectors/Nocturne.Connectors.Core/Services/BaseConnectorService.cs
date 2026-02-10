@@ -691,7 +691,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Tracks consecutive failed requests for health monitoring.
     ///     Automatically incremented on failures and reset on success.
     /// </summary>
-    protected int _failedRequestCount;
+    private int _failedRequestCount;
 
     /// <summary>
     ///     Maximum failed requests before connector is considered unhealthy.
@@ -703,19 +703,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Gets whether the connector is in a healthy state based on recent request failures.
     ///     Returns false if consecutive failures exceed MaxFailedRequestsBeforeUnhealthy.
     /// </summary>
-    public virtual bool IsHealthy => _failedRequestCount < MaxFailedRequestsBeforeUnhealthy;
+    public virtual bool IsHealthy => Volatile.Read(ref _failedRequestCount) < MaxFailedRequestsBeforeUnhealthy;
 
     /// <summary>
     ///     Gets the number of consecutive failed requests.
     /// </summary>
-    public int FailedRequestCount => _failedRequestCount;
+    public int FailedRequestCount => Volatile.Read(ref _failedRequestCount);
 
     /// <summary>
     ///     Resets the failed request counter. Call this after successful recovery.
     /// </summary>
     public virtual void ResetFailedRequestCount()
     {
-        _failedRequestCount = 0;
+        Interlocked.Exchange(ref _failedRequestCount, 0);
         _logger.LogInformation(
             "[{ConnectorSource}] Failed request count reset",
             ConnectorSource
@@ -727,11 +727,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </summary>
     protected void TrackFailedRequest(string? reason = null)
     {
-        _failedRequestCount++;
+        var newCount = Interlocked.Increment(ref _failedRequestCount);
         _logger.LogWarning(
             "[{ConnectorSource}] Request failed (count: {FailedCount}/{MaxAllowed}){Reason}",
             ConnectorSource,
-            _failedRequestCount,
+            newCount,
             MaxFailedRequestsBeforeUnhealthy,
             reason != null ? $": {reason}" : ""
         );
@@ -742,14 +742,15 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </summary>
     protected void TrackSuccessfulRequest()
     {
-        if (_failedRequestCount > 0)
+        var previousCount = Volatile.Read(ref _failedRequestCount);
+        if (previousCount > 0)
         {
             _logger.LogInformation(
                 "[{ConnectorSource}] Request succeeded, resetting failed count from {PreviousCount}",
                 ConnectorSource,
-                _failedRequestCount
+                previousCount
             );
-            _failedRequestCount = 0;
+            Interlocked.Exchange(ref _failedRequestCount, 0);
         }
     }
 

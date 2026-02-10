@@ -19,6 +19,6 @@ public static class GlookoConstants
     /// </summary>
     public static class Configuration
     {
-        public const string DefaultServer = "eu.api.glooko.com";
+        public const string DefaultServer = Servers.Eu;
     }
 }

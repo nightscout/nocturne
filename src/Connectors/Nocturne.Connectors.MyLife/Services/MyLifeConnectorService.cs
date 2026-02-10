@@ -35,7 +35,7 @@ public class MyLifeConnectorService(
         [SyncDataType.Glucose, SyncDataType.Treatments];
 
     public override bool IsHealthy =>
-        _failedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;
+        FailedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;
 
     public override async Task<bool> AuthenticateAsync()
     {

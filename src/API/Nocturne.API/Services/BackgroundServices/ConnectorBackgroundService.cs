@@ -91,7 +91,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, "Error during {ConnectorName} data sync cycle {ex}", ConnectorName, ex);
+                    Logger.LogError(ex, "Error during {ConnectorName} data sync cycle", ConnectorName);
                 }
             } while (await timer.WaitForNextTickAsync(stoppingToken));
         }
@@ -105,9 +105,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         catch (Exception ex)
         {
             Logger.LogError(
-                "Unexpected error in {ConnectorName} connector background service {ex}",
-                ConnectorName,
-                ex
+                ex,
+                "Unexpected error in {ConnectorName} connector background service",
+                ConnectorName
             );
             throw;
         }

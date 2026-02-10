@@ -84,6 +84,12 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.AddServiceDefaults();
 
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = builder.Environment.IsDevelopment();
+    options.ValidateOnBuild = builder.Environment.IsDevelopment();
+});
+
 // Configure PostgreSQL database
 var aspirePostgreSqlConnection = builder.Configuration.GetConnectionString(ServiceNames.PostgreSql);
 
@@ -263,7 +269,7 @@ builder.Services.AddScoped<IConnectorConfigurationService, ConnectorConfiguratio
 
 // Connector runtime services (single executable)
 builder.Services.AddBaseConnectorServices();
-builder.Services.AddSingleton<IConnectorPublisher, InProcessConnectorPublisher>();
+builder.Services.AddScoped<IConnectorPublisher, InProcessConnectorPublisher>();
 builder.Services.AddDexcomConnector(builder.Configuration);
 builder.Services.AddGlookoConnector(builder.Configuration);
 builder.Services.AddLibreLinkUpConnector(builder.Configuration);

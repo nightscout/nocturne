@@ -462,7 +462,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         {
             defaultInstance = Activator.CreateInstance(configType);
         }
-        catch
+        catch (Exception)
         {
             // Could not create default instance - continue without defaults
         }
@@ -518,9 +518,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 {
                     defaultValue = property.GetValue(defaultInstance);
                 }
-                catch
+                catch (TargetInvocationException)
                 {
-                    // Ignore errors getting default value
+                    continue;
+                }
+                catch (InvalidOperationException)
+                {
+                    continue;
                 }
             }
 

@@ -64,6 +64,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             await _entryService.CreateEntriesAsync(entries, cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish entries for {Source}", source);
@@ -81,6 +82,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             await _treatmentService.CreateTreatmentsAsync(treatments, cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish treatments for {Source}", source);
@@ -100,6 +102,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
                 cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish device status for {Source}", source);
@@ -117,6 +120,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             await _profileDataService.CreateProfilesAsync(profiles, cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish profiles for {Source}", source);
@@ -134,6 +138,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             await _foodService.CreateFoodAsync(foods, cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish food for {Source}", source);
@@ -154,6 +159,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
                 cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish connector food entries for {Source}", source);
@@ -171,6 +177,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             await _activityService.CreateActivitiesAsync(activities, cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish activities for {Source}", source);
@@ -191,6 +198,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             }
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish state spans for {Source}", source);
@@ -208,6 +216,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
             await _systemEventRepository.BulkUpsertAsync(systemEvents, cancellationToken);
             return true;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish system events for {Source}", source);
@@ -219,6 +228,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
         string source,
         CancellationToken cancellationToken = default)
     {
+        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
         var entry = await _entryService.GetCurrentEntryAsync(cancellationToken);
         if (entry == null)
             return null;
@@ -236,6 +246,7 @@ public class InProcessConnectorPublisher : IConnectorPublisher
         string source,
         CancellationToken cancellationToken = default)
     {
+        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
         var latest = (await _treatmentService.GetTreatmentsAsync(
                 count: 1,
                 skip: 0,
