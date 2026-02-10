@@ -818,6 +818,11 @@ public class OAuthController : ControllerBase
                     subjectId.Value
                 );
             }
+            catch (OperationCanceledException)
+            {
+                // Preserve cancellation semantics so upstream middleware can handle it appropriately.
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to create follower account for {Email}", request.FollowerEmail);
