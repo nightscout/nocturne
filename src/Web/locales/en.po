@@ -269,7 +269,6 @@ msgstr "Using cached data"
 #: src/lib/components/dashboard/PredictionVisualizations.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
-#: src/routes/+layout.svelte
 #: src/routes/auth/forgot-password/+page.svelte
 #: src/routes/auth/login/+page.svelte
 #: src/routes/auth/register/+page.svelte
@@ -3466,6 +3465,7 @@ msgstr "Alarms"
 msgid "Notifications & Trackers"
 msgstr "Notifications & Trackers"
 
+#: src/lib/components/StepIndicator.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "Connectors"
 msgstr "Connectors"
@@ -13298,3 +13298,218 @@ msgstr "Run Detection"
 #: src/routes/reports/data-quality/+page.svelte
 msgid "Manually scan a date range for compression lows"
 msgstr "Manually scan a date range for compression lows"
+
+#: src/routes/+layout.svelte
+msgid "N"
+msgstr "N"
+
+#: src/routes/+layout.svelte
+msgid "Nocturne Portal"
+msgstr "Nocturne Portal"
+
+#. placeholder {0}: new Date().getFullYear()
+#: src/routes/+layout.svelte
+msgid "Nocturne © {0} - Open source diabetes management"
+msgstr "Nocturne © {0} - Open source diabetes management"
+
+#: src/routes/+page.svelte
+msgid "Your Diabetes Data, <0>Your Way</0>"
+msgstr "Your Diabetes Data, <0>Your Way</0>"
+
+#: src/routes/+page.svelte
+msgid ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+msgstr ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+
+#: src/routes/+page.svelte
+msgid "Get Started <0/>"
+msgstr "Get Started <0/>"
+
+#: src/routes/+page.svelte
+msgid "<0/> See it in Action"
+msgstr "<0/> See it in Action"
+
+#: src/routes/+page.svelte
+msgid "Explore Features"
+msgstr "Explore Features"
+
+#: src/routes/+page.svelte
+msgid "Why Choose Nocturne?"
+msgstr "Why Choose Nocturne?"
+
+#: src/routes/+page.svelte
+msgid ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+msgstr ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+
+#: src/routes/+page.svelte
+msgid "Nightscout Compatible"
+msgstr "Nightscout Compatible"
+
+#: src/routes/+page.svelte
+msgid ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+msgstr ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+
+#: src/routes/+page.svelte
+msgid "Modern Performance"
+msgstr "Modern Performance"
+
+#: src/routes/+page.svelte
+msgid ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+msgstr ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+
+#: src/routes/+page.svelte
+msgid "Self-Hosted Security"
+msgstr "Self-Hosted Security"
+
+#: src/routes/+page.svelte
+msgid ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+msgstr ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+
+#: src/routes/+page.svelte
+msgid "Multiple Data Sources"
+msgstr "Multiple Data Sources"
+
+#: src/routes/+page.svelte
+msgid ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+msgstr ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+
+#: src/routes/+page.svelte
+msgid "Real-Time Monitoring"
+msgstr "Real-Time Monitoring"
+
+#: src/routes/+page.svelte
+msgid ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+msgstr ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+
+#: src/routes/+page.svelte
+msgid "Easy Migration"
+msgstr "Easy Migration"
+
+#: src/routes/+page.svelte
+msgid ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+msgstr ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+
+#: src/routes/+page.svelte
+msgid "Get Started in Minutes"
+msgstr "Get Started in Minutes"
+
+#: src/routes/+page.svelte
+msgid ""
+"Our configuration wizard generates everything you need for a\n"
+"production-ready deployment."
+msgstr ""
+"Our configuration wizard generates everything you need for a\n"
+"production-ready deployment."
+
+#: src/routes/+page.svelte
+msgid "Step 1"
+msgstr "Step 1"
+
+#: src/routes/+page.svelte
+msgid "Configure"
+msgstr "Configure"
+
+#: src/routes/+page.svelte
+msgid ""
+"Choose your setup type and configure your data sources through our\n"
+"friendly wizard."
+msgstr ""
+"Choose your setup type and configure your data sources through our\n"
+"friendly wizard."
+
+#: src/routes/+page.svelte
+msgid "Step 2"
+msgstr "Step 2"
+
+#: src/routes/+page.svelte
+msgid "Deploy"
+msgstr "Deploy"
+
+#: src/routes/+page.svelte
+msgid ""
+"Download your configuration files and deploy with Docker in one\n"
+"command."
+msgstr ""
+"Download your configuration files and deploy with Docker in one\n"
+"command."
+
+#: src/routes/+page.svelte
+msgid "Step 3"
+msgstr "Step 3"
+
+#: src/routes/+page.svelte
+msgid "Monitor"
+msgstr "Monitor"
+
+#: src/routes/+page.svelte
+msgid ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+msgstr ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+
+#: src/routes/+page.svelte
+msgid "Ready to Take Control?"
+msgstr "Ready to Take Control?"
+
+#: src/routes/+page.svelte
+msgid ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+msgstr ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+
+#: src/routes/+page.svelte
+msgid "Start Configuration <0/>"
+msgstr "Start Configuration <0/>"
+
+#: src/routes/+page.svelte
+msgid "Read the Docs"
+msgstr "Read the Docs"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Setup"
+msgstr "Setup"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Download"
+msgstr "Download"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Setup progress"
+msgstr "Setup progress"

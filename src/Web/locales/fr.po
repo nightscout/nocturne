@@ -246,7 +246,6 @@ msgstr ""
 #: src/lib/components/dashboard/PredictionVisualizations.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
-#: src/routes/+layout.svelte
 #: src/routes/auth/forgot-password/+page.svelte
 #: src/routes/auth/login/+page.svelte
 #: src/routes/auth/register/+page.svelte
@@ -12371,148 +12370,186 @@ msgstr ""
 #~ "• Last seen {1}"
 #~ msgstr ""
 
-#~ msgid "Your Diabetes Data, <0>Your Way</0>"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Your Diabetes Data, <0>Your Way</0>"
+msgstr ""
 
-#~ msgid ""
-#~ "A modern, open-source platform for managing your glucose data with full\n"
-#~ "Nightscout compatibility. Built by the diabetes community, for the\n"
-#~ "diabetes community."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+msgstr ""
 
-#~ msgid "Get Started <0/>"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Get Started <0/>"
+msgstr ""
 
-#~ msgid "<0/> See it in Action"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "<0/> See it in Action"
+msgstr ""
 
-#~ msgid "Explore Features"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Explore Features"
+msgstr ""
 
-#~ msgid "Why Choose Nocturne?"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Why Choose Nocturne?"
+msgstr ""
 
-#~ msgid ""
-#~ "Modern architecture meets proven reliability. Get the features you need\n"
-#~ "without sacrificing compatibility."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+msgstr ""
 
-#~ msgid "Nightscout Compatible"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Nightscout Compatible"
+msgstr ""
 
-#~ msgid ""
-#~ "Full API compatibility means your existing apps and devices work\n"
-#~ "seamlessly. No migration headaches."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+msgstr ""
 
+#: src/routes/+page.svelte
 #: src/routes/features/+page.svelte
 msgid "Modern Performance"
 msgstr ""
 
-#~ msgid ""
-#~ "Built on .NET 10 for blazing fast performance. Handle more data with\n"
-#~ "less resources."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+msgstr ""
 
-#~ msgid "Self-Hosted Security"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Self-Hosted Security"
+msgstr ""
 
-#~ msgid ""
-#~ "Your data stays on your server. Full control over your health\n"
-#~ "information, always."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+msgstr ""
 
-#~ msgid "Multiple Data Sources"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Multiple Data Sources"
+msgstr ""
 
-#~ msgid ""
-#~ "Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
-#~ "together in one place."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+msgstr ""
 
-#~ msgid "Real-Time Monitoring"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Real-Time Monitoring"
+msgstr ""
 
-#~ msgid ""
-#~ "Live glucose updates with WebSocket support. Stay informed with\n"
-#~ "instant notifications."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+msgstr ""
 
-#~ msgid "Easy Migration"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Easy Migration"
+msgstr ""
 
-#~ msgid ""
-#~ "Import your existing Nightscout data with one click. Or run both\n"
-#~ "side-by-side to test first."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+msgstr ""
 
-#~ msgid "Get Started in Minutes"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Get Started in Minutes"
+msgstr ""
 
-#~ msgid ""
-#~ "Our configuration wizard generates everything you need for a\n"
-#~ "production-ready deployment."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Our configuration wizard generates everything you need for a\n"
+"production-ready deployment."
+msgstr ""
 
-#~ msgid "Step 1"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Step 1"
+msgstr ""
 
-#~ msgid "Configure"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Configure"
+msgstr ""
 
-#~ msgid ""
-#~ "Choose your setup type and configure your data sources through our\n"
-#~ "friendly wizard."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Choose your setup type and configure your data sources through our\n"
+"friendly wizard."
+msgstr ""
 
-#~ msgid "Step 2"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Step 2"
+msgstr ""
 
-#~ msgid "Deploy"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Deploy"
+msgstr ""
 
-#~ msgid ""
-#~ "Download your configuration files and deploy with Docker in one\n"
-#~ "command."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Download your configuration files and deploy with Docker in one\n"
+"command."
+msgstr ""
 
-#~ msgid "Step 3"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Step 3"
+msgstr ""
 
-#~ msgid "Monitor"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Monitor"
+msgstr ""
 
-#~ msgid ""
-#~ "Start tracking your glucose data with a modern, responsive\n"
-#~ "interface."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+msgstr ""
 
-#~ msgid "Ready to Take Control?"
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid "Ready to Take Control?"
+msgstr ""
 
-#~ msgid ""
-#~ "Join the community of people managing their diabetes data on their own\n"
-#~ "terms. Free, open source, and always will be."
-#~ msgstr ""
+#: src/routes/+page.svelte
+msgid ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+msgstr ""
 
+#: src/routes/+page.svelte
 #: src/routes/features/+page.svelte
 msgid "Start Configuration <0/>"
 msgstr ""
 
+#: src/routes/+page.svelte
 #: src/routes/features/+page.svelte
 msgid "Read the Docs"
 msgstr ""
 
 #: src/lib/components/SiteFooter.svelte
 #: src/lib/components/SiteHeader.svelte
+#: src/routes/+layout.svelte
 msgid "N"
 msgstr ""
 
-#~ msgid "Nocturne Portal"
-#~ msgstr ""
+#: src/routes/+layout.svelte
+msgid "Nocturne Portal"
+msgstr ""
 
-#~ msgid "Nocturne © {0} - Open source diabetes management"
-#~ msgstr ""
+#. placeholder {0}: new Date().getFullYear()
+#: src/routes/+layout.svelte
+msgid "Nocturne © {0} - Open source diabetes management"
+msgstr ""
 
 #: src/lib/components/StepIndicator.svelte
 msgid "Setup"
