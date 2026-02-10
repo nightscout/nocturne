@@ -440,6 +440,9 @@ public class OAuthTokenService : IOAuthTokenService
         _db.OAuthRefreshTokens.Add(refreshTokenEntity);
         await _db.SaveChangesAsync(ct);
 
+        // Update grant last used timestamp
+        await _grantService.UpdateLastUsedAsync(grant.Id, null, null, ct);
+
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} client_id={ClientId} subject_id={SubjectId} scopes={Scopes}",
             "token_issued", grant.Id, grant.ClientId, grant.SubjectId, string.Join(" ", grant.Scopes));

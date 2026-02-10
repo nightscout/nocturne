@@ -13820,7 +13820,6 @@ msgstr "The device will not be granted access."
 msgid "Authorize Application"
 msgstr "Authorize Application"
 
-#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid ""
 "<0/> wants to access\n"
@@ -13857,23 +13856,18 @@ msgstr ""
 "This app is requesting full access, including the ability to delete\n"
 "data."
 
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "Deny"
-msgstr "Deny"
+#~ msgid "Deny"
+#~ msgstr "Deny"
 
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "Approve"
-msgstr "Approve"
+#~ msgid "Approve"
+#~ msgstr "Approve"
 
 #: src/routes/oauth/device/+page.svelte
 msgid "Enter the code shown on your device"
 msgstr "Enter the code shown on your device"
 
-#: src/routes/oauth/device/+page.svelte
-msgid "Continue"
-msgstr "Continue"
+#~ msgid "Continue"
+#~ msgstr "Continue"
 
 #. placeholder {0}: appName
 #: src/routes/oauth/consent/+page.svelte
@@ -13884,13 +13878,12 @@ msgstr "Authorize {0} - Nocturne"
 msgid "Additional Permissions"
 msgstr "Additional Permissions"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid ""
-"<0/> is requesting\n"
-"additional access to your Nocturne data."
-msgstr ""
-"<0/> is requesting\n"
-"additional access to your Nocturne data."
+#~ msgid ""
+#~ "<0/> is requesting\n"
+#~ "additional access to your Nocturne data."
+#~ msgstr ""
+#~ "<0/> is requesting\n"
+#~ "additional access to your Nocturne data."
 
 #: src/routes/oauth/consent/+page.svelte
 msgid "New permissions requested"
@@ -14093,22 +14086,17 @@ msgstr "Allow multiple uses"
 msgid "By default, invite links can only be used once. Enable this to allow unlimited uses."
 msgstr "By default, invite links can only be used once. Enable this to allow unlimited uses."
 
-#: src/routes/oauth/device/+page.server.ts
-msgid "Please enter a device code."
-msgstr "Please enter a device code."
+#~ msgid "Please enter a device code."
+#~ msgstr "Please enter a device code."
 
-#: src/routes/oauth/device/+page.server.ts
-msgid "Invalid or expired device code. Please check the code and try again."
-msgstr "Invalid or expired device code. Please check the code and try again."
+#~ msgid "Invalid or expired device code. Please check the code and try again."
+#~ msgstr "Invalid or expired device code. Please check the code and try again."
 
-#: src/routes/oauth/device/+page.server.ts
-#: src/routes/oauth/device/+page.server.ts
-msgid "The device code has expired or is no longer valid."
-msgstr "The device code has expired or is no longer valid."
+#~ msgid "The device code has expired or is no longer valid."
+#~ msgstr "The device code has expired or is no longer valid."
 
-#: src/routes/oauth/consent/+page.server.ts
-msgid "Location"
-msgstr "Location"
+#~ msgid "Location"
+#~ msgstr "Location"
 
 #: src/lib/components/settings/ConnectedApps.svelte
 msgid "App access revoked successfully."
@@ -14180,10 +14168,48 @@ msgstr "Manage data sources, set up new connections, and control app access"
 msgid "Followers & Sharing - Settings - Nocturne"
 msgstr "Followers & Sharing - Settings - Nocturne"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "Only share data from last 24 hours"
-msgstr "Only share data from last 24 hours"
+#~ msgid "Only share data from last 24 hours"
+#~ msgstr "Only share data from last 24 hours"
+
+#~ msgid "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
+#~ msgstr "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
 
 #: src/routes/oauth/consent/+page.svelte
-msgid "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
-msgstr "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
+msgid "<0/> is requesting additional access to your Nocturne data."
+msgstr "<0/> is requesting additional access to your Nocturne data."
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "<0/> wants to access your Nocturne data."
+msgstr "<0/> wants to access your Nocturne data."
+
+#: src/routes/oauth/consent/+page.svelte
+msgid ""
+"When enabled, this app will only be able to access data from the\n"
+"last 24 hours. Historical reports will show a notice that data is\n"
+"limited."
+msgstr ""
+"When enabled, this app will only be able to access data from the\n"
+"last 24 hours. Historical reports will show a notice that data is\n"
+"limited."
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Only share data from the last 24 hours"
+msgstr "Only share data from the last 24 hours"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Add device"
+msgstr "<0/> Add device"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Deny"
+msgstr "<0/> Deny"
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Approve"
+msgstr "<0/> Approve"
+
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Continue"
+msgstr "<0/> Continue"

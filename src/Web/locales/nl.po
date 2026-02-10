@@ -15892,13 +15892,11 @@ msgstr ""
 msgid "Authorize Application"
 msgstr ""
 
-#: src/routes/oauth/consent/+page.svelte
-msgid ""
-"<0/> is requesting\n"
-"additional access to your Nocturne data."
-msgstr ""
+#~ msgid ""
+#~ "<0/> is requesting\n"
+#~ "additional access to your Nocturne data."
+#~ msgstr ""
 
-#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid ""
 "<0/> wants to access\n"
@@ -15937,15 +15935,11 @@ msgid ""
 "data."
 msgstr ""
 
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "Deny"
-msgstr ""
+#~ msgid "Deny"
+#~ msgstr ""
 
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "Approve"
-msgstr ""
+#~ msgid "Approve"
+#~ msgstr ""
 
 #. placeholder {0}: appName
 #: src/routes/oauth/device/+page.svelte
@@ -15982,9 +15976,8 @@ msgstr ""
 msgid "Enter the code shown on your device"
 msgstr ""
 
-#: src/routes/oauth/device/+page.svelte
-msgid "Continue"
-msgstr ""
+#~ msgid "Continue"
+#~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
 msgid "Manage users, connected devices, and access control"
@@ -16176,22 +16169,17 @@ msgstr ""
 msgid "By default, invite links can only be used once. Enable this to allow unlimited uses."
 msgstr ""
 
-#: src/routes/oauth/device/+page.server.ts
-msgid "Please enter a device code."
-msgstr ""
+#~ msgid "Please enter a device code."
+#~ msgstr ""
 
-#: src/routes/oauth/device/+page.server.ts
-msgid "Invalid or expired device code. Please check the code and try again."
-msgstr ""
+#~ msgid "Invalid or expired device code. Please check the code and try again."
+#~ msgstr ""
 
-#: src/routes/oauth/device/+page.server.ts
-#: src/routes/oauth/device/+page.server.ts
-msgid "The device code has expired or is no longer valid."
-msgstr ""
+#~ msgid "The device code has expired or is no longer valid."
+#~ msgstr ""
 
-#: src/routes/oauth/consent/+page.server.ts
-msgid "Location"
-msgstr ""
+#~ msgid "Location"
+#~ msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
 msgid "App access revoked successfully."
@@ -16263,10 +16251,45 @@ msgstr ""
 msgid "Manage data sources, set up new connections, and control app access"
 msgstr ""
 
+#~ msgid "Only share data from last 24 hours"
+#~ msgstr ""
+
+#~ msgid "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
+#~ msgstr ""
+
 #: src/routes/oauth/consent/+page.svelte
-msgid "Only share data from last 24 hours"
+msgid "<0/> is requesting additional access to your Nocturne data."
 msgstr ""
 
 #: src/routes/oauth/consent/+page.svelte
-msgid "When enabled, this app will only be able to access data from the last 24 hours. Historical reports will show a notice that data is limited."
+msgid "<0/> wants to access your Nocturne data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid ""
+"When enabled, this app will only be able to access data from the\n"
+"last 24 hours. Historical reports will show a notice that data is\n"
+"limited."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Only share data from the last 24 hours"
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Add device"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Deny"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Approve"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Continue"
 msgstr ""

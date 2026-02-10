@@ -19552,27 +19552,27 @@ export enum WidgetSize {
 
 /** OAuth 2.0 token response (RFC 6749 Section 5.1) */
 export interface OAuthTokenResponse {
-    accessToken?: string;
-    tokenType?: string;
-    expiresIn?: number;
-    refreshToken?: string | undefined;
+    access_token?: string;
+    token_type?: string;
+    expires_in?: number;
+    refresh_token?: string | undefined;
     scope?: string | undefined;
 }
 
 /** OAuth 2.0 error response (RFC 6749 Section 5.2) */
 export interface OAuthError {
     error?: string;
-    errorDescription?: string | undefined;
-    errorUri?: string | undefined;
+    error_description?: string | undefined;
+    error_uri?: string | undefined;
 }
 
 /** Device Authorization Response (RFC 8628 Section 3.2) */
 export interface OAuthDeviceAuthorizationResponse {
-    deviceCode?: string;
-    userCode?: string;
-    verificationUri?: string;
-    verificationUriComplete?: string | undefined;
-    expiresIn?: number;
+    device_code?: string;
+    user_code?: string;
+    verification_uri?: string;
+    verification_uri_complete?: string | undefined;
+    expires_in?: number;
     interval?: number;
 }
 

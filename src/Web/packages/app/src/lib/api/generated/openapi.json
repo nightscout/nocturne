@@ -17902,17 +17902,17 @@
         "description": "OAuth 2.0 token response (RFC 6749 Section 5.1)",
         "additionalProperties": false,
         "properties": {
-          "accessToken": {
+          "access_token": {
             "type": "string"
           },
-          "tokenType": {
+          "token_type": {
             "type": "string"
           },
-          "expiresIn": {
+          "expires_in": {
             "type": "integer",
             "format": "int32"
           },
-          "refreshToken": {
+          "refresh_token": {
             "type": "string",
             "nullable": true
           },
@@ -17930,11 +17930,11 @@
           "error": {
             "type": "string"
           },
-          "errorDescription": {
+          "error_description": {
             "type": "string",
             "nullable": true
           },
-          "errorUri": {
+          "error_uri": {
             "type": "string",
             "nullable": true
           }
@@ -17945,20 +17945,20 @@
         "description": "Device Authorization Response (RFC 8628 Section 3.2)",
         "additionalProperties": false,
         "properties": {
-          "deviceCode": {
+          "device_code": {
             "type": "string"
           },
-          "userCode": {
+          "user_code": {
             "type": "string"
           },
-          "verificationUri": {
+          "verification_uri": {
             "type": "string"
           },
-          "verificationUriComplete": {
+          "verification_uri_complete": {
             "type": "string",
             "nullable": true
           },
-          "expiresIn": {
+          "expires_in": {
             "type": "integer",
             "format": "int32"
           },

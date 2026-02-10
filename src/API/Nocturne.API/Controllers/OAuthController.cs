@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -133,7 +134,7 @@ public class OAuthController : ControllerBase
         {
             // Redirect to login, preserving the OAuth params to return to after login
             var returnUrl = $"/api/oauth/authorize{Request.QueryString}";
-            return Redirect($"/auth/local/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+            return Redirect($"/auth/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         var subjectId = HttpContext.GetSubjectId();
@@ -401,9 +402,12 @@ public class OAuthController : ControllerBase
         // Create device code pair
         var result = await _deviceCodeService.CreateDeviceCodeAsync(client_id, normalizedScopes);
 
-        // Build verification URI from current request
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        var verificationUri = $"{baseUrl}/api/oauth/device";
+        // Build verification URI - points to frontend device approval page
+        // The frontend runs on a different port, so we use the Origin header if available
+        // or fall back to the current request with the frontend path
+        var baseUrl = Request.Headers.Origin.FirstOrDefault()
+            ?? $"{Request.Scheme}://{Request.Host}";
+        var verificationUri = $"{baseUrl}/oauth/device";
         var verificationUriComplete = $"{verificationUri}?user_code={Uri.EscapeDataString(result.UserCode)}";
 
         _logger.LogInformation(
@@ -448,7 +452,16 @@ public class OAuthController : ControllerBase
             return NotFound(new OAuthError
             {
                 Error = "invalid_request",
-                ErrorDescription = "Device code not found or has expired.",
+                ErrorDescription = "Device code not found.",
+            });
+        }
+
+        if (info.IsExpired)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "expired_token",
+                ErrorDescription = "Device code has expired. Please request a new one.",
             });
         }
 
@@ -622,7 +635,7 @@ public class OAuthController : ControllerBase
             qs += $"&existing_scopes={Uri.EscapeDataString(existingScopes)}";
         }
 
-        return $"/api/oauth/consent?{qs}";
+        return $"/oauth/consent?{qs}";
     }
 
     /// <summary>
@@ -1282,8 +1295,13 @@ public class OAuthController : ControllerBase
 /// </summary>
 public class OAuthError
 {
+    [JsonPropertyName("error")]
     public string Error { get; set; } = string.Empty;
+
+    [JsonPropertyName("error_description")]
     public string? ErrorDescription { get; set; }
+
+    [JsonPropertyName("error_uri")]
     public string? ErrorUri { get; set; }
 }
 
@@ -1322,10 +1340,19 @@ public class OAuthTokenRequest
 /// </summary>
 public class OAuthTokenResponse
 {
+    [JsonPropertyName("access_token")]
     public string AccessToken { get; set; } = string.Empty;
+
+    [JsonPropertyName("token_type")]
     public string TokenType { get; set; } = "Bearer";
+
+    [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; }
+
+    [JsonPropertyName("refresh_token")]
     public string? RefreshToken { get; set; }
+
+    [JsonPropertyName("scope")]
     public string? Scope { get; set; }
 }
 
@@ -1334,11 +1361,22 @@ public class OAuthTokenResponse
 /// </summary>
 public class OAuthDeviceAuthorizationResponse
 {
+    [JsonPropertyName("device_code")]
     public string DeviceCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("user_code")]
     public string UserCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("verification_uri")]
     public string VerificationUri { get; set; } = string.Empty;
+
+    [JsonPropertyName("verification_uri_complete")]
     public string? VerificationUriComplete { get; set; }
+
+    [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; }
+
+    [JsonPropertyName("interval")]
     public int Interval { get; set; } = 5;
 }
 

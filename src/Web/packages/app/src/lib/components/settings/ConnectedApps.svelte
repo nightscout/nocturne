@@ -10,6 +10,7 @@
     AlertTriangle,
     Clock,
     Loader2,
+    Plus,
   } from "lucide-svelte";
   import { formatDate } from "$lib/utils/formatting";
   import { getGrants, revokeGrant } from "$lib/data/oauth.remote";
@@ -71,11 +72,17 @@
 </script>
 
 <div class="space-y-4">
-  <div class="space-y-1">
-    <h2 class="text-lg font-semibold tracking-tight">Connected Apps</h2>
-    <p class="text-sm text-muted-foreground">
-      OAuth applications that have been authorized to access your data
-    </p>
+  <div class="flex items-start justify-between gap-4">
+    <div class="space-y-1">
+      <h2 class="text-lg font-semibold tracking-tight">Connected Apps</h2>
+      <p class="text-sm text-muted-foreground">
+        OAuth applications that have been authorized to access your data
+      </p>
+    </div>
+    <Button href="/oauth/device" variant="outline" size="sm" class="shrink-0">
+      <Plus class="mr-1.5 h-3.5 w-3.5" />
+      Add device
+    </Button>
   </div>
 
   {#if errorMessage}
