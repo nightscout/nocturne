@@ -9,12 +9,13 @@ using Nocturne.Desktop.Tray.Views;
 namespace Nocturne.Desktop.Tray;
 
 /// <summary>
-/// Application entry point. Manages single-instance behavior, service wiring,
-/// and the tray icon lifecycle.
+/// Application entry point. Manages single-instance behavior, OIDC auth,
+/// service wiring, and the tray icon lifecycle.
 /// </summary>
 public partial class App : Application
 {
     private SettingsService _settingsService = null!;
+    private OidcAuthService _authService = null!;
     private NocturneClient _nocturneClient = null!;
     private GlucoseStateService _glucoseState = null!;
     private AlarmService _alarmService = null!;
@@ -41,15 +42,16 @@ public partial class App : Application
             return;
         }
 
-        // Handle redirected activations (e.g., protocol activation from OAuth callback)
+        // Handle redirected activations (protocol activation from OIDC callback)
         mainInstance.Activated += OnInstanceActivated;
 
         // Initialize services
         _settingsService = new SettingsService();
         await _settingsService.LoadAsync();
 
+        _authService = new OidcAuthService(_settingsService);
         _glucoseState = new GlucoseStateService();
-        _nocturneClient = new NocturneClient(_settingsService);
+        _nocturneClient = new NocturneClient(_settingsService, _authService);
         _alarmService = new AlarmService(_settingsService);
         _alarmService.Initialize();
 
@@ -79,14 +81,26 @@ public partial class App : Application
         _nocturneClient.OnConnectionChanged += OnConnectionChanged;
         _glucoseState.StateChanged += OnStateChanged;
 
-        // Show settings on first run, otherwise connect
-        if (!_settingsService.IsConfigured)
+        // Wire auth state changes to connect/disconnect
+        _authService.AuthStateChanged += OnAuthStateChanged;
+
+        // If we have stored tokens, validate them and connect
+        if (_settingsService.HasServerUrl && _settingsService.IsAuthenticated)
         {
-            ShowSettings();
+            await _authService.InitializeAsync();
+            if (_authService.IsAuthenticated)
+            {
+                await ConnectAsync();
+            }
+            else
+            {
+                // Stored tokens were invalid — prompt re-authentication
+                ShowSettings();
+            }
         }
         else
         {
-            await ConnectAsync();
+            ShowSettings();
         }
     }
 
@@ -94,17 +108,14 @@ public partial class App : Application
     {
         await _trayIcon.SetConnectingAsync(_settingsService.Settings);
 
-        // Connect to the server
         await _nocturneClient.ConnectAsync(_appCts.Token);
 
-        // Fetch initial data
         var current = await _nocturneClient.FetchCurrentReadingAsync(_appCts.Token);
         if (current is not null)
         {
             _glucoseState.ProcessReading(current);
         }
 
-        // Load recent history for the chart
         var history = await _nocturneClient.FetchRecentReadingsAsync(
             _settingsService.Settings.ChartHours, _appCts.Token);
         if (history.Count > 0)
@@ -138,12 +149,30 @@ public partial class App : Application
         });
     }
 
+    private void OnAuthStateChanged()
+    {
+        _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, async () =>
+        {
+            if (_authService.IsAuthenticated)
+            {
+                // Tokens received or refreshed — connect if not already connected
+                if (!_nocturneClient.IsConnected)
+                {
+                    await ConnectAsync();
+                }
+            }
+            else
+            {
+                // Signed out or tokens revoked — disconnect
+                await _nocturneClient.DisconnectAsync();
+                await _trayIcon.SetConnectingAsync(_settingsService.Settings);
+            }
+        });
+    }
+
     private async void OnStateChanged()
     {
-        // Update tray icon with latest reading
         await _trayIcon.UpdateAsync(_glucoseState.CurrentReading, _settingsService.Settings);
-
-        // Refresh flyout if visible
         _flyoutWindow.RefreshContent();
     }
 
@@ -159,12 +188,19 @@ public partial class App : Application
 
     private void ShowSettings()
     {
-        var settingsWindow = new SettingsWindow(_settingsService);
+        var settingsWindow = new SettingsWindow(_settingsService, _authService);
         settingsWindow.SettingsSaved += async (_, _) =>
         {
-            // Reconnect with new settings
+            // Reconnect with updated settings (thresholds, chart hours, etc.)
+            if (_authService.IsAuthenticated)
+            {
+                await _nocturneClient.DisconnectAsync();
+                await ConnectAsync();
+            }
+        };
+        settingsWindow.SignOutRequested += async (_, _) =>
+        {
             await _nocturneClient.DisconnectAsync();
-            await ConnectAsync();
         };
         settingsWindow.Activate();
     }
@@ -173,6 +209,7 @@ public partial class App : Application
     {
         _appCts.Cancel();
         await _nocturneClient.DisposeAsync();
+        _authService.Dispose();
         _alarmService.Dispose();
         _trayIcon.Dispose();
         _glucoseState.Dispose();
@@ -182,7 +219,6 @@ public partial class App : Application
 
     private void OnInstanceActivated(object? sender, AppActivationArguments args)
     {
-        // Handle protocol activation from OAuth callback
         if (args.Kind == ExtendedActivationKind.Protocol
             && args.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs)
         {
@@ -193,30 +229,17 @@ public partial class App : Application
         }
     }
 
-    private void HandleProtocolActivation(Uri uri)
+    private async void HandleProtocolActivation(Uri uri)
     {
-        // nocturne-tray://auth/callback?token=xxx&refresh=yyy
+        // nocturne-tray://auth/callback?access_token=xxx&refresh_token=yyy&expires_in=900
         if (uri.AbsolutePath.TrimStart('/') == "auth/callback")
         {
-            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-            var token = query["token"];
-            var refresh = query["refresh"];
-
-            if (!string.IsNullOrEmpty(token))
+            var success = await _authService.HandleCallbackAsync(uri);
+            if (!success)
             {
-                _settingsService.SetAccessToken(token);
+                // Auth failed — show settings so the user can retry
+                ShowSettings();
             }
-            if (!string.IsNullOrEmpty(refresh))
-            {
-                _settingsService.SetRefreshToken(refresh);
-            }
-
-            // Reconnect with new credentials
-            _ = Task.Run(async () =>
-            {
-                await _nocturneClient.DisconnectAsync();
-                await ConnectAsync();
-            });
         }
     }
 

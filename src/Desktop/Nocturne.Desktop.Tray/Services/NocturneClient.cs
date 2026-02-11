@@ -1,6 +1,4 @@
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Nocturne.Desktop.Tray.Models;
@@ -8,13 +6,14 @@ using Nocturne.Desktop.Tray.Models;
 namespace Nocturne.Desktop.Tray.Services;
 
 /// <summary>
-/// HTTP + SignalR client for the Nocturne/Nightscout API.
-/// Handles authentication via API secret or access token,
-/// real-time data via SignalR DataHub, and polling fallback.
+/// HTTP + SignalR client for the Nocturne API.
+/// Authenticates exclusively via Bearer tokens obtained from OidcAuthService.
+/// Real-time data flows through the SignalR DataHub with HTTP polling as fallback.
 /// </summary>
 public sealed class NocturneClient : IAsyncDisposable
 {
     private readonly SettingsService _settingsService;
+    private readonly OidcAuthService _authService;
     private readonly HttpClient _httpClient;
     private HubConnection? _hubConnection;
     private CancellationTokenSource? _pollCts;
@@ -26,10 +25,14 @@ public sealed class NocturneClient : IAsyncDisposable
 
     public bool IsConnected => _isConnected;
 
-    public NocturneClient(SettingsService settingsService)
+    public NocturneClient(SettingsService settingsService, OidcAuthService authService)
     {
         _settingsService = settingsService;
+        _authService = authService;
         _httpClient = new HttpClient();
+
+        // Re-configure auth header when tokens are refreshed
+        _authService.AuthStateChanged += OnAuthStateChanged;
     }
 
     /// <summary>
@@ -39,6 +42,7 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
         if (string.IsNullOrEmpty(serverUrl)) return;
+        if (!_authService.IsAuthenticated) return;
 
         ConfigureHttpClient(serverUrl);
         await ConnectSignalRAsync(serverUrl, cancellationToken);
@@ -70,6 +74,7 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         try
         {
+            EnsureBearerToken();
             var response = await _httpClient.GetAsync("/api/v1/entries/current", cancellationToken);
             response.EnsureSuccessStatusCode();
 
@@ -91,6 +96,7 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         try
         {
+            EnsureBearerToken();
             var since = DateTimeOffset.UtcNow.AddHours(-hours).ToUnixTimeMilliseconds();
             var url = $"/api/v1/entries.json?find[mills][$gte]={since}&count=1000&sort$desc=mills";
 
@@ -116,20 +122,21 @@ public sealed class NocturneClient : IAsyncDisposable
     private void ConfigureHttpClient(string serverUrl)
     {
         _httpClient.BaseAddress = new Uri(serverUrl);
-        _httpClient.DefaultRequestHeaders.Clear();
+        EnsureBearerToken();
+    }
 
-        var apiSecret = _settingsService.GetApiSecret();
-        if (!string.IsNullOrEmpty(apiSecret))
-        {
-            var hash = Sha1Hex(apiSecret);
-            _httpClient.DefaultRequestHeaders.Add("api-secret", hash);
-        }
-
-        var accessToken = _settingsService.GetAccessToken();
-        if (!string.IsNullOrEmpty(accessToken))
+    /// <summary>
+    /// Updates the Authorization header with the current access token.
+    /// Called before each request and when tokens are refreshed.
+    /// </summary>
+    private void EnsureBearerToken()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+        var token = _authService.GetAccessToken();
+        if (!string.IsNullOrEmpty(token))
         {
             _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         }
     }
 
@@ -138,17 +145,10 @@ public sealed class NocturneClient : IAsyncDisposable
         _hubConnection = new HubConnectionBuilder()
             .WithUrl($"{serverUrl}/hubs/data", options =>
             {
-                var apiSecret = _settingsService.GetApiSecret();
-                if (!string.IsNullOrEmpty(apiSecret))
-                {
-                    options.Headers.Add("api-secret", Sha1Hex(apiSecret));
-                }
-
-                var accessToken = _settingsService.GetAccessToken();
-                if (!string.IsNullOrEmpty(accessToken))
-                {
-                    options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
-                }
+                // Provide the access token for the initial HTTP upgrade request.
+                // The provider is called on each reconnect, so it always gets the latest token.
+                options.AccessTokenProvider = () =>
+                    Task.FromResult(_authService.GetAccessToken());
             })
             .WithAutomaticReconnect(new RetryPolicy())
             .Build();
@@ -160,7 +160,7 @@ public sealed class NocturneClient : IAsyncDisposable
         // Listen for real-time data updates
         _hubConnection.On<JsonElement>("dataUpdate", HandleDataUpdate);
 
-        // Listen for alarm events (these come from AlarmHub but we handle them generically)
+        // Listen for alarm events
         _hubConnection.On<JsonElement>("alarm", data =>
             OnAlarm?.Invoke(new AlarmEventArgs(AlarmLevel.Alarm, data)));
         _hubConnection.On<JsonElement>("urgent_alarm", data =>
@@ -188,21 +188,14 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         if (_hubConnection?.State != HubConnectionState.Connected) return;
 
-        var authData = new Dictionary<string, object?> { ["client"] = "Nocturne.Desktop.Tray" };
+        var token = _authService.GetAccessToken();
+        if (string.IsNullOrEmpty(token)) return;
 
-        var apiSecret = _settingsService.GetApiSecret();
-        if (!string.IsNullOrEmpty(apiSecret))
+        await _hubConnection.InvokeAsync<object>("Authorize", new Dictionary<string, object?>
         {
-            authData["secret"] = Sha1Hex(apiSecret);
-        }
-
-        var accessToken = _settingsService.GetAccessToken();
-        if (!string.IsNullOrEmpty(accessToken))
-        {
-            authData["token"] = accessToken;
-        }
-
-        await _hubConnection.InvokeAsync<object>("Authorize", authData);
+            ["client"] = "Nocturne.Desktop.Tray",
+            ["token"] = token,
+        });
     }
 
     private async Task SubscribeAsync()
@@ -221,9 +214,22 @@ public sealed class NocturneClient : IAsyncDisposable
         await SubscribeAsync();
     }
 
+    /// <summary>
+    /// When the auth service refreshes tokens, re-authorize the SignalR hub
+    /// so it uses the new access token for the "authorized" group.
+    /// </summary>
+    private async void OnAuthStateChanged()
+    {
+        EnsureBearerToken();
+
+        if (_hubConnection?.State == HubConnectionState.Connected)
+        {
+            await AuthorizeHubAsync();
+        }
+    }
+
     private void HandleDataUpdate(JsonElement data)
     {
-        // dataUpdate can contain entries array
         if (data.TryGetProperty("sgvs", out var sgvs) && sgvs.ValueKind == JsonValueKind.Array)
         {
             foreach (var entry in sgvs.EnumerateArray())
@@ -236,7 +242,6 @@ public sealed class NocturneClient : IAsyncDisposable
             }
         }
 
-        // Also try top-level array entries
         if (data.ValueKind == JsonValueKind.Array)
         {
             foreach (var entry in data.EnumerateArray())
@@ -323,21 +328,13 @@ public sealed class NocturneClient : IAsyncDisposable
         };
     }
 
-    private static string Sha1Hex(string input)
-    {
-        var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexStringLower(bytes);
-    }
-
     public async ValueTask DisposeAsync()
     {
+        _authService.AuthStateChanged -= OnAuthStateChanged;
         await DisconnectAsync();
         _httpClient.Dispose();
     }
 
-    /// <summary>
-    /// Retry policy for SignalR reconnection with exponential backoff.
-    /// </summary>
     private sealed class RetryPolicy : IRetryPolicy
     {
         private static readonly TimeSpan[] Delays =

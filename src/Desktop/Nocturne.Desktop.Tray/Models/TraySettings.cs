@@ -23,9 +23,3 @@ public enum GlucoseUnit
     MgDl,
     MmolL
 }
-
-public enum AuthMethod
-{
-    ApiSecret,
-    AccessToken
-}

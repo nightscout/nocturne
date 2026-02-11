@@ -6,14 +6,13 @@ namespace Nocturne.Desktop.Tray.Services;
 
 /// <summary>
 /// Persists settings to %APPDATA%/Nocturne/tray-settings.json
-/// and stores secrets securely in Windows Credential Manager.
+/// and stores OIDC tokens securely in Windows Credential Manager.
 /// </summary>
 public sealed class SettingsService
 {
     private const string AppDataFolder = "Nocturne";
     private const string SettingsFileName = "tray-settings.json";
     private const string CredentialResource = "Nocturne.Desktop.Tray";
-    private const string ApiSecretKey = "api-secret";
     private const string AccessTokenKey = "access-token";
     private const string RefreshTokenKey = "refresh-token";
 
@@ -98,15 +97,19 @@ public sealed class SettingsService
         }
     }
 
-    public string? GetApiSecret() => RetrieveSecret(ApiSecretKey);
-    public void SetApiSecret(string value) => StoreSecret(ApiSecretKey, value);
-
     public string? GetAccessToken() => RetrieveSecret(AccessTokenKey);
     public void SetAccessToken(string value) => StoreSecret(AccessTokenKey, value);
 
     public string? GetRefreshToken() => RetrieveSecret(RefreshTokenKey);
     public void SetRefreshToken(string value) => StoreSecret(RefreshTokenKey, value);
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_settings.ServerUrl)
-        && (GetApiSecret() is not null || GetAccessToken() is not null);
+    public void ClearTokens()
+    {
+        RemoveSecret(AccessTokenKey);
+        RemoveSecret(RefreshTokenKey);
+    }
+
+    public bool HasServerUrl => !string.IsNullOrWhiteSpace(_settings.ServerUrl);
+
+    public bool IsAuthenticated => GetAccessToken() is not null;
 }
