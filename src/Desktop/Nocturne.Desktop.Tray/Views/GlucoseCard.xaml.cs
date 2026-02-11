@@ -18,7 +18,7 @@ public sealed partial class GlucoseCard : UserControl
         if (reading is null)
         {
             BgValueText.Text = "---";
-            BgValueText.Foreground = new SolidColorBrush(Color.FromArgb(255, 128, 128, 128));
+            BgValueText.Foreground = new SolidColorBrush(GlucoseRangeHelper.StaleColor);
             TrendArrowText.Text = "";
             DeltaText.Text = "";
             TimeAgoText.Text = "No data";

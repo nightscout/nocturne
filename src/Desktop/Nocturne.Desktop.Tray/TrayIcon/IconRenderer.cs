@@ -83,7 +83,7 @@ public sealed class IconRenderer : IDisposable
 
     private static void DrawStaleIcon(CanvasDrawingSession session, GlucoseReading? reading)
     {
-        var color = Color.FromArgb(255, 128, 128, 128);
+        var color = GlucoseRangeHelper.StaleColor;
 
         using var textFormat = new CanvasTextFormat
         {

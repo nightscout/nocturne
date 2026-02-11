@@ -2,6 +2,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Desktop.Tray.Services;
 using Windows.Graphics;
@@ -106,8 +107,8 @@ public sealed partial class FlyoutWindow : Window
     public void UpdateConnectionStatus(bool isConnected)
     {
         ConnectionIndicator.Fill = isConnected
-            ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 60, 180, 75))
-            : new SolidColorBrush(Windows.UI.Color.FromArgb(255, 200, 30, 30));
+            ? new SolidColorBrush(GlucoseRangeHelper.InRangeColor)
+            : new SolidColorBrush(GlucoseRangeHelper.UrgentColor);
         ConnectionText.Text = isConnected ? "Connected" : "Disconnected";
     }
 

@@ -7,7 +7,7 @@ namespace Nocturne.Desktop.Tray.Services;
 /// Observable glucose state that drives the tray icon and flyout UI.
 /// Maintains the current reading and a rolling history buffer for the chart.
 /// </summary>
-public sealed partial class GlucoseStateService : ObservableObject
+public sealed partial class GlucoseStateService : ObservableObject, IDisposable
 {
     private const int MaxHistorySize = 1000;
 

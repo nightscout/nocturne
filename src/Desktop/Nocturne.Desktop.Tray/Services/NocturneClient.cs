@@ -1,21 +1,21 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
 using Nocturne.Desktop.Tray.Models;
-using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Desktop.Tray.Services;
 
 /// <summary>
 /// HTTP + SignalR client for the Nocturne API.
-/// Authenticates via Bearer tokens stored in ICredentialStore.
+/// Authenticates via Bearer tokens managed by OidcAuthService.
 /// Real-time data flows through the SignalR DataHub with HTTP polling as fallback.
 /// </summary>
 public sealed class NocturneClient : IAsyncDisposable
 {
     private readonly SettingsService _settingsService;
-    private readonly ICredentialStore _credentialStore;
     private readonly OidcAuthService _authService;
+    private readonly ILogger _logger;
     private readonly HttpClient _httpClient;
     private HubConnection? _hubConnection;
     private CancellationTokenSource? _pollCts;
@@ -27,11 +27,11 @@ public sealed class NocturneClient : IAsyncDisposable
 
     public bool IsConnected => _isConnected;
 
-    public NocturneClient(SettingsService settingsService, ICredentialStore credentialStore, OidcAuthService authService)
+    public NocturneClient(SettingsService settingsService, OidcAuthService authService, ILogger<NocturneClient> logger)
     {
         _settingsService = settingsService;
-        _credentialStore = credentialStore;
         _authService = authService;
+        _logger = logger;
         _httpClient = new HttpClient();
 
         _authService.AuthStateChanged += OnAuthStateChanged;
@@ -43,7 +43,7 @@ public sealed class NocturneClient : IAsyncDisposable
         if (string.IsNullOrEmpty(serverUrl)) return;
         if (!_authService.IsAuthenticated) return;
 
-        await ConfigureHttpClientAsync(serverUrl);
+        await EnsureBearerTokenAsync();
         await ConnectSignalRAsync(serverUrl, cancellationToken);
         StartPolling(cancellationToken);
     }
@@ -67,8 +67,11 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         try
         {
+            var serverUrl = GetServerUrl();
+            if (serverUrl is null) return null;
+
             await EnsureBearerTokenAsync();
-            var response = await _httpClient.GetAsync("/api/v1/entries/current", cancellationToken);
+            var response = await _httpClient.GetAsync($"{serverUrl}/api/v1/entries/current", cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var entries = await response.Content.ReadFromJsonAsync<JsonElement[]>(cancellationToken: cancellationToken);
@@ -76,8 +79,13 @@ public sealed class NocturneClient : IAsyncDisposable
 
             return ParseEntry(entries[0]);
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch current glucose reading");
             return null;
         }
     }
@@ -86,9 +94,12 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         try
         {
+            var serverUrl = GetServerUrl();
+            if (serverUrl is null) return [];
+
             await EnsureBearerTokenAsync();
             var since = DateTimeOffset.UtcNow.AddHours(-hours).ToUnixTimeMilliseconds();
-            var url = $"/api/v1/entries.json?find[mills][$gte]={since}&count=1000&sort$desc=mills";
+            var url = $"{serverUrl}/api/v1/entries.json?find[mills][$gte]={since}&count=1000&sort$desc=mills";
 
             var response = await _httpClient.GetAsync(url, cancellationToken);
             response.EnsureSuccessStatusCode();
@@ -103,16 +114,21 @@ public sealed class NocturneClient : IAsyncDisposable
                 .OrderBy(r => r.Mills)
                 .ToList();
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
+            return [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch recent glucose readings");
             return [];
         }
     }
 
-    private async Task ConfigureHttpClientAsync(string serverUrl)
+    private string? GetServerUrl()
     {
-        _httpClient.BaseAddress = new Uri(serverUrl);
-        await EnsureBearerTokenAsync();
+        var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
+        return string.IsNullOrEmpty(serverUrl) ? null : serverUrl;
     }
 
     private async Task EnsureBearerTokenAsync()
@@ -156,8 +172,9 @@ public sealed class NocturneClient : IAsyncDisposable
             await AuthorizeHubAsync();
             await SubscribeAsync();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to connect to SignalR hub at {ServerUrl}", serverUrl);
             SetConnected(false);
         }
     }
@@ -194,11 +211,18 @@ public sealed class NocturneClient : IAsyncDisposable
 
     private async void OnAuthStateChanged()
     {
-        await EnsureBearerTokenAsync();
-
-        if (_hubConnection?.State == HubConnectionState.Connected)
+        try
         {
-            await AuthorizeHubAsync();
+            await EnsureBearerTokenAsync();
+
+            if (_hubConnection?.State == HubConnectionState.Connected)
+            {
+                await AuthorizeHubAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update auth state on SignalR hub");
         }
     }
 
@@ -248,7 +272,10 @@ public sealed class NocturneClient : IAsyncDisposable
                     if (reading is not null) OnGlucoseReading?.Invoke(reading);
                 }
                 catch (OperationCanceledException) { break; }
-                catch { /* Polling failure is non-fatal; SignalR is the primary channel */ }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Polling failure (non-fatal; SignalR is the primary channel)");
+                }
             }
         }, token);
     }

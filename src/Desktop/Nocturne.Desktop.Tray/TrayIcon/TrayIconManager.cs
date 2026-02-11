@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.Input;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using Microsoft.UI.Xaml;
@@ -91,12 +92,5 @@ public sealed class TrayIconManager : IDisposable
             _iconRenderer.Dispose();
             _disposed = true;
         }
-    }
-
-    private sealed class RelayCommand(Action execute) : System.Windows.Input.ICommand
-    {
-        public event EventHandler? CanExecuteChanged;
-        public bool CanExecute(object? parameter) => true;
-        public void Execute(object? parameter) => execute();
     }
 }

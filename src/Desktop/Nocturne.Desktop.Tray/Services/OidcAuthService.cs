@@ -204,7 +204,21 @@ public sealed class OidcAuthService : IDisposable
 
         // Refresh 2 minutes before expiry, minimum 30 seconds from now
         var refreshInMs = Math.Max(30_000, (expiresInSeconds - 120) * 1000);
-        _refreshTimer = new Timer(async _ => await RefreshTokensAsync(), null, refreshInMs, Timeout.Infinite);
+        _refreshTimer = new Timer(_ =>
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RefreshTokensAsync();
+                }
+                catch
+                {
+                    // Refresh failure is handled within RefreshTokensAsync;
+                    // this catch prevents unobserved task exceptions.
+                }
+            });
+        }, null, refreshInMs, Timeout.Infinite);
     }
 
     public void Dispose()

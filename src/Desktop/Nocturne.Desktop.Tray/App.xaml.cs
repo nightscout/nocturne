@@ -64,7 +64,10 @@ public partial class App : Application
 
         _authService = new OidcAuthService(_settingsService, _credentialStore);
         _glucoseState = new GlucoseStateService();
-        _nocturneClient = new NocturneClient(_settingsService, _credentialStore, _authService);
+        _nocturneClient = new NocturneClient(
+            _settingsService,
+            _authService,
+            NullLogger<NocturneClient>.Instance);
         _alarmService = new AlarmService(_settingsService);
         _alarmService.Initialize();
 

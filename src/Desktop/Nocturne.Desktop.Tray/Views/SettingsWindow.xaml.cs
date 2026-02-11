@@ -1,8 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Desktop.Tray.Services;
-using Windows.UI;
 
 namespace Nocturne.Desktop.Tray.Views;
 
@@ -49,13 +49,13 @@ public sealed partial class SettingsWindow : Window
     {
         if (_authService.IsAuthenticated)
         {
-            AuthIndicator.Fill = new SolidColorBrush(Color.FromArgb(255, 60, 180, 75));
+            AuthIndicator.Fill = new SolidColorBrush(GlucoseRangeHelper.InRangeColor);
             AuthStatusText.Text = "Signed in";
             SignInOutButton.Content = "Sign Out";
         }
         else
         {
-            AuthIndicator.Fill = new SolidColorBrush(Color.FromArgb(255, 200, 30, 30));
+            AuthIndicator.Fill = new SolidColorBrush(GlucoseRangeHelper.UrgentColor);
             AuthStatusText.Text = "Not signed in";
             SignInOutButton.Content = "Sign In";
         }
