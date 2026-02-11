@@ -12,7 +12,8 @@ namespace Nocturne.Widget.Infrastructure;
 public class OAuthService : IOAuthService
 {
     private const string ClientId = "nocturne-widget-windows11";
-    private const string DefaultScopes = "entries:read treatments:read devicestatus:read profile:read";
+    private const string DefaultScopes =
+        "entries.read treatments.read devicestatus.read profile.read";
 
     private readonly HttpClient _httpClient;
     private readonly ICredentialStore _credentialStore;
@@ -27,34 +28,37 @@ public class OAuthService : IOAuthService
     public OAuthService(
         HttpClient httpClient,
         ICredentialStore credentialStore,
-        ILogger<OAuthService> logger)
+        ILogger<OAuthService> logger
+    )
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _credentialStore = credentialStore ?? throw new ArgumentNullException(nameof(credentialStore));
+        _credentialStore =
+            credentialStore ?? throw new ArgumentNullException(nameof(credentialStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
     public async Task<DeviceAuthorizationResult> InitiateDeviceAuthorizationAsync(
         string apiUrl,
-        IEnumerable<string>? scopes = null)
+        IEnumerable<string>? scopes = null
+    )
     {
         try
         {
             var scopeString = scopes != null ? string.Join(" ", scopes) : DefaultScopes;
-            var requestUri = $"{apiUrl.TrimEnd('/')}/oauth/device";
+            var requestUri = $"{apiUrl.TrimEnd('/')}/api/oauth/device";
 
-            var content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["client_id"] = ClientId,
-                ["scope"] = scopeString,
-            });
+            var content = new FormUrlEncodedContent(
+                new Dictionary<string, string> { ["client_id"] = ClientId, ["scope"] = scopeString }
+            );
 
             var response = await _httpClient.PostAsync(requestUri, content);
 
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadFromJsonAsync<OAuthErrorResponse>(JsonOptions);
+                var error = await response.Content.ReadFromJsonAsync<OAuthErrorResponse>(
+                    JsonOptions
+                );
                 _logger.LogWarning("Device authorization failed: {Error}", error?.Error);
                 return new DeviceAuthorizationResult
                 {
@@ -63,7 +67,8 @@ public class OAuthService : IOAuthService
                 };
             }
 
-            var deviceResponse = await response.Content.ReadFromJsonAsync<DeviceAuthorizationResponse>(JsonOptions);
+            var deviceResponse =
+                await response.Content.ReadFromJsonAsync<DeviceAuthorizationResponse>(JsonOptions);
             if (deviceResponse is null)
             {
                 return new DeviceAuthorizationResult
@@ -89,22 +94,15 @@ public class OAuthService : IOAuthService
             _logger.LogInformation(
                 "Device authorization initiated. User code: {UserCode}, Verification: {Uri}",
                 state.UserCode,
-                state.VerificationUri);
+                state.VerificationUri
+            );
 
-            return new DeviceAuthorizationResult
-            {
-                Success = true,
-                State = state,
-            };
+            return new DeviceAuthorizationResult { Success = true, State = state };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error initiating device authorization");
-            return new DeviceAuthorizationResult
-            {
-                Success = false,
-                Error = ex.Message,
-            };
+            return new DeviceAuthorizationResult { Success = false, Error = ex.Message };
         }
     }
 
@@ -134,19 +132,23 @@ public class OAuthService : IOAuthService
                 };
             }
 
-            var requestUri = $"{state.ApiUrl.TrimEnd('/')}/oauth/token";
-            var content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
-                ["device_code"] = state.DeviceCode,
-                ["client_id"] = ClientId,
-            });
+            var requestUri = $"{state.ApiUrl.TrimEnd('/')}/api/oauth/token";
+            var content = new FormUrlEncodedContent(
+                new Dictionary<string, string>
+                {
+                    ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+                    ["device_code"] = state.DeviceCode,
+                    ["client_id"] = ClientId,
+                }
+            );
 
             var response = await _httpClient.PostAsync(requestUri, content);
 
             if (response.IsSuccessStatusCode)
             {
-                var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(JsonOptions);
+                var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(
+                    JsonOptions
+                );
                 if (tokenResponse is null)
                 {
                     return new DevicePollResult
@@ -157,7 +159,8 @@ public class OAuthService : IOAuthService
                 }
 
                 // Parse scopes from response
-                var scopes = tokenResponse.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                var scopes =
+                    tokenResponse.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries)
                     ?? Array.Empty<string>();
 
                 var credentials = new NocturneCredentials
@@ -182,11 +185,7 @@ public class OAuthService : IOAuthService
 
             return errorCode switch
             {
-                "authorization_pending" => new DevicePollResult
-                {
-                    Success = false,
-                    Pending = true,
-                },
+                "authorization_pending" => new DevicePollResult { Success = false, Pending = true },
                 "slow_down" => new DevicePollResult
                 {
                     Success = false,
@@ -215,11 +214,7 @@ public class OAuthService : IOAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error polling for device authorization");
-            return new DevicePollResult
-            {
-                Success = false,
-                Error = ex.Message,
-            };
+            return new DevicePollResult { Success = false, Error = ex.Message };
         }
     }
 
@@ -247,19 +242,23 @@ public class OAuthService : IOAuthService
                 };
             }
 
-            var requestUri = $"{credentials.ApiUrl.TrimEnd('/')}/oauth/token";
-            var content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = credentials.RefreshToken,
-                ["client_id"] = ClientId,
-            });
+            var requestUri = $"{credentials.ApiUrl.TrimEnd('/')}/api/oauth/token";
+            var content = new FormUrlEncodedContent(
+                new Dictionary<string, string>
+                {
+                    ["grant_type"] = "refresh_token",
+                    ["refresh_token"] = credentials.RefreshToken,
+                    ["client_id"] = ClientId,
+                }
+            );
 
             var response = await _httpClient.PostAsync(requestUri, content);
 
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadFromJsonAsync<OAuthErrorResponse>(JsonOptions);
+                var error = await response.Content.ReadFromJsonAsync<OAuthErrorResponse>(
+                    JsonOptions
+                );
                 _logger.LogWarning("Token refresh failed: {Error}", error?.Error);
 
                 // If refresh token is invalid, clear credentials
@@ -275,20 +274,19 @@ public class OAuthService : IOAuthService
                 };
             }
 
-            var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(JsonOptions);
+            var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(
+                JsonOptions
+            );
             if (tokenResponse is null)
             {
-                return new TokenRefreshResult
-                {
-                    Success = false,
-                    Error = "Invalid token response",
-                };
+                return new TokenRefreshResult { Success = false, Error = "Invalid token response" };
             }
 
             await _credentialStore.UpdateTokensAsync(
                 tokenResponse.AccessToken,
                 tokenResponse.RefreshToken,
-                tokenResponse.ExpiresIn);
+                tokenResponse.ExpiresIn
+            );
 
             _logger.LogInformation("Token refreshed successfully");
 
@@ -297,11 +295,7 @@ public class OAuthService : IOAuthService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error refreshing token");
-            return new TokenRefreshResult
-            {
-                Success = false,
-                Error = ex.Message,
-            };
+            return new TokenRefreshResult { Success = false, Error = ex.Message };
         }
     }
 
@@ -336,12 +330,14 @@ public class OAuthService : IOAuthService
                 // Revoke the refresh token
                 try
                 {
-                    var requestUri = $"{credentials.ApiUrl.TrimEnd('/')}/oauth/revoke";
-                    var content = new FormUrlEncodedContent(new Dictionary<string, string>
-                    {
-                        ["token"] = credentials.RefreshToken,
-                        ["token_type_hint"] = "refresh_token",
-                    });
+                    var requestUri = $"{credentials.ApiUrl.TrimEnd('/')}/api/oauth/revoke";
+                    var content = new FormUrlEncodedContent(
+                        new Dictionary<string, string>
+                        {
+                            ["token"] = credentials.RefreshToken,
+                            ["token_type_hint"] = "refresh_token",
+                        }
+                    );
 
                     await _httpClient.PostAsync(requestUri, content);
                     _logger.LogDebug("Token revoked successfully");

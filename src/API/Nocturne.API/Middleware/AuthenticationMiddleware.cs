@@ -195,6 +195,7 @@ public class AuthenticationMiddleware
             AuthType.LegacyAccessToken => AuthenticationType.JwtToken,
             AuthType.OidcToken => AuthenticationType.JwtToken,
             AuthType.SessionCookie => AuthenticationType.JwtToken,
+            AuthType.OAuthAccessToken => AuthenticationType.JwtToken,
             _ => AuthenticationType.None,
         };
     }

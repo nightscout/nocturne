@@ -144,6 +144,50 @@
             "items": [
                 {
                     "type": "TextBlock",
+                    "text": "Trackers",
+                    "size": "Small",
+                    "weight": "Bolder",
+                    "isSubtle": true
+                },
+                {
+                    "type": "ColumnSet",
+                    "$data": "${trackers}",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${name}",
+                                    "size": "Small"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${age}",
+                                    "size": "Small",
+                                    "color": "${urgencyColor}"
+                                }
+                            ]
+                        }
+                    ],
+                    "spacing": "Small"
+                }
+            ],
+            "spacing": "Medium",
+            "$when": "${count(trackers) > 0}"
+        },
+        {
+            "type": "Container",
+            "items": [
+                {
+                    "type": "TextBlock",
                     "text": "Predicted Glucose",
                     "size": "Small",
                     "weight": "Bolder",

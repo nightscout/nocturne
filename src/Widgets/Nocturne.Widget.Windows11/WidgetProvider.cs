@@ -299,7 +299,11 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                     }
                     else
                     {
-                        var summary = await _apiClient.GetSummaryAsync(hours: 0, includePredictions: false);
+                        var needsPredictions = widgetInfo.DefinitionId == WidgetDefinitionIds.Large;
+                        var summary = await _apiClient.GetSummaryAsync(
+                            hours: 0,
+                            includePredictions: needsPredictions
+                        );
 
                         if (summary is null)
                         {
@@ -312,7 +316,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         else
                         {
                             template = GetGlucoseTemplate(widgetInfo.DefinitionId);
-                            dataNode = CreateGlucoseData(summary);
+                            dataNode = CreateGlucoseData(summary, widgetInfo.DefinitionId);
                         }
                     }
                     break;
@@ -529,7 +533,35 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             """;
     }
 
-    private static string GetGlucoseTemplate(string definitionId)
+    private string GetGlucoseTemplate(string definitionId)
+    {
+        if (_templateCache.TryGetValue(definitionId, out var cached))
+            return cached;
+
+        var templateFileName = definitionId switch
+        {
+            WidgetDefinitionIds.Small => "SmallTemplate.json",
+            WidgetDefinitionIds.Medium => "MediumTemplate.json",
+            WidgetDefinitionIds.Large => "LargeTemplate.json",
+            _ => "SmallTemplate.json",
+        };
+
+        var templatePath = Path.Combine(TemplatesPath, templateFileName);
+
+        try
+        {
+            var template = File.ReadAllText(templatePath);
+            _templateCache[definitionId] = template;
+            return template;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load template {Path}, using fallback", templatePath);
+            return GetFallbackGlucoseTemplate();
+        }
+    }
+
+    private static string GetFallbackGlucoseTemplate()
     {
         return """
             {
@@ -538,62 +570,67 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                 "version": "1.5",
                 "body": [
                     {
-                        "type": "Container",
-                        "items": [
-                            {
-                                "type": "TextBlock",
-                                "text": "${glucose}",
-                                "size": "ExtraLarge",
-                                "weight": "Bolder",
-                                "horizontalAlignment": "Center"
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": "${direction}",
-                                "size": "Large",
-                                "horizontalAlignment": "Center",
-                                "spacing": "None"
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": "${delta}",
-                                "size": "Small",
-                                "horizontalAlignment": "Center",
-                                "isSubtle": true,
-                                "spacing": "Small"
-                            }
-                        ],
-                        "verticalContentAlignment": "Center",
-                        "height": "stretch"
-                    }
-                ],
-                "actions": [
+                        "type": "TextBlock",
+                        "text": "${glucose} ${direction}",
+                        "size": "ExtraLarge",
+                        "weight": "Bolder",
+                        "horizontalAlignment": "Center"
+                    },
                     {
-                        "type": "Action.Execute",
-                        "title": "Refresh",
-                        "verb": "refresh"
+                        "type": "TextBlock",
+                        "text": "${delta}",
+                        "size": "Small",
+                        "horizontalAlignment": "Center",
+                        "isSubtle": true
                     }
                 ],
-                "selectAction": {
-                    "type": "Action.Execute",
-                    "verb": "openApp"
-                }
+                "actions": [{ "type": "Action.Execute", "title": "Refresh", "verb": "refresh" }],
+                "selectAction": { "type": "Action.Execute", "verb": "openApp" }
             }
             """;
     }
 
-    private static JsonObject CreateGlucoseData(V4SummaryResponse summary)
+    private static JsonObject CreateGlucoseData(V4SummaryResponse summary, string definitionId)
     {
-        var glucose = summary.CurrentGlucose?.ToString() ?? "---";
-        var direction = GetDirectionArrow(summary.Direction);
-        var delta = FormatDelta(summary.Delta);
+        var current = summary.Current;
+        var glucose = current is not null ? ((int)current.Sgv).ToString() : "---";
+        var direction = GetDirectionArrow(current?.Direction);
+        var delta = FormatDelta(current?.Delta);
 
-        return new JsonObject
+        // Calculate staleness and relative time
+        var stale = false;
+        var lastUpdate = "";
+        if (current is not null)
+        {
+            var ageMs = summary.ServerMills - current.Mills;
+            stale = ageMs > 15 * 60 * 1000; // 15 minutes
+            lastUpdate = FormatRelativeTime(ageMs);
+        }
+
+        var data = new JsonObject
         {
             ["glucose"] = glucose,
             ["direction"] = direction,
-            ["delta"] = delta
+            ["delta"] = delta,
+            ["lastUpdate"] = lastUpdate,
+            ["stale"] = stale,
         };
+
+        // IOB and COB for Medium and Large
+        if (definitionId is WidgetDefinitionIds.Medium or WidgetDefinitionIds.Large)
+        {
+            data["iob"] = Math.Round(summary.Iob * 100) / 100;
+            data["cob"] = (int)summary.Cob;
+        }
+
+        // Predictions and trackers for Large
+        if (definitionId == WidgetDefinitionIds.Large)
+        {
+            data["predictions"] = BuildPredictionsArray(summary.Predictions);
+            data["trackers"] = BuildTrackersArray(summary.Trackers);
+        }
+
+        return data;
     }
 
     private static string FormatDelta(double? delta)
@@ -601,6 +638,79 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         if (delta is null) return "";
         var sign = delta >= 0 ? "+" : "";
         return $"{sign}{delta:F1}";
+    }
+
+    private static string FormatRelativeTime(long milliseconds)
+    {
+        if (milliseconds < 0) return "now";
+        var minutes = milliseconds / 60_000;
+        if (minutes < 1) return "now";
+        if (minutes < 60) return $"{minutes}m ago";
+        var hours = minutes / 60;
+        if (hours < 24) return $"{hours}h ago";
+        var days = hours / 24;
+        return $"{days}d ago";
+    }
+
+    private static JsonArray BuildPredictionsArray(V4Predictions? predictions)
+    {
+        var result = new JsonArray();
+        if (predictions?.Values is null || predictions.Values.Count == 0)
+            return result;
+
+        // Sample at +15, +30, +45, +60 minutes
+        var intervalMs = predictions.IntervalMills;
+        if (intervalMs <= 0) return result;
+
+        foreach (var targetMin in new[] { 15, 30, 45, 60 })
+        {
+            var index = (int)(targetMin * 60_000L / intervalMs);
+            if (index >= 0 && index < predictions.Values.Count)
+            {
+                result.Add(new JsonObject
+                {
+                    ["value"] = ((int)predictions.Values[index]).ToString(),
+                    ["time"] = $"+{targetMin}m",
+                });
+            }
+        }
+
+        return result;
+    }
+
+    private static JsonArray BuildTrackersArray(List<V4TrackerStatus> trackers)
+    {
+        var result = new JsonArray();
+        foreach (var tracker in trackers)
+        {
+            var urgencyColor = tracker.Urgency?.ToUpperInvariant() switch
+            {
+                "URGENT" => "Attention",
+                "HAZARD" or "WARN" => "Warning",
+                _ => "Default",
+            };
+
+            var age = tracker.AgeHours.HasValue
+                ? FormatTrackerAge(tracker.AgeHours.Value)
+                : tracker.HoursUntilEvent.HasValue
+                    ? $"in {FormatTrackerAge(Math.Abs(tracker.HoursUntilEvent.Value))}"
+                    : "";
+
+            result.Add(new JsonObject
+            {
+                ["name"] = tracker.Name ?? "",
+                ["age"] = age,
+                ["urgencyColor"] = urgencyColor,
+            });
+        }
+        return result;
+    }
+
+    private static string FormatTrackerAge(double hours)
+    {
+        if (hours < 1) return $"{(int)(hours * 60)}m";
+        if (hours < 48) return $"{hours:F0}h";
+        return $"{hours / 24:F1}d";
     }
 
     private static string GetDirectionArrow(string? direction)

@@ -79,62 +79,61 @@ public class AlarmEventArgs : EventArgs
 }
 
 /// <summary>
-/// V4 summary response for widget display
-/// This is a placeholder that should be replaced with the actual generated model
-/// when the V4 API endpoint is implemented
+/// V4 summary response matching the server's Nocturne.Core.Models.Widget.V4SummaryResponse
 /// </summary>
 public class V4SummaryResponse
 {
-    /// <summary>
-    /// Gets or sets the current glucose value in mg/dL
-    /// </summary>
-    public int? CurrentGlucose { get; set; }
-
-    /// <summary>
-    /// Gets or sets the glucose trend direction
-    /// </summary>
-    public string? Direction { get; set; }
-
-    /// <summary>
-    /// Gets or sets the glucose delta (rate of change)
-    /// </summary>
-    public double? Delta { get; set; }
-
-    /// <summary>
-    /// Gets or sets the timestamp of the last reading in milliseconds
-    /// </summary>
-    public long? LastReadingMills { get; set; }
-
-    /// <summary>
-    /// Gets or sets the insulin on board in units
-    /// </summary>
-    public double? Iob { get; set; }
-
-    /// <summary>
-    /// Gets or sets the carbs on board in grams
-    /// </summary>
-    public int? Cob { get; set; }
-
-    /// <summary>
-    /// Gets or sets predicted glucose values
-    /// </summary>
-    public IList<PredictedGlucose>? Predictions { get; set; }
+    public V4GlucoseReading? Current { get; set; }
+    public List<V4GlucoseReading> History { get; set; } = [];
+    public double Iob { get; set; }
+    public double Cob { get; set; }
+    public List<V4TrackerStatus> Trackers { get; set; } = [];
+    public V4AlarmState? Alarm { get; set; }
+    public V4Predictions? Predictions { get; set; }
+    public long ServerMills { get; set; }
 }
 
-/// <summary>
-/// Predicted glucose value
-/// </summary>
-public class PredictedGlucose
+public class V4GlucoseReading
 {
-    /// <summary>
-    /// Gets or sets the predicted glucose value in mg/dL
-    /// </summary>
-    public int Value { get; set; }
-
-    /// <summary>
-    /// Gets or sets the timestamp of the prediction in milliseconds
-    /// </summary>
+    public double Sgv { get; set; }
+    public string? Direction { get; set; }
+    public double? TrendRate { get; set; }
+    public double? Delta { get; set; }
     public long Mills { get; set; }
+    public int? Noise { get; set; }
+}
+
+public class V4TrackerStatus
+{
+    public string Id { get; set; } = string.Empty;
+    public string DefinitionId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Icon { get; set; }
+    public string? Category { get; set; }
+    public string? Mode { get; set; }
+    public double? AgeHours { get; set; }
+    public double? HoursUntilEvent { get; set; }
+    public string? Urgency { get; set; }
+    public double? LifespanHours { get; set; }
+    public double? PercentElapsed { get; set; }
+}
+
+public class V4AlarmState
+{
+    public int Level { get; set; }
+    public string? Type { get; set; }
+    public string? Message { get; set; }
+    public long TriggeredMills { get; set; }
+    public bool IsSilenced { get; set; }
+    public long? SilenceExpiresMills { get; set; }
+}
+
+public class V4Predictions
+{
+    public List<double>? Values { get; set; }
+    public long StartMills { get; set; }
+    public long IntervalMills { get; set; }
+    public string? Source { get; set; }
 }
 
 /// <summary>

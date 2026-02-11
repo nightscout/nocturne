@@ -22287,17 +22287,6 @@ export interface V4TrackerStatus {
     percentElapsed?: number | undefined;
 }
 
-export enum TrackerCategory {
-    Consumable = "Consumable",
-    Reservoir = "Reservoir",
-    Appointment = "Appointment",
-    Reminder = "Reminder",
-    Custom = "Custom",
-    Sensor = "Sensor",
-    Cannula = "Cannula",
-    Battery = "Battery",
-}
-
 export enum TrackerMode {
     Duration = "Duration",
     Event = "Event",

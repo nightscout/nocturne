@@ -26430,30 +26430,6 @@
           }
         }
       },
-      "TrackerCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ],
-        "enum": [
-          "Consumable",
-          "Reservoir",
-          "Appointment",
-          "Reminder",
-          "Custom",
-          "Sensor",
-          "Cannula",
-          "Battery"
-        ]
-      },
       "TrackerMode": {
         "type": "string",
         "description": "",

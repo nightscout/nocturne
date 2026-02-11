@@ -243,6 +243,7 @@ builder.Services.AddHostedService<AuthorizationSeedService>();
 // Handlers are executed in priority order (lowest first)
 builder.Services.AddSingleton<IAuthHandler, SessionCookieHandler>(); // Priority 50 (web sessions)
 builder.Services.AddSingleton<IAuthHandler, OidcTokenHandler>(); // Priority 100
+builder.Services.AddSingleton<IAuthHandler, OAuthAccessTokenHandler>(); // Priority 150
 builder.Services.AddSingleton<IAuthHandler, LegacyJwtHandler>(); // Priority 200
 builder.Services.AddSingleton<IAuthHandler, AccessTokenHandler>(); // Priority 300
 builder.Services.AddSingleton<IAuthHandler, ApiSecretHandler>(); // Priority 400

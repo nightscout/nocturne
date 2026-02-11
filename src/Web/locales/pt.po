@@ -200,6 +200,8 @@ msgstr ""
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -1183,10 +1185,11 @@ msgstr ""
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/devices/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Unknown"
@@ -9773,7 +9776,6 @@ msgid "Critical only"
 msgstr ""
 
 #: src/routes/settings/alarms/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Enabled"
 msgstr ""
 
@@ -11981,7 +11983,6 @@ msgstr ""
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
-#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -12264,6 +12265,7 @@ msgid "Safe to run multiple times"
 msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/security/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Done"
 msgstr ""
@@ -15022,9 +15024,8 @@ msgstr ""
 #~ msgid "Loading connector capabilities..."
 #~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Supported data types"
-msgstr ""
+#~ msgid "Supported data types"
+#~ msgstr ""
 
 #~ msgid "Recent data only (last {0} days)."
 #~ msgstr ""
@@ -15078,33 +15079,26 @@ msgstr ""
 msgid "The API signs each webhook with HMAC-SHA256 using this secret."
 msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Sync Capabilities"
-msgstr ""
+#~ msgid "Sync Capabilities"
+#~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "What this connector supports for manual sync"
-msgstr ""
+#~ msgid "What this connector supports for manual sync"
+#~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Historical sync"
-msgstr ""
+#~ msgid "Historical sync"
+#~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Supported"
-msgstr ""
+#~ msgid "Supported"
+#~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Not supported"
-msgstr ""
+#~ msgid "Not supported"
+#~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Max historical days"
-msgstr ""
+#~ msgid "Max historical days"
+#~ msgstr ""
 
-#: src/routes/settings/connectors/[connector]/+page.svelte
-msgid "Manual sync"
-msgstr ""
+#~ msgid "Manual sync"
+#~ msgstr ""
 
 #~ msgid "Sync started"
 #~ msgstr ""
@@ -15398,66 +15392,94 @@ msgid "Connectors & Apps"
 msgstr ""
 
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "Followers & Sharing"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View glucose readings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View and record glucose readings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View treatments"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View and record treatments"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View device status"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View and update device status"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View profile settings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View and update profile settings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View notifications"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "Manage notifications"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View reports and analytics"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View basic account info"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "Manage sharing settings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "View all health data (read-only)"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "Full access including delete"
 msgstr ""
 
@@ -15492,15 +15514,264 @@ msgid "<0/> Verified"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "<0/> Revoke"
 msgstr ""
 
 #. placeholder {0}: formatDate(grant.createdAt)
+#. placeholder {0}: formatDate(grant.createdAt)
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "<0/> Created {0}"
 msgstr ""
 
 #. placeholder {0}: formatDate(grant.lastUsedAt)
+#. placeholder {0}: formatDate(grant.lastUsedAt)
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/settings/security/+page.svelte
 msgid "<0/> Last used {0}"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "View your glucose readings"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "View your treatments"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "View your profile settings"
+msgstr ""
+
+#. placeholder {0}: appName
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorize {0}"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+#: src/routes/oauth/device/+page.svelte
+msgid "Link a Device"
+msgstr ""
+
+#. placeholder {0}: deviceInfo ? `Authorize ${appName}` : "Link a Device"
+#: src/routes/oauth/device/+page.svelte
+msgid "{0} - Nocturne"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Device Authorized"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "You can close this window and return to your device."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorization Denied"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "The device will not be granted access."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Authorize Application"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"<0/> wants to access\n"
+"your Nocturne data."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"This application is not in the Nocturne known app directory. Only\n"
+"approve if you trust this application."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "This application is requesting permission to:"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "This app cannot delete your data."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid ""
+"This app is requesting full access, including the ability to delete\n"
+"data."
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Deny"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Approve"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "Enter the code shown on your device"
+msgstr ""
+
+#: src/routes/oauth/device/+page.svelte
+msgid "<0/> Continue"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Grant revoked successfully."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to revoke grant. Please try again."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Follower added successfully."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to add follower. Please try again."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to create invite. Please try again."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Invite revoked successfully."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Failed to revoke invite. Please try again."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Followers & Sharing - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Share your data with caregivers and family members"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Create Invite Link"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Add by Email"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Create Invite Link"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid ""
+"Generate a shareable link. Anyone with this link can accept the invite\n"
+"after signing in."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Invite link created! Share it with your friend or family member."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Label (optional)"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+#: src/routes/settings/security/+page.svelte
+msgid "Data to share"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Allow multiple uses"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "By default, invite links can only be used once. Enable this to allow unlimited uses."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Create Link"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Pending Invites"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Invite Link"
+msgstr ""
+
+#. placeholder {0}: invite.useCount
+#. placeholder {1}: invite.maxUses
+#: src/routes/settings/security/+page.svelte
+msgid "· {0}/{1} uses"
+msgstr ""
+
+#. placeholder {0}: formatDate(invite.expiresAt)
+#: src/routes/settings/security/+page.svelte
+msgid "Expires {0} <0/>"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Used by"
+msgstr ""
+
+#. placeholder {0}: formatDate(usage.usedAt)
+#: src/routes/settings/security/+page.svelte
+msgid "on {0}"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Add a Follower"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid ""
+"Grant someone read access to your data by entering their email\n"
+"and selecting which data to share."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Email address"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Create new account with temporary password"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Display name (optional)"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Temporary password"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Enter a temporary password"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "The follower will be required to change this password on first login."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "<0/> Add Follower"
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "No followers. Share your data with caregivers by adding a follower."
+msgstr ""
+
+#: src/routes/settings/security/+page.svelte
+msgid "Shared Data"
 msgstr ""

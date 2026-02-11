@@ -80,7 +80,7 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
             }
 
             var requestUri =
-                $"{credentials.ApiUrl.TrimEnd('/')}/api/v4/summary?hours={hours}&predictions={includePredictions}";
+                $"{credentials.ApiUrl.TrimEnd('/')}/api/v4/summary?hours={hours}&includePredictions={includePredictions}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(

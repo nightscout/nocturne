@@ -61,19 +61,12 @@ public class WidgetSummaryService : IWidgetSummaryService
             ServerMills = currentTime,
         };
 
-        // Fetch data in parallel where possible
+        // Fetch data sequentially (EF Core DbContext is not thread-safe)
         var entryCount = hours > 0 ? (hours * 12) + 1 : 1; // 12 readings per hour (5-minute intervals)
-        var entriesTask = _entryService.GetEntriesAsync(null, entryCount, 0, cancellationToken);
-        var treatmentsTask = _treatmentService.GetTreatmentsAsync(100, 0, cancellationToken);
-        var deviceStatusTask = _deviceStatusService.GetRecentDeviceStatusAsync(10, cancellationToken);
-        var trackersTask = _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
-
-        await Task.WhenAll(entriesTask, treatmentsTask, deviceStatusTask, trackersTask);
-
-        var entries = (await entriesTask).ToList();
-        var treatments = (await treatmentsTask).ToList();
-        var deviceStatusList = (await deviceStatusTask).ToList();
-        var trackerInstances = await trackersTask;
+        var entries = (await _entryService.GetEntriesAsync(null, entryCount, 0, cancellationToken)).ToList();
+        var treatments = (await _treatmentService.GetTreatmentsAsync(100, 0, cancellationToken)).ToList();
+        var deviceStatusList = (await _deviceStatusService.GetRecentDeviceStatusAsync(10, cancellationToken)).ToList();
+        var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
 
         // Process glucose readings
         ProcessGlucoseReadings(response, entries, hours, currentTime);

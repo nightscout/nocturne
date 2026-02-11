@@ -59,7 +59,7 @@
   <ItemGroup>
     <Content Include="Assets\*.png" />
     <Content Include="Images\*.png" />
-    <Content Include="Templates\*.json" />
+    <Content Include="Templates\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Public\*" />
   </ItemGroup>
 
