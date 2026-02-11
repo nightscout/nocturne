@@ -589,28 +589,52 @@ public class StatisticsController : ControllerBase
                         filteredTreatments
                     );
 
-                    // Calculate treatment summary with scheduled basal from profile
+                    // Calculate treatment summary from treatments
                     treatmentSummary = _statisticsService.CalculateTreatmentSummary(
                         filteredTreatments
                     );
 
-                    // Add scheduled basal from profile if we have profile data
+                    // Replace treatment-based basal with profile-aware calculation
+                    // when we have profile data. CalculateScheduledBasalForPeriod already
+                    // accounts for temp basals in treatments — using their rates during
+                    // active intervals and the scheduled rate otherwise. We REPLACE rather
+                    // than ADD to avoid double-counting when temp basals are both in
+                    // treatments AND in the profile-based calculation.
                     if (_profileService.HasData())
                     {
-                        var scheduledBasal = CalculateScheduledBasalForPeriod(
+                        var profileBasal = CalculateScheduledBasalForPeriod(
                             startTimestamp,
                             endTimestamp,
                             filteredTreatments
                         );
-                        treatmentSummary.Totals.Insulin.Basal += scheduledBasal;
+                        treatmentSummary.Totals.Insulin.Basal = profileBasal;
                     }
 
                     // Calculate comprehensive insulin delivery statistics
+                    // Uses profile basal when available, for consistency with treatmentSummary
                     insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
                         filteredTreatments,
                         startDate,
                         endDate
                     );
+                    if (_profileService.HasData())
+                    {
+                        var profileBasal = CalculateScheduledBasalForPeriod(
+                            startTimestamp,
+                            endTimestamp,
+                            filteredTreatments
+                        );
+                        var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
+                        insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
+                        insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
+                        insulinDelivery.Tdd = Math.Round(totalWithProfile / Math.Max(1, insulinDelivery.DayCount) * 10) / 10;
+                        insulinDelivery.BasalPercent = totalWithProfile > 0
+                            ? Math.Round(profileBasal / totalWithProfile * 100 * 10) / 10
+                            : 0;
+                        insulinDelivery.BolusPercent = totalWithProfile > 0
+                            ? Math.Round(insulinDelivery.TotalBolus / totalWithProfile * 100 * 10) / 10
+                            : 0;
+                    }
                 }
 
                 periodResults.Add(

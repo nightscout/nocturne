@@ -720,7 +720,9 @@ public class StatisticsService : IStatisticsService
         }
 
         var mean = valuesList.Average();
-        var variance = valuesList.Sum(v => Math.Pow(v - mean, 2)) / valuesList.Count;
+        var variance = valuesList.Count > 1
+            ? valuesList.Sum(v => Math.Pow(v - mean, 2)) / (valuesList.Count - 1)
+            : 0;
         var standardDeviation = Math.Sqrt(variance);
         var coefficientOfVariation = (standardDeviation / mean) * 100;
 
@@ -1229,7 +1231,9 @@ public class StatisticsService : IStatisticsService
         var median = sortedValues.Count % 2 == 0
             ? (sortedValues[sortedValues.Count / 2 - 1] + sortedValues[sortedValues.Count / 2]) / 2
             : sortedValues[sortedValues.Count / 2];
-        var variance = values.Sum(v => Math.Pow(v - mean, 2)) / values.Count;
+        var variance = values.Count > 1
+            ? values.Sum(v => Math.Pow(v - mean, 2)) / (values.Count - 1)
+            : 0;
         var stdDev = Math.Sqrt(variance);
 
         return new PeriodMetrics
@@ -1602,11 +1606,7 @@ public class StatisticsService : IStatisticsService
                     TotalFat = acc.TotalFat + day.TreatmentSummary.Totals.Food.Fat,
                     TimeInRange = acc.TimeInRange + day.TimeInRanges.Percentages.Target,
                     TightTimeInRange = acc.TightTimeInRange
-                        + (
-                            day.TimeInRanges.Percentages.Target > 85
-                                ? day.TimeInRanges.Percentages.Target
-                                : 0
-                        ),
+                        + day.TimeInRanges.Percentages.TightTarget,
                     DaysWithData = acc.DaysWithData + (totalDailyInsulin > 0 ? 1 : 0),
                 };
             }
