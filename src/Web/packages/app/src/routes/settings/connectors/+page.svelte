@@ -1438,7 +1438,7 @@
             {:else}
               <!-- Not connected and no data - show with configure button -->
               <a
-                href="/settings/connectors/{connector.name?.toLowerCase()}"
+                href="/settings/connectors/{connector.id?.toLowerCase()}"
                 class="flex items-center gap-4 p-4 rounded-lg border bg-muted/30 hover:border-primary/50 hover:bg-accent/50 transition-colors group"
               >
                 <div
@@ -2525,7 +2525,7 @@
         <Button
           variant="outline"
           class="gap-2"
-          href="/settings/connectors/{selectedConnector.name?.toLowerCase()}"
+          href="/settings/connectors/{selectedConnector.id?.toLowerCase()}"
         >
           <Wrench class="h-4 w-4" />
           Configure
