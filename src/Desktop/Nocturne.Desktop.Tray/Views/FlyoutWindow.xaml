@@ -4,9 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Nocturne.Desktop.Tray.Views"
-    Title="Nocturne"
-    Width="360"
-    Height="320">
+    Title="Nocturne">
 
     <Grid
         x:Name="RootGrid"

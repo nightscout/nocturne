@@ -1,9 +1,14 @@
+using System.Runtime.InteropServices;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Desktop.Tray.Services;
 using Nocturne.Widget.Contracts;
+using Windows.Graphics;
+using WinRT.Interop;
 
 namespace Nocturne.Desktop.Tray.Views;
 
@@ -20,6 +25,8 @@ public sealed partial class SettingsWindow : Window
         this.InitializeComponent();
         _settingsService = settingsService;
         _authService = authService;
+
+        ResizeWindow(480, 560);
 
         _authService.AuthStateChanged += UpdateAuthStatus;
         this.Closed += (_, _) => _authService.AuthStateChanged -= UpdateAuthStatus;
@@ -108,4 +115,26 @@ public sealed partial class SettingsWindow : Window
     {
         this.Close();
     }
+
+    private void ResizeWindow(int width, int height)
+    {
+        var hwnd = WindowNative.GetWindowHandle(this);
+        var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+        var appWindow = AppWindow.GetFromWindowId(windowId);
+        appWindow.Resize(new SizeInt32(width, height));
+    }
+
+    /// <summary>
+    /// Brings the window to the foreground, even if the app wasn't previously focused.
+    /// </summary>
+    public void BringToFront()
+    {
+        Activate();
+        var hwnd = WindowNative.GetWindowHandle(this);
+        SetForegroundWindow(hwnd);
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(IntPtr hWnd);
 }

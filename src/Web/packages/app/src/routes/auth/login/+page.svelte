@@ -19,12 +19,26 @@
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
 
+  /** Whether the URL is external (absolute or custom protocol), requiring window.location instead of goto */
+  function isExternalUrl(url: string): boolean {
+    return /^[a-z][a-z0-9+.-]*:/i.test(url);
+  }
+
+  /** Navigate to a URL, using window.location for external/protocol URLs */
+  function navigateTo(url: string) {
+    if (isExternalUrl(url)) {
+      window.location.href = url;
+    } else {
+      goto(url, { replaceState: true });
+    }
+  }
+
   // Redirect if already authenticated - using $effect with derived query
   $effect(() => {
     // Check inside effect - authStateQuery.current gives us resolved value if available
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
-      goto(returnUrl, { replaceState: true });
+      navigateTo(returnUrl);
     }
   });
 
@@ -165,7 +179,11 @@
                     return;
                   }
                   await invalidateAll();
-                  await goto(targetUrl, { invalidateAll: true });
+                  if (isExternalUrl(targetUrl)) {
+                    window.location.href = targetUrl;
+                  } else {
+                    await goto(targetUrl, { invalidateAll: true });
+                  }
                 }
               })}
               class="space-y-4"

@@ -1,10 +1,10 @@
+using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Text;
+using Microsoft.UI;
 using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
-using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
-using Windows.UI;
 
 namespace Nocturne.Desktop.Tray.TrayIcon;
 
@@ -69,7 +69,7 @@ public sealed class IconRenderer : IDisposable
         {
             FontFamily = "Segoe UI",
             FontSize = fontSize,
-            FontWeight = Windows.UI.Text.FontWeights.Bold,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
             HorizontalAlignment = CanvasHorizontalAlignment.Center,
             VerticalAlignment = CanvasVerticalAlignment.Center,
         };
@@ -89,7 +89,7 @@ public sealed class IconRenderer : IDisposable
         {
             FontFamily = "Segoe UI",
             FontSize = 14f,
-            FontWeight = Windows.UI.Text.FontWeights.Bold,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
             HorizontalAlignment = CanvasHorizontalAlignment.Center,
             VerticalAlignment = CanvasVerticalAlignment.Center,
         };

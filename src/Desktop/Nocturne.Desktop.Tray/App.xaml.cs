@@ -38,83 +38,116 @@ public partial class App : Application
         this.InitializeComponent();
     }
 
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Nocturne", "tray-debug.log");
+
+    private static void Log(string message)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+        File.AppendAllText(LogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
+    }
+
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // Ensure single instance
-        var mainInstance = AppInstance.FindOrRegisterForKey("NocturneTray");
-        if (!mainInstance.IsCurrent)
+        try
         {
-            var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            await mainInstance.RedirectActivationToAsync(activationArgs);
-            System.Diagnostics.Process.GetCurrentProcess().Kill();
-            return;
-        }
+            Log("OnLaunched started");
 
-        mainInstance.Activated += OnInstanceActivated;
-
-        // Initialize services
-        _settingsService = new SettingsService();
-        await _settingsService.LoadAsync();
-
-        // Use shared WindowsCredentialStore with tray-specific target names
-        _credentialStore = new WindowsCredentialStore(
-            NullLogger<WindowsCredentialStore>.Instance,
-            "Nocturne.Tray.OAuth",
-            "Nocturne.Tray.DeviceAuth");
-
-        _authService = new OidcAuthService(_settingsService, _credentialStore);
-        _glucoseState = new GlucoseStateService();
-        _nocturneClient = new NocturneClient(
-            _settingsService,
-            _authService,
-            NullLogger<NocturneClient>.Instance);
-        _alarmService = new AlarmService(_settingsService);
-        _alarmService.Initialize();
-
-        // Create a hidden window (required by WinUI 3 for the app to stay alive)
-        _hiddenWindow = new Window
-        {
-            Title = "Nocturne Tray",
-        };
-
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
-        ShowWindow(hwnd, SW_HIDE);
-
-        // Set up tray icon
-        _trayIcon = new TrayIconManager(_hiddenWindow.Content.XamlRoot!);
-        _trayIcon.FlyoutRequested += OnFlyoutRequested;
-        _trayIcon.SettingsRequested += OnSettingsRequested;
-        _trayIcon.ExitRequested += OnExitRequested;
-        _trayIcon.ForceCreate();
-
-        // Create flyout window
-        _flyoutWindow = new FlyoutWindow(_glucoseState, _settingsService.Settings);
-
-        // Wire up data events
-        _nocturneClient.OnGlucoseReading += OnGlucoseReading;
-        _nocturneClient.OnAlarm += OnAlarm;
-        _nocturneClient.OnConnectionChanged += OnConnectionChanged;
-        _glucoseState.StateChanged += OnStateChanged;
-
-        // Wire auth state changes to connect/disconnect
-        _authService.AuthStateChanged += OnAuthStateChanged;
-
-        // If we have stored tokens, validate them and connect
-        if (_settingsService.HasServerUrl && await _credentialStore.HasCredentialsAsync())
-        {
-            await _authService.InitializeAsync();
-            if (_authService.IsAuthenticated)
+            // Ensure single instance
+            var mainInstance = AppInstance.FindOrRegisterForKey("NocturneTray");
+            if (!mainInstance.IsCurrent)
             {
-                await ConnectAsync();
+                var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
+                await mainInstance.RedirectActivationToAsync(activationArgs);
+                System.Diagnostics.Process.GetCurrentProcess().Kill();
+                return;
+            }
+
+            mainInstance.Activated += OnInstanceActivated;
+
+            // Initialize services
+            _settingsService = new SettingsService();
+            await _settingsService.LoadAsync();
+            Log("Settings loaded");
+
+            // Use shared WindowsCredentialStore with tray-specific target names
+            _credentialStore = new WindowsCredentialStore(
+                NullLogger<WindowsCredentialStore>.Instance,
+                "Nocturne.Tray.OAuth",
+                "Nocturne.Tray.DeviceAuth");
+
+            _authService = new OidcAuthService(_settingsService, _credentialStore);
+            _glucoseState = new GlucoseStateService();
+            _nocturneClient = new NocturneClient(
+                _settingsService,
+                _authService,
+                NullLogger<NocturneClient>.Instance);
+            _alarmService = new AlarmService(_settingsService);
+            _alarmService.Initialize();
+            Log("Services initialized");
+
+            // Create a hidden window (required by WinUI 3 for the app to stay alive)
+            _hiddenWindow = new Window
+            {
+                Title = "Nocturne Tray",
+            };
+            Log($"Hidden window created, Content={_hiddenWindow.Content}, XamlRoot={_hiddenWindow.Content?.XamlRoot}");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
+            ShowWindow(hwnd, SW_HIDE);
+            Log("Window hidden");
+
+            // Set up tray icon
+            _trayIcon = new TrayIconManager(_hiddenWindow.Content?.XamlRoot);
+            Log("TrayIconManager created");
+            _trayIcon.FlyoutRequested += OnFlyoutRequested;
+            _trayIcon.SettingsRequested += OnSettingsRequested;
+            _trayIcon.ExitRequested += OnExitRequested;
+            _trayIcon.ForceCreate();
+            await _trayIcon.SetConnectingAsync(_settingsService.Settings);
+            Log("Tray icon ForceCreate done");
+
+            // Create flyout window
+            _flyoutWindow = new FlyoutWindow(_glucoseState, _settingsService.Settings);
+            Log("FlyoutWindow created");
+
+            // Wire up data events
+            _nocturneClient.OnGlucoseReading += OnGlucoseReading;
+            _nocturneClient.OnAlarm += OnAlarm;
+            _nocturneClient.OnConnectionChanged += OnConnectionChanged;
+            _glucoseState.StateChanged += OnStateChanged;
+
+            // Wire auth state changes to connect/disconnect
+            _authService.AuthStateChanged += OnAuthStateChanged;
+
+            // If we have stored tokens, validate them and connect
+            Log($"HasServerUrl={_settingsService.HasServerUrl}");
+            if (_settingsService.HasServerUrl && await _credentialStore.HasCredentialsAsync())
+            {
+                Log("Has credentials, initializing auth");
+                await _authService.InitializeAsync();
+                if (_authService.IsAuthenticated)
+                {
+                    Log("Authenticated, connecting");
+                    await ConnectAsync();
+                }
+                else
+                {
+                    Log("Not authenticated, showing settings");
+                    ShowSettings();
+                }
             }
             else
             {
+                Log("No server URL or credentials, showing settings");
                 ShowSettings();
             }
+            Log("OnLaunched completed");
         }
-        else
+        catch (Exception ex)
         {
-            ShowSettings();
+            Log($"EXCEPTION in OnLaunched: {ex}");
         }
     }
 
@@ -146,7 +179,7 @@ public partial class App : Application
         });
     }
 
-    private void OnAlarm(AlarmEventArgs args)
+    private void OnAlarm(Services.AlarmEventArgs args)
     {
         _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () =>
         {
@@ -213,7 +246,7 @@ public partial class App : Application
         {
             await _nocturneClient.DisconnectAsync();
         };
-        settingsWindow.Activate();
+        settingsWindow.BringToFront();
     }
 
     private async void OnExitRequested(object? sender, EventArgs e)

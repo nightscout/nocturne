@@ -22,7 +22,7 @@ public sealed class TrayIconManager : IDisposable
     public event EventHandler? SettingsRequested;
     public event EventHandler? ExitRequested;
 
-    public TrayIconManager(XamlRoot xamlRoot)
+    public TrayIconManager(XamlRoot? xamlRoot)
     {
         _iconRenderer = new IconRenderer();
         _taskbarIcon = new TaskbarIcon();
@@ -53,8 +53,8 @@ public sealed class TrayIconManager : IDisposable
     {
         var iconBytes = await _iconRenderer.RenderIconAsync(reading, settings);
 
-        using var stream = new MemoryStream(iconBytes);
-        _taskbarIcon.UpdateIcon(stream);
+        using var icon = CreateIconFromPngBytes(iconBytes);
+        _taskbarIcon.UpdateIcon(icon);
 
         _taskbarIcon.ToolTipText = reading is not null
             ? FormatTooltip(reading, settings)
@@ -64,9 +64,17 @@ public sealed class TrayIconManager : IDisposable
     public async Task SetConnectingAsync(TraySettings settings)
     {
         var iconBytes = await _iconRenderer.RenderIconAsync(null, settings);
-        using var stream = new MemoryStream(iconBytes);
-        _taskbarIcon.UpdateIcon(stream);
+        using var icon = CreateIconFromPngBytes(iconBytes);
+        _taskbarIcon.UpdateIcon(icon);
         _taskbarIcon.ToolTipText = "Nocturne - Connecting...";
+    }
+
+    private static System.Drawing.Icon CreateIconFromPngBytes(byte[] pngBytes)
+    {
+        using var stream = new MemoryStream(pngBytes);
+        using var bitmap = new System.Drawing.Bitmap(stream);
+        var hIcon = bitmap.GetHicon();
+        return System.Drawing.Icon.FromHandle(hIcon);
     }
 
     public void ForceCreate()
