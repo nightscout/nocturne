@@ -594,47 +594,78 @@ public class StatisticsController : ControllerBase
                         filteredTreatments
                     );
 
-                    // Replace treatment-based basal with profile-aware calculation
-                    // when we have profile data. CalculateScheduledBasalForPeriod already
-                    // accounts for temp basals in treatments — using their rates during
-                    // active intervals and the scheduled rate otherwise. We REPLACE rather
-                    // than ADD to avoid double-counting when temp basals are both in
-                    // treatments AND in the profile-based calculation.
-                    if (_profileService.HasData())
-                    {
-                        var profileBasal = CalculateScheduledBasalForPeriod(
-                            startTimestamp,
-                            endTimestamp,
-                            filteredTreatments
-                        );
-                        treatmentSummary.Totals.Insulin.Basal = profileBasal;
-                    }
-
                     // Calculate comprehensive insulin delivery statistics
-                    // Uses profile basal when available, for consistency with treatmentSummary
                     insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
                         filteredTreatments,
                         startDate,
                         endDate
                     );
-                    if (_profileService.HasData())
+
+                    // Use StateSpan basal data (actual pump delivery) when available,
+                    // falling back to profile-based schedule calculation. StateSpans
+                    // represent real delivered insulin and match the daily-basal-bolus-ratios
+                    // endpoint so TDD values are consistent across the UI.
+                    var basalSpans = await _stateSpanService.GetStateSpansAsync(
+                        category: StateSpanCategory.BasalDelivery,
+                        from: startTimestamp,
+                        to: endTimestamp,
+                        count: 10000
+                    );
+                    var basalSpansList = basalSpans.ToList();
+
+                    double computedBasal;
+                    if (basalSpansList.Count > 0)
                     {
-                        var profileBasal = CalculateScheduledBasalForPeriod(
+                        // Sum actual delivered basal from StateSpans (same logic as CalculateDailyBasalBolusRatios)
+                        computedBasal = 0;
+                        foreach (var span in basalSpansList)
+                        {
+                            if (span.Category != StateSpanCategory.BasalDelivery) continue;
+                            var endMills = span.EndMills ?? span.StartMills + (5 * 60 * 1000);
+                            var durationHours = (endMills - span.StartMills) / (1000.0 * 60 * 60);
+                            double rate = 0;
+                            if (span.Metadata?.TryGetValue("rate", out var rateObj) == true)
+                            {
+                                rate = rateObj switch
+                                {
+                                    System.Text.Json.JsonElement je => je.GetDouble(),
+                                    double d => d,
+                                    _ => Convert.ToDouble(rateObj)
+                                };
+                            }
+                            var basalInsulin = rate * durationHours;
+                            if (basalInsulin > 0) computedBasal += basalInsulin;
+                        }
+                    }
+                    else if (_profileService.HasData())
+                    {
+                        // Fallback: use profile schedule when no StateSpan data exists
+                        computedBasal = CalculateScheduledBasalForPeriod(
                             startTimestamp,
                             endTimestamp,
                             filteredTreatments
                         );
-                        var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
-                        insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
-                        insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
-                        insulinDelivery.Tdd = Math.Round(totalWithProfile / Math.Max(1, insulinDelivery.DayCount) * 10) / 10;
-                        insulinDelivery.BasalPercent = totalWithProfile > 0
-                            ? Math.Round(profileBasal / totalWithProfile * 100 * 10) / 10
-                            : 0;
-                        insulinDelivery.BolusPercent = totalWithProfile > 0
-                            ? Math.Round(insulinDelivery.TotalBolus / totalWithProfile * 100 * 10) / 10
-                            : 0;
                     }
+                    else
+                    {
+                        // No StateSpans and no profile — keep treatment-based basal as-is
+                        computedBasal = insulinDelivery.TotalBasal;
+                    }
+
+                    // Update treatment summary basal
+                    treatmentSummary.Totals.Insulin.Basal = Math.Round(computedBasal * 100) / 100;
+
+                    // Update insulin delivery statistics with consistent basal
+                    var totalInsulin = insulinDelivery.TotalBolus + computedBasal;
+                    insulinDelivery.TotalBasal = Math.Round(computedBasal * 100) / 100;
+                    insulinDelivery.TotalInsulin = Math.Round(totalInsulin * 100) / 100;
+                    insulinDelivery.Tdd = Math.Round(totalInsulin / Math.Max(1, insulinDelivery.DayCount) * 10) / 10;
+                    insulinDelivery.BasalPercent = totalInsulin > 0
+                        ? Math.Round(computedBasal / totalInsulin * 100 * 10) / 10
+                        : 0;
+                    insulinDelivery.BolusPercent = totalInsulin > 0
+                        ? Math.Round(insulinDelivery.TotalBolus / totalInsulin * 100 * 10) / 10
+                        : 0;
                 }
 
                 periodResults.Add(
