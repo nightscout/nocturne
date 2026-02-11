@@ -15234,6 +15234,8 @@ msgstr ""
 
 #. placeholder {0}: detectionResult.totalSuggestionsCreated
 #. placeholder {1}: detectionResult.nightsProcessed
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
 #: src/routes/reports/data-quality/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Found {0} compression low(s) across {1} night(s)"

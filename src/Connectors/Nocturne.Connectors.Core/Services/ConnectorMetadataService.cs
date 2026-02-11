@@ -159,12 +159,9 @@ public static class ConnectorMetadataService
         /// </summary>
         public AvailableService ToAvailableService()
         {
-            // Use connector name as the service ID (e.g., "glooko" not "glooko-connector")
-            var serviceId = ConnectorName.ToLowerInvariant();
-
             return new AvailableService
             {
-                Id = serviceId,
+                Id = ConnectorName,
                 Name = DisplayName,
                 Type = Category.ToString().ToLowerInvariant(),
                 Description = Description,

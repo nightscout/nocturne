@@ -1,9 +1,11 @@
-using System.Text;
+using System.Diagnostics;
+using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Core.Constants;
@@ -239,27 +241,89 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         };
 
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
         var url =
-            $"/api/services/authenticate_diary_key?username={Uri.EscapeDataString(_config.Username)}";
-        var response = await PostWithHeadersAsync(
-            url,
-            content,
-            cancellationToken: cancellationToken
-        );
+            $"https://www.myfitnesspal.com/api/services/authenticate_diary_key?username={Uri.EscapeDataString(_config.Username)}";
 
-        if (!response.IsSuccessStatusCode)
+        // Use curl to bypass Cloudflare's TLS fingerprinting which blocks .NET's HttpClient
+        var responseBody = await ExecuteCurlPostAsync(url, json, cancellationToken);
+
+        return JsonSerializer.Deserialize<List<MfpDiaryDay>>(responseBody, JsonDefaults.CaseInsensitive);
+    }
+
+    /// <summary>
+    /// Executes an HTTP POST via curl to avoid Cloudflare TLS fingerprint detection.
+    /// .NET's HttpClient uses a TLS stack that Cloudflare identifies as non-browser traffic.
+    /// </summary>
+    private async Task<string> ExecuteCurlPostAsync(
+        string url,
+        string jsonPayload,
+        CancellationToken cancellationToken
+    )
+    {
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
         {
-            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            FileName = "curl",
+            ArgumentList =
+            {
+                "-s",
+                "-w", "\n%{http_code}",
+                "--max-time", "30",
+                "-X", "POST",
+                "-H", "Content-Type: application/json",
+                "-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "-d", jsonPayload,
+                url,
+            },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        process.Start();
+
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        await process.WaitForExitAsync(cancellationToken);
+
+        var stdout = await outputTask;
+        var stderr = await errorTask;
+
+        if (process.ExitCode != 0)
+        {
+            _logger.LogError(
+                "curl request to MyFitnessPal failed with exit code {ExitCode}: {Error}",
+                process.ExitCode,
+                stderr
+            );
             throw new HttpRequestException(
-                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
-                null,
-                response.StatusCode
+                $"curl request failed (exit code {process.ExitCode}): {stderr}"
             );
         }
 
-        return await DeserializeResponseAsync<List<MfpDiaryDay>>(response, cancellationToken);
+        // Parse the appended HTTP status code from -w "\n%{http_code}"
+        var lastNewline = stdout.LastIndexOf('\n');
+        if (lastNewline < 0)
+            throw new HttpRequestException("Unexpected curl response format");
+
+        var statusStr = stdout[(lastNewline + 1)..].Trim();
+        var body = stdout[..lastNewline];
+
+        if (int.TryParse(statusStr, out var statusCode) && statusCode is >= 200 and < 300)
+            return body;
+
+        _logger.LogError(
+            "MyFitnessPal API returned HTTP {StatusCode}: {ResponseBody}",
+            statusStr,
+            body.Length > 500 ? body[..500] : body
+        );
+        throw new HttpRequestException(
+            $"MyFitnessPal API returned HTTP {statusStr}",
+            null,
+            (HttpStatusCode)statusCode
+        );
     }
 
     /// <summary>
@@ -339,7 +403,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     )
     {
         if (entry.ConsumedAt != null && DateTimeOffset.TryParse(entry.ConsumedAt, out var parsed))
-            return parsed;
+            return parsed.ToUniversalTime();
 
         var mealHour = entry.MealName switch
         {
@@ -351,7 +415,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         };
 
         var dateTime = date.ToDateTime(new TimeOnly(mealHour, 0));
-        return new DateTimeOffset(dateTime, TimeSpan.FromHours(config.TimezoneOffset));
+        return new DateTimeOffset(dateTime, TimeSpan.FromHours(config.TimezoneOffset)).ToUniversalTime();
     }
 
     private static DateTimeOffset? TryParseTimestamp(string? timestamp)
@@ -359,7 +423,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         if (string.IsNullOrEmpty(timestamp))
             return null;
 
-        return DateTimeOffset.TryParse(timestamp, out var result) ? result : null;
+        return DateTimeOffset.TryParse(timestamp, out var result) ? result.ToUniversalTime() : null;
     }
 
     private static string? FormatServingDescription(MfpServingSize? servingSize, decimal servings)

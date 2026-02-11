@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text.Json;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Dexcom.Configurations;
@@ -12,6 +14,7 @@ using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Services;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Services;
+using Nocturne.Core.Contracts;
 
 namespace Nocturne.API.Services;
 
@@ -60,27 +63,27 @@ public class ConnectorSyncService : IConnectorSyncService
                 "dexcom" => await ExecuteSyncAsync<
                     DexcomConnectorService,
                     DexcomConnectorConfiguration
-                >(request, ct),
+                >("Dexcom", request, ct),
                 "tidepool" => await ExecuteSyncAsync<
                     TidepoolConnectorService,
                     TidepoolConnectorConfiguration
-                >(request, ct),
+                >("Tidepool", request, ct),
                 "librelinkup" => await ExecuteSyncAsync<
                     LibreConnectorService,
                     LibreLinkUpConnectorConfiguration
-                >(request, ct),
+                >("LibreLinkUp", request, ct),
                 "glooko" => await ExecuteSyncAsync<
                     GlookoConnectorService,
                     GlookoConnectorConfiguration
-                >(request, ct),
+                >("Glooko", request, ct),
                 "mylife" => await ExecuteSyncAsync<
                     MyLifeConnectorService,
                     MyLifeConnectorConfiguration
-                >(request, ct),
+                >("MyLife", request, ct),
                 "myfitnesspal" => await ExecuteSyncAsync<
                     MyFitnessPalConnectorService,
                     MyFitnessPalConnectorConfiguration
-                >(request, ct),
+                >("MyFitnessPal", request, ct),
                 _ => new SyncResult
                 {
                     Success = false,
@@ -121,6 +124,7 @@ public class ConnectorSyncService : IConnectorSyncService
     }
 
     private async Task<SyncResult> ExecuteSyncAsync<TService, TConfig>(
+        string connectorName,
         SyncRequest request,
         CancellationToken ct
     )
@@ -130,6 +134,94 @@ public class ConnectorSyncService : IConnectorSyncService
         using var scope = _serviceProvider.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<TService>();
         var config = scope.ServiceProvider.GetRequiredService<TConfig>();
+
+        await LoadDatabaseConfigurationAsync(scope.ServiceProvider, connectorName, config, ct);
+
         return await service.SyncDataAsync(request, config, ct);
+    }
+
+    /// <summary>
+    /// Loads runtime configuration and secrets from the database and applies them
+    /// to the config singleton. Ensures DB-stored values (including encrypted
+    /// passwords) are available for manual sync requests.
+    /// </summary>
+    private async Task LoadDatabaseConfigurationAsync<TConfig>(
+        IServiceProvider scopedProvider,
+        string connectorName,
+        TConfig config,
+        CancellationToken ct)
+        where TConfig : class, IConnectorConfiguration
+    {
+        try
+        {
+            var configService = scopedProvider.GetRequiredService<IConnectorConfigurationService>();
+
+            var dbConfig = await configService.GetConfigurationAsync(connectorName, ct);
+            if (dbConfig?.Configuration != null)
+            {
+                ApplyJsonToConfig(dbConfig.Configuration, config);
+            }
+
+            var secrets = await configService.GetSecretsAsync(connectorName, ct);
+            if (secrets.Count > 0)
+            {
+                ApplySecretsToConfig(secrets, config);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to load database configuration for {ConnectorName} during manual sync",
+                connectorName);
+        }
+    }
+
+    private static void ApplyJsonToConfig<TConfig>(JsonDocument configuration, TConfig config)
+        where TConfig : class
+    {
+        var properties = config.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var root = configuration.RootElement;
+
+        foreach (var property in properties)
+        {
+            if (!property.CanWrite) continue;
+
+            var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
+            if (!root.TryGetProperty(camelName, out var element)) continue;
+
+            try
+            {
+                if (property.PropertyType == typeof(string) && element.ValueKind == JsonValueKind.String)
+                    property.SetValue(config, element.GetString());
+                else if (property.PropertyType == typeof(int) && element.ValueKind == JsonValueKind.Number)
+                    property.SetValue(config, element.GetInt32());
+                else if (property.PropertyType == typeof(double) && element.ValueKind == JsonValueKind.Number)
+                    property.SetValue(config, element.GetDouble());
+                else if (property.PropertyType == typeof(bool) &&
+                         (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
+                    property.SetValue(config, element.GetBoolean());
+            }
+            catch (Exception)
+            {
+                // Skip properties that can't be set
+            }
+        }
+    }
+
+    private static void ApplySecretsToConfig<TConfig>(Dictionary<string, string> secrets, TConfig config)
+        where TConfig : class
+    {
+        var properties = config.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var property in properties)
+        {
+            if (!property.CanWrite || property.PropertyType != typeof(string)) continue;
+
+            var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
+            if (secrets.TryGetValue(camelName, out var value))
+            {
+                property.SetValue(config, value);
+            }
+        }
     }
 }

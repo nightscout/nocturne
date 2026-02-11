@@ -31,13 +31,13 @@ public class TidepoolConnectorConfiguration : BaseConnectorConfiguration
         RuntimeConfigurable = true,
         Category = "Connection",
         Description = "Tidepool account email address")]
-    public string Username { get; init; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
 
     [ConnectorProperty("Password",
         Required = true,
         Secret = true,
         Description = "Tidepool account password")]
-    public string Password { get; init; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
 
     [ConnectorProperty("Server",
         RuntimeConfigurable = true,
@@ -45,11 +45,11 @@ public class TidepoolConnectorConfiguration : BaseConnectorConfiguration
         Description = "Tidepool server region",
         DefaultValue = "US",
         AllowedValues = ["US", "Development"])]
-    public string Server { get; init; } = "US";
+    public string Server { get; set; } = "US";
 
     [ConnectorProperty("UserId",
         RuntimeConfigurable = true,
         Category = "Connection",
         Description = "Tidepool user ID (leave empty to use the authenticated user)")]
-    public string UserId { get; init; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
 }

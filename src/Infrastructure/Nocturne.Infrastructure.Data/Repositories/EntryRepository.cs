@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -116,6 +117,12 @@ public class EntryRepository
             return Enumerable.Empty<Entry>();
         }
 
+        // Deduplicate within the batch itself (e.g. connector returns overlapping data)
+        entities = entities
+            .GroupBy(e => e.Id)
+            .Select(g => g.First())
+            .ToList();
+
         // Get the IDs of the entities we're trying to insert
         var entityIds = entities.Select(e => e.Id).ToHashSet();
 
@@ -135,7 +142,36 @@ public class EntryRepository
         }
 
         _context.Entries.AddRange(newEntities);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Race condition: another sync inserted the same entries between our check and save.
+            // Detach all added entities and retry with a fresh duplicate check.
+            _logger.LogWarning("Duplicate key conflict during entry insert, retrying with fresh deduplication");
+
+            foreach (var entity in newEntities)
+            {
+                _context.Entry(entity).State = EntityState.Detached;
+            }
+
+            var nowExistingIds = await _context
+                .Entries.Where(e => entityIds.Contains(e.Id))
+                .Select(e => e.Id)
+                .ToHashSetAsync(cancellationToken);
+
+            newEntities = newEntities.Where(e => !nowExistingIds.Contains(e.Id)).ToList();
+
+            if (newEntities.Count == 0)
+            {
+                return Enumerable.Empty<Entry>();
+            }
+
+            _context.Entries.AddRange(newEntities);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
         // Link new entries to canonical groups for deduplication
         foreach (var entity in newEntities)

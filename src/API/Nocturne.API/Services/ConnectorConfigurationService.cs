@@ -56,7 +56,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     {
         var entity = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         if (entity == null)
         {
@@ -88,7 +88,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         var configJson = configuration.RootElement.GetRawText();
 
@@ -151,7 +151,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
         var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
@@ -201,7 +201,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         var entity = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         if (entity == null || string.IsNullOrEmpty(entity.SecretsJson) || entity.SecretsJson == "{}")
         {
@@ -240,9 +240,12 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     public async Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default)
     {
         var allConnectors = ConnectorMetadataService.GetAll();
-        var dbConfigs = await _context.ConnectorConfigurations
+        var dbConfigsList = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .ToDictionaryAsync(c => c.ConnectorName, ct);
+            .ToListAsync(ct);
+        var dbConfigs = dbConfigsList.ToDictionary(
+            c => c.ConnectorName,
+            StringComparer.OrdinalIgnoreCase);
 
         var result = new List<ConnectorStatusInfo>();
 
@@ -301,7 +304,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         // Create the config JSON with the enabled field
         var configWithEnabled = CreateConfigWithEnabled(entity?.ConfigurationJson ?? "{}", isActive);
@@ -363,7 +366,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     public async Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         if (entity == null)
         {
