@@ -111,6 +111,21 @@ public interface IStatisticsService
         DateTime endDate
     );
 
+    /// <summary>
+    /// Calculate comprehensive insulin delivery statistics using StateSpans for basal data
+    /// </summary>
+    InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
+        IEnumerable<Treatment> treatments,
+        IEnumerable<StateSpan> basalStateSpans,
+        DateTime startDate,
+        DateTime endDate
+    );
+
+    /// <summary>
+    /// Sum total basal insulin delivered across a collection of BasalDelivery StateSpans
+    /// </summary>
+    double SumBasalFromStateSpans(IEnumerable<StateSpan> basalStateSpans);
+
     // Formatting Utilities
     string FormatInsulinDisplay(double value);
     string FormatCarbDisplay(double value);

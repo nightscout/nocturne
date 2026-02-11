@@ -36,8 +36,6 @@
   const chartData = $derived(ratioData?.dailyData ?? []);
   const averageBasalPercent = $derived(ratioData?.averageBasalPercent ?? 0);
   const averageBolusPercent = $derived(ratioData?.averageBolusPercent ?? 0);
-  const averageTdd = $derived(ratioData?.averageTdd ?? 0);
-  const dayCount = $derived(ratioData?.dayCount ?? 0);
 </script>
 
 <div class="w-full">
@@ -51,32 +49,6 @@
       </div>
     </div>
   {:else if chartData.length > 0 && chartData.some((d) => (d.total ?? 0) > 0)}
-    <!-- Summary Cards -->
-    <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-      <div class="rounded-lg border bg-card p-4 text-center">
-        <div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
-          {averageBasalPercent.toFixed(0)}%
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Avg Basal</div>
-      </div>
-      <div class="rounded-lg border bg-card p-4 text-center">
-        <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">
-          {averageBolusPercent.toFixed(0)}%
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Avg Bolus</div>
-      </div>
-      <div class="rounded-lg border bg-card p-4 text-center">
-        <div class="text-2xl font-bold">
-          {averageTdd.toFixed(1)}U
-        </div>
-        <div class="text-xs font-medium text-muted-foreground">Avg TDD</div>
-      </div>
-      <div class="rounded-lg border bg-card p-4 text-center">
-        <div class="text-2xl font-bold">{dayCount}</div>
-        <div class="text-xs font-medium text-muted-foreground">Days</div>
-      </div>
-    </div>
-
     <!-- Stacked Bar Chart -->
     <div class="h-[300px] w-full">
       <BarChart

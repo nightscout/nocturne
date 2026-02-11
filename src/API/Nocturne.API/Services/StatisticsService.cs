@@ -2056,6 +2056,77 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
+    /// Extract the rate (U/hr) from a StateSpan's metadata, handling various stored types.
+    /// </summary>
+    internal static double GetStateSpanRate(StateSpan span)
+    {
+        if (span.Metadata?.TryGetValue("rate", out var rateObj) != true)
+            return 0;
+
+        return rateObj switch
+        {
+            System.Text.Json.JsonElement je => je.GetDouble(),
+            double d => d,
+            _ => Convert.ToDouble(rateObj)
+        };
+    }
+
+    /// <summary>
+    /// Calculate the insulin delivered (units) for a single basal StateSpan.
+    /// </summary>
+    internal static double GetStateSpanBasalInsulin(StateSpan span)
+    {
+        var endMills = span.EndMills ?? span.StartMills + (5 * 60 * 1000); // Default 5 min
+        var durationHours = (endMills - span.StartMills) / (1000.0 * 60 * 60);
+        var rate = GetStateSpanRate(span);
+        return rate * durationHours;
+    }
+
+    /// <summary>
+    /// Sum total basal insulin delivered across a collection of BasalDelivery StateSpans.
+    /// </summary>
+    public double SumBasalFromStateSpans(IEnumerable<StateSpan> basalStateSpans)
+    {
+        double total = 0;
+        foreach (var span in basalStateSpans)
+        {
+            if (span.Category != StateSpanCategory.BasalDelivery) continue;
+            var insulin = GetStateSpanBasalInsulin(span);
+            if (insulin > 0) total += insulin;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Calculate comprehensive insulin delivery statistics using StateSpans for basal data.
+    /// </summary>
+    public InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
+        IEnumerable<Treatment> treatments,
+        IEnumerable<StateSpan> basalStateSpans,
+        DateTime startDate,
+        DateTime endDate)
+    {
+        // Start with treatment-based calculation (handles boluses, carbs, etc.)
+        var stats = CalculateInsulinDeliveryStatistics(treatments, startDate, endDate);
+
+        // Replace basal with StateSpan-derived total
+        var stateSpanBasal = SumBasalFromStateSpans(basalStateSpans);
+        var totalInsulin = stats.TotalBolus + stateSpanBasal;
+
+        stats.TotalBasal = Math.Round(stateSpanBasal * 100) / 100;
+        stats.TotalInsulin = Math.Round(totalInsulin * 100) / 100;
+        stats.Tdd = Math.Round(totalInsulin / Math.Max(1, stats.DayCount) * 10) / 10;
+        stats.BasalPercent = totalInsulin > 0
+            ? Math.Round(stateSpanBasal / totalInsulin * 100 * 10) / 10
+            : 0;
+        stats.BolusPercent = totalInsulin > 0
+            ? Math.Round(stats.TotalBolus / totalInsulin * 100 * 10) / 10
+            : 0;
+
+        return stats;
+    }
+
+    /// <summary>
     /// Calculate daily basal/bolus ratio breakdown using StateSpans for basal data
     /// </summary>
     public DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
@@ -2104,27 +2175,11 @@ public class StatisticsService : IStatisticsService
         {
             if (span.Category != StateSpanCategory.BasalDelivery) continue;
 
-            var startDate = DateTimeOffset.FromUnixTimeMilliseconds(span.StartMills).DateTime;
-            var endMills = span.EndMills ?? span.StartMills + (5 * 60 * 1000); // Default 5 min
-            var endDate = DateTimeOffset.FromUnixTimeMilliseconds(endMills).DateTime;
-            var durationHours = (endMills - span.StartMills) / (1000.0 * 60 * 60);
-
-            // Get rate from metadata
-            double rate = 0;
-            if (span.Metadata?.TryGetValue("rate", out var rateObj) == true)
-            {
-                rate = rateObj switch
-                {
-                    System.Text.Json.JsonElement je => je.GetDouble(),
-                    double d => d,
-                    _ => Convert.ToDouble(rateObj)
-                };
-            }
-
-            var basalInsulin = rate * durationHours;
+            var basalInsulin = GetStateSpanBasalInsulin(span);
             if (basalInsulin <= 0) continue;
 
-            var dateKey = startDate.ToString("yyyy-MM-dd");
+            var spanDate = DateTimeOffset.FromUnixTimeMilliseconds(span.StartMills).DateTime;
+            var dateKey = spanDate.ToString("yyyy-MM-dd");
             if (!dailyData.ContainsKey(dateKey))
                 dailyData[dateKey] = (0, 0);
 
@@ -2202,22 +2257,13 @@ public class StatisticsService : IStatisticsService
 
         foreach (var span in spansList)
         {
-            // Get rate and origin from metadata
-            double rate = 0;
+            var rate = GetStateSpanRate(span);
+
+            // Get origin and scheduledRate from metadata (specific to basal analysis)
             string? origin = null;
             double? scheduledRate = null;
-
             if (span.Metadata != null)
             {
-                if (span.Metadata.TryGetValue("rate", out var rateObj))
-                {
-                    rate = rateObj switch
-                    {
-                        System.Text.Json.JsonElement je => je.GetDouble(),
-                        double d => d,
-                        _ => Convert.ToDouble(rateObj)
-                    };
-                }
                 if (span.Metadata.TryGetValue("origin", out var originObj))
                 {
                     origin = originObj?.ToString();
@@ -2234,11 +2280,9 @@ public class StatisticsService : IStatisticsService
             }
 
             var startTime = DateTimeOffset.FromUnixTimeMilliseconds(span.StartMills).DateTime;
-            var endMills = span.EndMills ?? span.StartMills + (5 * 60 * 1000);
-            var durationHours = (endMills - span.StartMills) / (1000.0 * 60 * 60);
 
             allRates.Add(rate);
-            totalDelivered += rate * durationHours;
+            totalDelivered += GetStateSpanBasalInsulin(span);
 
             // Add to hourly buckets
             var hour = startTime.Hour;
