@@ -6,7 +6,7 @@
   import { X, Loader2 } from "lucide-svelte";
   import { StateHistory } from "runed";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getDefinitions } from "$lib/data/trackers.remote";
+  import { getDefinitions } from "$lib/data/generated";
   import {
     update as updateClockFace,
     getByIdForEdit as getClockFaceById,

@@ -210,8 +210,9 @@ export const createTreatment = command(TreatmentSchema, async (treatment) => {
 export const updateTreatment = command(TreatmentSchema, async (treatment) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
-  if (!treatment._id) throw new Error("Treatment ID required for update");
-  return apiClient.treatments.updateTreatment(treatment._id, treatment as Treatment);
+  const t = treatment as Treatment;
+  if (!t._id) throw new Error("Treatment ID required for update");
+  return apiClient.treatments.updateTreatment(t._id, t);
 });
 
 /**

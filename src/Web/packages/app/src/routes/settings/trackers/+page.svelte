@@ -42,7 +42,7 @@
   import { tick, onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
-  import * as trackersRemote from "$lib/data/trackers.remote";
+  import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
   import {
     NotificationUrgency,
     TrackerCategory,
@@ -387,7 +387,7 @@
       } else if (editingDefinition) {
         await trackersRemote.updateDefinition({
           id: editingDefinition.id!,
-          ...data,
+          request: data,
         });
       }
       await loadData();

@@ -1911,7 +1911,7 @@ export class OAuthClient {
      * @param code_challenge_method (optional) 
      */
     authorize(client_id?: string | undefined, redirect_uri?: string | undefined, response_type?: string | undefined, scope?: string | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, code_challenge_method?: string | null | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/authorize?";
+        let url_ = this.baseUrl + "/api/oauth/authorize?";
         if (client_id === null)
             throw new globalThis.Error("The parameter 'client_id' cannot be null.");
         else if (client_id !== undefined)
@@ -1977,9 +1977,10 @@ export class OAuthClient {
      * @param state (optional) 
      * @param code_challenge (optional) 
      * @param approved (optional) 
+     * @param limit_to_24_hours (optional) 
      */
-    approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/authorize";
+    approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, limit_to_24_hours?: boolean | undefined, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/oauth/authorize";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -1997,6 +1998,10 @@ export class OAuthClient {
             throw new globalThis.Error("The parameter 'approved' cannot be null.");
         else
             content_.append("approved", approved.toString());
+        if (limit_to_24_hours === null || limit_to_24_hours === undefined)
+            throw new globalThis.Error("The parameter 'limit_to_24_hours' cannot be null.");
+        else
+            content_.append("limit_to_24_hours", limit_to_24_hours.toString());
 
         let options_: RequestInit = {
             body: content_,
@@ -2045,7 +2050,7 @@ export class OAuthClient {
      * @param scope (optional) 
      */
     token(grant_type?: string | undefined, client_id?: string | null | undefined, code?: string | null | undefined, redirect_uri?: string | null | undefined, code_verifier?: string | null | undefined, refresh_token?: string | null | undefined, device_code?: string | null | undefined, scope?: string | null | undefined, signal?: AbortSignal): Promise<OAuthTokenResponse> {
-        let url_ = this.baseUrl + "/oauth/token";
+        let url_ = this.baseUrl + "/api/oauth/token";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2112,7 +2117,7 @@ export class OAuthClient {
      * @param scope (optional) 
      */
     deviceAuthorization(client_id?: string | null | undefined, scope?: string | null | undefined, signal?: AbortSignal): Promise<OAuthDeviceAuthorizationResponse> {
-        let url_ = this.baseUrl + "/oauth/device";
+        let url_ = this.baseUrl + "/api/oauth/device";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2163,7 +2168,7 @@ export class OAuthClient {
      * @param user_code (optional) 
      */
     getDeviceInfo(user_code?: string | undefined, signal?: AbortSignal): Promise<DeviceCodeInfo> {
-        let url_ = this.baseUrl + "/oauth/device-info?";
+        let url_ = this.baseUrl + "/api/oauth/device-info?";
         if (user_code === null)
             throw new globalThis.Error("The parameter 'user_code' cannot be null.");
         else if (user_code !== undefined)
@@ -2213,7 +2218,7 @@ export class OAuthClient {
      * @param approved (optional) 
      */
     deviceApprove(user_code?: string | null | undefined, approved?: boolean | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/device-approve";
+        let url_ = this.baseUrl + "/api/oauth/device-approve";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2264,7 +2269,7 @@ export class OAuthClient {
      * @param token_type_hint (optional) 
      */
     revoke(token?: string | null | undefined, token_type_hint?: string | null | undefined, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/revoke";
+        let url_ = this.baseUrl + "/api/oauth/revoke";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -2306,7 +2311,7 @@ export class OAuthClient {
      * @param client_id (optional) 
      */
     getClientInfo(client_id?: string | undefined, signal?: AbortSignal): Promise<OAuthClientInfoResponse> {
-        let url_ = this.baseUrl + "/oauth/client-info?";
+        let url_ = this.baseUrl + "/api/oauth/client-info?";
         if (client_id === null)
             throw new globalThis.Error("The parameter 'client_id' cannot be null.");
         else if (client_id !== undefined)
@@ -2347,7 +2352,7 @@ export class OAuthClient {
      * List all active grants for the authenticated user.
      */
     getGrants(signal?: AbortSignal): Promise<OAuthGrantListResponse> {
-        let url_ = this.baseUrl + "/oauth/grants";
+        let url_ = this.baseUrl + "/api/oauth/grants";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -2384,7 +2389,7 @@ export class OAuthClient {
      * Revoke (delete) a specific grant owned by the authenticated user.
      */
     deleteGrant(grantId: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/grants/{grantId}";
+        let url_ = this.baseUrl + "/api/oauth/grants/{grantId}";
         if (grantId === undefined || grantId === null)
             throw new globalThis.Error("The parameter 'grantId' must be defined.");
         url_ = url_.replace("{grantId}", encodeURIComponent("" + grantId));
@@ -2427,7 +2432,7 @@ export class OAuthClient {
      * Update a grant's label and/or scopes.
      */
     updateGrant(grantId: string, request: UpdateGrantRequest, signal?: AbortSignal): Promise<OAuthGrantDto> {
-        let url_ = this.baseUrl + "/oauth/grants/{grantId}";
+        let url_ = this.baseUrl + "/api/oauth/grants/{grantId}";
         if (grantId === undefined || grantId === null)
             throw new globalThis.Error("The parameter 'grantId' must be defined.");
         url_ = url_.replace("{grantId}", encodeURIComponent("" + grantId));
@@ -2477,7 +2482,7 @@ export class OAuthClient {
      * Create a follower grant (share data with another user by email).
      */
     createFollowerGrant(request: CreateFollowerGrantRequest, signal?: AbortSignal): Promise<OAuthGrantDto> {
-        let url_ = this.baseUrl + "/oauth/grants/follower";
+        let url_ = this.baseUrl + "/api/oauth/grants/follower";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = JSON.stringify(request);
@@ -2525,7 +2530,7 @@ export class OAuthClient {
     Used by the frontend to populate the "Viewing data for:" selector.
      */
     getFollowerTargets(signal?: AbortSignal): Promise<FollowerTargetListResponse> {
-        let url_ = this.baseUrl + "/oauth/follower-targets";
+        let url_ = this.baseUrl + "/api/oauth/follower-targets";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -2563,7 +2568,7 @@ export class OAuthClient {
     The link can be shared with someone who doesn't have an account yet.
      */
     createInvite(request: CreateInviteRequest, signal?: AbortSignal): Promise<CreateInviteResponse> {
-        let url_ = this.baseUrl + "/oauth/invites";
+        let url_ = this.baseUrl + "/api/oauth/invites";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = JSON.stringify(request);
@@ -2610,7 +2615,7 @@ export class OAuthClient {
      * List invites created by the authenticated user.
      */
     listInvites(signal?: AbortSignal): Promise<InviteListResponse> {
-        let url_ = this.baseUrl + "/oauth/invites";
+        let url_ = this.baseUrl + "/api/oauth/invites";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -2647,7 +2652,7 @@ export class OAuthClient {
      * Revoke an invite so it can no longer be used.
      */
     revokeInvite(inviteId: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/oauth/invites/{inviteId}";
+        let url_ = this.baseUrl + "/api/oauth/invites/{inviteId}";
         if (inviteId === undefined || inviteId === null)
             throw new globalThis.Error("The parameter 'inviteId' must be defined.");
         url_ = url_.replace("{inviteId}", encodeURIComponent("" + inviteId));
@@ -2691,7 +2696,7 @@ export class OAuthClient {
     This is a public endpoint so invitees can see what they're accepting.
      */
     getInviteInfo(token: string, signal?: AbortSignal): Promise<InviteInfoResponse> {
-        let url_ = this.baseUrl + "/oauth/invites/{token}/info";
+        let url_ = this.baseUrl + "/api/oauth/invites/{token}/info";
         if (token === undefined || token === null)
             throw new globalThis.Error("The parameter 'token' must be defined.");
         url_ = url_.replace("{token}", encodeURIComponent("" + token));
@@ -2738,7 +2743,7 @@ export class OAuthClient {
     Requires authentication - the invitee must be logged in.
      */
     acceptInvite(token: string, signal?: AbortSignal): Promise<AcceptInviteResponse> {
-        let url_ = this.baseUrl + "/oauth/invites/{token}/accept";
+        let url_ = this.baseUrl + "/api/oauth/invites/{token}/accept";
         if (token === undefined || token === null)
             throw new globalThis.Error("The parameter 'token' must be defined.");
         url_ = url_.replace("{token}", encodeURIComponent("" + token));
@@ -2788,7 +2793,7 @@ export class OAuthClient {
      * @param token_type_hint (optional) 
      */
     introspect(token?: string | null | undefined, token_type_hint?: string | null | undefined, signal?: AbortSignal): Promise<TokenIntrospectionResponse> {
-        let url_ = this.baseUrl + "/oauth/introspect";
+        let url_ = this.baseUrl + "/api/oauth/introspect";
         url_ = url_.replace(/[?&]$/, "");
 
         const content_ = new FormData();
@@ -4780,11 +4785,12 @@ export class ChartDataClient {
     }
 
     /**
-     * Get dashboard chart data with pre-calculated IOB, COB, and basal time series
-     * @param startTime (optional) Start time in Unix milliseconds
-     * @param endTime (optional) End time in Unix milliseconds
-     * @param intervalMinutes (optional) Interval for IOB/COB calculations (default: 5)
-     * @return Chart data with all calculated series
+     * Get complete dashboard chart data in a single call.
+    Returns pre-calculated IOB, COB, basal series, categorized treatment markers,
+    state spans, system events, tracker markers, and glucose readings.
+     * @param startTime (optional) 
+     * @param endTime (optional) 
+     * @param intervalMinutes (optional) 
      */
     getDashboardChartData(startTime?: number | undefined, endTime?: number | undefined, intervalMinutes?: number | undefined, signal?: AbortSignal): Promise<DashboardChartData> {
         let url_ = this.baseUrl + "/api/v4/ChartData/dashboard?";
@@ -5373,6 +5379,289 @@ export class CompatibilityClient {
             });
         }
         return Promise.resolve<ManualTestResult>(null as any);
+    }
+}
+
+export class CompressionLowClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get compression low suggestions with optional filtering
+     * @param status (optional) 
+     * @param nightOf (optional) 
+     */
+    getSuggestions(status?: CompressionLowStatus | null | undefined, nightOf?: string | null | undefined, signal?: AbortSignal): Promise<CompressionLowSuggestion[]> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions?";
+        if (status !== undefined && status !== null)
+            url_ += "status=" + encodeURIComponent("" + status) + "&";
+        if (nightOf !== undefined && nightOf !== null)
+            url_ += "nightOf=" + encodeURIComponent("" + nightOf) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSuggestions(_response);
+        });
+    }
+
+    protected processGetSuggestions(response: Response): Promise<CompressionLowSuggestion[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CompressionLowSuggestion[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<CompressionLowSuggestion[]>(null as any);
+    }
+
+    /**
+     * Get a single suggestion with glucose entries for charting
+     */
+    getSuggestion(id: string, signal?: AbortSignal): Promise<CompressionLowSuggestionWithEntries> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSuggestion(_response);
+        });
+    }
+
+    protected processGetSuggestion(response: Response): Promise<CompressionLowSuggestionWithEntries> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CompressionLowSuggestionWithEntries;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<CompressionLowSuggestionWithEntries>(null as any);
+    }
+
+    /**
+     * Delete a suggestion and its associated state span
+     */
+    deleteSuggestion(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteSuggestion(_response);
+        });
+    }
+
+    protected processDeleteSuggestion(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Accept a suggestion with adjusted bounds
+     */
+    acceptSuggestion(id: string, request: AcceptSuggestionRequest, signal?: AbortSignal): Promise<StateSpan> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}/accept";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAcceptSuggestion(_response);
+        });
+    }
+
+    protected processAcceptSuggestion(response: Response): Promise<StateSpan> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StateSpan;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StateSpan>(null as any);
+    }
+
+    /**
+     * Dismiss a suggestion
+     */
+    dismissSuggestion(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions/{id}/dismiss";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDismissSuggestion(_response);
+        });
+    }
+
+    protected processDismissSuggestion(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Manually trigger detection for a date range (for testing)
+     */
+    triggerDetection(request: TriggerDetectionRequest, signal?: AbortSignal): Promise<DetectionResult> {
+        let url_ = this.baseUrl + "/api/v4/compression-lows/detect";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTriggerDetection(_response);
+        });
+    }
+
+    protected processTriggerDetection(response: Response): Promise<DetectionResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DetectionResult;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DetectionResult>(null as any);
     }
 }
 
@@ -10409,7 +10698,7 @@ export class StateSpansClient {
     /**
      * Delete a state span
      */
-    deleteStateSpan(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deleteStateSpan(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/state-spans/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -10420,7 +10709,6 @@ export class StateSpansClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -10429,26 +10717,19 @@ export class StateSpansClient {
         });
     }
 
-    protected processDeleteStateSpan(response: Response): Promise<FileResponse> {
+    protected processDeleteStateSpan(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 }
 
@@ -11248,7 +11529,7 @@ export class TrackersClient {
     /**
      * Delete a tracker definition
      */
-    deleteDefinition(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deleteDefinition(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/definitions/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -11259,7 +11540,6 @@ export class TrackersClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -11268,26 +11548,19 @@ export class TrackersClient {
         });
     }
 
-    protected processDeleteDefinition(response: Response): Promise<FileResponse> {
+    protected processDeleteDefinition(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
@@ -11500,7 +11773,7 @@ export class TrackersClient {
     /**
      * Acknowledge/snooze a tracker notification
      */
-    ackInstance(id: string, request: AckTrackerRequest, signal?: AbortSignal): Promise<FileResponse> {
+    ackInstance(id: string, request: AckTrackerRequest, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}/ack";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -11515,7 +11788,6 @@ export class TrackersClient {
             signal,
             headers: {
                 "Content-Type": "application/json",
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -11524,32 +11796,25 @@ export class TrackersClient {
         });
     }
 
-    protected processAckInstance(response: Response): Promise<FileResponse> {
+    protected processAckInstance(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
      * Delete a tracker instance
      */
-    deleteInstance(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deleteInstance(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -11560,7 +11825,6 @@ export class TrackersClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -11569,26 +11833,19 @@ export class TrackersClient {
         });
     }
 
-    protected processDeleteInstance(response: Response): Promise<FileResponse> {
+    protected processDeleteInstance(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
@@ -11717,7 +11974,7 @@ export class TrackersClient {
     /**
      * Delete a preset
      */
-    deletePreset(id: string, signal?: AbortSignal): Promise<FileResponse> {
+    deletePreset(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/presets/{id}";
         if (id === undefined || id === null)
             throw new globalThis.Error("The parameter 'id' must be defined.");
@@ -11728,7 +11985,6 @@ export class TrackersClient {
             method: "DELETE",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -11737,26 +11993,19 @@ export class TrackersClient {
         });
     }
 
-    protected processDeletePreset(response: Response): Promise<FileResponse> {
+    protected processDeletePreset(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 }
 
@@ -19169,6 +19418,7 @@ export enum StateSpanCategory {
     Exercise = "Exercise",
     Illness = "Illness",
     Travel = "Travel",
+    DataExclusion = "DataExclusion",
 }
 
 export enum BasalDeliveryState {
@@ -19356,27 +19606,27 @@ export enum WidgetSize {
 
 /** OAuth 2.0 token response (RFC 6749 Section 5.1) */
 export interface OAuthTokenResponse {
-    accessToken?: string;
-    tokenType?: string;
-    expiresIn?: number;
-    refreshToken?: string | undefined;
+    access_token?: string;
+    token_type?: string;
+    expires_in?: number;
+    refresh_token?: string | undefined;
     scope?: string | undefined;
 }
 
 /** OAuth 2.0 error response (RFC 6749 Section 5.2) */
 export interface OAuthError {
     error?: string;
-    errorDescription?: string | undefined;
-    errorUri?: string | undefined;
+    error_description?: string | undefined;
+    error_uri?: string | undefined;
 }
 
 /** Device Authorization Response (RFC 8628 Section 3.2) */
 export interface OAuthDeviceAuthorizationResponse {
-    deviceCode?: string;
-    userCode?: string;
-    verificationUri?: string;
-    verificationUriComplete?: string | undefined;
-    expiresIn?: number;
+    device_code?: string;
+    user_code?: string;
+    verification_uri?: string;
+    verification_uri_complete?: string | undefined;
+    expires_in?: number;
     interval?: number;
 }
 
@@ -19420,6 +19670,9 @@ export interface OAuthGrantDto {
     createdAt?: Date;
     lastUsedAt?: Date | undefined;
     lastUsedUserAgent?: string | undefined;
+    /** When true, this grant only allows access to data from the last 24 hours
+(rolling window from each request time). */
+    limitTo24Hours?: boolean;
 }
 
 /** Request to create a follower grant (share data with another user) */
@@ -19427,6 +19680,8 @@ export interface CreateFollowerGrantRequest {
     followerEmail?: string;
     scopes?: string[];
     label?: string | undefined;
+    temporaryPassword?: string | undefined;
+    followerDisplayName?: string | undefined;
 }
 
 /** Request to update an existing grant's label and/or scopes */
@@ -19467,6 +19722,9 @@ export interface CreateInviteRequest {
     expiresInDays?: number | undefined;
     /** Maximum number of times the invite can be used (null = unlimited) */
     maxUses?: number | undefined;
+    /** When true, grants created from this invite will only allow access to
+the last 24 hours of data (rolling window from each request time). */
+    limitTo24Hours?: boolean;
 }
 
 /** Response containing a list of invites */
@@ -19486,6 +19744,16 @@ export interface InviteDto {
     isValid?: boolean;
     isExpired?: boolean;
     isRevoked?: boolean;
+    limitTo24Hours?: boolean;
+    usedBy?: InviteUsageDto[];
+}
+
+/** DTO for invite usage information */
+export interface InviteUsageDto {
+    followerSubjectId?: string;
+    followerName?: string | undefined;
+    followerEmail?: string | undefined;
+    usedAt?: Date;
 }
 
 /** Response for invite info (for the accept page) */
@@ -19498,6 +19766,7 @@ export interface InviteInfoResponse {
     isValid?: boolean;
     isExpired?: boolean;
     isRevoked?: boolean;
+    limitTo24Hours?: boolean;
 }
 
 /** Response after accepting an invite */
@@ -20471,63 +20740,204 @@ export interface ChargeCycle {
     isComplete?: boolean;
 }
 
-/** Dashboard chart data response with all calculated series */
 export interface DashboardChartData {
-    /** IOB (Insulin on Board) time series */
     iobSeries?: TimeSeriesPoint[];
-    /** COB (Carbs on Board) time series */
     cobSeries?: TimeSeriesPoint[];
-    /** Basal rate time series with temp basal indicators */
     basalSeries?: BasalPoint[];
-    /** Default basal rate from profile (U/hr) */
     defaultBasalRate?: number;
-    /** Maximum basal rate in the series (for Y-axis scaling) */
     maxBasalRate?: number;
-    /** Maximum IOB in the series (for Y-axis scaling) */
     maxIob?: number;
-    /** Maximum COB in the series (for Y-axis scaling) */
     maxCob?: number;
-    /** Pump mode state spans for chart background coloring */
-    pumpModeSpans?: StateSpan[];
-    /** Basal delivery state spans (pump-confirmed delivery data) */
-    basalDeliverySpans?: StateSpan[];
-    /** Profile state spans showing active profile changes */
-    profileSpans?: StateSpan[];
+    glucoseData?: GlucosePointDto[];
+    thresholds?: ChartThresholdsDto;
+    bolusMarkers?: BolusMarkerDto[];
+    carbMarkers?: CarbMarkerDto[];
+    deviceEventMarkers?: DeviceEventMarkerDto[];
+    pumpModeSpans?: ChartStateSpanDto[];
+    profileSpans?: ChartStateSpanDto[];
+    overrideSpans?: ChartStateSpanDto[];
+    activitySpans?: ChartStateSpanDto[];
+    tempBasalSpans?: ChartStateSpanDto[];
+    basalDeliverySpans?: BasalDeliverySpanDto[];
+    systemEventMarkers?: SystemEventMarkerDto[];
+    trackerMarkers?: TrackerMarkerDto[];
 }
 
-/** Time series data point with timestamp and value */
 export interface TimeSeriesPoint {
-    /** Timestamp in Unix milliseconds */
     timestamp?: number;
-    /** Value at this timestamp */
     value?: number;
 }
 
-/** Basal rate data point */
 export interface BasalPoint {
-    /** Timestamp in Unix milliseconds */
     timestamp?: number;
-    /** Effective basal rate in U/hr */
     rate?: number;
-    /** Scheduled basal rate from profile in U/hr */
     scheduledRate?: number;
-    /** Origin of this basal rate - where it came from */
     origin?: BasalDeliveryOrigin;
+    fillColor?: ChartColor;
+    strokeColor?: ChartColor;
 }
 
-export interface StateSpan {
-    id?: string | undefined;
+export enum ChartColor {
+    GlucoseVeryLow = "glucose-very-low",
+    GlucoseLow = "glucose-low",
+    GlucoseInRange = "glucose-in-range",
+    GlucoseHigh = "glucose-high",
+    GlucoseVeryHigh = "glucose-very-high",
+    InsulinBolus = "insulin-bolus",
+    InsulinBasal = "insulin-basal",
+    InsulinTempBasal = "insulin-temp-basal",
+    Carbs = "carbs",
+    PumpModeAutomatic = "pump-mode-automatic",
+    PumpModeLimited = "pump-mode-limited",
+    PumpModeManual = "pump-mode-manual",
+    PumpModeBoost = "pump-mode-boost",
+    PumpModeEaseOff = "pump-mode-ease-off",
+    PumpModeSleep = "pump-mode-sleep",
+    PumpModeExercise = "pump-mode-exercise",
+    PumpModeSuspended = "pump-mode-suspended",
+    PumpModeOff = "pump-mode-off",
+    SystemEventAlarm = "system-event-alarm",
+    SystemEventHazard = "system-event-hazard",
+    SystemEventWarning = "system-event-warning",
+    SystemEventInfo = "system-event-info",
+    ActivitySleep = "activity-sleep",
+    ActivityExercise = "activity-exercise",
+    ActivityIllness = "activity-illness",
+    ActivityTravel = "activity-travel",
+    TrackerSensor = "tracker-sensor",
+    TrackerCannula = "tracker-cannula",
+    TrackerReservoir = "tracker-reservoir",
+    TrackerBattery = "tracker-battery",
+    TrackerConsumable = "tracker-consumable",
+    TrackerAppointment = "tracker-appointment",
+    TrackerReminder = "tracker-reminder",
+    TrackerCustom = "tracker-custom",
+    Profile = "chart-1",
+    Override = "chart-2",
+    MutedForeground = "muted-foreground",
+    Primary = "primary",
+}
+
+export interface GlucosePointDto {
+    time?: number;
+    sgv?: number;
+    direction?: string | undefined;
+}
+
+export interface ChartThresholdsDto {
+    low?: number;
+    high?: number;
+    veryLow?: number;
+    veryHigh?: number;
+    glucoseYMax?: number;
+}
+
+export interface BolusMarkerDto {
+    time?: number;
+    insulin?: number;
+    treatmentId?: string | undefined;
+    bolusType?: BolusType;
+    isOverride?: boolean;
+}
+
+export enum BolusType {
+    Bolus = "Bolus",
+    MealBolus = "MealBolus",
+    CorrectionBolus = "CorrectionBolus",
+    SnackBolus = "SnackBolus",
+    BolusWizard = "BolusWizard",
+    ComboBolus = "ComboBolus",
+    Smb = "Smb",
+    AutomaticBolus = "AutomaticBolus",
+}
+
+export interface CarbMarkerDto {
+    time?: number;
+    carbs?: number;
+    label?: string | undefined;
+    treatmentId?: string | undefined;
+    isOffset?: boolean;
+}
+
+export interface DeviceEventMarkerDto {
+    time?: number;
+    eventType?: DeviceEventType;
+    notes?: string | undefined;
+    color?: ChartColor;
+}
+
+export enum DeviceEventType {
+    SensorStart = "SensorStart",
+    SensorChange = "SensorChange",
+    SensorStop = "SensorStop",
+    SiteChange = "SiteChange",
+    InsulinChange = "InsulinChange",
+    PumpBatteryChange = "PumpBatteryChange",
+}
+
+export interface ChartStateSpanDto {
+    id?: string;
     category?: StateSpanCategory;
-    state?: string | undefined;
+    state?: string;
     startMills?: number;
     endMills?: number | undefined;
-    source?: string | undefined;
+    color?: ChartColor;
     metadata?: { [key: string]: any; } | undefined;
-    originalId?: string | undefined;
-    createdAt?: Date | undefined;
-    updatedAt?: Date | undefined;
-    canonicalId?: string | undefined;
-    sources?: string[] | undefined;
+}
+
+export interface BasalDeliverySpanDto {
+    id?: string;
+    startMills?: number;
+    endMills?: number | undefined;
+    rate?: number;
+    origin?: BasalDeliveryOrigin;
+    source?: string | undefined;
+    fillColor?: ChartColor;
+    strokeColor?: ChartColor;
+}
+
+export interface SystemEventMarkerDto {
+    id?: string;
+    time?: number;
+    eventType?: SystemEventType;
+    category?: SystemEventCategory;
+    code?: string | undefined;
+    description?: string | undefined;
+    color?: ChartColor;
+}
+
+export enum SystemEventType {
+    Alarm = "Alarm",
+    Hazard = "Hazard",
+    Warning = "Warning",
+    Info = "Info",
+}
+
+export enum SystemEventCategory {
+    Pump = "Pump",
+    Cgm = "Cgm",
+    Connectivity = "Connectivity",
+}
+
+export interface TrackerMarkerDto {
+    id?: string;
+    definitionId?: string;
+    name?: string;
+    category?: TrackerCategory;
+    time?: number;
+    icon?: string | undefined;
+    color?: ChartColor;
+}
+
+export enum TrackerCategory {
+    Consumable = "Consumable",
+    Reservoir = "Reservoir",
+    Appointment = "Appointment",
+    Reminder = "Reminder",
+    Custom = "Custom",
+    Sensor = "Sensor",
+    Cannula = "Cannula",
+    Battery = "Battery",
 }
 
 export interface ClockFacePublicDto {
@@ -20786,6 +21196,70 @@ export interface ManualTestRequest {
     requestBody?: string | undefined;
 }
 
+export interface CompressionLowSuggestion {
+    id?: string;
+    startMills?: number;
+    endMills?: number;
+    confidence?: number;
+    status?: CompressionLowStatus;
+    nightOf?: Date;
+    createdAt?: number;
+    reviewedAt?: number | undefined;
+    stateSpanId?: string | undefined;
+    lowestGlucose?: number | undefined;
+    dropRate?: number | undefined;
+    recoveryMinutes?: number | undefined;
+}
+
+export enum CompressionLowStatus {
+    Pending = "Pending",
+    Accepted = "Accepted",
+    Dismissed = "Dismissed",
+}
+
+export interface CompressionLowSuggestionWithEntries {
+    suggestion?: CompressionLowSuggestion;
+    entries?: Entry[];
+    treatments?: Treatment[];
+}
+
+export interface StateSpan {
+    id?: string | undefined;
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    startMills?: number;
+    endMills?: number | undefined;
+    source?: string | undefined;
+    metadata?: { [key: string]: any; } | undefined;
+    originalId?: string | undefined;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+    canonicalId?: string | undefined;
+    sources?: string[] | undefined;
+}
+
+export interface AcceptSuggestionRequest {
+    startMills?: number;
+    endMills?: number;
+}
+
+export interface DetectionResult {
+    totalSuggestionsCreated?: number;
+    nightsProcessed?: number;
+    results?: NightDetectionResult[];
+}
+
+export interface NightDetectionResult {
+    nightOf?: string;
+    suggestionsCreated?: number;
+}
+
+export interface TriggerDetectionRequest {
+    nightOf?: string | undefined;
+    startDate?: string | undefined;
+    endDate?: string | undefined;
+}
+
 export interface ConnectorFoodEntry {
     id?: string;
     connectorSource?: string;
@@ -20892,6 +21366,7 @@ export enum InAppNotificationType {
     PredictedLow = "PredictedLow",
     SuggestedMealMatch = "SuggestedMealMatch",
     SuggestedTrackerMatch = "SuggestedTrackerMatch",
+    CompressionLowReview = "CompressionLowReview",
 }
 
 export enum NotificationUrgency {
@@ -21857,19 +22332,6 @@ export interface SystemEvent {
     createdAt?: Date | undefined;
 }
 
-export enum SystemEventType {
-    Alarm = "Alarm",
-    Hazard = "Hazard",
-    Warning = "Warning",
-    Info = "Info",
-}
-
-export enum SystemEventCategory {
-    Pump = "Pump",
-    Cgm = "Cgm",
-    Connectivity = "Connectivity",
-}
-
 export interface CreateSystemEventRequest {
     eventType?: SystemEventType;
     category?: SystemEventCategory;
@@ -22132,6 +22594,8 @@ export interface UISettingsConfiguration {
     features?: FeatureSettings;
     notifications?: NotificationSettings;
     services?: ServicesSettings;
+    dataQuality?: DataQualitySettings;
+    security?: SecuritySettings;
 }
 
 export interface DeviceSettings {
@@ -22437,6 +22901,26 @@ export interface SyncSettings {
     autoSync?: boolean;
     syncOnAppOpen?: boolean;
     backgroundRefresh?: boolean;
+}
+
+export interface DataQualitySettings {
+    sleepSchedule?: SleepScheduleSettings;
+    compressionLowDetection?: CompressionLowDetectionSettings;
+}
+
+export interface SleepScheduleSettings {
+    bedtimeHour?: number;
+    wakeTimeHour?: number;
+}
+
+export interface CompressionLowDetectionSettings {
+    enabled?: boolean;
+    excludeFromStatistics?: boolean;
+}
+
+export interface SecuritySettings {
+    requireAuthForPublicAccess?: boolean;
+    hideGlucoseInFavicon?: boolean;
 }
 
 /** User preferences response */

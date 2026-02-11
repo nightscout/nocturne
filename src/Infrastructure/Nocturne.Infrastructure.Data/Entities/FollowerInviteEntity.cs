@@ -77,6 +77,13 @@ public class FollowerInviteEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// When true, grants created from this invite will limit data access to
+    /// the last 24 hours (rolling window from each request time).
+    /// </summary>
+    [Column("limit_to_24_hours")]
+    public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
     /// Whether this invite has expired
     /// </summary>
     [NotMapped]
@@ -106,4 +113,9 @@ public class FollowerInviteEntity
     /// The data owner who created this invite
     /// </summary>
     public SubjectEntity? Owner { get; set; }
+
+    /// <summary>
+    /// Grants that were created from this invite
+    /// </summary>
+    public ICollection<OAuthGrantEntity> CreatedGrants { get; set; } = new List<OAuthGrantEntity>();
 }

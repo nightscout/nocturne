@@ -2,7 +2,6 @@
   import { Area, Axis, Text, ChartClipPath, Highlight } from "layerchart";
   import { curveMonotoneX, bisector } from "d3";
   import type { ScaleLinear } from "d3-scale";
-  import type { Treatment } from "$lib/api";
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
 
@@ -13,15 +12,16 @@
 
   interface BolusMarkerData {
     time: Date;
-    insulin: number;
-    treatment: Treatment;
+    insulin?: number;
+    treatmentId?: string;
+    isOverride?: boolean;
   }
 
   interface CarbMarkerData {
     time: Date;
-    carbs: number;
-    treatment: Treatment;
-    label: string | null;
+    carbs?: number;
+    label?: string | null;
+    treatmentId?: string;
     isOffset?: boolean;
   }
 
@@ -39,8 +39,11 @@
     showCarbs: boolean;
     bolusMarkers: BolusMarkerData[];
     carbMarkers: CarbMarkerData[];
-    context: { xScale: (time: Date) => number; yScale: (value: number) => number };
-    onMarkerClick: (treatment: Treatment) => void;
+    context: {
+      xScale: (time: Date) => number;
+      yScale: (value: number) => number;
+    };
+    onMarkerClick: (treatmentId: string) => void;
     showIobTrack: boolean;
   }
 
@@ -75,7 +78,8 @@
     const d1 = series[i];
     if (!d0) return d1;
     if (!d1) return d0;
-    return time.getTime() - d0.time.getTime() > d1.time.getTime() - time.getTime()
+    return time.getTime() - d0.time.getTime() >
+      d1.time.getTime() - time.getTime()
       ? d1
       : d0;
   }
@@ -91,7 +95,11 @@
   />
 
   <!-- IOB/COB track label -->
-  <Text x={4} y={iobTrackTop + 12} class="text-[8px] fill-muted-foreground font-medium">
+  <Text
+    x={4}
+    y={iobTrackTop + 12}
+    class="text-[8px] fill-muted-foreground font-medium"
+  >
     IOB/COB
   </Text>
 {/if}
@@ -131,12 +139,13 @@
   {#if showBolus}
     {#each bolusMarkers as marker}
       {@const xPos = context.xScale(marker.time)}
-      {@const yPos = context.yScale(iobScale(marker.insulin))}
+      {@const yPos = context.yScale(iobScale(marker.insulin ?? 0))}
       <BolusMarker
         {xPos}
         {yPos}
-        insulin={marker.insulin}
-        treatment={marker.treatment}
+        insulin={marker.insulin ?? 0}
+        isOverride={marker.isOverride ?? false}
+        treatmentId={marker.treatmentId ?? ""}
         {onMarkerClick}
       />
     {/each}
@@ -146,13 +155,15 @@
   {#if showCarbs}
     {#each carbMarkers as marker}
       {@const xPos = context.xScale(marker.time)}
-      {@const yPos = context.yScale(iobScale(marker.carbs / carbRatio))}
+      {@const yPos = context.yScale(
+        iobScale((marker.carbs ?? 0) / carbRatio)
+      )}
       <CarbMarker
         {xPos}
         {yPos}
-        carbs={marker.carbs}
-        label={marker.label}
-        treatment={marker.treatment}
+        carbs={marker.carbs ?? 0}
+        label={marker.label ?? null}
+        treatmentId={marker.treatmentId ?? ""}
         {onMarkerClick}
       />
     {/each}

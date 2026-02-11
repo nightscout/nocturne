@@ -32,6 +32,7 @@ import {
   ServicesClient,
   LocalAuthClient,
   OidcClient,
+  OAuthClient,
   BatteryClient,
   PredictionClient,
   RetrospectiveClient,
@@ -45,7 +46,8 @@ import {
   ConfigurationClient,
   WebhookSettingsClient,
   MealMatchingClient,
-  ClockFacesClient
+  ClockFacesClient,
+  CompressionLowClient
 } from "./generated/nocturne-api-client";
 
 /**
@@ -90,6 +92,7 @@ export class ApiClient {
   public readonly services: ServicesClient;
   public readonly localAuth: LocalAuthClient;
   public readonly oidc: OidcClient;
+  public readonly oauth: OAuthClient;
   public readonly battery: BatteryClient;
   public readonly predictions: PredictionClient;
   public readonly retrospective: RetrospectiveClient;
@@ -104,6 +107,7 @@ export class ApiClient {
   public readonly webhookSettings: WebhookSettingsClient;
   public readonly mealMatching: MealMatchingClient;
   public readonly clockFaces: ClockFacesClient;
+  public readonly compressionLow: CompressionLowClient;
 
   constructor(
     baseUrl: string,
@@ -147,6 +151,7 @@ export class ApiClient {
     this.services = new ServicesClient(apiBaseUrl, http);
     this.localAuth = new LocalAuthClient(apiBaseUrl, http);
     this.oidc = new OidcClient(apiBaseUrl, http);
+    this.oauth = new OAuthClient(apiBaseUrl, http);
     this.battery = new BatteryClient(apiBaseUrl, http);
     this.predictions = new PredictionClient(apiBaseUrl, http);
     this.retrospective = new RetrospectiveClient(apiBaseUrl, http);
@@ -161,6 +166,7 @@ export class ApiClient {
     this.webhookSettings = new WebhookSettingsClient(apiBaseUrl, http);
     this.mealMatching = new MealMatchingClient(apiBaseUrl, http);
     this.clockFaces = new ClockFacesClient(apiBaseUrl, http);
+    this.compressionLow = new CompressionLowClient(apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */

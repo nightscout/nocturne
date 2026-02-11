@@ -230,7 +230,7 @@
       showEditDialog = false;
       treatmentToEdit = null;
       // Trigger data reload
-      reportsResource.refetch();
+      reportsResource.refresh();
     } catch (error) {
       console.error("Update error:", error);
       toast.error("Failed to update treatment");
@@ -531,7 +531,7 @@
                 toast.success("Treatment deleted successfully");
                 showDeleteConfirm = false;
                 treatmentToDelete = null;
-                reportsResource.refetch();
+                reportsResource.refresh();
               } catch (error) {
                 console.error("Delete error:", error);
                 toast.error("Failed to delete treatment");
@@ -644,7 +644,7 @@
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;
                 treatmentsToDelete = [];
-                reportsResource.refetch();
+                reportsResource.refresh();
               } else {
                 toast.error(result.message);
               }

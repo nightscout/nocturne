@@ -4,23 +4,23 @@
   import type { StateSpanCategory } from "$lib/api";
 
   interface PumpModeSpan {
-    id: string;
+    id?: string;
     displayStart: Date;
     displayEnd: Date;
-    state: string;
+    state?: string;
     color: string;
   }
 
   interface OverrideSpan {
-    id: string;
+    id?: string;
     displayStart: Date;
     displayEnd: Date;
-    state: string;
+    state?: string;
     color: string;
   }
 
   interface ProfileSpan {
-    id: string;
+    id?: string;
     displayStart: Date;
     displayEnd: Date;
     profileName: string;
@@ -28,11 +28,11 @@
   }
 
   interface ActivitySpan {
-    id: string;
+    id?: string;
     displayStart: Date;
     displayEnd: Date;
-    category: StateSpanCategory;
-    state: string;
+    category?: StateSpanCategory;
+    state?: string;
     color: string;
   }
 
@@ -104,7 +104,7 @@
     <Group x={spanXPos} y={lane.top + (lane.bottom - lane.top) / 2}>
       <foreignObject x="2" y="-6" width="12" height="12">
         <div class="flex items-center justify-center w-full h-full">
-          <PumpModeIcon state={span.state} size={10} color={span.color} />
+          <PumpModeIcon state={span.state ?? ""} size={10} color={span.color} />
         </div>
       </foreignObject>
     </Group>

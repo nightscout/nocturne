@@ -517,6 +517,69 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("clock_faces");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.CompressionLowSuggestionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("Confidence")
+                        .HasColumnType("double precision")
+                        .HasColumnName("confidence");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at");
+
+                    b.Property<double?>("DropRate")
+                        .HasColumnType("double precision")
+                        .HasColumnName("drop_rate");
+
+                    b.Property<long>("EndMills")
+                        .HasColumnType("bigint")
+                        .HasColumnName("end_mills");
+
+                    b.Property<double?>("LowestGlucose")
+                        .HasColumnType("double precision")
+                        .HasColumnName("lowest_glucose");
+
+                    b.Property<DateOnly>("NightOf")
+                        .HasColumnType("date")
+                        .HasColumnName("night_of");
+
+                    b.Property<int?>("RecoveryMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("recovery_minutes");
+
+                    b.Property<long?>("ReviewedAt")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<long>("StartMills")
+                        .HasColumnType("bigint")
+                        .HasColumnName("start_mills");
+
+                    b.Property<Guid?>("StateSpanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("state_span_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NightOf")
+                        .HasDatabaseName("ix_compression_low_suggestions_night_of");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_compression_low_suggestions_status");
+
+                    b.ToTable("compression_low_suggestions");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorConfigurationEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1480,6 +1543,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("label");
 
+                    b.Property<bool>("LimitTo24Hours")
+                        .HasColumnType("boolean")
+                        .HasColumnName("limit_to_24_hours");
+
                     b.Property<int?>("MaxUses")
                         .HasColumnType("integer")
                         .HasColumnName("max_uses");
@@ -1494,9 +1561,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.PrimitiveCollection<List<string>>("Scopes")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
-                        .HasDefaultValue(new List<string>())
                         .HasColumnName("scopes");
 
                     b.Property<string>("TokenHash")
@@ -2232,6 +2297,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<bool>("LimitTo24Hours")
+                        .HasColumnType("boolean")
+                        .HasColumnName("limit_to_24_hours");
+
                     b.Property<DateTime?>("RedeemedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("redeemed_at");
@@ -2244,9 +2313,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.PrimitiveCollection<List<string>>("Scopes")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
-                        .HasDefaultValue(new List<string>())
                         .HasColumnName("scopes");
 
                     b.Property<Guid>("SubjectId")
@@ -2373,9 +2440,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.PrimitiveCollection<List<string>>("Scopes")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
-                        .HasDefaultValue(new List<string>())
                         .HasColumnName("scopes");
 
                     b.Property<Guid?>("SubjectId")
@@ -2422,6 +2487,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<Guid?>("CreatedFromInviteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_from_invite_id");
+
                     b.Property<Guid?>("FollowerSubjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("follower_subject_id");
@@ -2452,15 +2521,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("last_used_user_agent");
 
+                    b.Property<bool>("LimitTo24Hours")
+                        .HasColumnType("boolean")
+                        .HasColumnName("limit_to_24_hours");
+
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.PrimitiveCollection<List<string>>("Scopes")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("text[]")
-                        .HasDefaultValue(new List<string>())
                         .HasColumnName("scopes");
 
                     b.Property<Guid>("SubjectId")
@@ -2471,6 +2542,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("ClientEntityId")
                         .HasDatabaseName("ix_oauth_grants_client_id");
+
+                    b.HasIndex("CreatedFromInviteId");
 
                     b.HasIndex("FollowerSubjectId")
                         .HasDatabaseName("ix_oauth_grants_follower_subject_id")
@@ -2585,9 +2658,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.PrimitiveCollection<string>("DefaultRoles")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
-                        .HasDefaultValue("[\"readable\"]")
                         .HasColumnName("default_roles");
 
                     b.Property<DateTime?>("DiscoveryCachedAt")
@@ -2629,9 +2700,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.PrimitiveCollection<string>("Scopes")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
-                        .HasDefaultValue("[\"openid\",\"profile\",\"email\"]")
                         .HasColumnName("scopes");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -2937,9 +3006,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.PrimitiveCollection<string>("Permissions")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
-                        .HasDefaultValue("[]")
                         .HasColumnName("permissions");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -4183,6 +4250,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.FollowerInviteEntity", "CreatedFromInvite")
+                        .WithMany("CreatedGrants")
+                        .HasForeignKey("CreatedFromInviteId");
+
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "FollowerSubject")
                         .WithMany()
                         .HasForeignKey("FollowerSubjectId")
@@ -4195,6 +4266,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+
+                    b.Navigation("CreatedFromInvite");
 
                     b.Navigation("FollowerSubject");
 
@@ -4344,6 +4417,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DiscrepancyAnalysisEntity", b =>
                 {
                     b.Navigation("Discrepancies");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.FollowerInviteEntity", b =>
+                {
+                    b.Navigation("CreatedGrants");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MigrationSourceEntity", b =>

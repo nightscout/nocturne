@@ -9,7 +9,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Check } from "lucide-svelte";
   import { CompletionReason, TrackerCategory } from "$api";
-  import * as trackersRemote from "$lib/data/trackers.remote";
+  import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
   import * as treatmentsRemote from "$lib/data/treatments.remote";
 
   interface TrackerCompletionDialogProps {
@@ -165,7 +165,7 @@
         request: {
           reason: completionReason,
           completionNotes: completionNotes || undefined,
-          completedAt: completedAt ? new Date(completedAt) : undefined,
+          completedAt: completedAt ? new Date(completedAt).toISOString() : undefined,
         },
       });
 
@@ -173,7 +173,7 @@
       if (startAnother && definitionId) {
         await trackersRemote.startInstance({
           definitionId,
-          startedAt: completedAt ? new Date(completedAt) : undefined,
+          startedAt: completedAt ? new Date(completedAt).toISOString() : undefined,
         });
       }
 

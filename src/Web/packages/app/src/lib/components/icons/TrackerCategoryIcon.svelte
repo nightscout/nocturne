@@ -10,7 +10,7 @@
   import Activity from "lucide-svelte/icons/activity";
 
   interface Props extends IconProps {
-    category: TrackerCategory;
+    category?: TrackerCategory;
   }
 
   let { category, class: className = "", ...rest }: Props = $props();

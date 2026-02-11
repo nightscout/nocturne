@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -12,6 +13,7 @@ namespace Nocturne.API.Controllers.V2;
 [Route("api/v2/summary")]
 [Produces("application/json")]
 [Tags("V2 Summary")]
+[ClientPropertyName("v2Summary")]
 public class SummaryController : ControllerBase
 {
     private readonly ISummaryService _summaryService;

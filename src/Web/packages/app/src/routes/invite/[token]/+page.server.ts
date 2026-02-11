@@ -1,70 +1,46 @@
 import type { PageServerLoad, Actions } from "./$types";
 import { redirect, fail } from "@sveltejs/kit";
 
-// TODO: Replace with actual API client calls when NSwag client is regenerated
-// These are stubs that will be replaced with proper remote function calls
-
-interface InviteInfo {
-  ownerName: string | null;
-  ownerEmail: string | null;
-  scopes: string[];
-  label: string | null;
-  expiresAt: string;
-  isValid: boolean;
-  isExpired: boolean;
-  isRevoked: boolean;
-}
-
-export const load: PageServerLoad = async ({ params, fetch, locals }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
   const { token } = params;
+  const { apiClient } = locals;
 
-  // Fetch invite info from API
-  // TODO: Replace with: const invite = await getInviteInfo({ token });
-  const response = await fetch(`/api/oauth/invites/${token}/info`);
+  try {
+    const invite = await apiClient.oauth.getInviteInfo(token);
 
-  if (!response.ok) {
+    return {
+      invite,
+      token,
+      isAuthenticated: locals.isAuthenticated ?? false,
+    };
+  } catch {
     return {
       invite: null,
+      token,
       error: "Invite not found or has expired.",
+      isAuthenticated: locals.isAuthenticated ?? false,
     };
   }
-
-  const invite: InviteInfo = await response.json();
-
-  return {
-    invite,
-    token,
-    isAuthenticated: locals.session?.isAuthenticated ?? false,
-  };
 };
 
 export const actions: Actions = {
-  accept: async ({ params, fetch, locals }) => {
-    if (!locals.session?.isAuthenticated) {
-      // Redirect to login with return URL
+  accept: async ({ params, locals }) => {
+    if (!locals.isAuthenticated) {
       const returnUrl = `/invite/${params.token}`;
-      redirect(302, `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+      throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`);
     }
 
     const { token } = params;
+    const { apiClient } = locals;
 
-    // Accept the invite
-    // TODO: Replace with: const result = await acceptInvite({ token });
-    const response = await fetch(`/api/oauth/invites/${token}/accept`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      return fail(400, {
-        error: error.errorDescription ?? "Failed to accept invite.",
-      });
+    try {
+      await apiClient.oauth.acceptInvite(token);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to accept invite.";
+      return fail(400, { error: errorMessage });
     }
 
-    // Redirect to dashboard on success
-    redirect(302, "/");
+    throw redirect(302, "/");
   },
 };

@@ -1,7 +1,7 @@
 import type { RequestHandler } from "./$types";
 import { redirect } from "@sveltejs/kit";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { logout } from "$lib/data/auth.remote";
+import { logout } from "$lib/data/generated";
 
 /**
  * Helper to clear all auth cookies
@@ -18,7 +18,7 @@ function clearAuthCookies(cookies: Parameters<RequestHandler>[0]["cookies"]) {
  */
 export const POST: RequestHandler = async ({ cookies }) => {
   try {
-    const result = await logout();
+    const result = await logout(undefined);
 
     // Clear all auth cookies
     clearAuthCookies(cookies);
@@ -53,7 +53,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
   // For now, we'll redirect to the login page after clearing cookies
 
   try {
-    await logout();
+    await logout(undefined);
   } catch (error) {
     console.error("Logout error:", error);
   }

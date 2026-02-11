@@ -20,7 +20,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
     private const int UserCodeLength = 8;
     private const int MaxUserCodeRetries = 5;
-    private const int DeviceCodeExpirationMinutes = 15;
+    private const int DeviceCodeExpirationMinutes = 30;
     private const int DefaultPollingInterval = 5;
 
     private readonly NocturneDbContext _db;
@@ -37,7 +37,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         IJwtService jwtService,
         IOAuthClientService clientService,
         IOAuthGrantService grantService,
-        ILogger<OAuthDeviceCodeService> logger)
+        ILogger<OAuthDeviceCodeService> logger
+    )
     {
         _db = db;
         _jwtService = jwtService;
@@ -50,7 +51,8 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     public async Task<DeviceCodeResult> CreateDeviceCodeAsync(
         string clientId,
         IEnumerable<string> scopes,
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         // Generate a crypto-random device code and hash it for storage
         var deviceCode = _jwtService.GenerateRefreshToken();
@@ -63,8 +65,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             userCode = GenerateUserCode();
             var normalized = NormalizeUserCode(userCode);
 
-            var exists = await _db.OAuthDeviceCodes
-                .AnyAsync(d => d.UserCode == normalized, ct);
+            var exists = await _db.OAuthDeviceCodes.AnyAsync(d => d.UserCode == normalized, ct);
 
             if (!exists)
                 break;
@@ -73,14 +74,19 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             {
                 _logger.LogError(
                     "Failed to generate a unique user code after {MaxRetries} attempts for client {ClientId}",
-                    MaxUserCodeRetries, clientId);
+                    MaxUserCodeRetries,
+                    clientId
+                );
                 throw new InvalidOperationException(
-                    $"Failed to generate a unique user code after {MaxUserCodeRetries} attempts");
+                    $"Failed to generate a unique user code after {MaxUserCodeRetries} attempts"
+                );
             }
 
             _logger.LogWarning(
                 "User code collision on attempt {Attempt} for client {ClientId}, retrying",
-                attempt + 1, clientId);
+                attempt + 1,
+                clientId
+            );
         }
 
         var scopesList = scopes.ToList();
@@ -101,7 +107,9 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         _logger.LogInformation(
             "Created device code for client {ClientId} with user code {UserCode}",
-            clientId, userCode);
+            clientId,
+            userCode
+        );
 
         return new DeviceCodeResult
         {
@@ -115,18 +123,35 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <inheritdoc />
     public async Task<DeviceCodeInfo?> GetByUserCodeAsync(
         string userCode,
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes
-            .FirstOrDefaultAsync(d => d.UserCode == normalized, ct);
+        _logger.LogInformation(
+            "Looking up device code: input={Input}, normalized={Normalized}",
+            userCode,
+            normalized
+        );
+
+        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
+            d => d.UserCode == normalized,
+            ct
+        );
 
         if (entity == null)
         {
-            _logger.LogDebug("Device code not found for user code {UserCode}", normalized);
+            _logger.LogWarning("Device code not found for user code {UserCode}", normalized);
             return null;
         }
+
+        _logger.LogInformation(
+            "Found device code: id={Id}, expired={Expired}, approved={Approved}, denied={Denied}",
+            entity.Id,
+            entity.IsExpired,
+            entity.IsApproved,
+            entity.IsDenied
+        );
 
         // Look up client display name
         var client = await _clientService.FindOrCreateClientAsync(entity.ClientId, ct);
@@ -149,16 +174,22 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     public async Task<bool> ApproveDeviceCodeAsync(
         string userCode,
         Guid subjectId,
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes
-            .FirstOrDefaultAsync(d => d.UserCode == normalized, ct);
+        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
+            d => d.UserCode == normalized,
+            ct
+        );
 
         if (entity == null)
         {
-            _logger.LogWarning("Attempted to approve non-existent device code {UserCode}", normalized);
+            _logger.LogWarning(
+                "Attempted to approve non-existent device code {UserCode}",
+                normalized
+            );
             return false;
         }
 
@@ -170,13 +201,19 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         if (entity.IsApproved)
         {
-            _logger.LogWarning("Attempted to approve already-approved device code {UserCode}", normalized);
+            _logger.LogWarning(
+                "Attempted to approve already-approved device code {UserCode}",
+                normalized
+            );
             return false;
         }
 
         if (entity.IsDenied)
         {
-            _logger.LogWarning("Attempted to approve already-denied device code {UserCode}", normalized);
+            _logger.LogWarning(
+                "Attempted to approve already-denied device code {UserCode}",
+                normalized
+            );
             return false;
         }
 
@@ -185,7 +222,11 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         // Create a grant linking the user to the client with the requested scopes
         var grant = await _grantService.CreateOrUpdateGrantAsync(
-            client.Id, subjectId, entity.Scopes, ct: ct);
+            client.Id,
+            subjectId,
+            entity.Scopes,
+            ct: ct
+        );
 
         entity.ApprovedAt = DateTime.UtcNow;
         entity.GrantId = grant.Id;
@@ -194,21 +235,26 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}",
-            normalized, subjectId, entity.ClientId);
+            "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}, created grant {GrantId} of type {GrantType}",
+            normalized,
+            subjectId,
+            entity.ClientId,
+            grant.Id,
+            grant.GrantType
+        );
 
         return true;
     }
 
     /// <inheritdoc />
-    public async Task<bool> DenyDeviceCodeAsync(
-        string userCode,
-        CancellationToken ct = default)
+    public async Task<bool> DenyDeviceCodeAsync(string userCode, CancellationToken ct = default)
     {
         var normalized = NormalizeUserCode(userCode);
 
-        var entity = await _db.OAuthDeviceCodes
-            .FirstOrDefaultAsync(d => d.UserCode == normalized, ct);
+        var entity = await _db.OAuthDeviceCodes.FirstOrDefaultAsync(
+            d => d.UserCode == normalized,
+            ct
+        );
 
         if (entity == null)
         {
@@ -224,13 +270,19 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         if (entity.IsApproved)
         {
-            _logger.LogWarning("Attempted to deny already-approved device code {UserCode}", normalized);
+            _logger.LogWarning(
+                "Attempted to deny already-approved device code {UserCode}",
+                normalized
+            );
             return false;
         }
 
         if (entity.IsDenied)
         {
-            _logger.LogWarning("Attempted to deny already-denied device code {UserCode}", normalized);
+            _logger.LogWarning(
+                "Attempted to deny already-denied device code {UserCode}",
+                normalized
+            );
             return false;
         }
 
@@ -240,7 +292,9 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
 
         _logger.LogInformation(
             "Device code {UserCode} denied for client {ClientId}",
-            normalized, entity.ClientId);
+            normalized,
+            entity.ClientId
+        );
 
         return true;
     }

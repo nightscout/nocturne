@@ -32,6 +32,7 @@ public interface IJwtService
     /// <param name="roles">Role names to include</param>
     /// <param name="scopes">OAuth scopes to include in the token</param>
     /// <param name="clientId">OAuth client ID that requested this token</param>
+    /// <param name="limitTo24Hours">When true, data requests should only return data from the last 24 hours</param>
     /// <param name="lifetime">Optional custom lifetime (defaults to configuration)</param>
     /// <returns>JWT access token string</returns>
     string GenerateAccessToken(
@@ -40,6 +41,7 @@ public interface IJwtService
         IEnumerable<string> roles,
         IEnumerable<string> scopes,
         string? clientId = null,
+        bool limitTo24Hours = false,
         TimeSpan? lifetime = null
     );
 
@@ -183,6 +185,12 @@ public class JwtClaims
     /// OAuth client ID that requested this token
     /// </summary>
     public string? ClientId { get; set; }
+
+    /// <summary>
+    /// When true, data requests using this token should only return data from the
+    /// last 24 hours (rolling window from current request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 
     /// <summary>
     /// JWT ID (jti claim)

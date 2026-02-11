@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -13,7 +14,7 @@ namespace Nocturne.API.Controllers;
 /// All clients are public (no client secrets); PKCE is mandatory.
 /// </summary>
 [ApiController]
-[Route("oauth")]
+[Route("api/oauth")]
 [Tags("OAuth")]
 public class OAuthController : ControllerBase
 {
@@ -25,6 +26,7 @@ public class OAuthController : ControllerBase
     private readonly ISubjectService _subjectService;
     private readonly IJwtService _jwtService;
     private readonly IOAuthTokenRevocationCache _revocationCache;
+    private readonly ILocalIdentityService _localIdentityService;
     private readonly ILogger<OAuthController> _logger;
 
     /// <summary>
@@ -39,6 +41,7 @@ public class OAuthController : ControllerBase
         ISubjectService subjectService,
         IJwtService jwtService,
         IOAuthTokenRevocationCache revocationCache,
+        ILocalIdentityService localIdentityService,
         ILogger<OAuthController> logger
     )
     {
@@ -50,6 +53,7 @@ public class OAuthController : ControllerBase
         _subjectService = subjectService;
         _jwtService = jwtService;
         _revocationCache = revocationCache;
+        _localIdentityService = localIdentityService;
         _logger = logger;
     }
 
@@ -129,8 +133,8 @@ public class OAuthController : ControllerBase
         if (!HttpContext.IsAuthenticated())
         {
             // Redirect to login, preserving the OAuth params to return to after login
-            var returnUrl = $"/oauth/authorize{Request.QueryString}";
-            return Redirect($"/auth/local/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+            var returnUrl = $"/api/oauth/authorize{Request.QueryString}";
+            return Redirect($"/auth/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         var subjectId = HttpContext.GetSubjectId();
@@ -246,7 +250,8 @@ public class OAuthController : ControllerBase
             normalizedScopes,
             request.RedirectUri,
             request.CodeChallenge,
-            request.State
+            request.State,
+            request.LimitTo24Hours
         );
     }
 
@@ -397,8 +402,11 @@ public class OAuthController : ControllerBase
         // Create device code pair
         var result = await _deviceCodeService.CreateDeviceCodeAsync(client_id, normalizedScopes);
 
-        // Build verification URI from current request
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        // Build verification URI - points to frontend device approval page
+        // The frontend runs on a different port, so we use the Origin header if available
+        // or fall back to the current request with the frontend path
+        var baseUrl = Request.Headers.Origin.FirstOrDefault()
+            ?? $"{Request.Scheme}://{Request.Host}";
         var verificationUri = $"{baseUrl}/oauth/device";
         var verificationUriComplete = $"{verificationUri}?user_code={Uri.EscapeDataString(result.UserCode)}";
 
@@ -444,7 +452,16 @@ public class OAuthController : ControllerBase
             return NotFound(new OAuthError
             {
                 Error = "invalid_request",
-                ErrorDescription = "Device code not found or has expired.",
+                ErrorDescription = "Device code not found.",
+            });
+        }
+
+        if (info.IsExpired)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "expired_token",
+                ErrorDescription = "Device code has expired. Please request a new one.",
             });
         }
 
@@ -552,7 +569,8 @@ public class OAuthController : ControllerBase
         IReadOnlySet<string> scopes,
         string redirectUri,
         string codeChallenge,
-        string? state
+        string? state,
+        bool limitTo24Hours = false
     )
     {
         var code = await _tokenService.GenerateAuthorizationCodeAsync(
@@ -560,7 +578,8 @@ public class OAuthController : ControllerBase
             subjectId,
             scopes,
             redirectUri,
-            codeChallenge
+            codeChallenge,
+            limitTo24Hours
         );
 
         var separator = redirectUri.Contains('?') ? '&' : '?';
@@ -750,6 +769,70 @@ public class OAuthController : ControllerBase
         });
         var follower = subjects.FirstOrDefault(s =>
             string.Equals(s.Email, request.FollowerEmail, StringComparison.OrdinalIgnoreCase));
+
+        // If follower doesn't exist and a temporary password is provided, create them
+        if (follower == null && !string.IsNullOrWhiteSpace(request.TemporaryPassword))
+        {
+            try
+            {
+                var registrationResult = await _localIdentityService.RegisterAsync(
+                    email: request.FollowerEmail,
+                    password: request.TemporaryPassword,
+                    displayName: request.FollowerDisplayName ?? request.FollowerEmail,
+                    skipAllowlistCheck: true,
+                    autoVerifyEmail: true
+                );
+
+                if (!registrationResult.Success)
+                {
+                    return BadRequest(new OAuthError
+                    {
+                        Error = "registration_failed",
+                        ErrorDescription = registrationResult.ErrorMessage ?? "Failed to create follower account.",
+                    });
+                }
+
+                // Set temporary password flag
+                await _localIdentityService.SetTemporaryPasswordAsync(
+                    registrationResult.User!.Id,
+                    request.TemporaryPassword,
+                    subjectId.Value
+                );
+
+                // Assign follower role
+                if (registrationResult.SubjectId.HasValue)
+                {
+                    await _subjectService.AssignRoleAsync(
+                        registrationResult.SubjectId.Value,
+                        "follower",
+                        subjectId.Value
+                    );
+                }
+
+                // Get the newly created subject
+                follower = await _subjectService.GetSubjectByIdAsync(registrationResult.SubjectId!.Value);
+
+                _logger.LogInformation(
+                    "Created follower account for {Email} by admin {AdminId}",
+                    request.FollowerEmail,
+                    subjectId.Value
+                );
+            }
+            catch (OperationCanceledException)
+            {
+                // Preserve cancellation semantics so upstream middleware can handle it appropriately.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create follower account for {Email}", request.FollowerEmail);
+                return BadRequest(new OAuthError
+                {
+                    Error = "creation_failed",
+                    ErrorDescription = "Failed to create follower account.",
+                });
+            }
+        }
 
         if (follower == null)
         {
@@ -952,7 +1035,8 @@ public class OAuthController : ControllerBase
                 request.Scopes,
                 request.Label,
                 expiresIn,
-                request.MaxUses);
+                request.MaxUses,
+                request.LimitTo24Hours);
 
             return StatusCode(StatusCodes.Status201Created, new CreateInviteResponse
             {
@@ -1014,6 +1098,14 @@ public class OAuthController : ControllerBase
                 IsValid = i.IsValid,
                 IsExpired = i.IsExpired,
                 IsRevoked = i.IsRevoked,
+                LimitTo24Hours = i.LimitTo24Hours,
+                UsedBy = i.UsedBy.Select(u => new InviteUsageDto
+                {
+                    FollowerSubjectId = u.FollowerSubjectId,
+                    FollowerName = u.FollowerName,
+                    FollowerEmail = u.FollowerEmail,
+                    UsedAt = u.UsedAt,
+                }).ToList(),
             }).ToList(),
         });
     }
@@ -1080,6 +1172,7 @@ public class OAuthController : ControllerBase
             IsValid = invite.IsValid,
             IsExpired = invite.IsExpired,
             IsRevoked = invite.IsRevoked,
+            LimitTo24Hours = invite.LimitTo24Hours,
         });
     }
 
@@ -1196,6 +1289,7 @@ public class OAuthController : ControllerBase
         CreatedAt = info.CreatedAt,
         LastUsedAt = info.LastUsedAt,
         LastUsedUserAgent = info.LastUsedUserAgent,
+        LimitTo24Hours = info.LimitTo24Hours,
     };
 }
 
@@ -1206,8 +1300,13 @@ public class OAuthController : ControllerBase
 /// </summary>
 public class OAuthError
 {
+    [JsonPropertyName("error")]
     public string Error { get; set; } = string.Empty;
+
+    [JsonPropertyName("error_description")]
     public string? ErrorDescription { get; set; }
+
+    [JsonPropertyName("error_uri")]
     public string? ErrorUri { get; set; }
 }
 
@@ -1246,10 +1345,19 @@ public class OAuthTokenRequest
 /// </summary>
 public class OAuthTokenResponse
 {
+    [JsonPropertyName("access_token")]
     public string AccessToken { get; set; } = string.Empty;
+
+    [JsonPropertyName("token_type")]
     public string TokenType { get; set; } = "Bearer";
+
+    [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; }
+
+    [JsonPropertyName("refresh_token")]
     public string? RefreshToken { get; set; }
+
+    [JsonPropertyName("scope")]
     public string? Scope { get; set; }
 }
 
@@ -1258,11 +1366,22 @@ public class OAuthTokenResponse
 /// </summary>
 public class OAuthDeviceAuthorizationResponse
 {
+    [JsonPropertyName("device_code")]
     public string DeviceCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("user_code")]
     public string UserCode { get; set; } = string.Empty;
+
+    [JsonPropertyName("verification_uri")]
     public string VerificationUri { get; set; } = string.Empty;
+
+    [JsonPropertyName("verification_uri_complete")]
     public string? VerificationUriComplete { get; set; }
+
+    [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; }
+
+    [JsonPropertyName("interval")]
     public int Interval { get; set; } = 5;
 }
 
@@ -1288,6 +1407,12 @@ public class ConsentApprovalRequest
 
     [FromForm(Name = "approved")]
     public bool Approved { get; set; }
+
+    /// <summary>
+    /// When true, limits data access to 24 hours from the grant creation time.
+    /// </summary>
+    [FromForm(Name = "limit_to_24_hours")]
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -1331,6 +1456,11 @@ public class OAuthGrantDto
     public DateTime CreatedAt { get; set; }
     public DateTime? LastUsedAt { get; set; }
     public string? LastUsedUserAgent { get; set; }
+    /// <summary>
+    /// When true, this grant only allows access to data from the last 24 hours
+    /// (rolling window from each request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -1349,6 +1479,8 @@ public class CreateFollowerGrantRequest
     public string FollowerEmail { get; set; } = string.Empty;
     public List<string> Scopes { get; set; } = new();
     public string? Label { get; set; }
+    public string? TemporaryPassword { get; set; }
+    public string? FollowerDisplayName { get; set; }
 }
 
 /// <summary>
@@ -1419,6 +1551,12 @@ public class CreateInviteRequest
     /// Maximum number of times the invite can be used (null = unlimited)
     /// </summary>
     public int? MaxUses { get; set; }
+
+    /// <summary>
+    /// When true, grants created from this invite will only allow access to
+    /// the last 24 hours of data (rolling window from each request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -1447,6 +1585,19 @@ public class InviteDto
     public bool IsValid { get; set; }
     public bool IsExpired { get; set; }
     public bool IsRevoked { get; set; }
+    public bool LimitTo24Hours { get; set; }
+    public List<InviteUsageDto> UsedBy { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for invite usage information
+/// </summary>
+public class InviteUsageDto
+{
+    public Guid FollowerSubjectId { get; set; }
+    public string? FollowerName { get; set; }
+    public string? FollowerEmail { get; set; }
+    public DateTime UsedAt { get; set; }
 }
 
 /// <summary>
@@ -1470,6 +1621,7 @@ public class InviteInfoResponse
     public bool IsValid { get; set; }
     public bool IsExpired { get; set; }
     public bool IsRevoked { get; set; }
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>

@@ -71,6 +71,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>List of permissions with usage statistics</returns>
     [HttpGet("permissions")]
     [NightscoutEndpoint("/api/v2/authorization/permissions")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PermissionsResponse), 200)]
     public async Task<ActionResult<PermissionsResponse>> GetAllPermissions()
     {
@@ -96,6 +97,7 @@ public class AuthorizationController : ControllerBase
     /// <returns>Permission trie structure</returns>
     [HttpGet("permissions/trie")]
     [NightscoutEndpoint("/api/v2/authorization/permissions/trie")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PermissionTrieResponse), 200)]
     public async Task<ActionResult<PermissionTrieResponse>> GetPermissionTrie()
     {
@@ -126,6 +128,7 @@ public class AuthorizationController : ControllerBase
     [HttpGet("subjects")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/subjects")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(List<Subject>), 200)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
@@ -155,6 +158,7 @@ public class AuthorizationController : ControllerBase
     [HttpPost("subjects")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/subjects")]
+    [RemoteCommand(Invalidates = ["GetAllSubjects"])]
     [ProducesResponseType(typeof(Subject), 201)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
@@ -197,6 +201,7 @@ public class AuthorizationController : ControllerBase
     [HttpPut("subjects")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/subjects")]
+    [RemoteCommand(Invalidates = ["GetAllSubjects"])]
     [ProducesResponseType(typeof(Subject), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
@@ -244,6 +249,7 @@ public class AuthorizationController : ControllerBase
     [HttpDelete("subjects/{id}")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/subjects/:id")]
+    [RemoteCommand(Invalidates = ["GetAllSubjects"])]
     [ProducesResponseType(204)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
@@ -280,6 +286,7 @@ public class AuthorizationController : ControllerBase
     [HttpGet("roles")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(List<Role>), 200)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
@@ -309,6 +316,7 @@ public class AuthorizationController : ControllerBase
     [HttpPost("roles")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
+    [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 201)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
@@ -351,6 +359,7 @@ public class AuthorizationController : ControllerBase
     [HttpPut("roles")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/roles")]
+    [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(typeof(Role), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
@@ -398,6 +407,7 @@ public class AuthorizationController : ControllerBase
     [HttpDelete("roles/{id}")]
     [RequireAdmin]
     [NightscoutEndpoint("/api/v2/authorization/roles/:id")]
+    [RemoteCommand(Invalidates = ["GetAllRoles"])]
     [ProducesResponseType(204)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]

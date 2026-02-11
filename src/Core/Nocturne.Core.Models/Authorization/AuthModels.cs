@@ -137,6 +137,13 @@ public class AuthContext
     public string? ActingAsSubjectName { get; set; }
 
     /// <summary>
+    /// When true, data requests should only return data from the last 24 hours
+    /// (rolling window from current request time). Used for "only share data from
+    /// last 24 hours" feature.
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
     /// The effective subject ID for data queries. Returns ActingAsSubjectId if set, otherwise SubjectId.
     /// </summary>
     public Guid? EffectiveSubjectId => ActingAsSubjectId ?? SubjectId;

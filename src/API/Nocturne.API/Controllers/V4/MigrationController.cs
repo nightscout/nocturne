@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services.Migration;
 
 namespace Nocturne.API.Controllers.V4;
@@ -26,6 +27,7 @@ public class MigrationController : ControllerBase
     /// Test a migration source connection
     /// </summary>
     [HttpPost("test")]
+    [RemoteCommand]
     [ProducesResponseType(typeof(TestMigrationConnectionResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TestMigrationConnectionResult>> TestConnection(
@@ -40,6 +42,7 @@ public class MigrationController : ControllerBase
     /// Start a new migration job
     /// </summary>
     [HttpPost("start")]
+    [RemoteCommand]
     [ProducesResponseType(typeof(MigrationJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MigrationJobInfo>> StartMigration(
@@ -74,6 +77,7 @@ public class MigrationController : ControllerBase
     /// Get the status of a migration job
     /// </summary>
     [HttpGet("{jobId:guid}/status")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(MigrationJobStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<MigrationJobStatus>> GetStatus(Guid jobId)
@@ -93,6 +97,7 @@ public class MigrationController : ControllerBase
     /// Cancel a running migration job
     /// </summary>
     [HttpPost("{jobId:guid}/cancel")]
+    [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelMigration(Guid jobId)
@@ -112,6 +117,7 @@ public class MigrationController : ControllerBase
     /// Get migration job history
     /// </summary>
     [HttpGet("history")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<MigrationJobInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MigrationJobInfo>>> GetHistory()
     {
@@ -123,6 +129,7 @@ public class MigrationController : ControllerBase
     /// Get pending migration configuration from environment variables
     /// </summary>
     [HttpGet("pending-config")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PendingMigrationConfig), StatusCodes.Status200OK)]
     public ActionResult<PendingMigrationConfig> GetPendingConfig()
     {
@@ -134,6 +141,7 @@ public class MigrationController : ControllerBase
     /// Get saved migration sources with their last migration timestamps
     /// </summary>
     [HttpGet("sources")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<MigrationSourceDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MigrationSourceDto>>> GetSources(CancellationToken ct)
     {

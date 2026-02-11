@@ -14,7 +14,7 @@
     TrackerMode,
     CompletionReason,
   } from "$api";
-  import * as trackersRemote from "$lib/data/trackers.remote";
+  import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
   import * as treatmentsRemote from "$lib/data/treatments.remote";
 
   interface TrackerStartDialogProps {
@@ -186,8 +186,8 @@
       await trackersRemote.startInstance({
         definitionId: defId,
         startNotes: startNotes || undefined,
-        startedAt: isEventMode ? undefined : startedAt,
-        scheduledAt: isEventMode ? scheduledAt : undefined,
+        startedAt: isEventMode ? undefined : (startedAt ? startedAt.toISOString() : undefined),
+        scheduledAt: isEventMode ? (scheduledAt ? scheduledAt.toISOString() : undefined) : undefined,
       });
 
       // Create treatment event if configured on the definition

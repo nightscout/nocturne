@@ -14,6 +14,7 @@ public interface IFollowerInviteService
     /// <param name="label">Optional label for the grant</param>
     /// <param name="expiresIn">How long until the invite expires (default: 7 days)</param>
     /// <param name="maxUses">Maximum uses (null = unlimited, 1 = single-use)</param>
+    /// <param name="limitTo24Hours">When true, grants created from this invite will only allow access to the last 24 hours of data</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>The created invite with the raw token (only returned once)</returns>
     Task<FollowerInviteResult> CreateInviteAsync(
@@ -22,6 +23,7 @@ public interface IFollowerInviteService
         string? label = null,
         TimeSpan? expiresIn = null,
         int? maxUses = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default);
 
     /// <summary>
@@ -163,6 +165,43 @@ public class FollowerInviteInfo
     /// Whether the invite has been revoked
     /// </summary>
     public bool IsRevoked { get; set; }
+
+    /// <summary>
+    /// When true, grants created from this invite will only allow access to
+    /// the last 24 hours of data (rolling window from each request time).
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
+    /// List of users who have used this invite
+    /// </summary>
+    public List<InviteUsage> UsedBy { get; set; } = new();
+}
+
+/// <summary>
+/// Information about who used an invite.
+/// </summary>
+public class InviteUsage
+{
+    /// <summary>
+    /// The follower's subject ID
+    /// </summary>
+    public Guid FollowerSubjectId { get; set; }
+
+    /// <summary>
+    /// The follower's display name
+    /// </summary>
+    public string? FollowerName { get; set; }
+
+    /// <summary>
+    /// The follower's email
+    /// </summary>
+    public string? FollowerEmail { get; set; }
+
+    /// <summary>
+    /// When the invite was used
+    /// </summary>
+    public DateTime UsedAt { get; set; }
 }
 
 /// <summary>

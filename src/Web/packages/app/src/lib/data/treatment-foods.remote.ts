@@ -229,7 +229,7 @@ export const removeFavoriteFood = command(z.string(), async (foodId) => {
  * Create a new food record
  */
 export const createNewFood = command(
-  FoodSchema.omit({ _id: true }),
+  FoodSchema,
   async (food) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
@@ -254,18 +254,19 @@ export const createNewFood = command(
 export const updateExistingFood = command(FoodSchema, async (food) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
+  const f = food as Food;
 
   try {
-    if (!food._id) {
+    if (!f._id) {
       throw error(400, "Food ID is required for update");
     }
-    await apiClient.food.updateFood2(food._id, food as Food);
+    await apiClient.food.updateFood2(f._id, f);
     await Promise.all([
       getAllFoods().refresh(),
-      getFoodById(food._id).refresh(),
+      getFoodById(f._id).refresh(),
       getRecentFoods(undefined).refresh(),
     ]);
-    return { success: true, record: food };
+    return { success: true, record: f };
   } catch (err) {
     console.error("Error updating food:", err);
     throw error(500, "Failed to update food");

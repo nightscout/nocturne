@@ -404,8 +404,6 @@
 
   <!-- Main Glucose Chart with Treatment Markers -->
   <GlucoseChartCard
-    entries={dayData?.entries ?? []}
-    treatments={dayData?.treatments ?? []}
     dateRange={{
       from:
         dayData?.dateRange?.from ??

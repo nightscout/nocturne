@@ -81,13 +81,14 @@ public class OAuthTokenServiceTests : IDisposable
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string?>(),
+                It.IsAny<bool>(),
                 It.IsAny<TimeSpan?>()))
             .Returns(TestAccessToken);
         _mockJwtService.Setup(j => j.GetAccessTokenLifetime())
             .Returns(TimeSpan.FromHours(1));
 
         _mockSubjectService.Setup(s => s.GetSubjectByIdAsync(It.IsAny<Guid>()))
-            .ReturnsAsync((Guid id) => new Subject
+            .ReturnsAsync((Guid id) => new Core.Models.Authorization.Subject
             {
                 Id = id,
                 Name = "Test User",
@@ -102,8 +103,9 @@ public class OAuthTokenServiceTests : IDisposable
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
+                It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, CancellationToken _) =>
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool _, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
                     Id = _testGrantId,
@@ -281,6 +283,7 @@ public class OAuthTokenServiceTests : IDisposable
             It.IsAny<IEnumerable<string>>(),
             It.IsAny<string>(),
             It.IsAny<string?>(),
+            It.IsAny<bool>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

@@ -86,10 +86,23 @@ public class OAuthGrantEntity
     public Guid? FollowerSubjectId { get; set; }
 
     /// <summary>
+    /// For follower grants created from an invite: the invite ID
+    /// </summary>
+    [Column("created_from_invite_id")]
+    public Guid? CreatedFromInviteId { get; set; }
+
+    /// <summary>
     /// When this grant was revoked (soft delete for audit trail)
     /// </summary>
     [Column("revoked_at")]
     public DateTime? RevokedAt { get; set; }
+
+    /// <summary>
+    /// When true, data requests using this grant should only return data from
+    /// the last 24 hours (rolling window from current request time).
+    /// </summary>
+    [Column("limit_to_24_hours")]
+    public bool LimitTo24Hours { get; set; }
 
     /// <summary>
     /// Whether this grant has been revoked
@@ -113,6 +126,11 @@ public class OAuthGrantEntity
     /// The follower subject (for follower grants only)
     /// </summary>
     public SubjectEntity? FollowerSubject { get; set; }
+
+    /// <summary>
+    /// The invite this grant was created from (for follower grants only)
+    /// </summary>
+    public FollowerInviteEntity? CreatedFromInvite { get; set; }
 
     /// <summary>
     /// Refresh tokens issued under this grant

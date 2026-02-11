@@ -6,7 +6,7 @@
   interface Props {
     xPos: number;
     yPos: number;
-    eventType: SystemEventType;
+    eventType?: SystemEventType;
     color: string;
   }
 

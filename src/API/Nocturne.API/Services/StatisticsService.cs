@@ -1710,6 +1710,9 @@ public class StatisticsService : IStatisticsService
             var isBolus = IsBolusTreatment(treatment);
 
             // Count and sum insulin
+            // Note: Treatment.Insulin auto-calculates from Rate * Duration / 60
+            // when not explicitly set, so this branch handles both explicit insulin
+            // values and rate-based basal calculations.
             if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0)
             {
                 if (isBolus)
@@ -1730,20 +1733,6 @@ public class StatisticsService : IStatisticsService
                 else
                 {
                     totalBasal += treatment.Insulin.Value;
-                    basalCount++;
-                }
-            }
-            // Fallback: Calculate basal from rate × duration for legacy data
-            else if (
-                treatment.Rate.HasValue
-                && treatment.Duration.HasValue
-                && !isBolus
-            )
-            {
-                var basalInsulin = (treatment.Rate.Value * treatment.Duration.Value) / 60.0;
-                if (basalInsulin > 0)
-                {
-                    totalBasal += basalInsulin;
                     basalCount++;
                 }
             }
@@ -1856,27 +1845,11 @@ public class StatisticsService : IStatisticsService
             }
             else
             {
-                // Basal treatment - calculate from rate × duration or use insulin value
-                double basalInsulin = 0;
-
+                // Basal treatment - Treatment.Insulin auto-calculates from
+                // Rate * Duration / 60 when not explicitly set
                 if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0)
                 {
-                    basalInsulin = treatment.Insulin.Value;
-                }
-                else if (treatment.Rate.HasValue && treatment.Duration.HasValue)
-                {
-                    // Rate is U/hr, Duration is in minutes
-                    basalInsulin = (treatment.Rate.Value * treatment.Duration.Value) / 60.0;
-                }
-                else if (treatment.Absolute.HasValue && treatment.Duration.HasValue)
-                {
-                    // Absolute rate is U/hr, Duration is in minutes
-                    basalInsulin = (treatment.Absolute.Value * treatment.Duration.Value) / 60.0;
-                }
-
-                if (basalInsulin > 0)
-                {
-                    dailyData[dateKey] = (currentBasal + basalInsulin, currentBolus);
+                    dailyData[dateKey] = (currentBasal + treatment.Insulin.Value, currentBolus);
                 }
             }
         }

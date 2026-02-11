@@ -9,7 +9,7 @@
     lineBottom: number;
     basalTrackTop: number;
     time: Date;
-    category: TrackerCategory;
+    category?: TrackerCategory;
     color: string;
   }
 

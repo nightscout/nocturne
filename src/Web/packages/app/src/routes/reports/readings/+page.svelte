@@ -17,8 +17,6 @@
 
 {#if reportsResource.current}
   <GlucoseChartCard
-    entries={reportsResource.current.entries}
-    treatments={reportsResource.current.treatments}
     dateRange={reportsResource.current.dateRange}
   />
 {/if}

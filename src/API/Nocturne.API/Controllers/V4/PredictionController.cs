@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services;
 using Nocturne.Core.Oref;
 
@@ -11,6 +12,7 @@ namespace Nocturne.API.Controllers.V4;
 [ApiController]
 [Route("api/v4/predictions")]
 [Produces("application/json")]
+[ClientPropertyName("predictions")]
 public class PredictionController : ControllerBase
 {
     private readonly IPredictionService _predictionService;

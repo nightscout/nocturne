@@ -93,6 +93,15 @@ public class FollowerAccessMiddleware
         authContext.ActingAsSubjectId = ownerSubjectId;
         authContext.ActingAsSubjectName = ownerSubject?.Name;
 
+        // Set 24-hour limit flag if the grant has it enabled
+        if (grant.LimitTo24Hours)
+        {
+            authContext.LimitTo24Hours = true;
+            _logger.LogDebug(
+                "Grant has 24-hour data limit for follower {FollowerId} accessing {OwnerId}",
+                followerSubjectId, ownerSubjectId);
+        }
+
         // Restrict scopes: intersection of user's current scopes and grant's scopes
         var currentScopes = context.GetGrantedScopes();
         var grantScopes = OAuthScopes.Normalize(grant.Scopes);

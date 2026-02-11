@@ -305,7 +305,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v2/authorization/permissions/trie": {
@@ -326,7 +327,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v2/authorization/subjects": {
@@ -370,7 +372,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -432,7 +435,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllSubjects"
+        ]
       },
       "put": {
         "tags": [
@@ -504,7 +511,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllSubjects"
+        ]
       }
     },
     "/api/v2/authorization/subjects/{id}": {
@@ -560,7 +571,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllSubjects"
+        ]
       }
     },
     "/api/v2/authorization/roles": {
@@ -604,7 +619,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -666,7 +682,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllRoles"
+        ]
       },
       "put": {
         "tags": [
@@ -738,7 +758,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllRoles"
+        ]
       }
     },
     "/api/v2/authorization/roles/{id}": {
@@ -794,7 +818,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllRoles"
+        ]
       }
     },
     "/api/v1/connectors/status": {
@@ -824,7 +852,7 @@
     "/auth/local/config": {
       "get": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Get local identity provider configuration",
         "operationId": "LocalAuth_GetConfig",
@@ -845,7 +873,7 @@
     "/auth/local/register": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Register a new user account",
         "operationId": "LocalAuth_Register",
@@ -888,7 +916,7 @@
     "/auth/local/login": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Log in with email and password",
         "operationId": "LocalAuth_Login",
@@ -941,7 +969,7 @@
     "/auth/local/verify-email": {
       "get": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Verify email address",
         "operationId": "LocalAuth_VerifyEmail",
@@ -975,7 +1003,7 @@
     "/auth/local/forgot-password": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Request password reset",
         "operationId": "LocalAuth_ForgotPassword",
@@ -1008,7 +1036,7 @@
     "/auth/local/reset-password": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Reset password with token",
         "operationId": "LocalAuth_ResetPassword",
@@ -1051,7 +1079,7 @@
     "/auth/local/change-password": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Change password for authenticated user",
         "operationId": "LocalAuth_ChangePassword",
@@ -1104,7 +1132,7 @@
     "/auth/local/check-email": {
       "get": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Check if email is allowed to register (for form validation)",
         "operationId": "LocalAuth_CheckEmail",
@@ -1135,7 +1163,7 @@
     "/auth/local/resend-verification": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Resend email verification",
         "operationId": "LocalAuth_ResendVerification",
@@ -1168,7 +1196,7 @@
     "/auth/local/admin/password-resets": {
       "get": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Get pending password reset requests (admin only)",
         "operationId": "LocalAuth_GetPendingPasswordResets",
@@ -1183,13 +1211,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/auth/local/admin/set-temporary-password": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Set a temporary password for a user (admin only)",
         "operationId": "LocalAuth_SetTemporaryPassword",
@@ -1226,13 +1255,17 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPendingPasswordResets"
+        ]
       }
     },
     "/auth/local/admin/handle-password-reset/{requestId}": {
       "post": {
         "tags": [
-          "Authentication"
+          "LocalAuth"
         ],
         "summary": "Handle a password reset request by generating a reset link (admin only)",
         "operationId": "LocalAuth_HandlePasswordReset",
@@ -1269,7 +1302,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPendingPasswordResets"
+        ]
       }
     },
     "/api/Metadata/websocket-events": {
@@ -1398,7 +1435,7 @@
         }
       }
     },
-    "/oauth/authorize": {
+    "/api/oauth/authorize": {
       "get": {
         "tags": [
           "OAuth"
@@ -1515,6 +1552,9 @@
                   },
                   "approved": {
                     "type": "boolean"
+                  },
+                  "limit_to_24_hours": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -1538,7 +1578,7 @@
         }
       }
     },
-    "/oauth/token": {
+    "/api/oauth/token": {
       "post": {
         "tags": [
           "OAuth"
@@ -1610,7 +1650,7 @@
         }
       }
     },
-    "/oauth/device": {
+    "/api/oauth/device": {
       "post": {
         "tags": [
           "OAuth"
@@ -1659,7 +1699,7 @@
         }
       }
     },
-    "/oauth/device-info": {
+    "/api/oauth/device-info": {
       "get": {
         "tags": [
           "OAuth"
@@ -1700,7 +1740,7 @@
         }
       }
     },
-    "/oauth/device-approve": {
+    "/api/oauth/device-approve": {
       "post": {
         "tags": [
           "OAuth"
@@ -1741,7 +1781,7 @@
         }
       }
     },
-    "/oauth/revoke": {
+    "/api/oauth/revoke": {
       "post": {
         "tags": [
           "OAuth"
@@ -1773,7 +1813,7 @@
         }
       }
     },
-    "/oauth/client-info": {
+    "/api/oauth/client-info": {
       "get": {
         "tags": [
           "OAuth"
@@ -1804,7 +1844,7 @@
         }
       }
     },
-    "/oauth/grants": {
+    "/api/oauth/grants": {
       "get": {
         "tags": [
           "OAuth"
@@ -1825,7 +1865,7 @@
         }
       }
     },
-    "/oauth/grants/{grantId}": {
+    "/api/oauth/grants/{grantId}": {
       "delete": {
         "tags": [
           "OAuth"
@@ -1914,7 +1954,7 @@
         }
       }
     },
-    "/oauth/grants/follower": {
+    "/api/oauth/grants/follower": {
       "post": {
         "tags": [
           "OAuth"
@@ -1957,7 +1997,7 @@
         }
       }
     },
-    "/oauth/follower-targets": {
+    "/api/oauth/follower-targets": {
       "get": {
         "tags": [
           "OAuth"
@@ -1978,7 +2018,7 @@
         }
       }
     },
-    "/oauth/invites": {
+    "/api/oauth/invites": {
       "post": {
         "tags": [
           "OAuth"
@@ -2040,7 +2080,7 @@
         }
       }
     },
-    "/oauth/invites/{inviteId}": {
+    "/api/oauth/invites/{inviteId}": {
       "delete": {
         "tags": [
           "OAuth"
@@ -2076,7 +2116,7 @@
         }
       }
     },
-    "/oauth/invites/{token}/info": {
+    "/api/oauth/invites/{token}/info": {
       "get": {
         "tags": [
           "OAuth"
@@ -2118,7 +2158,7 @@
         }
       }
     },
-    "/oauth/invites/{token}/accept": {
+    "/api/oauth/invites/{token}/accept": {
       "post": {
         "tags": [
           "OAuth"
@@ -2160,7 +2200,7 @@
         }
       }
     },
-    "/oauth/introspect": {
+    "/api/oauth/introspect": {
       "post": {
         "tags": [
           "OAuth"
@@ -2202,7 +2242,7 @@
     "/auth/providers": {
       "get": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Get available OIDC providers for login",
         "operationId": "Oidc_GetProviders",
@@ -2226,7 +2266,7 @@
     "/auth/login": {
       "get": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Initiate OIDC login flow\nRedirects to the OIDC provider's authorization endpoint",
         "operationId": "Oidc_Login",
@@ -2273,7 +2313,7 @@
     "/auth/callback": {
       "get": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Handle OIDC callback from provider\nExchanges authorization code for tokens and creates session",
         "operationId": "Oidc_Callback",
@@ -2339,7 +2379,7 @@
     "/auth/refresh": {
       "post": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Refresh the session tokens\nUses the refresh token to get a new access token",
         "operationId": "Oidc_Refresh",
@@ -2370,7 +2410,7 @@
     "/auth/logout": {
       "post": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Logout and revoke the session",
         "operationId": "Oidc_Logout",
@@ -2398,13 +2438,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/auth/userinfo": {
       "get": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Get current user information",
         "operationId": "Oidc_GetUserInfo",
@@ -2435,7 +2476,7 @@
     "/auth/session": {
       "get": {
         "tags": [
-          "Authentication"
+          "Oidc"
         ],
         "summary": "Get current session information",
         "operationId": "Oidc_GetSession",
@@ -2600,7 +2641,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v1/Statistics/glucose-distribution": {
@@ -2677,7 +2719,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v1/Statistics/treatment-summary": {
@@ -3256,7 +3299,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v1/Statistics/site-change-impact": {
@@ -3333,7 +3377,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v1/Statistics/insulin-delivery-stats": {
@@ -3376,7 +3421,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v1/Statistics/basal-analysis": {
@@ -3419,7 +3465,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/Versions": {
@@ -3461,7 +3508,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "oidcDiscovery"
       }
     },
     "/.well-known/jwks.json": {
@@ -3482,7 +3530,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "oidcDiscovery"
       }
     },
     "/.well-known/oauth-authorization-server": {
@@ -3503,7 +3552,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "oidcDiscovery"
       }
     },
     "/api/v4/Battery/current": {
@@ -3769,13 +3819,12 @@
         "tags": [
           "V4 Chart Data"
         ],
-        "summary": "Get dashboard chart data with pre-calculated IOB, COB, and basal time series",
+        "summary": "Get complete dashboard chart data in a single call.\nReturns pre-calculated IOB, COB, basal series, categorized treatment markers,\nstate spans, system events, tracker markers, and glucose readings.",
         "operationId": "ChartData_GetDashboardChartData",
         "parameters": [
           {
             "name": "startTime",
             "in": "query",
-            "description": "Start time in Unix milliseconds",
             "schema": {
               "type": "integer",
               "format": "int64"
@@ -3785,7 +3834,6 @@
           {
             "name": "endTime",
             "in": "query",
-            "description": "End time in Unix milliseconds",
             "schema": {
               "type": "integer",
               "format": "int64"
@@ -3795,7 +3843,6 @@
           {
             "name": "intervalMinutes",
             "in": "query",
-            "description": "Interval for IOB/COB calculations (default: 5)",
             "schema": {
               "type": "integer",
               "format": "int32",
@@ -3806,7 +3853,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Chart data with all calculated series",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -4318,6 +4365,270 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions": {
+      "get": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Get compression low suggestions with optional filtering",
+        "operationId": "CompressionLow_GetSuggestions",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "nullable": true,
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CompressionLowStatus"
+                    }
+                  ]
+                }
+              ]
+            },
+            "x-position": 1
+          },
+          {
+            "name": "nightOf",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompressionLowSuggestion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions/{id}": {
+      "get": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Get a single suggestion with glucose entries for charting",
+        "operationId": "CompressionLow_GetSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompressionLowSuggestionWithEntries"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Delete a suggestion and its associated state span",
+        "operationId": "CompressionLow_DeleteSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions/{id}/accept": {
+      "post": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Accept a suggestion with adjusted bounds",
+        "operationId": "CompressionLow_AcceptSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptSuggestionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateSpan"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/suggestions/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Dismiss a suggestion",
+        "operationId": "CompressionLow_DismissSuggestion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/compression-lows/detect": {
+      "post": {
+        "tags": [
+          "CompressionLow"
+        ],
+        "summary": "Manually trigger detection for a date range (for testing)",
+        "description": "Provide either a single `nightOf` date or a range with `startDate` and `endDate`.\nWhen using a range, detection runs for each night in the range (inclusive).",
+        "operationId": "CompressionLow_TriggerDetection",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerDetectionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionResult"
                 }
               }
             }
@@ -5954,7 +6265,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "foodsV4"
       }
     },
     "/api/v4/foods/{foodId}/favorite": {
@@ -5987,7 +6299,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "foodsV4"
       },
       "delete": {
         "tags": [
@@ -6018,7 +6331,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "foodsV4"
       }
     },
     "/api/v4/foods/recent": {
@@ -6054,7 +6368,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "foodsV4"
       }
     },
     "/api/v4/meal-matching/food-entries/{id}": {
@@ -6248,7 +6563,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/migration/start": {
@@ -6291,7 +6607,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/migration/{jobId}/status": {
@@ -6334,7 +6651,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/migration/{jobId}/cancel": {
@@ -6370,7 +6688,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/migration/history": {
@@ -6394,7 +6713,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/migration/pending-config": {
@@ -6415,7 +6735,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/migration/sources": {
@@ -6439,7 +6760,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/connectors/myfitnesspal/settings": {
@@ -6682,7 +7004,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "predictions"
       }
     },
     "/api/v4/predictions/status": {
@@ -6703,7 +7026,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "predictions"
       }
     },
     "/api/v4/processing/status/{correlationId}": {
@@ -6866,7 +7190,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Retrospective/timeline": {
@@ -6922,7 +7247,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Retrospective/basal-timeline": {
@@ -6978,7 +7304,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services": {
@@ -7611,7 +7938,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -7642,7 +7970,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStateSpans"
+        ]
       }
     },
     "/api/v4/state-spans/pump-modes": {
@@ -8134,7 +8466,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8176,7 +8509,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStateSpans",
+          "GetStateSpan"
+        ]
       },
       "delete": {
         "tags": [
@@ -8196,18 +8534,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStateSpans"
+        ]
       }
     },
     "/api/v4/Status": {
@@ -8595,7 +8929,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8626,7 +8961,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDefinitions"
+        ]
       }
     },
     "/api/v4/trackers/definitions/{id}": {
@@ -8659,7 +8998,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8702,7 +9042,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDefinitions",
+          "GetDefinition"
+        ]
       },
       "delete": {
         "tags": [
@@ -8723,18 +9068,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDefinitions"
+        ]
       }
     },
     "/api/v4/trackers/instances": {
@@ -8758,7 +9099,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8789,7 +9131,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/instances/history": {
@@ -8825,7 +9171,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/trackers/instances/upcoming": {
@@ -8871,7 +9218,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/trackers/instances/{id}/complete": {
@@ -8916,7 +9264,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances",
+          "GetInstanceHistory"
+        ]
       }
     },
     "/api/v4/trackers/instances/{id}/ack": {
@@ -8951,18 +9304,14 @@
           "x-position": 2
         },
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/instances/{id}": {
@@ -8985,18 +9334,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/presets": {
@@ -9020,7 +9365,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -9051,7 +9397,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPresets"
+        ]
       }
     },
     "/api/v4/trackers/presets/{id}/apply": {
@@ -9095,7 +9445,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveInstances"
+        ]
       }
     },
     "/api/v4/trackers/presets/{id}": {
@@ -9118,18 +9472,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPresets"
+        ]
       }
     },
     "/api/v4/treatments/{id}/foods": {
@@ -9421,7 +9771,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -9462,7 +9813,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments"
+        ]
       }
     },
     "/api/v4/treatments/bulk": {
@@ -9511,7 +9866,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments"
+        ]
       }
     },
     "/api/v4/treatments/{id}": {
@@ -9553,7 +9912,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -9615,7 +9975,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments",
+          "GetTreatment"
+        ]
       },
       "delete": {
         "tags": [
@@ -9648,7 +10013,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTreatments"
+        ]
       }
     },
     "/api/v4/ui-settings": {
@@ -9672,7 +10041,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       },
       "put": {
         "tags": [
@@ -9717,7 +10087,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       }
     },
     "/api/v4/ui-settings/{section}": {
@@ -9756,7 +10127,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       }
     },
     "/api/v4/ui-settings/notifications": {
@@ -9803,7 +10175,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       }
     },
     "/api/v4/ui-settings/notifications/alarms": {
@@ -9827,7 +10200,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       },
       "put": {
         "tags": [
@@ -9872,7 +10246,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       }
     },
     "/api/v4/ui-settings/notifications/alarms/profiles": {
@@ -9919,7 +10294,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       }
     },
     "/api/v4/ui-settings/notifications/alarms/profiles/{profileId}": {
@@ -9965,7 +10341,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-client-property": "uiSettings"
       }
     },
     "/api/v4/user/preferences": {
@@ -11792,7 +12169,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "v2DData"
       }
     },
     "/api/v2/ddata/at/{timestamp}": {
@@ -11838,7 +12216,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "v2DData"
       }
     },
     "/api/v2/ddata/raw": {
@@ -11884,7 +12263,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "v2DData"
       }
     },
     "/api/v2/loop/send": {
@@ -12011,7 +12391,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "v2Notifications"
       }
     },
     "/api/v2/notifications": {
@@ -12065,7 +12446,8 @@
               }
             }
           }
-        }
+        },
+        "x-client-property": "v2Notifications"
       }
     },
     "/api/v2/notifications/status": {
@@ -12087,7 +12469,8 @@
           "500": {
             "description": "Internal server error"
           }
-        }
+        },
+        "x-client-property": "v2Notifications"
       }
     },
     "/api/v2/properties": {
@@ -12124,7 +12507,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "v2Properties"
       }
     },
     "/api/v2/properties/{propertyPath}": {
@@ -12181,7 +12565,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "v2Properties"
       }
     },
     "/api/v2/summary": {
@@ -12228,7 +12613,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "v2Summary"
       }
     },
     "/api/v1/Activity": {
@@ -13919,7 +14305,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "iob"
       }
     },
     "/api/v1/Iob/treatments": {
@@ -13956,7 +14343,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "iob"
       }
     },
     "/api/v1/Iob/hourly": {
@@ -14025,7 +14413,8 @@
           "500": {
             "description": "If there was an internal server error"
           }
-        }
+        },
+        "x-client-property": "iob"
       }
     },
     "/api/v1/notifications/ack": {
@@ -17018,7 +17407,8 @@
           "Sleep",
           "Exercise",
           "Illness",
-          "Travel"
+          "Travel",
+          "DataExclusion"
         ],
         "enum": [
           "PumpMode",
@@ -17029,7 +17419,8 @@
           "Sleep",
           "Exercise",
           "Illness",
-          "Travel"
+          "Travel",
+          "DataExclusion"
         ]
       },
       "BasalDeliveryState": {
@@ -17565,17 +17956,17 @@
         "description": "OAuth 2.0 token response (RFC 6749 Section 5.1)",
         "additionalProperties": false,
         "properties": {
-          "accessToken": {
+          "access_token": {
             "type": "string"
           },
-          "tokenType": {
+          "token_type": {
             "type": "string"
           },
-          "expiresIn": {
+          "expires_in": {
             "type": "integer",
             "format": "int32"
           },
-          "refreshToken": {
+          "refresh_token": {
             "type": "string",
             "nullable": true
           },
@@ -17593,11 +17984,11 @@
           "error": {
             "type": "string"
           },
-          "errorDescription": {
+          "error_description": {
             "type": "string",
             "nullable": true
           },
-          "errorUri": {
+          "error_uri": {
             "type": "string",
             "nullable": true
           }
@@ -17608,20 +17999,20 @@
         "description": "Device Authorization Response (RFC 8628 Section 3.2)",
         "additionalProperties": false,
         "properties": {
-          "deviceCode": {
+          "device_code": {
             "type": "string"
           },
-          "userCode": {
+          "user_code": {
             "type": "string"
           },
-          "verificationUri": {
+          "verification_uri": {
             "type": "string"
           },
-          "verificationUriComplete": {
+          "verification_uri_complete": {
             "type": "string",
             "nullable": true
           },
-          "expiresIn": {
+          "expires_in": {
             "type": "integer",
             "format": "int32"
           },
@@ -17761,6 +18152,10 @@
           "lastUsedUserAgent": {
             "type": "string",
             "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean",
+            "description": "When true, this grant only allows access to data from the last 24 hours\n(rolling window from each request time)."
           }
         }
       },
@@ -17779,6 +18174,14 @@
             }
           },
           "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "temporaryPassword": {
+            "type": "string",
+            "nullable": true
+          },
+          "followerDisplayName": {
             "type": "string",
             "nullable": true
           }
@@ -17893,6 +18296,10 @@
             "description": "Maximum number of times the invite can be used (null = unlimited)",
             "format": "int32",
             "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean",
+            "description": "When true, grants created from this invite will only allow access to\nthe last 24 hours of data (rolling window from each request time)."
           }
         }
       },
@@ -17953,6 +18360,38 @@
           },
           "isRevoked": {
             "type": "boolean"
+          },
+          "limitTo24Hours": {
+            "type": "boolean"
+          },
+          "usedBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteUsageDto"
+            }
+          }
+        }
+      },
+      "InviteUsageDto": {
+        "type": "object",
+        "description": "DTO for invite usage information",
+        "additionalProperties": false,
+        "properties": {
+          "followerSubjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "followerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "followerEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "usedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -17990,6 +18429,9 @@
             "type": "boolean"
           },
           "isRevoked": {
+            "type": "boolean"
+          },
+          "limitTo24Hours": {
             "type": "boolean"
           }
         }
@@ -21247,134 +21689,413 @@
       },
       "DashboardChartData": {
         "type": "object",
-        "description": "Dashboard chart data response with all calculated series",
         "additionalProperties": false,
         "properties": {
           "iobSeries": {
             "type": "array",
-            "description": "IOB (Insulin on Board) time series",
             "items": {
               "$ref": "#/components/schemas/TimeSeriesPoint"
             }
           },
           "cobSeries": {
             "type": "array",
-            "description": "COB (Carbs on Board) time series",
             "items": {
               "$ref": "#/components/schemas/TimeSeriesPoint"
             }
           },
           "basalSeries": {
             "type": "array",
-            "description": "Basal rate time series with temp basal indicators",
             "items": {
               "$ref": "#/components/schemas/BasalPoint"
             }
           },
           "defaultBasalRate": {
             "type": "number",
-            "description": "Default basal rate from profile (U/hr)",
             "format": "double"
           },
           "maxBasalRate": {
             "type": "number",
-            "description": "Maximum basal rate in the series (for Y-axis scaling)",
             "format": "double"
           },
           "maxIob": {
             "type": "number",
-            "description": "Maximum IOB in the series (for Y-axis scaling)",
             "format": "double"
           },
           "maxCob": {
             "type": "number",
-            "description": "Maximum COB in the series (for Y-axis scaling)",
             "format": "double"
+          },
+          "glucoseData": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucosePointDto"
+            }
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/ChartThresholdsDto"
+          },
+          "bolusMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BolusMarkerDto"
+            }
+          },
+          "carbMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CarbMarkerDto"
+            }
+          },
+          "deviceEventMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceEventMarkerDto"
+            }
           },
           "pumpModeSpans": {
             "type": "array",
-            "description": "Pump mode state spans for chart background coloring",
             "items": {
-              "$ref": "#/components/schemas/StateSpan"
-            }
-          },
-          "basalDeliverySpans": {
-            "type": "array",
-            "description": "Basal delivery state spans (pump-confirmed delivery data)",
-            "items": {
-              "$ref": "#/components/schemas/StateSpan"
+              "$ref": "#/components/schemas/ChartStateSpanDto"
             }
           },
           "profileSpans": {
             "type": "array",
-            "description": "Profile state spans showing active profile changes",
             "items": {
-              "$ref": "#/components/schemas/StateSpan"
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "overrideSpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "activitySpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "tempBasalSpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartStateSpanDto"
+            }
+          },
+          "basalDeliverySpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasalDeliverySpanDto"
+            }
+          },
+          "systemEventMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemEventMarkerDto"
+            }
+          },
+          "trackerMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackerMarkerDto"
             }
           }
         }
       },
       "TimeSeriesPoint": {
         "type": "object",
-        "description": "Time series data point with timestamp and value",
         "additionalProperties": false,
         "properties": {
           "timestamp": {
             "type": "integer",
-            "description": "Timestamp in Unix milliseconds",
             "format": "int64"
           },
           "value": {
             "type": "number",
-            "description": "Value at this timestamp",
             "format": "double"
           }
         }
       },
       "BasalPoint": {
         "type": "object",
-        "description": "Basal rate data point",
         "additionalProperties": false,
         "properties": {
           "timestamp": {
             "type": "integer",
-            "description": "Timestamp in Unix milliseconds",
             "format": "int64"
           },
           "rate": {
             "type": "number",
-            "description": "Effective basal rate in U/hr",
             "format": "double"
           },
           "scheduledRate": {
             "type": "number",
-            "description": "Scheduled basal rate from profile in U/hr",
             "format": "double"
           },
           "origin": {
-            "description": "Origin of this basal rate - where it came from",
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/BasalDeliveryOrigin"
-              }
-            ]
+            "$ref": "#/components/schemas/BasalDeliveryOrigin"
+          },
+          "fillColor": {
+            "$ref": "#/components/schemas/ChartColor"
+          },
+          "strokeColor": {
+            "$ref": "#/components/schemas/ChartColor"
           }
         }
       },
-      "StateSpan": {
+      "ChartColor": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "GlucoseVeryLow",
+          "GlucoseLow",
+          "GlucoseInRange",
+          "GlucoseHigh",
+          "GlucoseVeryHigh",
+          "InsulinBolus",
+          "InsulinBasal",
+          "InsulinTempBasal",
+          "Carbs",
+          "PumpModeAutomatic",
+          "PumpModeLimited",
+          "PumpModeManual",
+          "PumpModeBoost",
+          "PumpModeEaseOff",
+          "PumpModeSleep",
+          "PumpModeExercise",
+          "PumpModeSuspended",
+          "PumpModeOff",
+          "SystemEventAlarm",
+          "SystemEventHazard",
+          "SystemEventWarning",
+          "SystemEventInfo",
+          "ActivitySleep",
+          "ActivityExercise",
+          "ActivityIllness",
+          "ActivityTravel",
+          "TrackerSensor",
+          "TrackerCannula",
+          "TrackerReservoir",
+          "TrackerBattery",
+          "TrackerConsumable",
+          "TrackerAppointment",
+          "TrackerReminder",
+          "TrackerCustom",
+          "Profile",
+          "Override",
+          "MutedForeground",
+          "Primary"
+        ],
+        "enum": [
+          "glucose-very-low",
+          "glucose-low",
+          "glucose-in-range",
+          "glucose-high",
+          "glucose-very-high",
+          "insulin-bolus",
+          "insulin-basal",
+          "insulin-temp-basal",
+          "carbs",
+          "pump-mode-automatic",
+          "pump-mode-limited",
+          "pump-mode-manual",
+          "pump-mode-boost",
+          "pump-mode-ease-off",
+          "pump-mode-sleep",
+          "pump-mode-exercise",
+          "pump-mode-suspended",
+          "pump-mode-off",
+          "system-event-alarm",
+          "system-event-hazard",
+          "system-event-warning",
+          "system-event-info",
+          "activity-sleep",
+          "activity-exercise",
+          "activity-illness",
+          "activity-travel",
+          "tracker-sensor",
+          "tracker-cannula",
+          "tracker-reservoir",
+          "tracker-battery",
+          "tracker-consumable",
+          "tracker-appointment",
+          "tracker-reminder",
+          "tracker-custom",
+          "chart-1",
+          "chart-2",
+          "muted-foreground",
+          "primary"
+        ]
+      },
+      "GlucosePointDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sgv": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ChartThresholdsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "low": {
+            "type": "number",
+            "format": "double"
+          },
+          "high": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "glucoseYMax": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "BolusMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "insulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "treatmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "bolusType": {
+            "$ref": "#/components/schemas/BolusType"
+          },
+          "isOverride": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BolusType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Bolus",
+          "MealBolus",
+          "CorrectionBolus",
+          "SnackBolus",
+          "BolusWizard",
+          "ComboBolus",
+          "Smb",
+          "AutomaticBolus"
+        ],
+        "enum": [
+          "Bolus",
+          "MealBolus",
+          "CorrectionBolus",
+          "SnackBolus",
+          "BolusWizard",
+          "ComboBolus",
+          "Smb",
+          "AutomaticBolus"
+        ]
+      },
+      "CarbMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "carbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "treatmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "isOffset": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DeviceEventMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/DeviceEventType"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "DeviceEventType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "SensorStart",
+          "SensorChange",
+          "SensorStop",
+          "SiteChange",
+          "InsulinChange",
+          "PumpBatteryChange"
+        ],
+        "enum": [
+          "SensorStart",
+          "SensorChange",
+          "SensorStop",
+          "SiteChange",
+          "InsulinChange",
+          "PumpBatteryChange"
+        ]
+      },
+      "ChartStateSpanDto": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "category": {
             "$ref": "#/components/schemas/StateSpanCategory"
           },
           "state": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "startMills": {
             "type": "integer",
@@ -21385,42 +22106,163 @@
             "format": "int64",
             "nullable": true
           },
-          "source": {
-            "type": "string",
-            "nullable": true
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
           },
           "metadata": {
             "type": "object",
             "nullable": true,
             "additionalProperties": {}
-          },
-          "originalId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "canonicalId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "sources": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
           }
         }
+      },
+      "BasalDeliverySpanDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/BasalDeliveryOrigin"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "fillColor": {
+            "$ref": "#/components/schemas/ChartColor"
+          },
+          "strokeColor": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "SystemEventMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/SystemEventType"
+          },
+          "category": {
+            "$ref": "#/components/schemas/SystemEventCategory"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "SystemEventType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Alarm",
+          "Hazard",
+          "Warning",
+          "Info"
+        ],
+        "enum": [
+          "Alarm",
+          "Hazard",
+          "Warning",
+          "Info"
+        ]
+      },
+      "SystemEventCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pump",
+          "Cgm",
+          "Connectivity"
+        ],
+        "enum": [
+          "Pump",
+          "Cgm",
+          "Connectivity"
+        ]
+      },
+      "TrackerMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "definitionId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/TrackerCategory"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "$ref": "#/components/schemas/ChartColor"
+          }
+        }
+      },
+      "TrackerCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ],
+        "enum": [
+          "Consumable",
+          "Reservoir",
+          "Appointment",
+          "Reminder",
+          "Custom",
+          "Sensor",
+          "Cannula",
+          "Battery"
+        ]
       },
       "ClockFacePublicDto": {
         "type": "object",
@@ -22199,6 +23041,225 @@
           }
         }
       },
+      "CompressionLowSuggestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CompressionLowStatus"
+          },
+          "nightOf": {
+            "type": "string",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reviewedAt": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "stateSpanId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "lowestGlucose": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dropRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "recoveryMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "CompressionLowStatus": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pending",
+          "Accepted",
+          "Dismissed"
+        ],
+        "enum": [
+          "Pending",
+          "Accepted",
+          "Dismissed"
+        ]
+      },
+      "CompressionLowSuggestionWithEntries": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "suggestion": {
+            "$ref": "#/components/schemas/CompressionLowSuggestion"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            }
+          },
+          "treatments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Treatment"
+            }
+          }
+        }
+      },
+      "StateSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {}
+          },
+          "originalId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "canonicalId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "sources": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AcceptSuggestionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DetectionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "totalSuggestionsCreated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nightsProcessed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NightDetectionResult"
+            }
+          }
+        }
+      },
+      "NightDetectionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nightOf": {
+            "type": "string"
+          },
+          "suggestionsCreated": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TriggerDetectionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nightOf": {
+            "type": "string",
+            "nullable": true
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "ConnectorFoodEntry": {
         "type": "object",
         "additionalProperties": false,
@@ -22543,7 +23604,8 @@
           "AnonymousLoginRequest",
           "PredictedLow",
           "SuggestedMealMatch",
-          "SuggestedTrackerMatch"
+          "SuggestedTrackerMatch",
+          "CompressionLowReview"
         ],
         "enum": [
           "PasswordResetRequest",
@@ -22554,7 +23616,8 @@
           "AnonymousLoginRequest",
           "PredictedLow",
           "SuggestedMealMatch",
-          "SuggestedTrackerMatch"
+          "SuggestedTrackerMatch",
+          "CompressionLowReview"
         ]
       },
       "NotificationUrgency": {
@@ -25503,36 +26566,6 @@
           }
         }
       },
-      "SystemEventType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Alarm",
-          "Hazard",
-          "Warning",
-          "Info"
-        ],
-        "enum": [
-          "Alarm",
-          "Hazard",
-          "Warning",
-          "Info"
-        ]
-      },
-      "SystemEventCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Pump",
-          "Cgm",
-          "Connectivity"
-        ],
-        "enum": [
-          "Pump",
-          "Cgm",
-          "Connectivity"
-        ]
-      },
       "CreateSystemEventRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -26409,6 +27442,12 @@
           },
           "services": {
             "$ref": "#/components/schemas/ServicesSettings"
+          },
+          "dataQuality": {
+            "$ref": "#/components/schemas/DataQualitySettings"
+          },
+          "security": {
+            "$ref": "#/components/schemas/SecuritySettings"
           }
         }
       },
@@ -27306,6 +28345,56 @@
             "type": "boolean"
           },
           "backgroundRefresh": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DataQualitySettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sleepSchedule": {
+            "$ref": "#/components/schemas/SleepScheduleSettings"
+          },
+          "compressionLowDetection": {
+            "$ref": "#/components/schemas/CompressionLowDetectionSettings"
+          }
+        }
+      },
+      "SleepScheduleSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bedtimeHour": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wakeTimeHour": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CompressionLowDetectionSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "excludeFromStatistics": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SecuritySettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "requireAuthForPublicAccess": {
+            "type": "boolean"
+          },
+          "hideGlucoseInFavicon": {
             "type": "boolean"
           }
         }

@@ -19,7 +19,7 @@
     getActiveInstances,
     getDefinitions,
     getInstanceHistory,
-  } from "$lib/data/trackers.remote";
+  } from "$lib/data/generated";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import {
     NotificationUrgency as NotificationUrgencyEnum,
@@ -90,7 +90,7 @@
 
   // Queries for trackers
   const trackersQuery = $derived(getActiveInstances());
-  const historyQuery = $derived(getInstanceHistory(100));
+  const historyQuery = $derived(getInstanceHistory({ limit: 100 }));
   const definitionsQuery = $derived(getDefinitions({}));
 
   // Tracker event types for calendar display

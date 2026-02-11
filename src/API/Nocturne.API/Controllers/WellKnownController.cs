@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
@@ -14,6 +15,7 @@ namespace Nocturne.API.Controllers;
 [ApiController]
 [Route(".well-known")]
 [Tags("OIDC Discovery")]
+[ClientPropertyName("oidcDiscovery")]
 [AllowAnonymous]
 public class WellKnownController : ControllerBase
 {
@@ -136,11 +138,11 @@ public class WellKnownController : ControllerBase
             new OAuthAuthorizationServerMetadata
             {
                 Issuer = _jwtOptions.Issuer,
-                AuthorizationEndpoint = $"{baseUrl}/oauth/authorize",
-                TokenEndpoint = $"{baseUrl}/oauth/token",
-                DeviceAuthorizationEndpoint = $"{baseUrl}/oauth/device",
-                RevocationEndpoint = $"{baseUrl}/oauth/revoke",
-                IntrospectionEndpoint = $"{baseUrl}/oauth/introspect",
+                AuthorizationEndpoint = $"{baseUrl}/api/oauth/authorize",
+                TokenEndpoint = $"{baseUrl}/api/oauth/token",
+                DeviceAuthorizationEndpoint = $"{baseUrl}/api/oauth/device",
+                RevocationEndpoint = $"{baseUrl}/api/oauth/revoke",
+                IntrospectionEndpoint = $"{baseUrl}/api/oauth/introspect",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
                 ResponseTypesSupported = new[] { "code" },
                 GrantTypesSupported = new[]

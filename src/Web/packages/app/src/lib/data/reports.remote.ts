@@ -148,7 +148,7 @@ export const getAnalysis = query(
 		return apiClient.statistics.analyzeGlucoseDataExtended({
 			entries,
 			treatments,
-			population,
+			population: population as DiabetesPopulation,
 		});
 	}
 );

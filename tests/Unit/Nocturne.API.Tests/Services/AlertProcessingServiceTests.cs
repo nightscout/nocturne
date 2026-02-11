@@ -90,7 +90,12 @@ public class AlertProcessingServiceTests
         );
 
         _mockNotifierDispatcher.Verify(
-            x => x.DispatchAsync(It.IsAny<NotificationBase>(), It.IsAny<CancellationToken>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Once
         );
     }
@@ -114,7 +119,12 @@ public class AlertProcessingServiceTests
 
         // Assert
         _mockNotifierDispatcher.Verify(
-            x => x.DispatchAsync(It.IsAny<NotificationBase>(), It.IsAny<CancellationToken>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Once
         );
     }
@@ -138,7 +148,12 @@ public class AlertProcessingServiceTests
 
         // Assert
         _mockNotifierDispatcher.Verify(
-            x => x.DispatchAsync(It.IsAny<NotificationBase>(), It.IsAny<CancellationToken>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Once
         );
     }
@@ -189,7 +204,12 @@ public class AlertProcessingServiceTests
         );
 
         _mockNotifierDispatcher.Verify(
-            x => x.BroadcastClearAlarmAsync(It.IsAny<NotificationBase>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Once
         );
     }
@@ -402,7 +422,12 @@ public class AlertProcessingServiceTests
         updated?.NextEscalationTime.Should().NotBeNull();
         updated?.EscalationLevel.Should().Be(0);
         _mockNotifierDispatcher.Verify(
-            x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Never
         );
     }
@@ -429,7 +454,12 @@ public class AlertProcessingServiceTests
         updated?.EscalationLevel.Should().Be(1);
         updated?.NextEscalationTime.Should().BeAfter(DateTime.UtcNow.AddMinutes(-2));
         _mockNotifierDispatcher.Verify(
-            x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.AtLeastOnce
         );
     }
@@ -467,7 +497,12 @@ public class AlertProcessingServiceTests
         updated?.EscalationLevel.Should().Be(0);
         updated?.NextEscalationTime.Should().BeAfter(DateTime.UtcNow);
         _mockNotifierDispatcher.Verify(
-            x => x.BroadcastAlarmAsync(It.IsAny<NotificationBase>()),
+            x =>
+                x.DispatchAsync(
+                    It.IsAny<NotificationBase>(),
+                    It.IsAny<string>(),
+                    It.IsAny<CancellationToken>()
+                ),
             Times.Never
         );
     }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 
 namespace Nocturne.API.Controllers.V2;
@@ -12,6 +13,7 @@ namespace Nocturne.API.Controllers.V2;
 [Route("api/v2/properties")]
 [Produces("application/json")]
 [Tags("V2 Properties")]
+[ClientPropertyName("v2Properties")]
 public class PropertiesController : ControllerBase
 {
     private readonly IPropertiesService _propertiesService;

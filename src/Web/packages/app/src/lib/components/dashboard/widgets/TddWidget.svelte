@@ -1,14 +1,14 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
   import { Text, PieChart } from "layerchart";
-  import { getMultiPeriodStatistics } from "$lib/data/statistics.remote";
+  import { getMultiPeriodStatistics } from "$lib/data/generated";
   import { Button } from "$lib/components/ui/button";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
 
   // Fetch TDD data from backend statistics
-  const statsPromise = $derived(getMultiPeriodStatistics({}));
+  const statsPromise = $derived(getMultiPeriodStatistics());
 
   function toggleView() {
     showAverage = !showAverage;

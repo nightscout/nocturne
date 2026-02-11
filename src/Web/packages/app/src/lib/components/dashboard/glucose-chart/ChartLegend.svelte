@@ -15,22 +15,22 @@
   import ChevronDown from "lucide-svelte/icons/chevron-down";
 
   interface DeviceEventMarker {
-    eventType: string;
+    eventType?: string;
   }
 
   interface SystemEvent {
-    id: string;
-    eventType: SystemEventType;
-    color: string;
+    id?: string;
+    eventType?: SystemEventType;
+    color?: string;
   }
 
   interface PumpModeSpan {
-    state: string;
-    color: string;
+    state?: string;
+    color?: string;
   }
 
   interface ScheduledTrackerMarker {
-    id: string;
+    id?: string;
   }
 
   interface GlucoseDataPoint {
@@ -76,8 +76,8 @@
     systemEvents: SystemEvent[];
     pumpModeSpans: PumpModeSpan[];
     scheduledTrackerMarkers: ScheduledTrackerMarker[];
-    currentPumpMode: string;
-    uniquePumpModes: string[];
+    currentPumpMode: string | undefined;
+    uniquePumpModes: (string | undefined)[];
 
     // Pump mode expansion
     expandedPumpModes: boolean;
@@ -227,16 +227,16 @@
   {@render legendToggle(showCarbs, onToggleCarbs, "Carbs", carbsIconSnippet)}
 
   <!-- Device event legend items (only show if present in current view) -->
-  {#if deviceEventMarkers.some((m) => m.eventType === "Sensor Start" || m.eventType === "Sensor Change")}
+  {#if deviceEventMarkers.some((m) => m.eventType === "SensorStart" || m.eventType === "SensorChange")}
     {@render legendIndicator(sensorIcon, "Sensor")}
   {/if}
-  {#if deviceEventMarkers.some((m) => m.eventType === "Site Change")}
+  {#if deviceEventMarkers.some((m) => m.eventType === "SiteChange")}
     {@render legendIndicator(siteIcon, "Site")}
   {/if}
-  {#if deviceEventMarkers.some((m) => m.eventType === "Insulin Change")}
+  {#if deviceEventMarkers.some((m) => m.eventType === "InsulinChange")}
     {@render legendIndicator(reservoirIcon, "Reservoir")}
   {/if}
-  {#if deviceEventMarkers.some((m) => m.eventType === "Pump Battery Change")}
+  {#if deviceEventMarkers.some((m) => m.eventType === "PumpBatteryChange")}
     {@render legendIndicator(batteryIcon, "Battery")}
   {/if}
 
@@ -251,12 +251,12 @@
       onclick={onTogglePumpModes}
     >
       <PumpModeIcon
-        state={currentPumpMode}
+        state={currentPumpMode ?? "Automatic"}
         size={14}
         class={showPumpModes ? "opacity-70" : "opacity-40"}
       />
       <span class={cn(!showPumpModes && "line-through")}>
-        {currentPumpMode}
+        {currentPumpMode ?? "Automatic"}
       </span>
     </button>
     {#if uniquePumpModes.length > 1 && showPumpModes}
@@ -281,7 +281,7 @@
             <div
               class="flex items-center gap-2 px-2 py-1 text-xs hover:bg-accent/50"
             >
-              <PumpModeIcon {state} size={14} color={span.color} />
+              <PumpModeIcon state={state ?? ""} size={14} color={span.color ?? ""} />
               <span>{state}</span>
             </div>
           {/if}
@@ -305,11 +305,11 @@
     >
       {#each uniqueEventTypes.slice(0, 1) as eventType}
         {@const event = systemEvents.find((e) => e.eventType === eventType)}
-        {#if event}
+        {#if event && eventType}
           <SystemEventIcon
             {eventType}
             size={14}
-            color={showAlarms ? event.color : "var(--muted-foreground)"}
+            color={showAlarms ? (event.color ?? "var(--muted-foreground)") : "var(--muted-foreground)"}
           />
         {/if}
       {/each}

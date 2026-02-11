@@ -1,19 +1,12 @@
 <script lang="ts">
   import { Group } from "layerchart";
   import { DeviceEventIcon } from "$lib/components/icons";
-
-  type DeviceEventType =
-    | "Sensor Start"
-    | "Sensor Change"
-    | "Sensor Stop"
-    | "Site Change"
-    | "Insulin Change"
-    | "Pump Battery Change";
+  import type { DeviceEventType } from "$lib/api";
 
   interface Props {
     xPos: number;
     yPos: number;
-    eventType: DeviceEventType;
+    eventType?: DeviceEventType;
     color: string;
   }
 

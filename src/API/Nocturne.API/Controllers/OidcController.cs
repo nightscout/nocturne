@@ -16,7 +16,7 @@ namespace Nocturne.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("auth")]
-[Tags("Authentication")]
+[Tags("Oidc")]
 public class OidcController : ControllerBase
 {
     private readonly IOidcAuthService _authService;
@@ -258,6 +258,7 @@ public class OidcController : ControllerBase
     /// <returns>Logout result with optional provider logout URL</returns>
     [HttpPost("logout")]
     [NightscoutEndpoint("/auth/logout")]
+    [RemoteCommand]
     [ProducesResponseType(typeof(LogoutResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<LogoutResponse>> Logout([FromQuery] Guid? providerId = null)
     {

@@ -15,7 +15,7 @@
   } from "lucide-svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
-  import { getRetrospectiveAt } from "$lib/data/retrospective.remote";
+  import { getRetrospectiveData } from "$lib/data/generated";
 
   interface Props {
     /** Unix timestamp in milliseconds to fetch data for */
@@ -25,7 +25,7 @@
   let { time }: Props = $props();
 
   // Fetch retrospective data using remote function
-  const retrospectiveQuery = $derived(getRetrospectiveAt({ time }));
+  const retrospectiveQuery = $derived(getRetrospectiveData({ time }));
 
   // Get units preference
   const units = $derived(glucoseUnits.current);
@@ -239,7 +239,7 @@
         <Button
           variant="outline"
           size="sm"
-          onclick={() => getRetrospectiveAt({ time }).refresh()}
+          onclick={() => getRetrospectiveData({ time }).refresh()}
         >
           <RefreshCw class="h-4 w-4 mr-2" />
           Try Again

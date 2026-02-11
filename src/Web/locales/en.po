@@ -33,19 +33,16 @@ msgstr "Error ID: {0}"
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Meal Bolus"
 msgstr "Meal Bolus"
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Snack Bolus"
 msgstr "Snack Bolus"
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Correction Bolus"
 msgstr "Correction Bolus"
@@ -70,9 +67,6 @@ msgstr "Exercise"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 msgid "Site Change"
@@ -82,9 +76,6 @@ msgstr "Site Change"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Insulin Change"
@@ -99,9 +90,6 @@ msgstr "D.A.D. Alert"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Sensor Start"
 msgstr "Sensor Start"
@@ -110,9 +98,6 @@ msgstr "Sensor Start"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Sensor Change"
 msgstr "Sensor Change"
@@ -121,9 +106,6 @@ msgstr "Sensor Change"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Pump Battery Change"
 msgstr "Pump Battery Change"
@@ -491,6 +473,7 @@ msgstr "Expired"
 #: src/lib/stores/settings-store.svelte.ts
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
+#: src/routes/settings/data-quality/+page.svelte
 #: src/routes/settings/features/+page.svelte
 msgid "Failed to load settings"
 msgstr "Failed to load settings"
@@ -654,6 +637,7 @@ msgstr "In Range"
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/calendar/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -673,6 +657,7 @@ msgstr "Low"
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/calendar/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -1050,6 +1035,7 @@ msgstr "Comparison Error"
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1062,12 +1048,14 @@ msgstr "Comparison Error"
 #: src/routes/dashboard/analyses/[id]/+page.svelte
 #: src/routes/reports/battery/+page.svelte
 #: src/routes/reports/battery/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Unknown"
@@ -1422,6 +1410,8 @@ msgstr "Method"
 #: src/routes/compatibility/+page.svelte
 #: src/routes/compatibility/+page.svelte
 #: src/routes/meals/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "All"
 msgstr "All"
 
@@ -2865,7 +2855,6 @@ msgstr "Temp Basal"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
@@ -2875,19 +2864,15 @@ msgid "Bolus"
 msgstr "Bolus"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Bolus Wizard"
 msgstr "Bolus Wizard"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Combo Bolus"
 msgstr "Combo Bolus"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Sensor Stop"
 msgstr "Sensor Stop"
@@ -2897,9 +2882,6 @@ msgstr "Sensor Stop"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -2909,7 +2891,6 @@ msgstr "Sensor"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Site"
 msgstr "Site"
@@ -2917,7 +2898,6 @@ msgstr "Site"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Reservoir"
@@ -2926,7 +2906,6 @@ msgstr "Reservoir"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -2936,6 +2915,8 @@ msgstr "Battery"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
@@ -2943,7 +2924,6 @@ msgid "Automatic"
 msgstr "Automatic"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -2954,7 +2934,6 @@ msgstr "Custom"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock/ClockFaceRenderer.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "Tracker"
@@ -3489,9 +3468,8 @@ msgstr "Alarms"
 msgid "Notifications & Trackers"
 msgstr "Notifications & Trackers"
 
-#: src/lib/components/layout/AppSidebar.svelte
-msgid "Connectors"
-msgstr "Connectors"
+#~ msgid "Connectors"
+#~ msgstr "Connectors"
 
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/support/+page.svelte
@@ -5860,11 +5838,13 @@ msgstr "<0/> Additional Properties <1/>"
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/clock/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "<0/> Delete"
 msgstr "<0/> Delete"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Medium"
 msgstr "Medium"
 
@@ -8062,6 +8042,7 @@ msgstr "Average (mg/dL)"
 msgid "Median (mg/dL)"
 msgstr "Median (mg/dL)"
 
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Lowest (mg/dL)"
 msgstr "Lowest (mg/dL)"
@@ -8856,6 +8837,7 @@ msgid "Critical only"
 msgstr "Critical only"
 
 #: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Enabled"
 msgstr "Enabled"
 
@@ -9212,6 +9194,7 @@ msgstr "Update role details and permissions."
 msgid "Description of this role's purpose"
 msgstr "Description of this role's purpose"
 
+#: src/lib/components/settings/ConnectedApps.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "Permissions"
 msgstr "Permissions"
@@ -9837,6 +9820,7 @@ msgstr "Failed to start migration"
 msgid "Failed to cancel migration"
 msgstr "Failed to cancel migration"
 
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Pending"
 msgstr "Pending"
@@ -9941,6 +9925,8 @@ msgstr ""
 "Leave empty to import all data, or specify a range to import\n"
 "partial data."
 
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Start Date"
 msgstr "Start Date"
@@ -10675,17 +10661,14 @@ msgstr "Stale"
 msgid "Inactive"
 msgstr "Inactive"
 
-#: src/routes/settings/connectors/+page.svelte
-msgid "Services - Settings - Nocturne"
-msgstr "Services - Settings - Nocturne"
+#~ msgid "Services - Settings - Nocturne"
+#~ msgstr "Services - Settings - Nocturne"
 
-#: src/routes/settings/connectors/+page.svelte
-msgid "Data Sources & Services"
-msgstr "Data Sources & Services"
+#~ msgid "Data Sources & Services"
+#~ msgstr "Data Sources & Services"
 
-#: src/routes/settings/connectors/+page.svelte
-msgid "See what's sending data to Nocturne and set up new connections"
-msgstr "See what's sending data to Nocturne and set up new connections"
+#~ msgid "See what's sending data to Nocturne and set up new connections"
+#~ msgstr "See what's sending data to Nocturne and set up new connections"
 
 #: src/routes/settings/connectors/+page.svelte
 msgid "<0/> Active Data Sources"
@@ -10756,6 +10739,7 @@ msgstr "<0/> Manual Sync"
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Disabled"
 msgstr "Disabled"
 
@@ -12880,3 +12864,542 @@ msgstr "Exceeds tracker lifespan"
 #: src/lib/stores/settings-store.svelte.ts
 msgid "Validation error"
 msgstr "Validation error"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhook settings saved."
+msgstr "Webhook settings saved."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to save webhook settings."
+msgstr "Failed to save webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test sent to all webhooks."
+msgstr "Test sent to all webhooks."
+
+#. placeholder {0}: response.failedUrls.join(", ")
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed: {0}"
+msgstr "Failed: {0}"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Test failed."
+msgstr "Test failed."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Failed to test webhook settings."
+msgstr "Failed to test webhook settings."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Webhooks"
+msgstr "Webhooks"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
+msgid "Send alert events to external services"
+msgstr "Send alert events to external services"
+
+#~ msgid "Historical sync not supported."
+#~ msgstr "Historical sync not supported."
+
+#~ msgid "Historical sync limited to {0} days."
+#~ msgstr "Historical sync limited to {0} days."
+
+#~ msgid "Loading connector capabilities..."
+#~ msgstr "Loading connector capabilities..."
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Supported data types"
+msgstr "Supported data types"
+
+#~ msgid "Recent data only (last {0} days)."
+#~ msgstr "Recent data only (last {0} days)."
+
+#~ msgid "Historical sync is not supported for this connector. <0/>"
+#~ msgstr "Historical sync is not supported for this connector. <0/>"
+
+#~ msgid "Historical sync limited to the last {0} days."
+#~ msgstr "Historical sync limited to the last {0} days."
+
+#~ msgid "This connector only supports recent syncs."
+#~ msgstr "This connector only supports recent syncs."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Webhook Settings"
+msgstr "Webhook Settings"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Configure URLs and signature secrets for alarm notifications."
+msgstr "Configure URLs and signature secrets for alarm notifications."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
+msgid "Send Test"
+msgstr "Send Test"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+msgid "Webhook URLs"
+msgstr "Webhook URLs"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr "No webhook URLs configured."
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
+msgstr "<0/> Add URL"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Signature Secret"
+msgstr "Signature Secret"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret already configured"
+msgstr "Secret already configured"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "Secret will be generated on save"
+msgstr "Secret will be generated on save"
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
+msgid "The API signs each webhook with HMAC-SHA256 using this secret."
+msgstr "The API signs each webhook with HMAC-SHA256 using this secret."
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Sync Capabilities"
+msgstr "Sync Capabilities"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "What this connector supports for manual sync"
+msgstr "What this connector supports for manual sync"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Historical sync"
+msgstr "Historical sync"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Supported"
+msgstr "Supported"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Not supported"
+msgstr "Not supported"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Max historical days"
+msgstr "Max historical days"
+
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Manual sync"
+msgstr "Manual sync"
+
+#~ msgid "Sync started"
+#~ msgstr "Sync started"
+
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Data Quality"
+msgstr "Data Quality"
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorStart"
+msgstr "SensorStart"
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorChange"
+msgstr "SensorChange"
+
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorStop"
+msgstr "SensorStop"
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SiteChange"
+msgstr "SiteChange"
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "InsulinChange"
+msgstr "InsulinChange"
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "PumpBatteryChange"
+msgstr "PumpBatteryChange"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Data Quality - Settings - Nocturne"
+msgstr "Data Quality - Settings - Nocturne"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Configure how Nocturne handles data quality and analysis"
+msgstr "Configure how Nocturne handles data quality and analysis"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "<0/> Sleep Schedule"
+msgstr "<0/> Sleep Schedule"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Your typical sleep times are used for overnight analysis features"
+msgstr "Your typical sleep times are used for overnight analysis features"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Typical bedtime"
+msgstr "Typical bedtime"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Typical wake time"
+msgstr "Typical wake time"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "<0/> Compression Low Detection"
+msgstr "<0/> Compression Low Detection"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Automatically detect potential compression lows during sleep"
+msgstr "Automatically detect potential compression lows during sleep"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Enable automatic detection"
+msgstr "Enable automatic detection"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid ""
+"Nocturne will analyze your overnight data and notify you when potential compression\n"
+"lows are detected"
+msgstr ""
+"Nocturne will analyze your overnight data and notify you when potential compression\n"
+"lows are detected"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid "Exclude from statistics"
+msgstr "Exclude from statistics"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid ""
+"Don't include accepted compression lows when calculating Time in Range and other\n"
+"statistics"
+msgstr ""
+"Don't include accepted compression lows when calculating Time in Range and other\n"
+"statistics"
+
+#: src/routes/settings/data-quality/+page.svelte
+msgid ""
+"Compression lows are falsely low CGM readings caused by sleeping on your sensor. When\n"
+"detected, you'll be notified to review and confirm them."
+msgstr ""
+"Compression lows are falsely low CGM readings caused by sleeping on your sensor. When\n"
+"detected, you'll be notified to review and confirm them."
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Error Loading Data Quality Report"
+msgstr "Error Loading Data Quality Report"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Data Quality - Nocturne"
+msgstr "Data Quality - Nocturne"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Monitor and manage data exclusions"
+msgstr "Monitor and manage data exclusions"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Pending Review"
+msgstr "Pending Review"
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Accepted"
+msgstr "Accepted"
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Dismissed"
+msgstr "Dismissed"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Data Quality Categories"
+msgstr "Data Quality Categories"
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Compression Lows"
+msgstr "Compression Lows"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Falsely low readings from sleeping on sensor"
+msgstr "Falsely low readings from sleeping on sensor"
+
+#. placeholder {0}: pendingCount
+#: src/routes/reports/data-quality/+page.svelte
+msgid "{0} pending"
+msgstr "{0} pending"
+
+#. placeholder {0}: acceptedCount
+#: src/routes/reports/data-quality/+page.svelte
+msgid "{0} events"
+msgstr "{0} events"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Additional data quality categories coming soon"
+msgstr "Additional data quality categories coming soon"
+
+#. placeholder {0}: pendingCount
+#. placeholder {1}: pendingCount !== 1 ? 's' : ''
+#: src/routes/reports/data-quality/+page.svelte
+msgid "You have {0} item{1} waiting for review"
+msgstr "You have {0} item{1} waiting for review"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Review detected compression lows to improve your statistics accuracy"
+msgstr "Review detected compression lows to improve your statistics accuracy"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Review Now"
+msgstr "Review Now"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Run Detection"
+msgstr "Run Detection"
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Manually scan a date range for compression lows"
+msgstr "Manually scan a date range for compression lows"
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "End Date (optional)"
+msgstr "End Date (optional)"
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Run Detection"
+msgstr "<0/> Run Detection"
+
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Found {0} compression low(s) across {1} night(s)"
+msgstr "Found {0} compression low(s) across {1} night(s)"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Error Loading Compression Low History"
+msgstr "Error Loading Compression Low History"
+
+#. placeholder {0}: dateStr
+#. placeholder {1}: nextDayStr
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Night of {0}-{1}"
+msgstr "Night of {0}-{1}"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Compression Lows - Nocturne"
+msgstr "Compression Lows - Nocturne"
+
+#. placeholder {0}: pendingCount
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "{0} pending review"
+msgstr "{0} pending review"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Review history and manage exclusions"
+msgstr "Review history and manage exclusions"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Status:"
+msgstr "Status:"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "No compression lows detected yet"
+msgstr "No compression lows detected yet"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "When compression lows are detected during your sleep, they will appear here."
+msgstr "When compression lows are detected during your sleep, they will appear here."
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "No matching results"
+msgstr "No matching results"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Try changing your filter criteria."
+msgstr "Try changing your filter criteria."
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Unknown date"
+msgstr "Unknown date"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Drop Rate (mg/dL/min)"
+msgstr "Drop Rate (mg/dL/min)"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Recovery (min)"
+msgstr "Recovery (min)"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Selected Range"
+msgstr "Selected Range"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Exclusion Range"
+msgstr "Exclusion Range"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Drag the handles on the chart to adjust"
+msgstr "Drag the handles on the chart to adjust"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Accept"
+msgstr "<0/> Accept"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Dismiss"
+msgstr "<0/> Dismiss"
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Select a compression low to view details"
+msgstr "Select a compression low to view details"
+
+#~ msgid "Grants & Sharing"
+#~ msgstr "Grants & Sharing"
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "<0/> Viewing data for"
+msgstr "<0/> Viewing data for"
+
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "My Data"
+msgstr "My Data"
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Connectors & Apps"
+msgstr "Connectors & Apps"
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Followers & Sharing"
+msgstr "Followers & Sharing"
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Connectors & Apps - Settings - Nocturne"
+msgstr "Connectors & Apps - Settings - Nocturne"
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Connectors & Connected Apps"
+msgstr "Connectors & Connected Apps"
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Manage data sources, set up new connections, and control app access"
+msgstr "Manage data sources, set up new connections, and control app access"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View glucose readings"
+msgstr "View glucose readings"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View and record glucose readings"
+msgstr "View and record glucose readings"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View treatments"
+msgstr "View treatments"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View and record treatments"
+msgstr "View and record treatments"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View device status"
+msgstr "View device status"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View and update device status"
+msgstr "View and update device status"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View profile settings"
+msgstr "View profile settings"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View and update profile settings"
+msgstr "View and update profile settings"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View notifications"
+msgstr "View notifications"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Manage notifications"
+msgstr "Manage notifications"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View reports and analytics"
+msgstr "View reports and analytics"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View basic account info"
+msgstr "View basic account info"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Manage sharing settings"
+msgstr "Manage sharing settings"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "View all health data (read-only)"
+msgstr "View all health data (read-only)"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Full access including delete"
+msgstr "Full access including delete"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "App access revoked successfully."
+msgstr "App access revoked successfully."
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Failed to revoke access. Please try again."
+msgstr "Failed to revoke access. Please try again."
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Connected Apps"
+msgstr "Connected Apps"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "OAuth applications that have been authorized to access your data"
+msgstr "OAuth applications that have been authorized to access your data"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Add device"
+msgstr "<0/> Add device"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid ""
+"No connected applications. When you authorize apps to access your\n"
+"data, they will appear here."
+msgstr ""
+"No connected applications. When you authorize apps to access your\n"
+"data, they will appear here."
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Verified"
+msgstr "<0/> Verified"
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Revoke"
+msgstr "<0/> Revoke"
+
+#. placeholder {0}: formatDate(grant.createdAt)
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Created {0}"
+msgstr "<0/> Created {0}"
+
+#. placeholder {0}: formatDate(grant.lastUsedAt)
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "<0/> Last used {0}"
+msgstr "<0/> Last used {0}"

@@ -15,6 +15,8 @@ import type {
   FeatureSettings,
   NotificationSettings,
   ServicesSettings,
+  DataQualitySettings,
+  SecuritySettings,
 } from "$lib/api/api-client";
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
 import {
@@ -41,6 +43,8 @@ export class SettingsStore {
   features = $state<FeatureSettings | null>(null);
   notifications = $state<NotificationSettings | null>(null);
   services = $state<ServicesSettings | null>(null);
+  dataQuality = $state<DataQualitySettings | null>(null);
+  security = $state<SecuritySettings | null>(null);
 
   // xDrip+-style alarm configuration (stored separately for convenience)
   alarmConfiguration = $state<UserAlarmConfiguration>(createDefaultUserAlarmConfiguration());
@@ -106,6 +110,8 @@ export class SettingsStore {
       this.features = settings.features ? { ...settings.features } : null;
       this.notifications = settings.notifications ? { ...settings.notifications } : null;
       this.services = settings.services ? { ...settings.services } : null;
+      this.dataQuality = settings.dataQuality ? { ...settings.dataQuality } : null;
+      this.security = settings.security ? { ...settings.security } : null;
 
       // Load alarm configuration from notifications or create default
       if (settings.notifications?.alarmConfiguration) {
@@ -154,6 +160,8 @@ export class SettingsStore {
       features: this.features ?? undefined,
       notifications,
       services: this.services ?? undefined,
+      dataQuality: this.dataQuality ?? undefined,
+      security: this.security ?? undefined,
     };
   }
 
@@ -268,6 +276,7 @@ export class SettingsStore {
       this.features = this._rawSettings.features ? { ...this._rawSettings.features } : null;
       this.notifications = this._rawSettings.notifications ? { ...this._rawSettings.notifications } : null;
       this.services = this._rawSettings.services ? { ...this._rawSettings.services } : null;
+      this.dataQuality = this._rawSettings.dataQuality ? { ...this._rawSettings.dataQuality } : null;
       this._hasChanges = false;
     }
   }

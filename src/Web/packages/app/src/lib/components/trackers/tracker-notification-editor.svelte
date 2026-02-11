@@ -7,14 +7,7 @@
   import { Plus, Trash2 } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { NotificationUrgency } from "$api";
-
-  export interface TrackerNotification {
-    id?: string; // For existing thresholds (from API)
-    urgency: NotificationUrgency;
-    hours: number | undefined;
-    description?: string;
-    displayOrder?: number;
-  }
+  import type { TrackerNotification } from "./types";
 
   interface Props {
     /** The notifications array (bindable) */

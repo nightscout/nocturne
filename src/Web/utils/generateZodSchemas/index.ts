@@ -3,7 +3,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { jsonSchemaToZod } from "json-schema-to-zod";
+import { z } from "zod";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,7 +25,7 @@ interface OpenApiSchema {
 }
 
 function generateZodSchemas(): void {
-  console.log("Generating Zod schemas from OpenAPI spec...");
+  console.log("Generating Zod schemas from OpenAPI spec using z.fromJSONSchema()...");
 
   if (!fs.existsSync(OPENAPI_PATH)) {
     console.error(`OpenAPI spec not found at: ${OPENAPI_PATH}`);
@@ -54,46 +54,43 @@ function generateZodSchemas(): void {
     "",
   ];
 
-  // Build a map of all schema names for reference resolution
-  const schemaNameSet = new Set(schemaNames);
+  let successCount = 0;
+  let fallbackCount = 0;
 
   for (const [name, schema] of Object.entries(schemas)) {
     try {
-      // Convert JSON Schema to Zod, replacing $ref with lazy references
-      const schemaWithResolvedRefs = resolveRefsForGeneration(schema, schemaNameSet);
+      // Resolve $refs by inlining referenced schemas, strip x- extensions
+      const resolved = resolveSchema(schema, schemas);
+      const jsonSchemaStr = JSON.stringify(resolved);
 
-      const zodCode = jsonSchemaToZod(schemaWithResolvedRefs, {
-        name: undefined, // We'll handle naming ourselves
-        module: "none",
-        noImport: true,
-        withJsdocs: true,
-      });
+      // Validate at generation time
+      z.fromJSONSchema(resolved as z.JSONSchema, { defaultTarget: "openapi-3.0" });
 
-      lines.push(`export const ${name}Schema = ${zodCode};`);
-      lines.push(`export type ${name} = z.infer<typeof ${name}Schema>;`);
+      lines.push(`export const ${name}Schema = z.fromJSONSchema(${jsonSchemaStr} as const, { defaultTarget: "openapi-3.0" });`);
+      lines.push(`export type ${name} = z.output<typeof ${name}Schema>;`);
       lines.push("");
+      successCount++;
     } catch (err) {
-      console.warn(`Warning: Failed to convert schema '${name}':`, err);
-      // Generate a fallback z.any() schema
+      console.warn(`Warning: Failed to convert schema '${name}':`, (err as Error).message ?? err);
       lines.push(`// Failed to generate schema for ${name}`);
       lines.push(`export const ${name}Schema = z.any();`);
-      lines.push(`export type ${name} = z.infer<typeof ${name}Schema>;`);
+      lines.push(`export type ${name} = z.output<typeof ${name}Schema>;`);
       lines.push("");
+      fallbackCount++;
     }
   }
 
-  // Write the output file
   const output = lines.join("\n");
   fs.writeFileSync(OUTPUT_PATH, output, "utf8");
-  console.log(`Generated ${schemaNames.length} Zod schemas at: ${OUTPUT_PATH}`);
+  console.log(`Generated ${successCount} Zod schemas (${fallbackCount} fallbacks) at: ${OUTPUT_PATH}`);
 }
 
 /**
- * Resolve $ref references to inline schemas or replace with z.any() for circular refs
+ * Resolve $ref by inlining referenced schemas, and strip x- vendor extensions.
  */
-function resolveRefsForGeneration(
+function resolveSchema(
   schema: unknown,
-  schemaNames: Set<string>,
+  allSchemas: Record<string, object>,
   visited = new Set<string>()
 ): unknown {
   if (schema === null || typeof schema !== "object") {
@@ -101,37 +98,37 @@ function resolveRefsForGeneration(
   }
 
   if (Array.isArray(schema)) {
-    return schema.map((item) => resolveRefsForGeneration(item, schemaNames, visited));
+    return schema.map((item) => resolveSchema(item, allSchemas, visited));
   }
 
   const obj = schema as Record<string, unknown>;
 
-  // Handle $ref
+  // Handle $ref - inline the referenced schema
   if ("$ref" in obj && typeof obj.$ref === "string") {
-    const refPath = obj.$ref as string;
-    // Extract schema name from "#/components/schemas/SchemaName"
-    const match = refPath.match(/#\/components\/schemas\/(\w+)/);
+    const match = (obj.$ref as string).match(/#\/components\/schemas\/(\w+)/);
     if (match) {
       const refName = match[1];
       if (visited.has(refName)) {
-        // Circular reference - use z.any()
         return {};
       }
-      // For now, inline as z.any() to avoid complex lazy references
-      // A more sophisticated approach would use z.lazy()
-      return {};
+      const refSchema = allSchemas[refName];
+      if (refSchema) {
+        const newVisited = new Set(visited);
+        newVisited.add(refName);
+        return resolveSchema(refSchema, allSchemas, newVisited);
+      }
     }
+    return {};
   }
 
-  // Recursively process all properties
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
-    result[key] = resolveRefsForGeneration(value, schemaNames, visited);
+    if (key.startsWith("x-")) continue;
+    result[key] = resolveSchema(value, allSchemas, visited);
   }
   return result;
 }
 
-// Run the generation
 generateZodSchemas();
 
 export default generateZodSchemas;

@@ -47,7 +47,7 @@
     Palette,
     Timer,
     Layers,
-    Bug,
+    ShieldCheck,
     Shield,
     Eye,
   } from "lucide-svelte";
@@ -66,8 +66,8 @@
   let selectedValue = $state<string>("__self__");
 
   /**
-   * Fetch available follower targets from the API.
-   * Gracefully handles 404 or errors (endpoint may not exist yet).
+   * Fetch available follower targets from the API. Gracefully handles 404 or
+   * errors (endpoint may not exist yet).
    */
   async function loadFollowerTargets() {
     try {
@@ -103,8 +103,8 @@
   }
 
   /**
-   * Format a target for display.
-   * Shows "{displayName} ({label})" if label is present, otherwise just "{displayName}".
+   * Format a target for display. Shows "{displayName} ({label})" if label is
+   * present, otherwise just "{displayName}".
    */
   function formatTargetLabel(target: ActingAsTarget): string {
     const name = target.displayName || target.email || "Unknown";
@@ -191,6 +191,11 @@
           href: "/reports/site-change-impact",
           icon: Syringe,
         },
+        {
+          title: "Data Quality",
+          href: "/reports/data-quality",
+          icon: ShieldCheck,
+        },
       ],
     },
     {
@@ -222,7 +227,7 @@
           title: "Test Endpoint Compatibility",
           href: "/compatibility/test",
           icon: TestTube,
-        }
+        },
       ],
     },
     {
@@ -233,14 +238,19 @@
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         { title: "Features", href: "/settings/features", icon: Sparkles },
+        {
+          title: "Data Quality",
+          href: "/settings/data-quality",
+          icon: ShieldCheck,
+        },
         { title: "Alarms", href: "/settings/alarms", icon: Bell },
         {
           title: "Notifications & Trackers",
           href: "/settings/trackers",
           icon: Timer,
         },
-        { title: "Connectors", href: "/settings/connectors", icon: Plug },
-        { title: "Grants & Sharing", href: "/settings/grants", icon: Shield },
+        { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
+        { title: "Followers & Sharing", href: "/settings/security", icon: Shield },
         {
           title: "Support & Community",
           href: "/settings/support",
@@ -273,11 +283,11 @@
     }
 
     if (item.href) {
-      return page.url.pathname.startsWith(item.href)
+      return page.url.pathname.startsWith(item.href);
     }
 
     if (item.children) {
-      return item.children.some(child => isActive(child));
+      return item.children.some((child) => isActive(child));
     }
 
     return false;
@@ -324,7 +334,9 @@
   <!-- Follower target selector (only visible when targets are available) -->
   {#if targets.length > 0}
     <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
-      <p class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+      <p
+        class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
+      >
         <Eye class="h-3 w-3" />
         Viewing data for
       </p>
@@ -430,7 +442,8 @@
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
           <LanguageSelector
             onLanguageChange={user
-              ? (locale: string) => updateLanguagePreference({ preferredLanguage: locale })
+              ? (locale: string) =>
+                  updateLanguagePreference({ preferredLanguage: locale })
               : undefined}
           />
         </Sidebar.MenuItem>

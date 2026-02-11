@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -85,6 +86,7 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing entries and optional thresholds</param>
     /// <returns>Time in range metrics including percentages, durations, and episodes</returns>
     [HttpPost("time-in-range")]
+    [RemoteQuery]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
     public ActionResult<TimeInRangeMetrics> CalculateTimeInRange(
         [FromBody] TimeInRangeRequest request
@@ -135,6 +137,7 @@ public class StatisticsController : ControllerBase
     /// <param name="entries">Array of glucose entries</param>
     /// <returns>Collection of averaged statistics for each hour</returns>
     [HttpPost("averaged-stats")]
+    [RemoteQuery]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
     public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
         [FromBody] Entry[] entries
@@ -498,6 +501,7 @@ public class StatisticsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Multi-period statistics with comprehensive analytics for each time period</returns>
     [HttpGet("periods")]
+    [RemoteQuery]
     public async Task<ActionResult<MultiPeriodStatistics>> GetMultiPeriodStatistics(
         CancellationToken cancellationToken = default
     )
@@ -780,6 +784,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period</param>
     /// <returns>Daily basal/bolus ratio breakdown with averages</returns>
     [HttpGet("daily-basal-bolus-ratios")]
+    [RemoteQuery]
     public async Task<ActionResult<DailyBasalBolusRatioResponse>> GetDailyBasalBolusRatios(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate
@@ -824,6 +829,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period</param>
     /// <returns>Comprehensive insulin delivery statistics</returns>
     [HttpGet("insulin-delivery-stats")]
+    [RemoteQuery]
     public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate
@@ -864,6 +870,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period</param>
     /// <returns>Comprehensive basal analysis with stats, temp basal info, and hourly percentiles</returns>
     [HttpGet("basal-analysis")]
+    [RemoteQuery]
     public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate

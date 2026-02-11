@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
@@ -8,13 +7,18 @@
     Shield,
     ShieldAlert,
     AlertTriangle,
-    ExternalLink,
     Check,
     X,
     Smartphone,
+    Loader2,
   } from "lucide-svelte";
+  import {
+    lookupDeviceForm,
+    approveDeviceForm,
+    denyDeviceForm,
+  } from "../oauth.remote";
 
-  const { data, form } = $props();
+  const { data } = $props();
 
   /** Human-readable descriptions for each OAuth scope. */
   const scopeDescriptions: Record<string, string> = {
@@ -37,18 +41,31 @@
 
   let codeInput = $state(data.prefilledCode ?? "");
 
+  // Get device info from lookup form result
   const deviceInfo = $derived(
-    form && "deviceInfo" in form ? form.deviceInfo : null
+    lookupDeviceForm.result && "deviceInfo" in lookupDeviceForm.result
+      ? lookupDeviceForm.result.deviceInfo
+      : null
   );
+
+  // Check for approval/denial results
   const approved = $derived(
-    form && "action" in form && form.action === "approve" && "success" in form && form.success
+    approveDeviceForm.result &&
+      "success" in approveDeviceForm.result &&
+      approveDeviceForm.result.success
   );
   const denied = $derived(
-    form && "action" in form && form.action === "deny" && "denied" in form && form.denied
+    denyDeviceForm.result &&
+      "denied" in denyDeviceForm.result &&
+      denyDeviceForm.result.denied
   );
-  const formError = $derived(
-    form && "error" in form ? (form.error as string) : null
-  );
+
+  // Collect all form-level issues
+  const allIssues = $derived([
+    ...(lookupDeviceForm.fields.allIssues() ?? []),
+    ...(approveDeviceForm.fields.allIssues() ?? []),
+    ...(denyDeviceForm.fields.allIssues() ?? []),
+  ]);
 
   const scopes = $derived(
     deviceInfo ? (deviceInfo.scopes as string[]).filter(Boolean) : []
@@ -128,20 +145,6 @@
               approve if you trust this application.
             </p>
           </div>
-        {:else if deviceInfo.homepage}
-          <div
-            class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
-          >
-            <a
-              href={deviceInfo.homepage as string}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="inline-flex items-center gap-1 hover:text-foreground"
-            >
-              {deviceInfo.homepage}
-              <ExternalLink class="h-3 w-3" />
-            </a>
-          </div>
         {/if}
 
         <Separator />
@@ -183,30 +186,54 @@
 
         <Separator />
 
-        {#if formError}
+        {#each allIssues as issue}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >
             <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <p class="text-sm text-destructive">{formError}</p>
+            <p class="text-sm text-destructive">{issue.message}</p>
           </div>
-        {/if}
+        {/each}
 
-        <form method="POST" use:enhance class="flex gap-3">
-          <input type="hidden" name="user_code" value={deviceInfo.userCode} />
-
-          <Button
-            type="submit"
-            formaction="?/deny"
-            variant="outline"
+        <div class="flex gap-3">
+          <form
+            {...denyDeviceForm.enhance(async ({ submit }) => {
+              await submit();
+            })}
             class="flex-1"
           >
-            Deny
-          </Button>
-          <Button type="submit" formaction="?/approve" class="flex-1">
-            Approve
-          </Button>
-        </form>
+            <input type="hidden" name="user_code" value={deviceInfo.userCode} />
+            <Button
+              type="submit"
+              variant="outline"
+              class="w-full"
+              disabled={!!denyDeviceForm.pending}
+            >
+              {#if denyDeviceForm.pending}
+                <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              {/if}
+              Deny
+            </Button>
+          </form>
+          <form
+            {...approveDeviceForm.enhance(async ({ submit }) => {
+              await submit();
+            })}
+            class="flex-1"
+          >
+            <input type="hidden" name="user_code" value={deviceInfo.userCode} />
+            <Button
+              type="submit"
+              class="w-full"
+              disabled={!!approveDeviceForm.pending}
+            >
+              {#if approveDeviceForm.pending}
+                <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              {/if}
+              Approve
+            </Button>
+          </form>
+        </div>
       </Card.Content>
     {:else}
       <!-- State 1: Code Entry -->
@@ -225,16 +252,21 @@
       </Card.Header>
 
       <Card.Content class="space-y-4">
-        {#if formError}
+        {#each lookupDeviceForm.fields.allIssues() ?? [] as issue}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >
             <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <p class="text-sm text-destructive">{formError}</p>
+            <p class="text-sm text-destructive">{issue.message}</p>
           </div>
-        {/if}
+        {/each}
 
-        <form method="POST" action="?/lookup" use:enhance class="space-y-4">
+        <form
+          {...lookupDeviceForm.enhance(async ({ submit }) => {
+            await submit();
+          })}
+          class="space-y-4"
+        >
           <Input
             type="text"
             name="user_code"
@@ -243,8 +275,16 @@
             autocomplete="off"
             class="text-center text-lg tracking-widest uppercase"
             bind:value={codeInput}
+            disabled={!!lookupDeviceForm.pending}
           />
-          <Button type="submit" class="w-full">
+          <Button
+            type="submit"
+            class="w-full"
+            disabled={!!lookupDeviceForm.pending}
+          >
+            {#if lookupDeviceForm.pending}
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+            {/if}
             Continue
           </Button>
         </form>

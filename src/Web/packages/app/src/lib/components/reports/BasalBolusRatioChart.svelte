@@ -1,7 +1,7 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
   import type { DailyBasalBolusRatioResponse } from "$lib/api";
-  import { getDailyBasalBolusRatios } from "$lib/data/statistics.remote";
+  import { getDailyBasalBolusRatios } from "$lib/data/generated";
   import { PieChart } from "lucide-svelte";
   import { resource } from "runed";
 

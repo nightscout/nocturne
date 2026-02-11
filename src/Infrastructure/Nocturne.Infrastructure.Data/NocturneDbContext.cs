@@ -255,6 +255,10 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<FollowerInviteEntity> FollowerInvites { get; set; }
 
+    /// <summary>
+    /// Gets or sets the CompressionLowSuggestions table for compression low detection
+    /// </summary>
+    public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
 
     /// <summary>
     /// Configure the database model and relationships
@@ -1035,7 +1039,12 @@ public class NocturneDbContext : DbContext
 
         modelBuilder
             .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.CanonicalId, l.IsPrimary })
+            .HasIndex(l => new
+            {
+                l.RecordType,
+                l.CanonicalId,
+                l.IsPrimary,
+            })
             .HasDatabaseName("ix_linked_records_type_canonical_primary");
 
         modelBuilder
@@ -1079,7 +1088,12 @@ public class NocturneDbContext : DbContext
 
         modelBuilder
             .Entity<InAppNotificationEntity>()
-            .HasIndex(n => new { n.UserId, n.Type, n.IsArchived })
+            .HasIndex(n => new
+            {
+                n.UserId,
+                n.Type,
+                n.IsArchived,
+            })
             .HasDatabaseName("ix_in_app_notifications_user_type_archived");
 
         modelBuilder
@@ -1205,6 +1219,17 @@ public class NocturneDbContext : DbContext
             .HasIndex(cf => new { cf.UserId, cf.CreatedAt })
             .HasDatabaseName("ix_clock_faces_user_created_at")
             .IsDescending(false, true);
+
+        // CompressionLowSuggestions indexes
+        modelBuilder
+            .Entity<CompressionLowSuggestionEntity>()
+            .HasIndex(e => e.NightOf)
+            .HasDatabaseName("ix_compression_low_suggestions_night_of");
+
+        modelBuilder
+            .Entity<CompressionLowSuggestionEntity>()
+            .HasIndex(e => e.Status)
+            .HasDatabaseName("ix_compression_low_suggestions_status");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1340,6 +1365,11 @@ public class NocturneDbContext : DbContext
             .HasValueGenerator<GuidV7ValueGenerator>();
 
         modelBuilder
+            .Entity<CompressionLowSuggestionEntity>()
+            .Property(c => c.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
             .HasOne(e => e.Food)
             .WithMany()
@@ -1352,7 +1382,6 @@ public class NocturneDbContext : DbContext
             .WithMany()
             .HasForeignKey(e => e.MatchedTreatmentId)
             .OnDelete(DeleteBehavior.SetNull);
-
 
         // Configure automatic timestamp updates
         modelBuilder
@@ -1687,7 +1716,6 @@ public class NocturneDbContext : DbContext
         // Configure Role entity defaults
         modelBuilder.Entity<RoleEntity>(entity =>
         {
-            entity.Property(e => e.Permissions).HasDefaultValue(new List<string>());
             entity.Property(e => e.IsSystemRole).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity
@@ -1725,10 +1753,6 @@ public class NocturneDbContext : DbContext
         // Configure OIDC Provider entity defaults
         modelBuilder.Entity<OidcProviderEntity>(entity =>
         {
-            entity
-                .Property(e => e.Scopes)
-                .HasDefaultValue(new List<string> { "openid", "profile", "email" });
-            entity.Property(e => e.DefaultRoles).HasDefaultValue(new List<string> { "readable" });
             entity.Property(e => e.ClaimMappingsJson).HasDefaultValue("{}");
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
@@ -1852,7 +1876,6 @@ public class NocturneDbContext : DbContext
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
             entity.Property(e => e.GrantType).HasDefaultValue(OAuthGrantTypes.App);
-            entity.Property(e => e.Scopes).HasDefaultValue(new List<string>());
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
@@ -1898,7 +1921,6 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<OAuthDeviceCodeEntity>(entity =>
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
-            entity.Property(e => e.Scopes).HasDefaultValue(new List<string>());
             entity.Property(e => e.Interval).HasDefaultValue(5);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -1913,7 +1935,6 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<OAuthAuthorizationCodeEntity>(entity =>
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
-            entity.Property(e => e.Scopes).HasDefaultValue(new List<string>());
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
@@ -1933,7 +1954,6 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<FollowerInviteEntity>(entity =>
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
-            entity.Property(e => e.Scopes).HasDefaultValue(new List<string>());
             entity.Property(e => e.UseCount).HasDefaultValue(0);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -1963,7 +1983,6 @@ public class NocturneDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .ValueGeneratedOnAddOrUpdate();
         });
-
     }
 
     /// <summary>

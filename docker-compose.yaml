@@ -57,6 +57,7 @@ services:
       services__mylife-connector__http__0: "http://mylife-connector:${MYLIFE_CONNECTOR_PORT}"
       TCONNECTSYNC_CONNECTOR_HTTP: "http://tconnectsync-connector:8000"
       services__tconnectsync-connector__http__0: "http://tconnectsync-connector:8000"
+      API_SECRET: "${API_SECRET}"
       DemoService__Enabled: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://compose-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models.Configuration;
@@ -17,6 +18,7 @@ namespace Nocturne.API.Controllers.V4;
 /// </summary>
 [ApiController]
 [Route("api/v4/ui-settings")]
+[ClientPropertyName("uiSettings")]
 public class UISettingsController : ControllerBase
 {
     private readonly ILogger<UISettingsController> _logger;
@@ -927,6 +929,7 @@ public class UISettingsController : ControllerBase
             Features = GenerateDefaultFeatureSettings(),
             Notifications = GenerateDefaultNotificationSettings(),
             Services = GenerateDefaultServicesSettings(),
+            Security = new SecuritySettings(),
         };
     }
 
@@ -941,6 +944,7 @@ public class UISettingsController : ControllerBase
             Features = GenerateDefaultFeatureSettings(),
             Notifications = GenerateDefaultNotificationSettings(),
             Services = new ServicesSettings { AvailableServices = GenerateAvailableServices() },
+            Security = new SecuritySettings(),
         };
     }
 

@@ -2,6 +2,8 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Label } from "$lib/components/ui/label";
   import {
     Shield,
     ShieldAlert,
@@ -9,7 +11,10 @@
     ExternalLink,
     Check,
     ShieldPlus,
+    Clock,
+    Loader2,
   } from "lucide-svelte";
+  import { consentForm } from "../oauth.remote";
 
   const { data } = $props();
 
@@ -53,9 +58,13 @@
   );
 
   /** Whether this is a scope upgrade (has both new and existing scopes). */
-  const isScopeUpgrade = $derived(
-    hasExistingScopes && newScopes.length > 0
-  );
+  const isScopeUpgrade = $derived(hasExistingScopes && newScopes.length > 0);
+
+  /** State for the "limit to 24 hours" checkbox */
+  let limitTo24Hours = $state(false);
+
+  // Get form-level issues for error display
+  const formIssues = $derived(consentForm.fields.allIssues() ?? []);
 </script>
 
 <svelte:head>
@@ -75,11 +84,11 @@
       </Card.Title>
       <Card.Description>
         {#if isScopeUpgrade}
-          <span class="font-semibold text-foreground">{appName}</span> is requesting
-          additional access to your Nocturne data.
+          <span class="font-semibold text-foreground">{appName}</span>
+          is requesting additional access to your Nocturne data.
         {:else}
-          <span class="font-semibold text-foreground">{appName}</span> wants to access
-          your Nocturne data.
+          <span class="font-semibold text-foreground">{appName}</span>
+          wants to access your Nocturne data.
         {/if}
       </Card.Description>
     </Card.Header>
@@ -207,26 +216,104 @@
 
       <Separator />
 
-      <form method="POST" class="flex gap-3">
-        <input type="hidden" name="client_id" value={data.clientId} />
-        <input type="hidden" name="redirect_uri" value={data.redirectUri} />
-        <input type="hidden" name="scope" value={data.scope} />
-        <input type="hidden" name="state" value={data.state} />
-        <input type="hidden" name="code_challenge" value={data.codeChallenge} />
+      <!-- Data access restriction option -->
+      <div class="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+        <Clock class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div class="flex-1 space-y-1">
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="limit-24-hours"
+              bind:checked={limitTo24Hours}
+              aria-describedby="limit-24-hours-description"
+            />
+            <Label
+              for="limit-24-hours"
+              class="text-sm font-medium cursor-pointer"
+            >
+              Only share data from the last 24 hours
+            </Label>
+          </div>
+          <p
+            id="limit-24-hours-description"
+            class="text-xs text-muted-foreground"
+          >
+            When enabled, this app will only be able to access data from the
+            last 24 hours. Historical reports will show a notice that data is
+            limited.
+          </p>
+        </div>
+      </div>
 
-        <Button
-          type="submit"
-          name="approved"
-          value="false"
-          variant="outline"
+      <Separator />
+
+      {#each formIssues as issue}
+        <div
+          class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
+        >
+          <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <p class="text-sm text-destructive">{issue.message}</p>
+        </div>
+      {/each}
+
+      <div class="flex gap-3">
+        <form
+          {...consentForm.enhance(async ({ submit }) => {
+            await submit();
+          })}
           class="flex-1"
         >
-          Deny
-        </Button>
-        <Button type="submit" name="approved" value="true" class="flex-1">
-          Approve
-        </Button>
-      </form>
+          <input type="hidden" name="client_id" value={data.clientId} />
+          <input type="hidden" name="redirect_uri" value={data.redirectUri} />
+          <input type="hidden" name="scope" value={data.scope} />
+          <input type="hidden" name="state" value={data.state} />
+          <input type="hidden" name="code_challenge" value={data.codeChallenge} />
+          <input type="hidden" name="approved" value="false" />
+          <input
+            type="hidden"
+            name="limit_to_24_hours"
+            value={limitTo24Hours ? "true" : "false"}
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            class="w-full"
+            disabled={!!consentForm.pending}
+          >
+            {#if consentForm.pending}
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+            {/if}
+            Deny
+          </Button>
+        </form>
+        <form
+          {...consentForm.enhance(async ({ submit }) => {
+            await submit();
+          })}
+          class="flex-1"
+        >
+          <input type="hidden" name="client_id" value={data.clientId} />
+          <input type="hidden" name="redirect_uri" value={data.redirectUri} />
+          <input type="hidden" name="scope" value={data.scope} />
+          <input type="hidden" name="state" value={data.state} />
+          <input type="hidden" name="code_challenge" value={data.codeChallenge} />
+          <input type="hidden" name="approved" value="true" />
+          <input
+            type="hidden"
+            name="limit_to_24_hours"
+            value={limitTo24Hours ? "true" : "false"}
+          />
+          <Button
+            type="submit"
+            class="w-full"
+            disabled={!!consentForm.pending}
+          >
+            {#if consentForm.pending}
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+            {/if}
+            Approve
+          </Button>
+        </form>
+      </div>
     </Card.Content>
   </Card.Root>
 </div>

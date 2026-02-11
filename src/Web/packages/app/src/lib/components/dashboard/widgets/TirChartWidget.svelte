@@ -2,7 +2,7 @@
   import WidgetCard from "./WidgetCard.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { TrendingUp, TrendingDown, Minus } from "lucide-svelte";
-  import { getMultiPeriodStatistics } from "$lib/data/statistics.remote";
+  import { getMultiPeriodStatistics } from "$lib/data/generated";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "$lib/components/ui/button";
 
@@ -10,7 +10,7 @@
   let showAverage = $state(false);
 
   // Fetch statistics from backend (includes 1-day, 90-day data)
-  const statsPromise = $derived(getMultiPeriodStatistics({}));
+  const statsPromise = $derived(getMultiPeriodStatistics());
 
   // Responsive breakpoint - use horizontal for larger screens (>= 640px / sm breakpoint)
   const isLargeScreen = new MediaQuery("(min-width: 640px)");

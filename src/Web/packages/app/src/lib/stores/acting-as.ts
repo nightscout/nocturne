@@ -34,6 +34,10 @@ export const followerTargets = writable<ActingAsTarget[]>([]);
  */
 export function getActingAsHeaders(): Record<string, string> {
   let current: ActingAsTarget | null = null;
-  actingAs.subscribe((v) => (current = v))();
-  return current ? { "X-Acting-As": current.subjectId } : {};
+  const unsubscribe = actingAs.subscribe((v) => (current = v));
+  unsubscribe();
+  if (current) {
+    return { "X-Acting-As": (current as ActingAsTarget).subjectId };
+  }
+  return {};
 }

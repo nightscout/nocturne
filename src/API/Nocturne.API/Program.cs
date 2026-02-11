@@ -11,6 +11,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.OpenApi;
 using Nocturne.API.Services;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Notifiers;
@@ -149,6 +150,9 @@ builder.Services.AddOpenApi();
 // Add OpenAPI document generation with NSwag
 builder.Services.AddOpenApiDocument(config =>
 {
+    // Add remote function metadata processor
+    config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
+
     config.PostProcess = document =>
     {
         document.Info.Version = "v1";
@@ -313,6 +317,15 @@ builder.Services.AddRateLimiter(options =>
 
 // Statistics service for analytics and calculations
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
+
+// Compression low detection services
+builder.Services.AddScoped<ICompressionLowRepository, CompressionLowRepository>();
+builder.Services.AddScoped<ICompressionLowService, CompressionLowService>();
+builder.Services.AddSingleton<CompressionLowDetectionService>();
+builder.Services.AddSingleton<ICompressionLowDetectionService>(sp =>
+    sp.GetRequiredService<CompressionLowDetectionService>()
+);
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CompressionLowDetectionService>());
 
 // Data source service for services/connectors management
 builder.Services.AddScoped<IDataSourceService, DataSourceService>();
@@ -480,6 +493,7 @@ builder.Services.AddScoped<
 >();
 builder.Services.AddScoped<IClockFaceService, ClockFaceService>();
 builder.Services.AddScoped<IWidgetSummaryService, WidgetSummaryService>();
+builder.Services.AddScoped<IChartDataService, ChartDataService>();
 
 // Note: Processing status service is registered by AddNocturneMemoryCache
 
@@ -565,6 +579,9 @@ app.UseMiddleware<AuthenticationMiddleware>();
 
 // Add follower access middleware (handles X-Acting-As header for data sharing)
 app.UseMiddleware<FollowerAccessMiddleware>();
+
+// Add site security middleware (enforces authentication when site lockdown is enabled)
+app.UseMiddleware<SiteSecurityMiddleware>();
 
 // Add authentication and authorization middleware
 app.UseAuthentication();

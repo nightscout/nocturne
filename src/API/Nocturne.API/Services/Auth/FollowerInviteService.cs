@@ -60,6 +60,7 @@ public class FollowerInviteService : IFollowerInviteService
         string? label = null,
         TimeSpan? expiresIn = null,
         int? maxUses = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         // Validate scopes - only allow read scopes for followers
@@ -93,14 +94,15 @@ public class FollowerInviteService : IFollowerInviteService
             MaxUses = maxUses,
             UseCount = 0,
             CreatedAt = DateTime.UtcNow,
+            LimitTo24Hours = limitTo24Hours,
         };
 
         _dbContext.FollowerInvites.Add(entity);
         await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation(
-            "FollowerInviteAudit: {Event} invite_id={InviteId} owner_id={OwnerId} scopes={Scopes} expires_at={ExpiresAt}",
-            "invite_created", entity.Id, ownerSubjectId, string.Join(" ", scopeList), entity.ExpiresAt);
+            "FollowerInviteAudit: {Event} invite_id={InviteId} owner_id={OwnerId} scopes={Scopes} expires_at={ExpiresAt} limit_24h={Limit24Hours}",
+            "invite_created", entity.Id, ownerSubjectId, string.Join(" ", scopeList), entity.ExpiresAt, limitTo24Hours);
 
         // Build invite URL
         var baseUrl = _oidcOptions.BaseUrl?.TrimEnd('/') ?? "";
@@ -176,12 +178,14 @@ public class FollowerInviteService : IFollowerInviteService
         if (existingGrant != null)
             return AcceptInviteResult.Failed("already_following", "You are already following this user.");
 
-        // Create the follower grant
+        // Create the follower grant with invite linkage, passing through the 24h limit setting
         var grant = await _grantService.CreateFollowerGrantAsync(
             entity.OwnerSubjectId,
             followerSubjectId,
             entity.Scopes,
             entity.Label,
+            entity.Id,
+            limitTo24Hours: entity.LimitTo24Hours,
             ct);
 
         // Increment use count
@@ -202,6 +206,8 @@ public class FollowerInviteService : IFollowerInviteService
     {
         var entities = await _dbContext.FollowerInvites
             .Include(i => i.Owner)
+            .Include(i => i.CreatedGrants)
+                .ThenInclude(g => g.FollowerSubject)
             .Where(i => i.OwnerSubjectId == ownerSubjectId)
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(ct);
@@ -250,6 +256,17 @@ public class FollowerInviteService : IFollowerInviteService
             IsValid = entity.IsValid,
             IsExpired = entity.IsExpired,
             IsRevoked = entity.IsRevoked,
+            LimitTo24Hours = entity.LimitTo24Hours,
+            UsedBy = entity.CreatedGrants
+                .Where(g => g.RevokedAt == null)
+                .Select(g => new InviteUsage
+                {
+                    FollowerSubjectId = g.FollowerSubjectId ?? Guid.Empty,
+                    FollowerName = g.FollowerSubject?.Name,
+                    FollowerEmail = g.FollowerSubject?.Email,
+                    UsedAt = g.CreatedAt,
+                })
+                .ToList(),
         };
     }
 }
