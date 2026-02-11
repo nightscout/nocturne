@@ -4,6 +4,7 @@ using H.NotifyIcon.Core;
 using Microsoft.UI.Xaml;
 using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
+using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Desktop.Tray.TrayIcon;
 

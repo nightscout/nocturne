@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
+using Nocturne.Widget.Contracts;
 using Windows.UI;
 
 namespace Nocturne.Desktop.Tray.Views;

@@ -1,18 +1,21 @@
 using Microsoft.UI;
+using Nocturne.Widget.Contracts;
+using Nocturne.Widget.Contracts.Helpers;
 using Windows.UI;
 
 namespace Nocturne.Desktop.Tray.Helpers;
 
 /// <summary>
-/// Maps glucose values to colors based on configured thresholds,
-/// and provides formatting utilities for glucose values.
+/// Maps glucose values to colors based on configured thresholds.
+/// Pure formatting and unit conversion are delegated to <see cref="GlucoseFormatHelper"/>.
 /// </summary>
 public static class GlucoseRangeHelper
 {
     /// <summary>
-    /// Standard conversion factor from mg/dL to mmol/L (molecular weight of glucose / 10).
+    /// Standard conversion factor from mg/dL to mmol/L.
+    /// Provided here for backward compatibility; prefer <see cref="GlucoseFormatHelper.MgdlToMmolFactor"/>.
     /// </summary>
-    public const double MgdlToMmolFactor = 18.01559;
+    public const double MgdlToMmolFactor = GlucoseFormatHelper.MgdlToMmolFactor;
 
     public static readonly Color UrgentColor = Color.FromArgb(255, 200, 30, 30);
     public static readonly Color WarningColor = Color.FromArgb(255, 230, 160, 30);
@@ -43,20 +46,15 @@ public static class GlucoseRangeHelper
         };
     }
 
-    public static string FormatValue(double mgdl, Models.GlucoseUnit unit)
-    {
-        return unit switch
-        {
-            Models.GlucoseUnit.MmolL => (mgdl / MgdlToMmolFactor).ToString("F1"),
-            _ => ((int)mgdl).ToString(),
-        };
-    }
+    /// <summary>
+    /// Formats a glucose value for display. Delegates to <see cref="GlucoseFormatHelper.FormatValue"/>.
+    /// </summary>
+    public static string FormatValue(double mgdl, GlucoseUnit unit) =>
+        GlucoseFormatHelper.FormatValue(mgdl, unit);
 
-    public static string FormatDelta(double? delta, Models.GlucoseUnit unit)
-    {
-        if (delta is null) return "";
-        var value = unit == Models.GlucoseUnit.MmolL ? delta.Value / MgdlToMmolFactor : delta.Value;
-        var formatted = unit == Models.GlucoseUnit.MmolL ? value.ToString("+0.0;-0.0;0.0") : value.ToString("+0;-0;0");
-        return formatted;
-    }
+    /// <summary>
+    /// Formats a glucose delta for display. Delegates to <see cref="GlucoseFormatHelper.FormatDelta"/>.
+    /// </summary>
+    public static string FormatDelta(double? delta, GlucoseUnit unit) =>
+        GlucoseFormatHelper.FormatDelta(delta, unit);
 }

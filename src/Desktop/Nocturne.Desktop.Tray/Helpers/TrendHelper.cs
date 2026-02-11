@@ -1,10 +1,18 @@
+using Nocturne.Widget.Contracts.Helpers;
+
 namespace Nocturne.Desktop.Tray.Helpers;
 
 /// <summary>
 /// Maps Nightscout direction strings to Segoe Fluent Icons arrow glyphs.
+/// Windows-specific rendering methods live here; platform-independent arrow text
+/// and direction labels are delegated to <see cref="DirectionHelper"/>.
 /// </summary>
 public static class TrendHelper
 {
+    /// <summary>
+    /// Returns a Segoe Fluent Icons glyph for the given direction.
+    /// Windows-specific: uses Segoe Fluent Icon font codepoints.
+    /// </summary>
     public static string GetArrowGlyph(string? direction)
     {
         return direction switch
@@ -22,6 +30,10 @@ public static class TrendHelper
         };
     }
 
+    /// <summary>
+    /// Returns the rotation angle for a Segoe Fluent Icons arrow glyph.
+    /// Windows-specific: used with WinUI RotateTransform.
+    /// </summary>
     public static double GetArrowRotation(string? direction)
     {
         return direction switch
@@ -39,39 +51,17 @@ public static class TrendHelper
         };
     }
 
-    public static string GetArrowText(string? direction)
-    {
-        return direction switch
-        {
-            "TripleUp" => "\u2191\u2191",
-            "DoubleUp" => "\u2191\u2191",
-            "SingleUp" => "\u2191",
-            "FortyFiveUp" => "\u2197",
-            "Flat" => "\u2192",
-            "FortyFiveDown" => "\u2198",
-            "SingleDown" => "\u2193",
-            "DoubleDown" => "\u2193\u2193",
-            "TripleDown" => "\u2193\u2193",
-            _ => "?",
-        };
-    }
+    /// <summary>
+    /// Returns a Unicode arrow character for the given direction.
+    /// Delegates to <see cref="DirectionHelper.GetArrowText"/>.
+    /// </summary>
+    public static string GetArrowText(string? direction) =>
+        DirectionHelper.GetArrowText(direction);
 
-    public static string GetDirectionLabel(string? direction)
-    {
-        return direction switch
-        {
-            "TripleUp" => "Rising very rapidly",
-            "DoubleUp" => "Rising rapidly",
-            "SingleUp" => "Rising",
-            "FortyFiveUp" => "Rising slowly",
-            "Flat" => "Stable",
-            "FortyFiveDown" => "Falling slowly",
-            "SingleDown" => "Falling",
-            "DoubleDown" => "Falling rapidly",
-            "TripleDown" => "Falling very rapidly",
-            "NOT COMPUTABLE" => "Not computable",
-            "RATE OUT OF RANGE" => "Rate out of range",
-            _ => "Unknown",
-        };
-    }
+    /// <summary>
+    /// Returns a human-readable label for the given direction (e.g. "Rising slowly").
+    /// Delegates to <see cref="DirectionHelper.GetDirectionLabel"/>.
+    /// </summary>
+    public static string GetDirectionLabel(string? direction) =>
+        DirectionHelper.GetDirectionLabel(direction);
 }

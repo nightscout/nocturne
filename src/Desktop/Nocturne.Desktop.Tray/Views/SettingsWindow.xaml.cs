@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Media;
 using Nocturne.Desktop.Tray.Helpers;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Desktop.Tray.Services;
+using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Desktop.Tray.Views;
 

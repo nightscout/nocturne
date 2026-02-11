@@ -1,3 +1,5 @@
+using Nocturne.Widget.Contracts;
+
 namespace Nocturne.Desktop.Tray.Models;
 
 /// <summary>
@@ -16,10 +18,4 @@ public sealed class TraySettings
     public bool LaunchAtStartup { get; set; }
     public int PollingIntervalSeconds { get; set; } = 60;
     public int ChartHours { get; set; } = 3;
-}
-
-public enum GlucoseUnit
-{
-    MgDl,
-    MmolL
 }

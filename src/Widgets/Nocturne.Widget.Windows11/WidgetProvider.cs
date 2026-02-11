@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Windows.Widgets.Providers;
 using Nocturne.Widget.Contracts;
+using Nocturne.Widget.Contracts.Helpers;
 
 namespace Nocturne.Widget.Windows11;
 
@@ -594,7 +595,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     {
         var current = summary.Current;
         var glucose = current is not null ? ((int)current.Sgv).ToString() : "---";
-        var direction = GetDirectionArrow(current?.Direction);
+        var direction = DirectionHelper.GetArrowText(current?.Direction);
         var delta = FormatDelta(current?.Delta);
 
         // Calculate staleness and relative time
@@ -603,8 +604,8 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         if (current is not null)
         {
             var ageMs = summary.ServerMills - current.Mills;
-            stale = ageMs > 15 * 60 * 1000; // 15 minutes
-            lastUpdate = FormatRelativeTime(ageMs);
+            stale = TimeAgoHelper.IsStaleMilliseconds(ageMs);
+            lastUpdate = TimeAgoHelper.FormatMilliseconds(ageMs);
         }
 
         var data = new JsonObject
@@ -638,18 +639,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         if (delta is null) return "";
         var sign = delta >= 0 ? "+" : "";
         return $"{sign}{delta:F1}";
-    }
-
-    private static string FormatRelativeTime(long milliseconds)
-    {
-        if (milliseconds < 0) return "now";
-        var minutes = milliseconds / 60_000;
-        if (minutes < 1) return "now";
-        if (minutes < 60) return $"{minutes}m ago";
-        var hours = minutes / 60;
-        if (hours < 24) return $"{hours}h ago";
-        var days = hours / 24;
-        return $"{days}d ago";
     }
 
     private static JsonArray BuildPredictionsArray(V4Predictions? predictions)
@@ -711,22 +700,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         if (hours < 1) return $"{(int)(hours * 60)}m";
         if (hours < 48) return $"{hours:F0}h";
         return $"{hours / 24:F1}d";
-    }
-
-    private static string GetDirectionArrow(string? direction)
-    {
-        return direction?.ToUpperInvariant() switch
-        {
-            "DOUBLEUP" or "DOUBLE_UP" => "\u21C8",
-            "SINGLEUP" or "SINGLE_UP" or "UP" => "\u2191",
-            "FORTYFIVEUP" or "FORTY_FIVE_UP" => "\u2197",
-            "FLAT" => "\u2192",
-            "FORTYFIVEDOWN" or "FORTY_FIVE_DOWN" => "\u2198",
-            "SINGLEDOWN" or "SINGLE_DOWN" or "DOWN" => "\u2193",
-            "DOUBLEDOWN" or "DOUBLE_DOWN" => "\u21CA",
-            "NOT_COMPUTABLE" or "NONE" or null => "?",
-            _ => direction ?? "?"
-        };
     }
 
     private void HandleOpenAppAction(string data)
