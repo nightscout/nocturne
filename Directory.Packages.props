@@ -124,5 +124,11 @@
     <!-- Roslyn Code Analysis packages (for source generators) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
+    <!-- Windows Desktop (WinUI 3) packages -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.7.0" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1" />
+    <PackageVersion Include="H.NotifyIcon.WinUI" Version="2.2.0" />
+    <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.3.0" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
   </ItemGroup>
 </Project>

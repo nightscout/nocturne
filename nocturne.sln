@@ -130,6 +130,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Portal.AppHost", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.MyLife", "src\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj", "{B9C6EBFB-C42D-451D-A772-0530E38474CE}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Desktop", "Desktop", "{D1E2F3A4-B5C6-7D8E-9F0A-1B2C3D4E5F6A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Desktop.Tray", "src\Desktop\Nocturne.Desktop.Tray\Nocturne.Desktop.Tray.csproj", "{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -620,6 +624,14 @@ Global
 		{B9C6EBFB-C42D-451D-A772-0530E38474CE}.Release|x64.Build.0 = Release|Any CPU
 		{B9C6EBFB-C42D-451D-A772-0530E38474CE}.Release|x86.ActiveCfg = Release|Any CPU
 		{B9C6EBFB-C42D-451D-A772-0530E38474CE}.Release|x86.Build.0 = Release|Any CPU
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Debug|x64.ActiveCfg = Debug|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Debug|x64.Build.0 = Debug|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Debug|x86.ActiveCfg = Debug|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Release|Any CPU.ActiveCfg = Release|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Release|x64.ActiveCfg = Release|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Release|x64.Build.0 = Release|x64
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -674,5 +686,7 @@ Global
 		{7AF64330-00BC-4CD6-B27E-648DF30C6770} = {47D8B096-E82B-5B56-5B7B-84742B497FE3}
 		{16F43C20-38A5-4914-8E4C-BDDB91ED1314} = {47D8B096-E82B-5B56-5B7B-84742B497FE3}
 		{B9C6EBFB-C42D-451D-A772-0530E38474CE} = {237CDB4C-E7C4-795B-969A-4CCB7C8B335B}
+		{D1E2F3A4-B5C6-7D8E-9F0A-1B2C3D4E5F6A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{A1F2B3C4-D5E6-7F8A-9B0C-1D2E3F4A5B6C} = {D1E2F3A4-B5C6-7D8E-9F0A-1B2C3D4E5F6A}
 	EndGlobalSection
 EndGlobal
