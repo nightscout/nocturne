@@ -140,12 +140,18 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Widget.Windows11",
 EndProject
 Project("{C7167F0D-BC9F-4E6E-AFE1-012C56B48DB5}") = "Nocturne.Widget.Windows11.Package", "src\Widgets\Nocturne.Widget.Windows11.Package\Nocturne.Widget.Windows11.Package.wapproj", "{163DBE6C-AD32-427B-AFE6-558FF1682AB0}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Desktop", "Desktop", "{D1A2B3C4-E5F6-7890-ABCD-1234567890AB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Desktop.Tray", "src\Desktop\Nocturne.Desktop.Tray\Nocturne.Desktop.Tray.csproj", "{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|arm64 = Debug|arm64
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
+		Release|arm64 = Release|arm64
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
@@ -678,6 +684,14 @@ Global
 		{163DBE6C-AD32-427B-AFE6-558FF1682AB0}.Release|x64.Build.0 = Release|x64
 		{163DBE6C-AD32-427B-AFE6-558FF1682AB0}.Release|x86.ActiveCfg = Release|x64
 		{163DBE6C-AD32-427B-AFE6-558FF1682AB0}.Release|x86.Build.0 = Release|x64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Debug|x64.ActiveCfg = Debug|x64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Debug|x64.Build.0 = Debug|x64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Release|x64.ActiveCfg = Release|x64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Release|x64.Build.0 = Release|x64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Debug|arm64.ActiveCfg = Debug|arm64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Debug|arm64.Build.0 = Debug|arm64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Release|arm64.ActiveCfg = Release|arm64
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC}.Release|arm64.Build.0 = Release|arm64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -737,5 +751,7 @@ Global
 		{09ED7DBA-1A88-4636-A6A8-04E05D166691} = {8FAF2A65-9545-D0E2-258D-DDED00B9DFBD}
 		{7C502767-8089-4CDD-95E4-EF877B69722B} = {8FAF2A65-9545-D0E2-258D-DDED00B9DFBD}
 		{163DBE6C-AD32-427B-AFE6-558FF1682AB0} = {8FAF2A65-9545-D0E2-258D-DDED00B9DFBD}
+		{D1A2B3C4-E5F6-7890-ABCD-1234567890AB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{A2B3C4D5-E6F7-8901-BCDE-234567890ABC} = {D1A2B3C4-E5F6-7890-ABCD-1234567890AB}
 	EndGlobalSection
 EndGlobal

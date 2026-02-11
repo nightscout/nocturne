@@ -11,8 +11,11 @@ namespace Nocturne.Widget.Infrastructure.Windows;
 /// </summary>
 public class WindowsCredentialStore : ICredentialStore
 {
-    private const string CredentialTargetName = "Nocturne.Widget.OAuth";
-    private const string DeviceAuthTargetName = "Nocturne.Widget.DeviceAuth";
+    private const string Default_credentialTargetName = "Nocturne.Widget.OAuth";
+    private const string Default_deviceAuthTargetName = "Nocturne.Widget.DeviceAuth";
+
+    private readonly string _credentialTargetName;
+    private readonly string _deviceAuthTargetName;
     private readonly ILogger<WindowsCredentialStore> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -48,12 +51,23 @@ public class WindowsCredentialStore : ICredentialStore
     }
 
     /// <summary>
-    /// Initializes a new instance of the WindowsCredentialStore
+    /// Initializes a new instance of the WindowsCredentialStore with default target names
     /// </summary>
     /// <param name="logger">The logger instance</param>
     public WindowsCredentialStore(ILogger<WindowsCredentialStore> logger)
+        : this(logger, Default_credentialTargetName, Default_deviceAuthTargetName)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the WindowsCredentialStore with custom target names.
+    /// Use this to isolate credentials between different native clients (e.g. widget vs tray).
+    /// </summary>
+    public WindowsCredentialStore(ILogger<WindowsCredentialStore> logger, string credentialTargetName, string deviceAuthTargetName)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _credentialTargetName = credentialTargetName;
+        _deviceAuthTargetName = deviceAuthTargetName;
     }
 
     /// <inheritdoc />
@@ -61,7 +75,7 @@ public class WindowsCredentialStore : ICredentialStore
     {
         try
         {
-            var json = ReadCredential(CredentialTargetName);
+            var json = ReadCredential(_credentialTargetName);
             if (json is null)
             {
                 return Task.FromResult<NocturneCredentials?>(null);
@@ -109,7 +123,7 @@ public class WindowsCredentialStore : ICredentialStore
             };
 
             var json = JsonSerializer.Serialize(data, JsonOptions);
-            WriteCredential(CredentialTargetName, json);
+            WriteCredential(_credentialTargetName, json);
             _logger.LogInformation("OAuth credentials saved successfully");
 
             return Task.CompletedTask;
@@ -148,7 +162,7 @@ public class WindowsCredentialStore : ICredentialStore
     {
         try
         {
-            DeleteCredential(CredentialTargetName);
+            DeleteCredential(_credentialTargetName);
             _logger.LogInformation("Credentials deleted successfully");
             return Task.CompletedTask;
         }
@@ -185,7 +199,7 @@ public class WindowsCredentialStore : ICredentialStore
             };
 
             var json = JsonSerializer.Serialize(data, JsonOptions);
-            WriteCredential(DeviceAuthTargetName, json);
+            WriteCredential(_deviceAuthTargetName, json);
             _logger.LogDebug("Device auth state saved");
 
             return Task.CompletedTask;
@@ -202,7 +216,7 @@ public class WindowsCredentialStore : ICredentialStore
     {
         try
         {
-            var json = ReadCredential(DeviceAuthTargetName);
+            var json = ReadCredential(_deviceAuthTargetName);
             if (json is null)
             {
                 return Task.FromResult<DeviceAuthorizationState?>(null);
@@ -239,7 +253,7 @@ public class WindowsCredentialStore : ICredentialStore
     {
         try
         {
-            DeleteCredential(DeviceAuthTargetName);
+            DeleteCredential(_deviceAuthTargetName);
             _logger.LogDebug("Device auth state cleared");
             return Task.CompletedTask;
         }

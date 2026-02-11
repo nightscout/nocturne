@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Nocturne.Desktop.Tray.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Nocturne Tray Settings"
+    Width="480"
+    Height="560">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="400">
+
+            <TextBlock Text="Nocturne Tray Settings" FontSize="24" FontWeight="Bold" Margin="0,0,0,8" />
+
+            <!-- Server Connection -->
+            <TextBlock Text="Connection" FontSize="16" FontWeight="SemiBold" />
+
+            <TextBox
+                x:Name="ServerUrlBox"
+                Header="Server URL"
+                PlaceholderText="https://your-nocturne-instance.com" />
+
+            <!-- Auth status + sign in/out -->
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Ellipse
+                        x:Name="AuthIndicator"
+                        Width="10"
+                        Height="10"
+                        Fill="{ThemeResource SystemFillColorCriticalBrush}" />
+                    <TextBlock
+                        x:Name="AuthStatusText"
+                        Text="Not signed in"
+                        FontSize="13"
+                        VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Button
+                    x:Name="SignInOutButton"
+                    Grid.Column="1"
+                    Content="Sign In"
+                    Click="OnSignInOutClick"
+                    Width="100" />
+            </Grid>
+
+            <!-- Display -->
+            <TextBlock Text="Display" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+            <ComboBox
+                x:Name="UnitCombo"
+                Header="Glucose Unit"
+                SelectedIndex="0"
+                Width="200">
+                <ComboBoxItem Content="mg/dL" />
+                <ComboBoxItem Content="mmol/L" />
+            </ComboBox>
+
+            <NumberBox
+                x:Name="ChartHoursBox"
+                Header="Chart Hours"
+                Minimum="1"
+                Maximum="12"
+                Value="3"
+                SpinButtonPlacementMode="Inline" />
+
+            <!-- Thresholds -->
+            <TextBlock Text="Glucose Thresholds (mg/dL)" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+            <Grid ColumnSpacing="12" RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <NumberBox
+                    x:Name="UrgentLowBox"
+                    Grid.Row="0" Grid.Column="0"
+                    Header="Urgent Low"
+                    Minimum="30"
+                    Maximum="100"
+                    Value="55"
+                    SpinButtonPlacementMode="Inline" />
+
+                <NumberBox
+                    x:Name="LowBox"
+                    Grid.Row="0" Grid.Column="1"
+                    Header="Low"
+                    Minimum="40"
+                    Maximum="120"
+                    Value="70"
+                    SpinButtonPlacementMode="Inline" />
+
+                <NumberBox
+                    x:Name="HighBox"
+                    Grid.Row="1" Grid.Column="0"
+                    Header="High"
+                    Minimum="120"
+                    Maximum="300"
+                    Value="180"
+                    SpinButtonPlacementMode="Inline" />
+
+                <NumberBox
+                    x:Name="UrgentHighBox"
+                    Grid.Row="1" Grid.Column="1"
+                    Header="Urgent High"
+                    Minimum="150"
+                    Maximum="400"
+                    Value="250"
+                    SpinButtonPlacementMode="Inline" />
+            </Grid>
+
+            <!-- Notifications -->
+            <TextBlock Text="Notifications" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+            <ToggleSwitch
+                x:Name="EnableAlarmsToggle"
+                Header="Glucose alarm notifications"
+                IsOn="True" />
+
+            <ToggleSwitch
+                x:Name="EnableUrgentAlarmsToggle"
+                Header="Urgent alarm notifications"
+                IsOn="True" />
+
+            <!-- Actions -->
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button
+                    x:Name="CancelButton"
+                    Content="Cancel"
+                    Click="OnCancelClick"
+                    Width="100" />
+                <Button
+                    x:Name="SaveButton"
+                    Content="Save"
+                    Style="{ThemeResource AccentButtonStyle}"
+                    Click="OnSaveClick"
+                    Width="100" />
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</Window>

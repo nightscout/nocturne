@@ -185,14 +185,23 @@ public class OidcController : ControllerBase
                 result.Error,
                 result.ErrorDescription
             );
-            return RedirectToError(
-                result.Error ?? "callback_failed",
-                result.ErrorDescription ?? "Authentication failed"
-            );
-        }
 
-        // Set session cookies
-        SetSessionCookies(result.Tokens!);
+            var errorReturnUrl = result.ReturnUrl ?? _options.DefaultReturnUrl;
+            var errorCode = result.Error ?? "callback_failed";
+            var errorDesc = result.ErrorDescription ?? "Authentication failed";
+
+            // Send errors to native clients via protocol activation
+            if (IsNativeReturnUrl(errorReturnUrl))
+            {
+                var sep = errorReturnUrl.Contains('?') ? '&' : '?';
+                var nativeError = $"{errorReturnUrl}{sep}" +
+                    $"error={Uri.EscapeDataString(errorCode)}" +
+                    $"&error_description={Uri.EscapeDataString(errorDesc)}";
+                return Redirect(nativeError);
+            }
+
+            return RedirectToError(errorCode, errorDesc);
+        }
 
         _logger.LogInformation(
             "OIDC login successful for user {Name} (subject: {SubjectId})",
@@ -202,6 +211,17 @@ public class OidcController : ControllerBase
 
         // Redirect to return URL
         var returnUrl = result.ReturnUrl ?? _options.DefaultReturnUrl;
+
+        // Native clients receive tokens via query parameters in the redirect URL
+        // instead of cookies, since custom protocol schemes can't carry cookies.
+        if (IsNativeReturnUrl(returnUrl))
+        {
+            var nativeRedirect = AppendTokensToNativeRedirect(returnUrl, result.Tokens!);
+            return Redirect(nativeRedirect);
+        }
+
+        // Web clients receive tokens via secure cookies
+        SetSessionCookies(result.Tokens!);
         return Redirect(returnUrl);
     }
 
@@ -362,6 +382,12 @@ public class OidcController : ControllerBase
             return true;
         }
 
+        // Allow registered native client protocol schemes (e.g. nocturne-tray://...)
+        if (IsNativeReturnUrl(returnUrl))
+        {
+            return true;
+        }
+
         // Or URLs that start with our base URL
         if (!string.IsNullOrEmpty(_options.BaseUrl))
         {
@@ -377,6 +403,33 @@ public class OidcController : ControllerBase
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Check if a return URL uses a registered native client protocol scheme.
+    /// Native clients receive tokens via protocol activation rather than cookies.
+    /// </summary>
+    private bool IsNativeReturnUrl(string returnUrl)
+    {
+        if (_options.AllowedNativeSchemes.Count == 0) return false;
+        if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri)) return false;
+
+        return _options.AllowedNativeSchemes.Any(scheme =>
+            string.Equals(uri.Scheme, scheme, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Build a native redirect URI with tokens appended as query parameters.
+    /// Example: nocturne-tray://auth/callback?access_token=...&amp;refresh_token=...&amp;expires_in=900
+    /// </summary>
+    private static string AppendTokensToNativeRedirect(string returnUrl, OidcTokenResponse tokens)
+    {
+        var separator = returnUrl.Contains('?') ? '&' : '?';
+        return $"{returnUrl}{separator}" +
+               $"access_token={Uri.EscapeDataString(tokens.AccessToken)}" +
+               $"&refresh_token={Uri.EscapeDataString(tokens.RefreshToken)}" +
+               $"&expires_in={tokens.ExpiresIn}" +
+               $"&token_type={Uri.EscapeDataString(tokens.TokenType)}";
     }
 
     /// <summary>

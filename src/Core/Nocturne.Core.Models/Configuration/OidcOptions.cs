@@ -49,6 +49,15 @@ public class OidcOptions
     public List<string> AllowedReturnUrlPatterns { get; set; } = new();
 
     /// <summary>
+    /// Allowed URI schemes for native client protocol redirects.
+    /// Native clients (e.g. desktop tray apps) use custom protocol schemes
+    /// like "nocturne-tray" to receive tokens via protocol activation.
+    /// When a return URL uses one of these schemes, the callback appends
+    /// tokens as query parameters instead of setting cookies.
+    /// </summary>
+    public List<string> AllowedNativeSchemes { get; set; } = ["nocturne-tray"];
+
+    /// <summary>
     /// Whether to automatically create subjects from OIDC claims
     /// </summary>
     public bool AutoCreateSubjects { get; set; } = true;
