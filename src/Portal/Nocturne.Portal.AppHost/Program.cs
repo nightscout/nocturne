@@ -18,7 +18,8 @@ var api = builder
     .WithHttpsEndpoint(port: 1610)
     .WithContainerBuildOptions(options =>
     {
-        options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+        options.TargetPlatform =
+            ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
     });
 
 // Conditional demo instance (Nocturne API + Web with demo data)
@@ -50,7 +51,8 @@ if (demoEnabled)
         .WithHttpsEndpoint(name: "demo-api", port: 1622)
         .WithContainerBuildOptions(options =>
         {
-            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+            options.TargetPlatform =
+                ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
         })
         .WithEnvironment("DemoService__Enabled", "true")
         // Seed demo user accounts
@@ -81,7 +83,8 @@ if (demoEnabled)
         .WithHttpsEndpoint(name: "demo-service-https", port: 1624)
         .WithContainerBuildOptions(options =>
         {
-            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+            options.TargetPlatform =
+                ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
         })
         .WithEnvironment("DemoMode__Enabled", "true")
         .WithEnvironment("DemoMode__ClearOnStartup", "true")
@@ -94,7 +97,7 @@ if (demoEnabled)
 
     // Add Nocturne Web pointing to demo API
     demoWeb = builder
-        .AddViteApp("demo-web", "../../Web/packages/app")
+        .AddViteApp("demo-web", "../../Web/packages/app", packageManager: "pnpm")
         .WithPnpmPackageInstallation()
         .WithReference(demoApi)
         .WaitFor(demoApi)
@@ -106,24 +109,26 @@ if (demoEnabled)
         .WithDeveloperCertificateTrust(true)
         .WithContainerBuildOptions(options =>
         {
-            options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+            options.TargetPlatform =
+                ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
         });
 }
 
 // Add the Portal Web frontend
-var portalWeb = builder
-    .AddViteApp("portal-web", "../../Web/packages/portal")
-    .WithPnpmPackageInstallation()
+var portalWeb = JavaScriptHostingExtensions
+    .AddViteApp(builder, "portal-web", "../../Web/packages/portal")
+    .WithPnpm()
     .WithReference(api)
     .WaitFor(api)
     .WithEnvironment("VITE_PORTAL_API_URL", api.GetEndpoint("https"))
     .WithDeveloperCertificateForVite()
-    .WithHttpsEndpoint(env: "PORT", port: 1611, name: "web")
+    .WithHttpsEndpoint(env: "PORT", port: 1611)
     .WithHttpsDeveloperCertificate()
     .WithDeveloperCertificateTrust(true)
     .WithContainerBuildOptions(options =>
     {
-        options.TargetPlatform = ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
+        options.TargetPlatform =
+            ContainerTargetPlatform.LinuxAmd64 | ContainerTargetPlatform.LinuxArm64;
     })
     .PublishAsDockerFile();
 

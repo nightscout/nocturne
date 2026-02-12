@@ -10,6 +10,9 @@
   import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { isWidgetEnabled } from "$lib/types/dashboard-widgets";
+  import type { PageData } from "./$types";
+
+  const { data }: { data: PageData } = $props();
 
   const settingsStore = getSettingsStore();
 
@@ -43,6 +46,8 @@
     <GlucoseChartCard
       showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
       defaultFocusHours={focusHours}
+      initialChartData={data.initialChartData}
+      streamedHistoricalData={data.streamed?.historicalChartData}
     />
   {/if}
 

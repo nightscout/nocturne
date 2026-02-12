@@ -25,7 +25,8 @@ public class StateSpanRepository
     public StateSpanRepository(
         NocturneDbContext context,
         IDeduplicationService deduplicationService,
-        ILogger<StateSpanRepository> logger)
+        ILogger<StateSpanRepository> logger
+    )
     {
         _context = context;
         _deduplicationService = deduplicationService;
@@ -44,7 +45,8 @@ public class StateSpanRepository
         bool? active = null,
         int count = 100,
         int skip = 0,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var query = _context.StateSpans.AsQueryable();
 
@@ -85,17 +87,20 @@ public class StateSpanRepository
     /// </summary>
     public async Task<StateSpan?> GetStateSpanByIdAsync(
         string id,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id,
-            cancellationToken);
+            cancellationToken
+        );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         return entity != null ? StateSpanMapper.ToDomainModel(entity) : null;
@@ -106,7 +111,8 @@ public class StateSpanRepository
     /// </summary>
     public async Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         StateSpanEntity? entity = null;
         var isNew = false;
@@ -116,7 +122,8 @@ public class StateSpanRepository
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.OriginalId == stateSpan.OriginalId,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (entity != null)
@@ -139,15 +146,18 @@ public class StateSpanRepository
             {
                 var criteria = new MatchCriteria
                 {
-                    Category = Enum.TryParse<StateSpanCategory>(entity.Category, true, out var cat) ? cat : null,
-                    State = entity.State
+                    Category = Enum.TryParse<StateSpanCategory>(entity.Category, true, out var cat)
+                        ? cat
+                        : null,
+                    State = entity.State,
                 };
 
                 var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
                     RecordType.StateSpan,
                     entity.StartMills,
                     criteria,
-                    cancellationToken);
+                    cancellationToken
+                );
 
                 await _deduplicationService.LinkRecordAsync(
                     canonicalId,
@@ -155,7 +165,8 @@ public class StateSpanRepository
                     entity.Id,
                     entity.StartMills,
                     entity.Source ?? "unknown",
-                    cancellationToken);
+                    cancellationToken
+                );
             }
             catch (Exception ex)
             {
@@ -172,7 +183,8 @@ public class StateSpanRepository
     /// </summary>
     public async Task<int> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var count = 0;
         foreach (var span in stateSpans)
@@ -189,17 +201,20 @@ public class StateSpanRepository
     public async Task<StateSpan?> UpdateStateSpanAsync(
         string id,
         StateSpan stateSpan,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id,
-            cancellationToken);
+            cancellationToken
+        );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (entity == null)
@@ -215,17 +230,20 @@ public class StateSpanRepository
     /// </summary>
     public async Task<bool> DeleteStateSpanAsync(
         string id,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id,
-            cancellationToken);
+            cancellationToken
+        );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (entity == null)
@@ -241,10 +259,11 @@ public class StateSpanRepository
     /// </summary>
     public async Task<long> DeleteBySourceAsync(
         string source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var deletedCount = await _context.StateSpans
-            .Where(s => s.Source == source)
+        var deletedCount = await _context
+            .StateSpans.Where(s => s.Source == source)
             .ExecuteDeleteAsync(cancellationToken);
         return deletedCount;
     }
@@ -256,13 +275,56 @@ public class StateSpanRepository
         StateSpanCategory category,
         long? from = null,
         long? to = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return await GetStateSpansAsync(
             category: category,
             from: from,
             to: to,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Get state spans for multiple categories in a single query (batch fetch)
+    /// </summary>
+    public async Task<Dictionary<StateSpanCategory, List<StateSpan>>> GetByCategories(
+        IEnumerable<StateSpanCategory> categories,
+        long? from = null,
+        long? to = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var categoryStrings = categories.Select(c => c.ToString()).ToList();
+
+        var query = _context.StateSpans.Where(s => categoryStrings.Contains(s.Category));
+
+        if (from.HasValue)
+            query = query.Where(s => s.EndMills == null || s.EndMills >= from.Value);
+
+        if (to.HasValue)
+            query = query.Where(s => s.StartMills <= to.Value);
+
+        var entities = await query
+            .OrderByDescending(s => s.StartMills)
+            .ToListAsync(cancellationToken);
+
+        // Group results by category
+        var result = categories.ToDictionary(c => c, c => new List<StateSpan>());
+
+        foreach (var entity in entities)
+        {
+            if (
+                Enum.TryParse<StateSpanCategory>(entity.Category, true, out var category)
+                && result.ContainsKey(category)
+            )
+            {
+                result[category].Add(StateSpanMapper.ToDomainModel(entity));
+            }
+        }
+
+        return result;
     }
 
     #region Activity Compatibility Methods
@@ -274,14 +336,14 @@ public class StateSpanRepository
         string? type = null,
         int count = 10,
         int skip = 0,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var activityCategories = ActivityStateSpanMapper.ActivityCategories
-            .Select(c => c.ToString())
+        var activityCategories = ActivityStateSpanMapper
+            .ActivityCategories.Select(c => c.ToString())
             .ToList();
 
-        var query = _context.StateSpans
-            .Where(s => activityCategories.Contains(s.Category));
+        var query = _context.StateSpans.Where(s => activityCategories.Contains(s.Category));
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))
@@ -301,21 +363,24 @@ public class StateSpanRepository
     /// </summary>
     public async Task<StateSpan?> GetActivityStateSpanByIdAsync(
         string id,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var activityCategories = ActivityStateSpanMapper.ActivityCategories
-            .Select(c => c.ToString())
+        var activityCategories = ActivityStateSpanMapper
+            .ActivityCategories.Select(c => c.ToString())
             .ToList();
 
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id && activityCategories.Contains(s.Category),
-            cancellationToken);
+            cancellationToken
+        );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId && activityCategories.Contains(s.Category),
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         return entity != null ? StateSpanMapper.ToDomainModel(entity) : null;
@@ -326,7 +391,8 @@ public class StateSpanRepository
     /// </summary>
     public async Task<StateSpan> UpsertActivityAsStateSpanAsync(
         StateSpan stateSpan,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         // Use the standard upsert method - Activity-specific logic is in the mapper
         return await UpsertStateSpanAsync(stateSpan, cancellationToken);
@@ -337,7 +403,8 @@ public class StateSpanRepository
     /// </summary>
     public async Task<IEnumerable<StateSpan>> CreateActivitiesAsStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var results = new List<StateSpan>();
         foreach (var span in stateSpans)
@@ -354,21 +421,24 @@ public class StateSpanRepository
     public async Task<StateSpan?> UpdateActivityStateSpanAsync(
         string id,
         StateSpan stateSpan,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var activityCategories = ActivityStateSpanMapper.ActivityCategories
-            .Select(c => c.ToString())
+        var activityCategories = ActivityStateSpanMapper
+            .ActivityCategories.Select(c => c.ToString())
             .ToList();
 
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id && activityCategories.Contains(s.Category),
-            cancellationToken);
+            cancellationToken
+        );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId && activityCategories.Contains(s.Category),
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (entity == null)
@@ -384,21 +454,24 @@ public class StateSpanRepository
     /// </summary>
     public async Task<bool> DeleteActivityStateSpanAsync(
         string id,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var activityCategories = ActivityStateSpanMapper.ActivityCategories
-            .Select(c => c.ToString())
+        var activityCategories = ActivityStateSpanMapper
+            .ActivityCategories.Select(c => c.ToString())
             .ToList();
 
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
             s => s.OriginalId == id && activityCategories.Contains(s.Category),
-            cancellationToken);
+            cancellationToken
+        );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
                 s => s.Id == guidId && activityCategories.Contains(s.Category),
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (entity == null)

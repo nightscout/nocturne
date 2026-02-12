@@ -914,6 +914,7 @@ msgstr "An error occurred"
 #: src/routes/auth/register/+page.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/dashboard/+page.svelte
+#: src/routes/roadmap/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 msgid "Try Again"
 msgstr "Try Again"
@@ -1082,6 +1083,7 @@ msgstr "Monitor Nightscout/Nocturne API compatibility in real-time"
 
 #: src/routes/dashboard/+page.svelte
 #: src/routes/reports/battery/+page.svelte
+#: src/routes/roadmap/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 msgid "<0/> Refresh"
@@ -1365,6 +1367,7 @@ msgstr "Polling Active"
 msgid "Polling Paused"
 msgstr "Polling Paused"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/routes/compatibility/+page.svelte
 msgid "Configuration"
 msgstr "Configuration"
@@ -1514,6 +1517,7 @@ msgstr "None"
 #: src/routes/compatibility/[id]/+page.svelte
 #: src/routes/compatibility/[id]/+page.svelte
 #: src/routes/compatibility/test/+page.svelte
+#: src/routes/features/+page.svelte
 msgid "Nightscout"
 msgstr "Nightscout"
 
@@ -1522,6 +1526,7 @@ msgstr "Nightscout"
 msgid "NS: {0}"
 msgstr "NS: {0}"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/layout/AppSidebar.svelte
@@ -2087,6 +2092,7 @@ msgstr "Unspecified: {0}g"
 msgid "Notes: {0}"
 msgstr "Notes: {0}"
 
+#: src/lib/components/MilestoneCard.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -3456,7 +3462,10 @@ msgstr "Appearance"
 msgid "Therapy"
 msgstr "Therapy"
 
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/features/+page.svelte
 #: src/routes/settings/features/+page.svelte
 msgid "Features"
 msgstr "Features"
@@ -3471,8 +3480,10 @@ msgstr "Alarms"
 msgid "Notifications & Trackers"
 msgstr "Notifications & Trackers"
 
-#~ msgid "Connectors"
-#~ msgstr "Connectors"
+#: src/lib/components/StepIndicator.svelte
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Connectors"
+msgstr "Connectors"
 
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/settings/support/+page.svelte
@@ -7434,6 +7445,7 @@ msgstr "Ambulatory Glucose Profile - Nocturne Reports"
 msgid "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 msgstr "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 
+#: src/routes/features/+page.svelte
 #: src/routes/reports/agp/+page.svelte
 msgid "<0/> Ambulatory Glucose Profile"
 msgstr "<0/> Ambulatory Glucose Profile"
@@ -10117,6 +10129,7 @@ msgstr "Discord Community"
 msgid "Chat with developers and other users"
 msgstr "Chat with developers and other users"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/routes/settings/support/+page.svelte
 msgid "Documentation"
 msgstr "Documentation"
@@ -13163,608 +13176,584 @@ msgstr "Run Detection"
 msgid "Manually scan a date range for compression lows"
 msgstr "Manually scan a date range for compression lows"
 
-#: src/routes/reports/data-quality/+page.svelte
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "End Date (optional)"
-msgstr "End Date (optional)"
-
-#: src/routes/reports/data-quality/+page.svelte
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "<0/> Run Detection"
-msgstr "<0/> Run Detection"
-
-#. placeholder {0}: detectionResult.totalSuggestionsCreated
-#. placeholder {1}: detectionResult.nightsProcessed
-#. placeholder {0}: detectionResult.totalSuggestionsCreated
-#. placeholder {1}: detectionResult.nightsProcessed
-#: src/routes/reports/data-quality/+page.svelte
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Found {0} compression low(s) across {1} night(s)"
-msgstr "Found {0} compression low(s) across {1} night(s)"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Error Loading Compression Low History"
-msgstr "Error Loading Compression Low History"
-
-#. placeholder {0}: dateStr
-#. placeholder {1}: nextDayStr
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Night of {0}-{1}"
-msgstr "Night of {0}-{1}"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Compression Lows - Nocturne"
-msgstr "Compression Lows - Nocturne"
-
-#. placeholder {0}: pendingCount
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "{0} pending review"
-msgstr "{0} pending review"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Review history and manage exclusions"
-msgstr "Review history and manage exclusions"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Status:"
-msgstr "Status:"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "No compression lows detected yet"
-msgstr "No compression lows detected yet"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "When compression lows are detected during your sleep, they will appear here."
-msgstr "When compression lows are detected during your sleep, they will appear here."
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "No matching results"
-msgstr "No matching results"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Try changing your filter criteria."
-msgstr "Try changing your filter criteria."
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Unknown date"
-msgstr "Unknown date"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Drop Rate (mg/dL/min)"
-msgstr "Drop Rate (mg/dL/min)"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Recovery (min)"
-msgstr "Recovery (min)"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Selected Range"
-msgstr "Selected Range"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Exclusion Range"
-msgstr "Exclusion Range"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Drag the handles on the chart to adjust"
-msgstr "Drag the handles on the chart to adjust"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "<0/> Accept"
-msgstr "<0/> Accept"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "<0/> Dismiss"
-msgstr "<0/> Dismiss"
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Select a compression low to view details"
-msgstr "Select a compression low to view details"
-
-#~ msgid "Grants & Sharing"
-#~ msgstr "Grants & Sharing"
-
-#: src/lib/components/layout/AppSidebar.svelte
-msgid "<0/> Viewing data for"
-msgstr "<0/> Viewing data for"
-
-#: src/lib/components/layout/AppSidebar.svelte
-#: src/lib/components/layout/AppSidebar.svelte
-msgid "My Data"
-msgstr "My Data"
-
-#: src/lib/components/layout/AppSidebar.svelte
-msgid "Connectors & Apps"
-msgstr "Connectors & Apps"
-
-#: src/lib/components/layout/AppSidebar.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Followers & Sharing"
-msgstr "Followers & Sharing"
-
-#: src/routes/settings/connectors/+page.svelte
-msgid "Connectors & Apps - Settings - Nocturne"
-msgstr "Connectors & Apps - Settings - Nocturne"
-
-#: src/routes/settings/connectors/+page.svelte
-msgid "Connectors & Connected Apps"
-msgstr "Connectors & Connected Apps"
-
-#: src/routes/settings/connectors/+page.svelte
-msgid "Manage data sources, set up new connections, and control app access"
-msgstr "Manage data sources, set up new connections, and control app access"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View glucose readings"
-msgstr "View glucose readings"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View and record glucose readings"
-msgstr "View and record glucose readings"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View treatments"
-msgstr "View treatments"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View and record treatments"
-msgstr "View and record treatments"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View device status"
-msgstr "View device status"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View and update device status"
-msgstr "View and update device status"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View profile settings"
-msgstr "View profile settings"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View and update profile settings"
-msgstr "View and update profile settings"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View notifications"
-msgstr "View notifications"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Manage notifications"
-msgstr "Manage notifications"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View reports and analytics"
-msgstr "View reports and analytics"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View basic account info"
-msgstr "View basic account info"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Manage sharing settings"
-msgstr "Manage sharing settings"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "View all health data (read-only)"
-msgstr "View all health data (read-only)"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Full access including delete"
-msgstr "Full access including delete"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "App access revoked successfully."
-msgstr "App access revoked successfully."
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "Failed to revoke access. Please try again."
-msgstr "Failed to revoke access. Please try again."
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "Connected Apps"
-msgstr "Connected Apps"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "OAuth applications that have been authorized to access your data"
-msgstr "OAuth applications that have been authorized to access your data"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "<0/> Add device"
-msgstr "<0/> Add device"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid ""
-"No connected applications. When you authorize apps to access your\n"
-"data, they will appear here."
-msgstr ""
-"No connected applications. When you authorize apps to access your\n"
-"data, they will appear here."
-
-#: src/lib/components/settings/ConnectedApps.svelte
-msgid "<0/> Verified"
-msgstr "<0/> Verified"
-
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Revoke"
-msgstr "<0/> Revoke"
-
-#. placeholder {0}: formatDate(grant.createdAt)
-#. placeholder {0}: formatDate(grant.createdAt)
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Created {0}"
-msgstr "<0/> Created {0}"
-
-#. placeholder {0}: formatDate(grant.lastUsedAt)
-#. placeholder {0}: formatDate(grant.lastUsedAt)
-#: src/lib/components/settings/ConnectedApps.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Last used {0}"
-msgstr "<0/> Last used {0}"
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "View your glucose readings"
-msgstr "View your glucose readings"
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "View your treatments"
-msgstr "View your treatments"
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "View your profile settings"
-msgstr "View your profile settings"
-
-#. placeholder {0}: appName
-#: src/routes/oauth/device/+page.svelte
-msgid "Authorize {0}"
-msgstr "Authorize {0}"
-
-#: src/routes/oauth/device/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "Link a Device"
-msgstr "Link a Device"
-
-#. placeholder {0}: deviceInfo ? `Authorize ${appName}` : "Link a Device"
-#: src/routes/oauth/device/+page.svelte
-msgid "{0} - Nocturne"
-msgstr "{0} - Nocturne"
-
-#: src/routes/oauth/device/+page.svelte
-msgid "Device Authorized"
-msgstr "Device Authorized"
-
-#: src/routes/oauth/device/+page.svelte
-msgid "You can close this window and return to your device."
-msgstr "You can close this window and return to your device."
-
-#: src/routes/oauth/device/+page.svelte
-msgid "Authorization Denied"
-msgstr "Authorization Denied"
-
-#: src/routes/oauth/device/+page.svelte
-msgid "The device will not be granted access."
-msgstr "The device will not be granted access."
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "Authorize Application"
-msgstr "Authorize Application"
-
-#: src/routes/oauth/device/+page.svelte
-msgid ""
-"<0/> wants to access\n"
-"your Nocturne data."
-msgstr ""
-"<0/> wants to access\n"
-"your Nocturne data."
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid ""
-"This application is not in the Nocturne known app directory. Only\n"
-"approve if you trust this application."
-msgstr ""
-"This application is not in the Nocturne known app directory. Only\n"
-"approve if you trust this application."
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "This application is requesting permission to:"
-msgstr "This application is requesting permission to:"
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "This app cannot delete your data."
-msgstr "This app cannot delete your data."
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid ""
-"This app is requesting full access, including the ability to delete\n"
-"data."
-msgstr ""
-"This app is requesting full access, including the ability to delete\n"
-"data."
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "<0/> Deny"
-msgstr "<0/> Deny"
-
-#: src/routes/oauth/consent/+page.svelte
-#: src/routes/oauth/device/+page.svelte
-msgid "<0/> Approve"
-msgstr "<0/> Approve"
-
-#: src/routes/oauth/device/+page.svelte
-msgid "Enter the code shown on your device"
-msgstr "Enter the code shown on your device"
-
-#: src/routes/oauth/device/+page.svelte
-msgid "<0/> Continue"
-msgstr "<0/> Continue"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Grant revoked successfully."
-msgstr "Grant revoked successfully."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Failed to revoke grant. Please try again."
-msgstr "Failed to revoke grant. Please try again."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Follower added successfully."
-msgstr "Follower added successfully."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Failed to add follower. Please try again."
-msgstr "Failed to add follower. Please try again."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Failed to create invite. Please try again."
-msgstr "Failed to create invite. Please try again."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Invite revoked successfully."
-msgstr "Invite revoked successfully."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Failed to revoke invite. Please try again."
-msgstr "Failed to revoke invite. Please try again."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Followers & Sharing - Settings - Nocturne"
-msgstr "Followers & Sharing - Settings - Nocturne"
-
-#: src/routes/settings/security/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Share your data with caregivers and family members"
-msgstr "Share your data with caregivers and family members"
-
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Create Invite Link"
-msgstr "<0/> Create Invite Link"
-
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Add by Email"
-msgstr "<0/> Add by Email"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Create Invite Link"
-msgstr "Create Invite Link"
-
-#: src/routes/settings/security/+page.svelte
-msgid ""
-"Generate a shareable link. Anyone with this link can accept the invite\n"
-"after signing in."
-msgstr ""
-"Generate a shareable link. Anyone with this link can accept the invite\n"
-"after signing in."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Invite link created! Share it with your friend or family member."
-msgstr "Invite link created! Share it with your friend or family member."
-
-#: src/routes/settings/security/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Label (optional)"
-msgstr "Label (optional)"
-
-#: src/routes/settings/security/+page.svelte
-#: src/routes/settings/security/+page.svelte
-msgid "Data to share"
-msgstr "Data to share"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Allow multiple uses"
-msgstr "Allow multiple uses"
-
-#: src/routes/settings/security/+page.svelte
-msgid "By default, invite links can only be used once. Enable this to allow unlimited uses."
-msgstr "By default, invite links can only be used once. Enable this to allow unlimited uses."
-
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Create Link"
-msgstr "<0/> Create Link"
-
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Pending Invites"
-msgstr "<0/> Pending Invites"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Invite Link"
-msgstr "Invite Link"
-
-#. placeholder {0}: invite.useCount
-#. placeholder {1}: invite.maxUses
-#: src/routes/settings/security/+page.svelte
-msgid "· {0}/{1} uses"
-msgstr "· {0}/{1} uses"
-
-#. placeholder {0}: formatDate(invite.expiresAt)
-#: src/routes/settings/security/+page.svelte
-msgid "Expires {0} <0/>"
-msgstr "Expires {0} <0/>"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Used by"
-msgstr "Used by"
-
-#. placeholder {0}: formatDate(usage.usedAt)
-#: src/routes/settings/security/+page.svelte
-msgid "on {0}"
-msgstr "on {0}"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Add a Follower"
-msgstr "Add a Follower"
-
-#: src/routes/settings/security/+page.svelte
-msgid ""
-"Grant someone read access to your data by entering their email\n"
-"and selecting which data to share."
-msgstr ""
-"Grant someone read access to your data by entering their email\n"
-"and selecting which data to share."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Email address"
-msgstr "Email address"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Create new account with temporary password"
-msgstr "Create new account with temporary password"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Display name (optional)"
-msgstr "Display name (optional)"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Temporary password"
-msgstr "Temporary password"
-
-#: src/routes/settings/security/+page.svelte
-msgid "Enter a temporary password"
-msgstr "Enter a temporary password"
-
-#: src/routes/settings/security/+page.svelte
-msgid "The follower will be required to change this password on first login."
-msgstr "The follower will be required to change this password on first login."
-
-#: src/routes/settings/security/+page.svelte
-msgid "<0/> Add Follower"
-msgstr "<0/> Add Follower"
-
-#: src/routes/settings/security/+page.svelte
-msgid "No followers. Share your data with caregivers by adding a follower."
-msgstr "No followers. Share your data with caregivers by adding a follower."
-
-#: src/routes/settings/security/+page.svelte
-msgid "Shared Data"
-msgstr "Shared Data"
-
-#~ msgid "Authentication Successful"
-#~ msgstr "Authentication Successful"
-
-#~ msgid "You have been signed in. You can return to {0} and close this tab."
-#~ msgstr "You have been signed in. You can return to {0} and close this tab."
-
-#~ msgid "You have been signed in. You can return to your application and close this tab."
-#~ msgstr "You have been signed in. You can return to your application and close this tab."
-
-#~ msgid "Open {0}"
-#~ msgstr "Open {0}"
-
-#~ msgid "Open Application"
-#~ msgstr "Open Application"
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+msgid "N"
+msgstr "N"
+
+#~ msgid "Nocturne Portal"
+#~ msgstr "Nocturne Portal"
+
+#~ msgid "Nocturne © {0} - Open source diabetes management"
+#~ msgstr "Nocturne © {0} - Open source diabetes management"
+
+#~ msgid "Your Diabetes Data, <0>Your Way</0>"
+#~ msgstr "Your Diabetes Data, <0>Your Way</0>"
 
 #~ msgid ""
-#~ "If the application did not open automatically, click the button above\n"
-#~ "or check that it is running."
+#~ "A modern, open-source platform for managing your glucose data with full\n"
+#~ "Nightscout compatibility. Built by the diabetes community, for the\n"
+#~ "diabetes community."
 #~ msgstr ""
-#~ "If the application did not open automatically, click the button above\n"
-#~ "or check that it is running."
+#~ "A modern, open-source platform for managing your glucose data with full\n"
+#~ "Nightscout compatibility. Built by the diabetes community, for the\n"
+#~ "diabetes community."
 
-#. placeholder {0}: appName
-#: src/routes/oauth/consent/+page.svelte
-msgid "Authorize {0} - Nocturne"
-msgstr "Authorize {0} - Nocturne"
+#~ msgid "Get Started <0/>"
+#~ msgstr "Get Started <0/>"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "Additional Permissions"
-msgstr "Additional Permissions"
+#~ msgid "<0/> See it in Action"
+#~ msgstr "<0/> See it in Action"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "<0/> is requesting additional access to your Nocturne data."
-msgstr "<0/> is requesting additional access to your Nocturne data."
+#~ msgid "Explore Features"
+#~ msgstr "Explore Features"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "<0/> wants to access your Nocturne data."
-msgstr "<0/> wants to access your Nocturne data."
+#~ msgid "Why Choose Nocturne?"
+#~ msgstr "Why Choose Nocturne?"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "New permissions requested"
-msgstr "New permissions requested"
+#~ msgid ""
+#~ "Modern architecture meets proven reliability. Get the features you need\n"
+#~ "without sacrificing compatibility."
+#~ msgstr ""
+#~ "Modern architecture meets proven reliability. Get the features you need\n"
+#~ "without sacrificing compatibility."
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "Previously approved"
-msgstr "Previously approved"
+#~ msgid "Nightscout Compatible"
+#~ msgstr "Nightscout Compatible"
 
-#: src/routes/oauth/consent/+page.svelte
-msgid "Only share data from the last 24 hours"
-msgstr "Only share data from the last 24 hours"
+#~ msgid ""
+#~ "Full API compatibility means your existing apps and devices work\n"
+#~ "seamlessly. No migration headaches."
+#~ msgstr ""
+#~ "Full API compatibility means your existing apps and devices work\n"
+#~ "seamlessly. No migration headaches."
 
-#: src/routes/oauth/consent/+page.svelte
+#: src/routes/features/+page.svelte
+msgid "Modern Performance"
+msgstr "Modern Performance"
+
+#~ msgid ""
+#~ "Built on .NET 10 for blazing fast performance. Handle more data with\n"
+#~ "less resources."
+#~ msgstr ""
+#~ "Built on .NET 10 for blazing fast performance. Handle more data with\n"
+#~ "less resources."
+
+#~ msgid "Self-Hosted Security"
+#~ msgstr "Self-Hosted Security"
+
+#~ msgid ""
+#~ "Your data stays on your server. Full control over your health\n"
+#~ "information, always."
+#~ msgstr ""
+#~ "Your data stays on your server. Full control over your health\n"
+#~ "information, always."
+
+#~ msgid "Multiple Data Sources"
+#~ msgstr "Multiple Data Sources"
+
+#~ msgid ""
+#~ "Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+#~ "together in one place."
+#~ msgstr ""
+#~ "Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+#~ "together in one place."
+
+#~ msgid "Real-Time Monitoring"
+#~ msgstr "Real-Time Monitoring"
+
+#~ msgid ""
+#~ "Live glucose updates with WebSocket support. Stay informed with\n"
+#~ "instant notifications."
+#~ msgstr ""
+#~ "Live glucose updates with WebSocket support. Stay informed with\n"
+#~ "instant notifications."
+
+#~ msgid "Easy Migration"
+#~ msgstr "Easy Migration"
+
+#~ msgid ""
+#~ "Import your existing Nightscout data with one click. Or run both\n"
+#~ "side-by-side to test first."
+#~ msgstr ""
+#~ "Import your existing Nightscout data with one click. Or run both\n"
+#~ "side-by-side to test first."
+
+#~ msgid "Get Started in Minutes"
+#~ msgstr "Get Started in Minutes"
+
+#~ msgid ""
+#~ "Our configuration wizard generates everything you need for a\n"
+#~ "production-ready deployment."
+#~ msgstr ""
+#~ "Our configuration wizard generates everything you need for a\n"
+#~ "production-ready deployment."
+
+#~ msgid "Step 1"
+#~ msgstr "Step 1"
+
+#~ msgid "Configure"
+#~ msgstr "Configure"
+
+#~ msgid ""
+#~ "Choose your setup type and configure your data sources through our\n"
+#~ "friendly wizard."
+#~ msgstr ""
+#~ "Choose your setup type and configure your data sources through our\n"
+#~ "friendly wizard."
+
+#~ msgid "Step 2"
+#~ msgstr "Step 2"
+
+#~ msgid "Deploy"
+#~ msgstr "Deploy"
+
+#~ msgid ""
+#~ "Download your configuration files and deploy with Docker in one\n"
+#~ "command."
+#~ msgstr ""
+#~ "Download your configuration files and deploy with Docker in one\n"
+#~ "command."
+
+#~ msgid "Step 3"
+#~ msgstr "Step 3"
+
+#~ msgid "Monitor"
+#~ msgstr "Monitor"
+
+#~ msgid ""
+#~ "Start tracking your glucose data with a modern, responsive\n"
+#~ "interface."
+#~ msgstr ""
+#~ "Start tracking your glucose data with a modern, responsive\n"
+#~ "interface."
+
+#~ msgid "Ready to Take Control?"
+#~ msgstr "Ready to Take Control?"
+
+#~ msgid ""
+#~ "Join the community of people managing their diabetes data on their own\n"
+#~ "terms. Free, open source, and always will be."
+#~ msgstr ""
+#~ "Join the community of people managing their diabetes data on their own\n"
+#~ "terms. Free, open source, and always will be."
+
+#: src/routes/features/+page.svelte
+msgid "Start Configuration <0/>"
+msgstr "Start Configuration <0/>"
+
+#: src/routes/features/+page.svelte
+msgid "Read the Docs"
+msgstr "Read the Docs"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Setup"
+msgstr "Setup"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Download"
+msgstr "Download"
+
+#: src/lib/components/StepIndicator.svelte
+msgid "Setup progress"
+msgstr "Setup progress"
+
+#: src/lib/components/SiteHeader.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "Roadmap"
+msgstr "Roadmap"
+
+#: src/lib/components/SiteHeader.svelte
+msgid "Docs"
+msgstr "Docs"
+
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+#: src/lib/components/SiteHeader.svelte
+msgid "Get Started"
+msgstr "Get Started"
+
+#: src/lib/components/SiteHeader.svelte
+msgid "Toggle menu"
+msgstr "Toggle menu"
+
+#: src/lib/components/SiteFooter.svelte
 msgid ""
-"When enabled, this app will only be able to access data from the\n"
-"last 24 hours. Historical reports will show a notice that data is\n"
-"limited."
+"Open source diabetes data management with full Nightscout\n"
+"compatibility."
 msgstr ""
-"When enabled, this app will only be able to access data from the\n"
-"last 24 hours. Historical reports will show a notice that data is\n"
-"limited."
+"Open source diabetes data management with full Nightscout\n"
+"compatibility."
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Product"
+msgstr "Product"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "FAQ"
+msgstr "FAQ"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Getting Started"
+msgstr "Getting Started"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Installation"
+msgstr "Installation"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Community"
+msgstr "Community"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "<0/> GitHub"
+msgstr "<0/> GitHub"
+
+#. placeholder {0}: new Date().getFullYear()
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"© {0} Nocturne. Open source under MIT\n"
+"license."
+msgstr ""
+"© {0} Nocturne. Open source under MIT\n"
+"license."
+
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"Made with <0/> by the\n"
+"diabetes community"
+msgstr ""
+"Made with <0/> by the\n"
+"diabetes community"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Everything you need to manage your diabetes data, built on modern\n"
+"technology with full Nightscout compatibility."
+msgstr ""
+"Everything you need to manage your diabetes data, built on modern\n"
+"technology with full Nightscout compatibility."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Core Features"
+msgstr "<0/> Core Features"
+
+#: src/routes/features/+page.svelte
+msgid "Full Nightscout API Compatibility"
+msgstr "Full Nightscout API Compatibility"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Drop-in replacement for Nightscout with v1, v2, and v3 API support.\n"
+"Your existing apps, uploaders, and integrations work without any\n"
+"changes."
+msgstr ""
+"Drop-in replacement for Nightscout with v1, v2, and v3 API support.\n"
+"Your existing apps, uploaders, and integrations work without any\n"
+"changes."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> xDrip+ compatible"
+msgstr "<0/> xDrip+ compatible"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Loop compatible"
+msgstr "<0/> Loop compatible"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> AndroidAPS compatible"
+msgstr "<0/> AndroidAPS compatible"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Built on .NET 10 with PostgreSQL for exceptional performance. Handle\n"
+"years of data without slowdowns."
+msgstr ""
+"Built on .NET 10 with PostgreSQL for exceptional performance. Handle\n"
+"years of data without slowdowns."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Sub-millisecond query response"
+msgstr "<0/> Sub-millisecond query response"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Efficient memory usage"
+msgstr "<0/> Efficient memory usage"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Scales with your data"
+msgstr "<0/> Scales with your data"
+
+#: src/routes/features/+page.svelte
+msgid "Real-Time Updates"
+msgstr "Real-Time Updates"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"WebSocket and SignalR support for instant glucose updates. Socket.IO\n"
+"bridge for Nightscout client compatibility."
+msgstr ""
+"WebSocket and SignalR support for instant glucose updates. Socket.IO\n"
+"bridge for Nightscout client compatibility."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Instant data sync"
+msgstr "<0/> Instant data sync"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Socket.IO compatibility"
+msgstr "<0/> Socket.IO compatibility"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Low bandwidth usage"
+msgstr "<0/> Low bandwidth usage"
+
+#: src/routes/features/+page.svelte
+msgid "Modern Dashboard & Reports"
+msgstr "Modern Dashboard & Reports"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Beautiful, responsive dashboard built with SvelteKit. Advanced\n"
+"reporting with AGP, TIR, and more."
+msgstr ""
+"Beautiful, responsive dashboard built with SvelteKit. Advanced\n"
+"reporting with AGP, TIR, and more."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Time in Range analysis"
+msgstr "<0/> Time in Range analysis"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Customizable widgets"
+msgstr "<0/> Customizable widgets"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Data Integrations"
+msgstr "<0/> Data Integrations"
+
+#: src/routes/features/+page.svelte
+msgid "Dexcom"
+msgstr "Dexcom"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Direct integration with Dexcom Share. Automatic data sync from G6, G7,\n"
+"and ONE sensors."
+msgstr ""
+"Direct integration with Dexcom Share. Automatic data sync from G6, G7,\n"
+"and ONE sensors."
+
+#: src/routes/features/+page.svelte
+msgid "Libre"
+msgstr "Libre"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Connect to LibreView for Freestyle Libre 2 and 3 data. Real-time sync\n"
+"with LibreLinkUp."
+msgstr ""
+"Connect to LibreView for Freestyle Libre 2 and 3 data. Real-time sync\n"
+"with LibreLinkUp."
+
+#: src/routes/features/+page.svelte
+msgid "Glooko"
+msgstr "Glooko"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Import data from Glooko for comprehensive diabetes management data\n"
+"aggregation."
+msgstr ""
+"Import data from Glooko for comprehensive diabetes management data\n"
+"aggregation."
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Run as a proxy alongside existing Nightscout or migrate your complete\n"
+"data history."
+msgstr ""
+"Run as a proxy alongside existing Nightscout or migrate your complete\n"
+"data history."
+
+#: src/routes/features/+page.svelte
+msgid "xDrip+"
+msgstr "xDrip+"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Full xDrip+ uploader support. Continue using your favorite Android CGM\n"
+"app."
+msgstr ""
+"Full xDrip+ uploader support. Continue using your favorite Android CGM\n"
+"app."
+
+#: src/routes/features/+page.svelte
+msgid "More Coming"
+msgstr "More Coming"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Extensible connector architecture makes adding new data sources\n"
+"straightforward."
+msgstr ""
+"Extensible connector architecture makes adding new data sources\n"
+"straightforward."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Security & Privacy"
+msgstr "<0/> Security & Privacy"
+
+#: src/routes/features/+page.svelte
+msgid "Self-Hosted"
+msgstr "Self-Hosted"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Your data stays on your server. No cloud dependencies or third-party\n"
+"data access."
+msgstr ""
+"Your data stays on your server. No cloud dependencies or third-party\n"
+"data access."
+
+#: src/routes/features/+page.svelte
+msgid "Role-Based Access"
+msgstr "Role-Based Access"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Fine-grained permissions for caregivers, healthcare providers, and\n"
+"family members."
+msgstr ""
+"Fine-grained permissions for caregivers, healthcare providers, and\n"
+"family members."
+
+#: src/routes/features/+page.svelte
+msgid "Multi-User Support"
+msgstr "Multi-User Support"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Manage multiple profiles for families. Each person gets their own data\n"
+"and settings."
+msgstr ""
+"Manage multiple profiles for families. Each person gets their own data\n"
+"and settings."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Developer Features"
+msgstr "<0/> Developer Features"
+
+#: src/routes/features/+page.svelte
+msgid "OpenAPI Documentation"
+msgstr "OpenAPI Documentation"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Full OpenAPI/Swagger documentation with Scalar UI. Generate client\n"
+"libraries for any language."
+msgstr ""
+"Full OpenAPI/Swagger documentation with Scalar UI. Generate client\n"
+"libraries for any language."
+
+#: src/routes/features/+page.svelte
+msgid "Aspire Dashboard"
+msgstr "Aspire Dashboard"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Built-in observability with distributed tracing, structured logging,\n"
+"and metrics visualization."
+msgstr ""
+"Built-in observability with distributed tracing, structured logging,\n"
+"and metrics visualization."
+
+#: src/routes/features/+page.svelte
+msgid "Clean Architecture"
+msgstr "Clean Architecture"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Well-organized codebase following Clean Architecture principles.\n"
+"Easy to extend and customize."
+msgstr ""
+"Well-organized codebase following Clean Architecture principles.\n"
+"Easy to extend and customize."
+
+#: src/routes/features/+page.svelte
+msgid "Docker Ready"
+msgstr "Docker Ready"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Production-ready Docker images with docker-compose configurations.\n"
+"Deploy anywhere containers run."
+msgstr ""
+"Production-ready Docker images with docker-compose configurations.\n"
+"Deploy anywhere containers run."
+
+#: src/routes/features/+page.svelte
+msgid "Ready to Get Started?"
+msgstr "Ready to Get Started?"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Set up your own Nocturne instance in minutes with our configuration\n"
+"wizard."
+msgstr ""
+"Set up your own Nocturne instance in minutes with our configuration\n"
+"wizard."
+
+#: src/routes/roadmap/+page.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "Failed to load roadmap"
+msgstr "Failed to load roadmap"
+
+#: src/routes/roadmap/+page.svelte
+msgid ""
+"Track the development progress of Nocturne. See what we're working on,\n"
+"what's coming next, and what's been completed."
+msgstr ""
+"Track the development progress of Nocturne. See what we're working on,\n"
+"what's coming next, and what's been completed."
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> View on GitHub <1/>"
+msgstr "<0/> View on GitHub <1/>"
+
+#: src/routes/roadmap/+page.svelte
+msgid "Loading roadmap from GitHub..."
+msgstr "Loading roadmap from GitHub..."
+
+#: src/routes/roadmap/+page.svelte
+msgid "No milestones found"
+msgstr "No milestones found"
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> In Progress"
+msgstr "<0/> In Progress"
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Upcoming"
+msgstr "<0/> Upcoming"
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Completed"
+msgstr "<0/> Completed"
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "Due"
+msgstr "Due"
+
+#. placeholder {0}: milestone.closed_issues
+#. placeholder {1}: totalIssues
+#: src/lib/components/MilestoneCard.svelte
+msgid "{0} / {1} issues completed"
+msgstr "{0} / {1} issues completed"
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "No issues in this milestone yet"
+msgstr "No issues in this milestone yet"
+rd.svelte
+msgid "No issues in this milestone yet"
+msgstr "No issues in this milestone yet"

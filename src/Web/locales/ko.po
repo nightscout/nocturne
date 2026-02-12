@@ -1083,6 +1083,7 @@ msgstr ""
 #: src/routes/auth/register/+page.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/dashboard/+page.svelte
+#: src/routes/roadmap/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Try Again"
@@ -1213,6 +1214,7 @@ msgstr ""
 
 #: src/routes/dashboard/+page.svelte
 #: src/routes/reports/battery/+page.svelte
+#: src/routes/roadmap/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -1885,6 +1887,7 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
+#: src/lib/components/MilestoneCard.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -15853,4 +15856,90 @@ msgid ""
 "When enabled, this app will only be able to access data from the\n"
 "last 24 hours. Historical reports will show a notice that data is\n"
 "limited."
+msgstr ""
+
+#: src/lib/components/SiteHeader.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "Roadmap"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "Failed to load roadmap"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid ""
+"Track the development progress of Nocturne. See what we're working on,\n"
+"what's coming next, and what's been completed."
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> View on GitHub <1/>"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "Loading roadmap from GitHub..."
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "No milestones found"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> In Progress"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Upcoming"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Completed"
+msgstr ""
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "Due"
+msgstr ""
+
+#. placeholder {0}: milestone.closed_issues
+#. placeholder {1}: totalIssues
+#: src/lib/components/MilestoneCard.svelte
+msgid "{0} / {1} issues completed"
+msgstr ""
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "No issues in this milestone yet"
+msgstr ""
+ "Loading roadmap from GitHub..."
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "No milestones found"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> In Progress"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Upcoming"
+msgstr ""
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Completed"
+msgstr ""
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "Due"
+msgstr ""
+
+#. placeholder {0}: milestone.closed_issues
+#. placeholder {1}: totalIssues
+#: src/lib/components/MilestoneCard.svelte
+msgid "{0} / {1} issues completed"
+msgstr ""
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "No issues in this milestone yet"
 msgstr ""

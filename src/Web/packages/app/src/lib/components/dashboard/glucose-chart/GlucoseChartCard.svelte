@@ -11,7 +11,14 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { Chart, Svg, Axis, ChartClipPath, Highlight, BrushContext } from "layerchart";
+  import {
+    Chart,
+    Svg,
+    Axis,
+    ChartClipPath,
+    Highlight,
+    BrushContext,
+  } from "layerchart";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
   import { bisector } from "d3";
   import { scaleTime, scaleLinear } from "d3-scale";
@@ -42,6 +49,8 @@
   import DeviceEventMarker from "./markers/DeviceEventMarker.svelte";
   import SystemEventMarker from "./markers/SystemEventMarker.svelte";
   import TrackerExpirationMarker from "./markers/TrackerExpirationMarker.svelte";
+  import { mergeChartData } from "$lib/utils/chart-data-merge";
+  import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 
   interface ComponentProps {
     demoMode?: boolean;
@@ -72,6 +81,10 @@
     selectionDomain?: [Date, Date] | null;
     /** Callback when brush selection changes (enables selection mode) */
     onSelectionChange?: (domain: [Date, Date] | null) => void;
+    /** Pre-loaded initial chart data from server (SSR streaming) */
+    initialChartData?: TransformedChartData | null;
+    /** Promise for streamed historical data */
+    streamedHistoricalData?: Promise<TransformedChartData | null>;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -97,6 +110,8 @@
     defaultFocusHours,
     selectionDomain,
     onSelectionChange,
+    initialChartData,
+    streamedHistoricalData,
   }: ComponentProps = $props();
 
   // Selection mode is enabled when onSelectionChange callback is provided
@@ -105,9 +120,12 @@
   // ===== STATE =====
   let predictionData = $state<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
-  let serverChartData = $state<Awaited<ReturnType<typeof getChartData>> | null>(
-    null
+  let serverChartData = $state<TransformedChartData | null>(
+    initialChartData ?? null
   );
+  // Track which promise we've already processed to allow re-processing on SPA navigation
+  let processedHistoricalPromise =
+    $state<Promise<TransformedChartData | null> | null>(null);
 
   // Legend toggle state
   // svelte-ignore state_referenced_locally
@@ -204,8 +222,7 @@
     from: displayDateRange.from,
     to: showPredictions
       ? new Date(
-          displayDateRange.to.getTime() +
-            predictionMinutes.current * 60 * 1000
+          displayDateRange.to.getTime() + predictionMinutes.current * 60 * 1000
         )
       : displayDateRange.to,
   });
@@ -226,8 +243,9 @@
     if (!isBrowser) return null;
     const enabled = predictionEnabled.current;
     const latestEntryMills =
-      serverChartData?.glucoseData?.[serverChartData.glucoseData.length - 1]
-        ?.time?.getTime() ?? 0;
+      serverChartData?.glucoseData?.[
+        serverChartData.glucoseData.length - 1
+      ]?.time?.getTime() ?? 0;
     if (
       !showPredictions ||
       !enabled ||
@@ -276,8 +294,40 @@
     return { startTime: startRounded, endTime: endRounded };
   });
 
-  // Single data fetch — replaces 7+ separate API calls
+  // Handle streamed historical data when available
   $effect(() => {
+    if (
+      !streamedHistoricalData ||
+      streamedHistoricalData === processedHistoricalPromise
+    )
+      return;
+
+    const currentPromise = streamedHistoricalData;
+    let cancelled = false;
+
+    currentPromise
+      .then((historicalData) => {
+        if (!cancelled && historicalData && serverChartData) {
+          serverChartData = mergeChartData(serverChartData, historicalData);
+          processedHistoricalPromise = currentPromise;
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("Failed to load historical chart data:", err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // Skip if we already have initial data from SSR streaming
+  $effect(() => {
+    // If we have initial data from SSR, don't refetch
+    if (initialChartData && serverChartData) return;
+
     const range = stableFetchRange;
     if (!range) return;
 
@@ -355,12 +405,8 @@
   const veryHighThreshold = $derived(
     serverChartData?.thresholds?.veryHigh ?? 250
   );
-  const veryLowThreshold = $derived(
-    serverChartData?.thresholds?.veryLow ?? 40
-  );
-  const glucoseYMax = $derived(
-    serverChartData?.thresholds?.glucoseYMax ?? 300
-  );
+  const veryLowThreshold = $derived(serverChartData?.thresholds?.veryLow ?? 40);
+  const glucoseYMax = $derived(serverChartData?.thresholds?.glucoseYMax ?? 300);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -398,9 +444,7 @@
       })
       .map((span) => ({
         ...span,
-        displayStart: new Date(
-          Math.max(span.startTime.getTime(), rangeStart)
-        ),
+        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
         displayEnd: new Date(
           Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
         ),
@@ -419,8 +463,7 @@
     const profile = processSpans(profileSpans, rangeStart, rangeEnd).map(
       (span) => ({
         ...span,
-        profileName:
-          (span.metadata?.profileName as string) ?? span.state,
+        profileName: (span.metadata?.profileName as string) ?? span.state,
       })
     );
 
@@ -465,9 +508,7 @@
   const displayProfileSpans = $derived(processedStateSpans.profile);
   const displayActivitySpans = $derived(processedStateSpans.activity);
   const displayTempBasalSpans = $derived(processedStateSpans.tempBasal);
-  const displayBasalDeliverySpans = $derived(
-    processedStateSpans.basalDelivery
-  );
+  const displayBasalDeliverySpans = $derived(processedStateSpans.basalDelivery);
   const displaySystemEvents = $derived(processedStateSpans.events);
 
   // Stale basal detection
@@ -511,8 +552,7 @@
     });
     if (activeSpan) return activeSpan.state;
     const sorted = [...displayPumpModeSpans].sort(
-      (a, b) =>
-        (b.endTime?.getTime() ?? now) - (a.endTime?.getTime() ?? now)
+      (a, b) => (b.endTime?.getTime() ?? now) - (a.endTime?.getTime() ?? now)
     );
     return sorted[0]?.state ?? "Automatic";
   });
@@ -613,12 +653,7 @@
       activity: { top: 0, bottom: 0, visible: false },
     };
 
-    const laneOrder = [
-      "pumpMode",
-      "override",
-      "profile",
-      "activity",
-    ] as const;
+    const laneOrder = ["pumpMode", "override", "profile", "activity"] as const;
     for (const lane of laneOrder) {
       const visible = swimLanes[lane];
       positions[lane] = {
@@ -709,9 +744,7 @@
 
     const time = new Date(
       treatment.mills ??
-        (treatment.created_at
-          ? new Date(treatment.created_at).getTime()
-          : 0)
+        (treatment.created_at ? new Date(treatment.created_at).getTime() : 0)
     );
     const nearby = findAllNearbyTreatments(time);
 
@@ -768,15 +801,21 @@
     );
   }
 
-  function findActiveSpan<
-    T extends { startTime: Date; endTime?: Date | null },
-  >(spans: T[], time: Date, findAll: false): T | undefined;
-  function findActiveSpan<
-    T extends { startTime: Date; endTime?: Date | null },
-  >(spans: T[], time: Date, findAll: true): T[];
-  function findActiveSpan<
-    T extends { startTime: Date; endTime?: Date | null },
-  >(spans: T[], time: Date, findAll: boolean): T | T[] | undefined {
+  function findActiveSpan<T extends { startTime: Date; endTime?: Date | null }>(
+    spans: T[],
+    time: Date,
+    findAll: false
+  ): T | undefined;
+  function findActiveSpan<T extends { startTime: Date; endTime?: Date | null }>(
+    spans: T[],
+    time: Date,
+    findAll: true
+  ): T[];
+  function findActiveSpan<T extends { startTime: Date; endTime?: Date | null }>(
+    spans: T[],
+    time: Date,
+    findAll: boolean
+  ): T | T[] | undefined {
     const timeMs = time.getTime();
     const predicate = (span: T) => {
       const spanStart = span.startTime.getTime();
@@ -802,8 +841,7 @@
   function findNearbySystemEvent(time: Date) {
     return displaySystemEvents.find(
       (event) =>
-        Math.abs(event.time.getTime() - time.getTime()) <
-        TREATMENT_PROXIMITY_MS
+        Math.abs(event.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
     );
   }
 </script>
@@ -867,8 +905,7 @@
           .range([glucoseTrackBottom, glucoseTrackTop])}
 
         {@const iobScale = (value: number) => {
-          const pixelY =
-            iobTrackBottom - (value / maxIOB) * iobTrackHeight;
+          const pixelY = iobTrackBottom - (value / maxIOB) * iobTrackHeight;
           return pixelToGlucoseDomain(pixelY);
         }}
         {@const iobZero = pixelToGlucoseDomain(iobTrackBottom)}
@@ -954,9 +991,7 @@
           {#if showDeviceEvents}
             {#each deviceEventMarkers as marker}
               {@const xPos = context.xScale(marker.time)}
-              {@const yPos = context.yScale(
-                glucoseScale(medianGlucose)
-              )}
+              {@const yPos = context.yScale(glucoseScale(medianGlucose))}
               <DeviceEventMarker
                 {xPos}
                 {yPos}
@@ -970,9 +1005,7 @@
           {#if showAlarms}
             {#each displaySystemEvents as event (event.id)}
               {@const xPos = context.xScale(event.time)}
-              {@const yPos = context.yScale(
-                glucoseScale(lowThreshold * 0.8)
-              )}
+              {@const yPos = context.yScale(glucoseScale(lowThreshold * 0.8))}
               <SystemEventMarker
                 {xPos}
                 {yPos}
@@ -1023,20 +1056,28 @@
           mode="separated"
           xDomain={selectionDomain ?? [chartXDomain.from, chartXDomain.to]}
           onChange={(e: { xDomain: unknown }) => {
-            if (e.xDomain && Array.isArray(e.xDomain) && e.xDomain.length === 2) {
-              onSelectionChange?.([new Date(e.xDomain[0] as number), new Date(e.xDomain[1] as number)]);
+            if (
+              e.xDomain &&
+              Array.isArray(e.xDomain) &&
+              e.xDomain.length === 2
+            ) {
+              onSelectionChange?.([
+                new Date(e.xDomain[0] as number),
+                new Date(e.xDomain[1] as number),
+              ]);
             }
           }}
           classes={{
-            range: 'bg-warning/30 border border-warning/60 rounded',
-            handle: 'bg-warning hover:bg-warning/80 rounded-sm'
+            range: "bg-warning/30 border border-warning/60 rounded",
+            handle: "bg-warning hover:bg-warning/80 rounded-sm",
           }}
         />
       {/if}
 
       <ChartTooltip
         {context}
-        findBasalValue={(time) => findBasalValue(basalData, time) as BasalPoint | undefined}
+        findBasalValue={(time) =>
+          findBasalValue(basalData, time) as BasalPoint | undefined}
         findIobValue={(time) => findSeriesValue(iobData, time)}
         findCobValue={(time) => findSeriesValue(cobData, time)}
         {findNearbyBolus}
@@ -1164,12 +1205,9 @@
         onToggleAlarms={() => (showAlarms = !showAlarms)}
         onToggleScheduledTrackers={() =>
           (showScheduledTrackers = !showScheduledTrackers)}
-        onToggleOverrideSpans={() =>
-          (showOverrideSpans = !showOverrideSpans)}
-        onToggleProfileSpans={() =>
-          (showProfileSpans = !showProfileSpans)}
-        onToggleActivitySpans={() =>
-          (showActivitySpans = !showActivitySpans)}
+        onToggleOverrideSpans={() => (showOverrideSpans = !showOverrideSpans)}
+        onToggleProfileSpans={() => (showProfileSpans = !showProfileSpans)}
+        onToggleActivitySpans={() => (showActivitySpans = !showActivitySpans)}
         {deviceEventMarkers}
         systemEvents={displaySystemEvents}
         pumpModeSpans={displayPumpModeSpans}

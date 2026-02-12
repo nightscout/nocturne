@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Nocturne.API.Helpers;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts;
@@ -26,11 +29,15 @@ public class ChartDataService : IChartDataService
     private readonly StateSpanRepository _stateSpanRepository;
     private readonly SystemEventRepository _systemEventRepository;
     private readonly TrackerRepository _trackerRepository;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<ChartDataService> _logger;
 
     // Clinical standard thresholds (mg/dL) -- used when profile doesn't specify
     private const double DefaultVeryLow = 54;
     private const double DefaultVeryHigh = 250;
+
+    // Cache settings
+    private static readonly TimeSpan IobCobCacheExpiration = TimeSpan.FromMinutes(1);
 
     public ChartDataService(
         IIobService iobService,
@@ -44,6 +51,7 @@ public class ChartDataService : IChartDataService
         StateSpanRepository stateSpanRepository,
         SystemEventRepository systemEventRepository,
         TrackerRepository trackerRepository,
+        IMemoryCache cache,
         ILogger<ChartDataService> logger
     )
     {
@@ -58,6 +66,7 @@ public class ChartDataService : IChartDataService
         _stateSpanRepository = stateSpanRepository;
         _systemEventRepository = systemEventRepository;
         _trackerRepository = trackerRepository;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -88,13 +97,20 @@ public class ChartDataService : IChartDataService
         // Fetch all data sequentially (DbContext is not thread-safe)
         var bufferMs = 8L * 60 * 60 * 1000; // 8 hours buffer for IOB calculation
 
-        // Time-range filtered queries
+        // Calculate reasonable limits based on the actual time range
+        var rangeHours = (endTime - startTime) / (60.0 * 60 * 1000);
+        // At 5-min CGM intervals: ~12 entries/hour. Add 50% safety margin.
+        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 12 * 1.5));
+        // Treatments are less frequent but include the buffer window
+        var treatmentRangeHours = (endTime - (startTime - bufferMs)) / (60.0 * 60 * 1000);
+        var treatmentLimit = (int)Math.Max(500, Math.Ceiling(treatmentRangeHours * 10));
+
         var treatmentFind = $"{{\"mills\":{{\"$gte\":{startTime - bufferMs},\"$lte\":{endTime}}}}}";
         var relevantTreatments =
             (
                 await _treatmentService.GetTreatmentsAsync(
                     find: treatmentFind,
-                    count: int.MaxValue,
+                    count: treatmentLimit,
                     cancellationToken: cancellationToken
                 )
             )?.ToList() ?? new List<Treatment>();
@@ -104,15 +120,16 @@ public class ChartDataService : IChartDataService
             (
                 await _entryService.GetEntriesAsync(
                     find: entryFind,
-                    count: int.MaxValue,
+                    count: entryLimit,
                     cancellationToken: cancellationToken
                 )
             )?.ToList() ?? new List<Entry>();
 
+        // Device status - only need recent entries for IOB source detection
         var deviceStatusList =
             (
                 await _deviceStatusService.GetDeviceStatusAsync(
-                    count: int.MaxValue,
+                    count: 100,
                     skip: 0,
                     cancellationToken: cancellationToken
                 )
@@ -122,55 +139,34 @@ public class ChartDataService : IChartDataService
             .Where(t => t.Mills >= startTime && t.Mills <= endTime)
             .ToList();
 
-        // Fetch state spans
-        var pumpModeSpansResult = await _stateSpanRepository.GetByCategory(
+        // Fetch all state spans in a single batched query
+        var stateSpanCategories = new[]
+        {
             StateSpanCategory.PumpMode,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var basalDeliverySpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.BasalDelivery,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var profileSpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.Profile,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var overrideSpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.Override,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var sleepSpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.Sleep,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var exerciseSpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.Exercise,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var illnessSpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.Illness,
-            startTime,
-            endTime,
-            cancellationToken
-        );
-        var travelSpansResult = await _stateSpanRepository.GetByCategory(
             StateSpanCategory.Travel,
+        };
+
+        var allStateSpans = await _stateSpanRepository.GetByCategories(
+            stateSpanCategories,
             startTime,
             endTime,
             cancellationToken
         );
+
+        var pumpModeSpansResult = allStateSpans[StateSpanCategory.PumpMode];
+        var basalDeliverySpansResult = allStateSpans[StateSpanCategory.BasalDelivery];
+        var profileSpansResult = allStateSpans[StateSpanCategory.Profile];
+        var overrideSpansResult = allStateSpans[StateSpanCategory.Override];
+        var sleepSpansResult = allStateSpans[StateSpanCategory.Sleep];
+        var exerciseSpansResult = allStateSpans[StateSpanCategory.Exercise];
+        var illnessSpansResult = allStateSpans[StateSpanCategory.Illness];
+        var travelSpansResult = allStateSpans[StateSpanCategory.Travel];
 
         // System events
         var systemEventsResult = await _systemEventRepository.GetSystemEventsAsync(
@@ -313,39 +309,133 @@ public class ChartDataService : IChartDataService
         int intervalMinutes
     )
     {
+        // Generate cache key based on treatment data hash and time range
+        var cacheKey = GenerateIobCobCacheKey(treatments, startTime, endTime, intervalMinutes);
+
+        // Try to get from cache
+        if (
+            _cache.TryGetValue(
+                cacheKey,
+                out (
+                    List<TimeSeriesPoint> iob,
+                    List<TimeSeriesPoint> cob,
+                    double maxIob,
+                    double maxCob
+                ) cached
+            )
+        )
+        {
+            _logger.LogDebug("IOB/COB cache hit for range {Start}-{End}", startTime, endTime);
+            return cached;
+        }
+
+        _logger.LogDebug(
+            "IOB/COB cache miss, computing for range {Start}-{End}",
+            startTime,
+            endTime
+        );
+
         var iobSeries = new List<TimeSeriesPoint>();
         var cobSeries = new List<TimeSeriesPoint>();
         var intervalMs = intervalMinutes * 60 * 1000;
         double maxIob = 0,
             maxCob = 0;
 
+        // Pre-compute DIA and COB absorption window for filtering
+        var dia = _profileService.HasData() ? _profileService.GetDIA(endTime, null) : 3.0;
+        var diaMs = (long)(dia * 60 * 60 * 1000); // DIA in milliseconds
+        var cobAbsorptionMs = 6L * 60 * 60 * 1000; // 6 hours for COB absorption
+
+        // Pre-filter treatments with insulin for IOB calculations
+        var insulinTreatments = treatments
+            .Where(t => t.Insulin.HasValue && t.Insulin.Value > 0)
+            .ToList();
+
+        // Pre-filter treatments with carbs for COB calculations
+        var carbTreatments = treatments.Where(t => t.Carbs.HasValue && t.Carbs.Value > 0).ToList();
+
+        var profile = _profileService.HasData() ? _profileService : null;
+
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            var iobResult = _iobService.FromTreatments(
-                treatments,
-                _profileService.HasData() ? _profileService : null,
-                t,
-                null
-            );
+            // Filter to only treatments that could still have active IOB at time t
+            // A treatment can only contribute IOB if it was given within DIA hours before t
+            var relevantIobTreatments = insulinTreatments
+                .Where(tr => tr.Mills <= t && tr.Mills >= t - diaMs)
+                .ToList();
+
+            var iobResult =
+                relevantIobTreatments.Count > 0
+                    ? _iobService.FromTreatments(relevantIobTreatments, profile, t, null)
+                    : new IobResult { Iob = 0 };
+
             var iob = iobResult.Iob;
             iobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = iob });
             if (iob > maxIob)
                 maxIob = iob;
 
-            var cobResult = _cobService.CobTotal(
-                treatments,
-                deviceStatuses,
-                _profileService.HasData() ? _profileService : null,
-                t,
-                null
-            );
+            // Filter to only treatments that could still have active COB at time t
+            var relevantCobTreatments = carbTreatments
+                .Where(tr => tr.Mills <= t && tr.Mills >= t - cobAbsorptionMs)
+                .ToList();
+
+            var cobResult =
+                relevantCobTreatments.Count > 0
+                    ? _cobService.CobTotal(relevantCobTreatments, deviceStatuses, profile, t, null)
+                    : new CobResult { Cob = 0 };
+
             var cob = cobResult.Cob;
             cobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = cob });
             if (cob > maxCob)
                 maxCob = cob;
         }
 
-        return (iobSeries, cobSeries, maxIob, maxCob);
+        // Cache the result
+        var result = (iobSeries, cobSeries, maxIob, maxCob);
+        _cache.Set(cacheKey, result, IobCobCacheExpiration);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Generate a cache key for IOB/COB calculations based on treatment fingerprint and time range.
+    /// Uses SHA256 of individual treatment mills/insulin/carbs values for collision resistance.
+    /// </summary>
+    private static string GenerateIobCobCacheKey(
+        List<Treatment> treatments,
+        long startTime,
+        long endTime,
+        int intervalMinutes
+    )
+    {
+        // Round start/end times to interval boundaries for better cache hits
+        var intervalMs = intervalMinutes * 60 * 1000;
+        var roundedStart = (startTime / intervalMs) * intervalMs;
+        var roundedEnd = (endTime / intervalMs) * intervalMs;
+
+        // Hash individual treatment data for a collision-resistant fingerprint
+        var sb = new StringBuilder();
+        foreach (var t in treatments)
+        {
+            if (
+                (t.Insulin.HasValue && t.Insulin.Value > 0)
+                || (t.Carbs.HasValue && t.Carbs.Value > 0)
+            )
+            {
+                sb.Append(t.Mills)
+                    .Append(':')
+                    .Append(t.Insulin ?? 0)
+                    .Append(':')
+                    .Append(t.Carbs ?? 0)
+                    .Append('|');
+            }
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())))[
+            ..16
+        ]; // First 16 hex chars (64 bits) is sufficient
+
+        return $"iobcob:{hash}:{roundedStart}:{roundedEnd}:{intervalMinutes}";
     }
 
     internal static (List<GlucosePointDto> data, double yMax) BuildGlucoseData(List<Entry> entries)

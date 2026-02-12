@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Helpers;
@@ -57,6 +58,7 @@ public class ChartDataServiceTests
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
+            new MemoryCache(new MemoryCacheOptions()),
             _logger
         );
     }
