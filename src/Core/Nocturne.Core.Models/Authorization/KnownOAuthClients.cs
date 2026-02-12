@@ -18,7 +18,8 @@ public static class KnownOAuthClients
             ClientIdPattern = "xdrip-*",
             DisplayName = "xDrip+",
             Homepage = "https://github.com/NightscoutFoundation/xDrip",
-            TypicalScopes = [
+            TypicalScopes =
+            [
                 OAuthScopes.EntriesReadWrite,
                 OAuthScopes.TreatmentsReadWrite,
                 OAuthScopes.DeviceStatusReadWrite,
@@ -29,7 +30,8 @@ public static class KnownOAuthClients
             ClientIdPattern = "aaps-*",
             DisplayName = "AAPS",
             Homepage = "https://androidaps.readthedocs.io",
-            TypicalScopes = [
+            TypicalScopes =
+            [
                 OAuthScopes.EntriesReadWrite,
                 OAuthScopes.TreatmentsReadWrite,
                 OAuthScopes.ProfileRead,
@@ -41,7 +43,8 @@ public static class KnownOAuthClients
             ClientIdPattern = "loop-*",
             DisplayName = "Loop",
             Homepage = "https://loopkit.github.io/loopdocs/",
-            TypicalScopes = [
+            TypicalScopes =
+            [
                 OAuthScopes.EntriesReadWrite,
                 OAuthScopes.TreatmentsReadWrite,
                 OAuthScopes.DeviceStatusReadWrite,
@@ -52,7 +55,8 @@ public static class KnownOAuthClients
             ClientIdPattern = "nightscout-*",
             DisplayName = "Nightscout",
             Homepage = "https://nightscout.github.io/",
-            TypicalScopes = [
+            TypicalScopes =
+            [
                 OAuthScopes.EntriesRead,
                 OAuthScopes.TreatmentsRead,
                 OAuthScopes.DeviceStatusRead,
@@ -64,25 +68,21 @@ public static class KnownOAuthClients
             ClientIdPattern = "sugarmate-*",
             DisplayName = "Sugarmate",
             Homepage = "https://sugarmate.io/",
-            TypicalScopes = [
-                OAuthScopes.EntriesRead,
-            ],
+            TypicalScopes = [OAuthScopes.EntriesRead],
         },
         new()
         {
             ClientIdPattern = "nightwatch-*",
             DisplayName = "Nightwatch",
             Homepage = "https://github.com/nickenilsson/nightwatch",
-            TypicalScopes = [
-                OAuthScopes.EntriesRead,
-                OAuthScopes.TreatmentsRead,
-            ],
+            TypicalScopes = [OAuthScopes.EntriesRead, OAuthScopes.TreatmentsRead],
         },
         new()
         {
             ClientIdPattern = "nocturne-follower-internal",
             DisplayName = "Nocturne Follower",
-            TypicalScopes = [
+            TypicalScopes =
+            [
                 OAuthScopes.EntriesRead,
                 OAuthScopes.TreatmentsRead,
                 OAuthScopes.DeviceStatusRead,
@@ -94,7 +94,21 @@ public static class KnownOAuthClients
             ClientIdPattern = "nocturne-widget-windows11",
             DisplayName = "Nocturne Windows Widget",
             Homepage = "https://github.com/nightscout/nocturne",
-            TypicalScopes = [
+            TypicalScopes =
+            [
+                OAuthScopes.EntriesRead,
+                OAuthScopes.TreatmentsRead,
+                OAuthScopes.DeviceStatusRead,
+                OAuthScopes.ProfileRead,
+            ],
+        },
+        new()
+        {
+            ClientIdPattern = "nocturne-tray",
+            DisplayName = "Nocturne Tray",
+            Homepage = "https://github.com/nightscout/nocturne",
+            TypicalScopes =
+            [
                 OAuthScopes.EntriesRead,
                 OAuthScopes.TreatmentsRead,
                 OAuthScopes.DeviceStatusRead,

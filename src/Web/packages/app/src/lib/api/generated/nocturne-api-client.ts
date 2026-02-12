@@ -23448,6 +23448,7 @@ export interface NotificationBase {
     lastRecorded?: number;
     persistent?: boolean;
     clear?: boolean;
+    alertType?: string | undefined;
 }
 
 export interface SummaryResponse {

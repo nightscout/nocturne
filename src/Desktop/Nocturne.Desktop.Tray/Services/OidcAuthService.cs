@@ -1,19 +1,31 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Desktop.Tray.Services;
 
 /// <summary>
-/// Manages the OIDC browser-based authentication lifecycle for the tray app.
-/// Uses ICredentialStore from Widget.Contracts for secure token persistence.
+/// Manages OAuth 2.0 Authorization Code + PKCE authentication for the tray app.
+/// Uses a loopback HTTP listener (RFC 8252) to receive the authorization code,
+/// then exchanges it for tokens at the OAuth token endpoint.
 /// </summary>
 public sealed class OidcAuthService : IDisposable
 {
+    private const string ClientId = "nocturne-tray";
+    private const string Scopes = "entries.read treatments.read devicestatus.read profile.read";
+
     private readonly SettingsService _settingsService;
     private readonly ICredentialStore _credentialStore;
     private readonly HttpClient _httpClient;
     private Timer? _refreshTimer;
+
+    // PKCE + loopback state (live between StartLogin and callback)
+    private string? _codeVerifier;
+    private string? _redirectUri;
+    private HttpListener? _loopbackListener;
 
     /// <summary>
     /// Raised when the authentication state changes (signed in/out/refreshed).
@@ -39,68 +51,42 @@ public sealed class OidcAuthService : IDisposable
     }
 
     /// <summary>
-    /// Opens the system browser to the Nocturne OIDC login page.
-    /// The server will redirect back to nocturne-tray://auth/callback with tokens.
+    /// Starts the OAuth 2.0 Authorization Code + PKCE flow.
+    /// Opens the system browser to the OAuth authorize endpoint and starts
+    /// a loopback HTTP listener to receive the authorization code callback.
     /// </summary>
     public void StartLogin()
     {
         var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
-        if (string.IsNullOrEmpty(serverUrl)) return;
+        if (string.IsNullOrEmpty(serverUrl))
+            return;
 
-        var callbackUri = Uri.EscapeDataString("nocturne-tray://auth/callback");
-        var loginUrl = $"{serverUrl}/auth/login?returnUrl={callbackUri}";
+        // Generate PKCE pair
+        _codeVerifier = GenerateCodeVerifier();
+        var codeChallenge = ComputeCodeChallenge(_codeVerifier);
 
-        var startInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = loginUrl,
-            UseShellExecute = true,
-        };
-        System.Diagnostics.Process.Start(startInfo);
-    }
+        // Start loopback listener on a random port
+        _redirectUri = StartLoopbackListener();
+        if (_redirectUri is null)
+            return;
 
-    /// <summary>
-    /// Handles the protocol activation callback from the OIDC flow.
-    /// Parses tokens from the URI and stores them via ICredentialStore.
-    /// </summary>
-    public async Task<bool> HandleCallbackAsync(Uri callbackUri)
-    {
-        var query = System.Web.HttpUtility.ParseQueryString(callbackUri.Query);
+        // Build OAuth authorize URL
+        var authorizeUrl =
+            $"{serverUrl}/api/oauth/authorize"
+            + $"?response_type=code"
+            + $"&client_id={Uri.EscapeDataString(ClientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString(_redirectUri)}"
+            + $"&scope={Uri.EscapeDataString(Scopes)}"
+            + $"&code_challenge={Uri.EscapeDataString(codeChallenge)}"
+            + $"&code_challenge_method=S256";
 
-        // Check for error response
-        var error = query["error"];
-        if (!string.IsNullOrEmpty(error))
-        {
-            IsAuthenticated = false;
-            AuthStateChanged?.Invoke();
-            return false;
-        }
-
-        var accessToken = query["access_token"];
-        var refreshToken = query["refresh_token"];
-        var expiresInStr = query["expires_in"];
-
-        if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(refreshToken))
-        {
-            return false;
-        }
-
-        var expiresIn = int.TryParse(expiresInStr, out var exp) ? exp : 900;
-        var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/') ?? "";
-
-        var credentials = new NocturneCredentials
-        {
-            ApiUrl = serverUrl,
-            AccessToken = accessToken,
-            RefreshToken = refreshToken,
-            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn),
-            Scopes = ["entries.read", "treatments.read", "devicestatus.read", "profile.read"],
-        };
-
-        await _credentialStore.SaveCredentialsAsync(credentials);
-        IsAuthenticated = true;
-        ScheduleRefresh(expiresIn);
-        AuthStateChanged?.Invoke();
-        return true;
+        System.Diagnostics.Process.Start(
+            new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = authorizeUrl,
+                UseShellExecute = true,
+            }
+        );
     }
 
     /// <summary>
@@ -130,34 +116,48 @@ public sealed class OidcAuthService : IDisposable
     }
 
     /// <summary>
-    /// Refreshes the access token using the stored refresh token.
+    /// Refreshes the access token using the stored refresh token via the OAuth token endpoint.
     /// </summary>
     public async Task<bool> RefreshTokensAsync()
     {
         var creds = await _credentialStore.GetCredentialsAsync();
-        if (creds is null) return false;
+        if (creds is null || string.IsNullOrEmpty(creds.RefreshToken))
+            return false;
 
         try
         {
             var serverUrl = creds.ApiUrl.TrimEnd('/');
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{serverUrl}/auth/refresh");
-            request.Headers.Add("Refresh", creds.RefreshToken);
+            var content = new FormUrlEncodedContent(
+                new Dictionary<string, string>
+                {
+                    ["grant_type"] = "refresh_token",
+                    ["refresh_token"] = creds.RefreshToken,
+                    ["client_id"] = ClientId,
+                }
+            );
 
-            var response = await _httpClient.SendAsync(request);
+            var response = await _httpClient.PostAsync($"{serverUrl}/api/oauth/token", content);
             if (!response.IsSuccessStatusCode)
             {
+                // If refresh token is invalid/revoked, clear credentials
+                if (response.StatusCode == HttpStatusCode.BadRequest)
+                {
+                    await _credentialStore.DeleteCredentialsAsync();
+                }
                 IsAuthenticated = false;
                 AuthStateChanged?.Invoke();
                 return false;
             }
 
-            var tokenResponse = await response.Content.ReadFromJsonAsync<TokenRefreshResponse>();
-            if (tokenResponse is null) return false;
+            var tokenResponse = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>();
+            if (tokenResponse is null)
+                return false;
 
             await _credentialStore.UpdateTokensAsync(
                 tokenResponse.AccessToken,
                 tokenResponse.RefreshToken,
-                tokenResponse.ExpiresIn);
+                tokenResponse.ExpiresIn
+            );
 
             IsAuthenticated = true;
             ScheduleRefresh(tokenResponse.ExpiresIn);
@@ -171,7 +171,8 @@ public sealed class OidcAuthService : IDisposable
     }
 
     /// <summary>
-    /// Signs out by revoking the refresh token on the server and clearing local credentials.
+    /// Signs out by revoking the refresh token at the OAuth revocation endpoint (RFC 7009)
+    /// and clearing local credentials.
     /// </summary>
     public async Task SignOutAsync()
     {
@@ -181,9 +182,14 @@ public sealed class OidcAuthService : IDisposable
             try
             {
                 var serverUrl = creds.ApiUrl.TrimEnd('/');
-                var request = new HttpRequestMessage(HttpMethod.Post, $"{serverUrl}/auth/logout");
-                request.Headers.Add("Refresh", creds.RefreshToken);
-                await _httpClient.SendAsync(request);
+                var content = new FormUrlEncodedContent(
+                    new Dictionary<string, string>
+                    {
+                        ["token"] = creds.RefreshToken,
+                        ["token_type_hint"] = "refresh_token",
+                    }
+                );
+                await _httpClient.PostAsync($"{serverUrl}/api/oauth/revoke", content);
             }
             catch
             {
@@ -194,9 +200,199 @@ public sealed class OidcAuthService : IDisposable
         await _credentialStore.DeleteCredentialsAsync();
         _refreshTimer?.Dispose();
         _refreshTimer = null;
+        StopLoopbackListener();
         IsAuthenticated = false;
         AuthStateChanged?.Invoke();
     }
+
+    // ── Loopback HTTP listener ──────────────────────────────────────────
+
+    private string? StartLoopbackListener()
+    {
+        StopLoopbackListener();
+
+        var random = new Random();
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var port = random.Next(49152, 65535);
+            var prefix = $"http://127.0.0.1:{port}/callback/";
+            var listener = new HttpListener();
+            listener.Prefixes.Add(prefix);
+            try
+            {
+                listener.Start();
+                _loopbackListener = listener;
+                _ = WaitForCallbackAsync(listener);
+                return $"http://127.0.0.1:{port}/callback";
+            }
+            catch (HttpListenerException)
+            {
+                listener.Close();
+            }
+        }
+        return null;
+    }
+
+    private void StopLoopbackListener()
+    {
+        if (_loopbackListener is not null)
+        {
+            try
+            {
+                _loopbackListener.Stop();
+                _loopbackListener.Close();
+            }
+            catch
+            { /* best effort */
+            }
+            _loopbackListener = null;
+        }
+    }
+
+    private async Task WaitForCallbackAsync(HttpListener listener)
+    {
+        try
+        {
+            var context = await listener.GetContextAsync();
+            var query = context.Request.QueryString;
+
+            // Respond to the browser immediately
+            var html = """
+                <html><body style="font-family:system-ui;text-align:center;padding:60px">
+                <h2>Authentication complete</h2>
+                <p>You can close this tab and return to Nocturne Tray.</p>
+                <script>window.close();</script>
+                </body></html>
+                """;
+            var buffer = Encoding.UTF8.GetBytes(html);
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = buffer.Length;
+            await context.Response.OutputStream.WriteAsync(buffer);
+            context.Response.Close();
+
+            StopLoopbackListener();
+
+            // Check for error (e.g., user denied consent)
+            var error = query["error"];
+            if (!string.IsNullOrEmpty(error))
+            {
+                IsAuthenticated = false;
+                AuthStateChanged?.Invoke();
+                return;
+            }
+
+            // Extract authorization code
+            var code = query["code"];
+            if (string.IsNullOrEmpty(code))
+            {
+                IsAuthenticated = false;
+                AuthStateChanged?.Invoke();
+                return;
+            }
+
+            await ExchangeCodeForTokensAsync(code);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Listener was stopped (e.g., user cancelled or signed out)
+        }
+        catch
+        {
+            IsAuthenticated = false;
+            AuthStateChanged?.Invoke();
+        }
+    }
+
+    // ── Token exchange ──────────────────────────────────────────────────
+
+    private async Task ExchangeCodeForTokensAsync(string code)
+    {
+        var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
+        if (string.IsNullOrEmpty(serverUrl) || _codeVerifier is null || _redirectUri is null)
+        {
+            IsAuthenticated = false;
+            AuthStateChanged?.Invoke();
+            return;
+        }
+
+        try
+        {
+            var content = new FormUrlEncodedContent(
+                new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["code"] = code,
+                    ["redirect_uri"] = _redirectUri,
+                    ["client_id"] = ClientId,
+                    ["code_verifier"] = _codeVerifier,
+                }
+            );
+
+            var response = await _httpClient.PostAsync($"{serverUrl}/api/oauth/token", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                IsAuthenticated = false;
+                AuthStateChanged?.Invoke();
+                return;
+            }
+
+            var tokenResponse = await response.Content.ReadFromJsonAsync<OAuthTokenResponse>();
+            if (tokenResponse is null)
+            {
+                IsAuthenticated = false;
+                AuthStateChanged?.Invoke();
+                return;
+            }
+
+            var scopes =
+                tokenResponse.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+            var credentials = new NocturneCredentials
+            {
+                ApiUrl = serverUrl,
+                AccessToken = tokenResponse.AccessToken,
+                RefreshToken = tokenResponse.RefreshToken ?? "",
+                ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
+                Scopes = scopes.ToList().AsReadOnly(),
+            };
+
+            await _credentialStore.SaveCredentialsAsync(credentials);
+            IsAuthenticated = true;
+            ScheduleRefresh(tokenResponse.ExpiresIn);
+            AuthStateChanged?.Invoke();
+        }
+        catch
+        {
+            IsAuthenticated = false;
+            AuthStateChanged?.Invoke();
+        }
+        finally
+        {
+            _codeVerifier = null;
+            _redirectUri = null;
+        }
+    }
+
+    // ── PKCE (RFC 7636) ─────────────────────────────────────────────────
+
+    private static string GenerateCodeVerifier()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Base64UrlEncode(bytes);
+    }
+
+    private static string ComputeCodeChallenge(string codeVerifier)
+    {
+        var hash = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
+        return Base64UrlEncode(hash);
+    }
+
+    private static string Base64UrlEncode(byte[] bytes)
+    {
+        return Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=');
+    }
+
+    // ── Refresh scheduling ──────────────────────────────────────────────
 
     private void ScheduleRefresh(int expiresInSeconds)
     {
@@ -204,41 +400,52 @@ public sealed class OidcAuthService : IDisposable
 
         // Refresh 2 minutes before expiry, minimum 30 seconds from now
         var refreshInMs = Math.Max(30_000, (expiresInSeconds - 120) * 1000);
-        _refreshTimer = new Timer(_ =>
-        {
-            _ = Task.Run(async () =>
+        _refreshTimer = new Timer(
+            _ =>
             {
-                try
+                _ = Task.Run(async () =>
                 {
-                    await RefreshTokensAsync();
-                }
-                catch
-                {
-                    // Refresh failure is handled within RefreshTokensAsync;
-                    // this catch prevents unobserved task exceptions.
-                }
-            });
-        }, null, refreshInMs, Timeout.Infinite);
+                    try
+                    {
+                        await RefreshTokensAsync();
+                    }
+                    catch
+                    {
+                        // Refresh failure is handled within RefreshTokensAsync;
+                        // this catch prevents unobserved task exceptions.
+                    }
+                });
+            },
+            null,
+            refreshInMs,
+            Timeout.Infinite
+        );
     }
 
     public void Dispose()
     {
         _refreshTimer?.Dispose();
+        StopLoopbackListener();
         _httpClient.Dispose();
     }
 
-    private sealed record TokenRefreshResponse
+    // ── Response model ──────────────────────────────────────────────────
+
+    private sealed record OAuthTokenResponse
     {
-        [JsonPropertyName("accessToken")]
+        [JsonPropertyName("access_token")]
         public string AccessToken { get; init; } = "";
 
-        [JsonPropertyName("refreshToken")]
+        [JsonPropertyName("refresh_token")]
         public string? RefreshToken { get; init; }
 
-        [JsonPropertyName("expiresIn")]
+        [JsonPropertyName("expires_in")]
         public int ExpiresIn { get; init; }
 
-        [JsonPropertyName("tokenType")]
+        [JsonPropertyName("token_type")]
         public string TokenType { get; init; } = "Bearer";
+
+        [JsonPropertyName("scope")]
+        public string? Scope { get; init; }
     }
 }

@@ -119,7 +119,7 @@ public sealed partial class FlyoutWindow : Window
         var workArea = displayArea.WorkArea;
 
         var windowWidth = 360;
-        var windowHeight = 320;
+        var windowHeight = 360;
         var margin = 12;
 
         var x = workArea.X + workArea.Width - windowWidth - margin;

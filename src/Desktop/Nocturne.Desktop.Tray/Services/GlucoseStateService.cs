@@ -93,6 +93,44 @@ public sealed partial class GlucoseStateService : ObservableObject, IDisposable
         StateChanged?.Invoke();
     }
 
+    public void MergeReadings(IEnumerable<GlucoseReading> readings)
+    {
+        var added = false;
+        lock (_lock)
+        {
+            foreach (var reading in readings)
+            {
+                if (_history.Any(h => h.Mills == reading.Mills))
+                    continue;
+
+                _history.Add(reading);
+                added = true;
+            }
+
+            if (added)
+            {
+                _history.Sort((a, b) => a.Mills.CompareTo(b.Mills));
+
+                while (_history.Count > MaxHistorySize)
+                {
+                    _history.RemoveAt(0);
+                }
+            }
+        }
+
+        if (added)
+        {
+            var latest = _history.LastOrDefault();
+            if (latest is not null && (CurrentReading is null || latest.Mills >= CurrentReading.Mills))
+            {
+                CurrentReading = latest;
+                IsStale = Helpers.TimeAgoHelper.IsStale(latest.Timestamp);
+            }
+
+            StateChanged?.Invoke();
+        }
+    }
+
     public IReadOnlyList<GlucoseReading> GetReadingsForChart(int hours)
     {
         var cutoff = DateTimeOffset.UtcNow.AddHours(-hours).ToUnixTimeMilliseconds();

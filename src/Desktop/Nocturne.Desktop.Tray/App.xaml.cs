@@ -40,7 +40,9 @@ public partial class App : Application
 
     private static readonly string LogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Nocturne", "tray-debug.log");
+        "Nocturne",
+        "tray-debug.log"
+    );
 
     private static void Log(string message)
     {
@@ -54,17 +56,23 @@ public partial class App : Application
         {
             Log("OnLaunched started");
 
+            // Clean up legacy protocol handler registration from previous versions.
+            try
+            {
+                ActivationRegistrationManager.UnregisterForProtocolActivation("nocturne-tray", "");
+            }
+            catch
+            { /* Ignore if not registered */
+            }
+
             // Ensure single instance
             var mainInstance = AppInstance.FindOrRegisterForKey("NocturneTray");
             if (!mainInstance.IsCurrent)
             {
-                var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-                await mainInstance.RedirectActivationToAsync(activationArgs);
+                Log("Secondary instance, exiting");
                 System.Diagnostics.Process.GetCurrentProcess().Kill();
                 return;
             }
-
-            mainInstance.Activated += OnInstanceActivated;
 
             // Initialize services
             _settingsService = new SettingsService();
@@ -75,24 +83,25 @@ public partial class App : Application
             _credentialStore = new WindowsCredentialStore(
                 NullLogger<WindowsCredentialStore>.Instance,
                 "Nocturne.Tray.OAuth",
-                "Nocturne.Tray.DeviceAuth");
+                "Nocturne.Tray.DeviceAuth"
+            );
 
             _authService = new OidcAuthService(_settingsService, _credentialStore);
             _glucoseState = new GlucoseStateService();
             _nocturneClient = new NocturneClient(
                 _settingsService,
                 _authService,
-                NullLogger<NocturneClient>.Instance);
+                NullLogger<NocturneClient>.Instance
+            );
             _alarmService = new AlarmService(_settingsService);
             _alarmService.Initialize();
             Log("Services initialized");
 
             // Create a hidden window (required by WinUI 3 for the app to stay alive)
-            _hiddenWindow = new Window
-            {
-                Title = "Nocturne Tray",
-            };
-            Log($"Hidden window created, Content={_hiddenWindow.Content}, XamlRoot={_hiddenWindow.Content?.XamlRoot}");
+            _hiddenWindow = new Window { Title = "Nocturne Tray" };
+            Log(
+                $"Hidden window created, Content={_hiddenWindow.Content}, XamlRoot={_hiddenWindow.Content?.XamlRoot}"
+            );
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
             ShowWindow(hwnd, SW_HIDE);
@@ -116,6 +125,7 @@ public partial class App : Application
             _nocturneClient.OnGlucoseReading += OnGlucoseReading;
             _nocturneClient.OnAlarm += OnAlarm;
             _nocturneClient.OnConnectionChanged += OnConnectionChanged;
+            _nocturneClient.OnReconnected += OnReconnected;
             _glucoseState.StateChanged += OnStateChanged;
 
             // Wire auth state changes to connect/disconnect
@@ -157,62 +167,111 @@ public partial class App : Application
 
         await _nocturneClient.ConnectAsync(_appCts.Token);
 
-        var current = await _nocturneClient.FetchCurrentReadingAsync(_appCts.Token);
-        if (current is not null)
-        {
-            _glucoseState.ProcessReading(current);
-        }
+        await BackfillChartDataAsync();
+    }
 
-        var history = await _nocturneClient.FetchRecentReadingsAsync(
-            _settingsService.Settings.ChartHours, _appCts.Token);
+    private async Task BackfillChartDataAsync()
+    {
+        var hours = _settingsService.Settings.ChartHours;
+
+        // Try v4 summary first (provides current + history in a single call)
+        var (current, history) = await _nocturneClient.FetchSummaryAsync(hours, _appCts.Token);
+
         if (history.Count > 0)
         {
             _glucoseState.SetHistory(history);
+            return;
+        }
+
+        // Fallback: fetch from v1 entries endpoint which queries by time range directly
+        var readings = await _nocturneClient.FetchRecentReadingsAsync(hours, _appCts.Token);
+        if (readings.Count > 0)
+        {
+            _glucoseState.SetHistory(readings);
+        }
+        else if (current is not null)
+        {
+            _glucoseState.ProcessReading(current);
         }
     }
 
     private void OnGlucoseReading(Models.GlucoseReading reading)
     {
-        _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
-        {
-            _glucoseState.ProcessReading(reading);
-        });
+        _hiddenWindow.DispatcherQueue.TryEnqueue(
+            DispatcherQueuePriority.Normal,
+            () =>
+            {
+                _glucoseState.ProcessReading(reading);
+            }
+        );
     }
 
     private void OnAlarm(Services.AlarmEventArgs args)
     {
-        _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () =>
-        {
-            _alarmService.HandleAlarm(args);
-        });
+        _hiddenWindow.DispatcherQueue.TryEnqueue(
+            DispatcherQueuePriority.High,
+            () =>
+            {
+                _alarmService.HandleAlarm(args);
+            }
+        );
+    }
+
+    private void OnReconnected()
+    {
+        _hiddenWindow.DispatcherQueue.TryEnqueue(
+            DispatcherQueuePriority.Normal,
+            async () =>
+            {
+                try
+                {
+                    var hours = _settingsService.Settings.ChartHours;
+                    var readings = await _nocturneClient.FetchRecentReadingsAsync(hours, _appCts.Token);
+                    if (readings.Count > 0)
+                    {
+                        _glucoseState.MergeReadings(readings);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"Backfill on reconnect failed: {ex.Message}");
+                }
+            }
+        );
     }
 
     private void OnConnectionChanged(bool isConnected)
     {
-        _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
-        {
-            _glucoseState.IsConnected = isConnected;
-            _flyoutWindow.UpdateConnectionStatus(isConnected);
-        });
+        _hiddenWindow.DispatcherQueue.TryEnqueue(
+            DispatcherQueuePriority.Normal,
+            () =>
+            {
+                _glucoseState.IsConnected = isConnected;
+                _flyoutWindow.UpdateConnectionStatus(isConnected);
+            }
+        );
     }
 
     private void OnAuthStateChanged()
     {
-        _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, async () =>
-        {
-            if (_authService.IsAuthenticated)
+        _hiddenWindow.DispatcherQueue.TryEnqueue(
+            DispatcherQueuePriority.Normal,
+            async () =>
             {
-                if (!_nocturneClient.IsConnected)
+                if (_authService.IsAuthenticated)
                 {
-                    await ConnectAsync();
+                    if (!_nocturneClient.IsConnected)
+                    {
+                        await ConnectAsync();
+                    }
+                }
+                else
+                {
+                    await _nocturneClient.DisconnectAsync();
+                    await _trayIcon.SetConnectingAsync(_settingsService.Settings);
                 }
             }
-            else
-            {
-                await _nocturneClient.DisconnectAsync();
-                await _trayIcon.SetConnectingAsync(_settingsService.Settings);
-            }
-        });
+        );
     }
 
     private async void OnStateChanged()
@@ -259,30 +318,6 @@ public partial class App : Application
         _glucoseState.Dispose();
         _hiddenWindow.Close();
         Environment.Exit(0);
-    }
-
-    private void OnInstanceActivated(object? sender, AppActivationArguments args)
-    {
-        if (args.Kind == ExtendedActivationKind.Protocol
-            && args.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs protocolArgs)
-        {
-            _hiddenWindow.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
-            {
-                HandleProtocolActivation(protocolArgs.Uri);
-            });
-        }
-    }
-
-    private async void HandleProtocolActivation(Uri uri)
-    {
-        if (uri.AbsolutePath.TrimStart('/') == "auth/callback")
-        {
-            var success = await _authService.HandleCallbackAsync(uri);
-            if (!success)
-            {
-                ShowSettings();
-            }
-        }
     }
 
     private const int SW_HIDE = 0;

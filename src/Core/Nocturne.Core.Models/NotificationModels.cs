@@ -158,6 +158,12 @@ public class NotificationBase
     /// Gets or sets whether this is a clear alarm notification
     /// </summary>
     public bool Clear { get; set; }
+
+    /// <summary>
+    /// Gets or sets the alert type that triggered this notification (e.g. "Low", "High", "UrgentLow").
+    /// Used by clients to filter which alarm types to display.
+    /// </summary>
+    public string? AlertType { get; set; }
 }
 
 /// <summary>

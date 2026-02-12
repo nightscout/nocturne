@@ -30384,6 +30384,10 @@
           },
           "clear": {
             "type": "boolean"
+          },
+          "alertType": {
+            "type": "string",
+            "nullable": true
           }
         }
       },

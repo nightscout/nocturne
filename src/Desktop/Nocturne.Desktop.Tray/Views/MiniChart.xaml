@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="16,4,16,12" MinHeight="100">
+    <Grid Padding="16,4,16,8" MinHeight="130">
         <Canvas x:Name="ChartCanvas" />
 
         <!-- Range band labels -->
@@ -26,7 +26,7 @@
             Opacity="0.3"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
-            Margin="0,0,4,4" />
+            Margin="0,0,4,24" />
     </Grid>
 
 </UserControl>

@@ -30,20 +30,29 @@ public sealed class AlarmService : IDisposable
 
     public void HandleAlarm(AlarmEventArgs args)
     {
-        var settings = _settingsService.Settings;
-
-        switch (args.Level)
+        if (args.Level == AlarmLevel.Clear)
         {
-            case AlarmLevel.Urgent when settings.EnableUrgentAlarmToasts:
-                ShowAlarmToast(args, isUrgent: true);
-                break;
-            case AlarmLevel.Alarm when settings.EnableAlarmToasts:
-                ShowAlarmToast(args, isUrgent: false);
-                break;
-            case AlarmLevel.Clear:
-                ClearAlarmToasts();
-                break;
+            ClearAlarmToasts();
+            return;
         }
+
+        // Parse the alert type from the server notification data
+        string? alertType = null;
+        if (args.Data.TryGetProperty("alertType", out var typeProp))
+        {
+            alertType = typeProp.GetString();
+        }
+
+        var disabled = _settingsService.Settings.DisabledAlarmTypes;
+
+        // If the server sent an alert type, check if the user has disabled it
+        if (alertType is not null && disabled.Contains(alertType))
+        {
+            return;
+        }
+
+        var isUrgent = args.Level == AlarmLevel.Urgent;
+        ShowAlarmToast(args, isUrgent);
     }
 
     private static void ShowAlarmToast(AlarmEventArgs args, bool isUrgent)

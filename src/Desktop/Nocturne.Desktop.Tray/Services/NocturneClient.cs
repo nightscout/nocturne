@@ -24,6 +24,7 @@ public sealed class NocturneClient : IAsyncDisposable
     public event Action<GlucoseReading>? OnGlucoseReading;
     public event Action<AlarmEventArgs>? OnAlarm;
     public event Action<bool>? OnConnectionChanged;
+    public event Action? OnReconnected;
 
     public bool IsConnected => _isConnected;
 
@@ -125,6 +126,77 @@ public sealed class NocturneClient : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Fetches the V4 summary including current reading and glucose history in a single call.
+    /// Returns the current reading and an ordered list of historical readings for the chart.
+    /// </summary>
+    public async Task<(GlucoseReading? Current, IReadOnlyList<GlucoseReading> History)> FetchSummaryAsync(
+        int hours = 3,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var serverUrl = GetServerUrl();
+            if (serverUrl is null) return (null, []);
+
+            await EnsureBearerTokenAsync();
+            var url = $"{serverUrl}/api/v4/summary?hours={hours}";
+
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+
+            GlucoseReading? current = null;
+            if (json.TryGetProperty("current", out var currentJson) && currentJson.ValueKind == JsonValueKind.Object)
+            {
+                current = ParseV4Reading(currentJson);
+            }
+
+            var history = new List<GlucoseReading>();
+            if (json.TryGetProperty("history", out var historyJson) && historyJson.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in historyJson.EnumerateArray())
+                {
+                    var reading = ParseV4Reading(item);
+                    if (reading is not null) history.Add(reading);
+                }
+            }
+
+            // Add current to history list so SetHistory gets the complete picture
+            if (current is not null) history.Add(current);
+            history.Sort((a, b) => a.Mills.CompareTo(b.Mills));
+
+            return (current, history);
+        }
+        catch (OperationCanceledException)
+        {
+            return (null, []);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch V4 summary");
+            return (null, []);
+        }
+    }
+
+    private static GlucoseReading? ParseV4Reading(JsonElement entry)
+    {
+        if (!entry.TryGetProperty("sgv", out var sgvProp)) return null;
+
+        var sgv = sgvProp.GetDouble();
+
+        return new GlucoseReading
+        {
+            Sgv = sgv,
+            Mgdl = sgv,
+            Direction = entry.TryGetProperty("direction", out var dir) ? dir.GetString() : null,
+            TrendRate = entry.TryGetProperty("trendRate", out var rate) ? rate.GetDouble() : null,
+            Delta = entry.TryGetProperty("delta", out var delta) ? delta.GetDouble() : null,
+            Mills = entry.TryGetProperty("mills", out var mills) ? mills.GetInt64() : 0,
+        };
+    }
+
     private string? GetServerUrl()
     {
         var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
@@ -153,7 +225,7 @@ public sealed class NocturneClient : IAsyncDisposable
             .Build();
 
         _hubConnection.Reconnecting += _ => { SetConnected(false); return Task.CompletedTask; };
-        _hubConnection.Reconnected += _ => { SetConnected(true); return ReauthorizeAsync(); };
+        _hubConnection.Reconnected += _ => { SetConnected(true); OnReconnected?.Invoke(); return ReauthorizeAsync(); };
         _hubConnection.Closed += _ => { SetConnected(false); return Task.CompletedTask; };
 
         _hubConnection.On<JsonElement>("dataUpdate", HandleDataUpdate);

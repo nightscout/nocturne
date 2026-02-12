@@ -26,6 +26,16 @@ public static class GlucoseFormatHelper
     }
 
     /// <summary>
+    /// Converts a glucose value from mg/dL to mmol/L.
+    /// </summary>
+    public static double ToMmol(double mgdl) => mgdl / MgdlToMmolFactor;
+
+    /// <summary>
+    /// Converts a glucose value from mmol/L to mg/dL.
+    /// </summary>
+    public static double ToMgdl(double mmol) => mmol * MgdlToMmolFactor;
+
+    /// <summary>
     /// Formats a glucose delta value with sign prefix for the given unit.
     /// </summary>
     /// <param name="delta">Delta value in mg/dL, or null.</param>
@@ -33,11 +43,11 @@ public static class GlucoseFormatHelper
     /// <returns>Formatted delta string (e.g. "+5", "-0.3"), or empty string if null.</returns>
     public static string FormatDelta(double? delta, GlucoseUnit unit)
     {
-        if (delta is null) return "";
+        if (delta is null)
+            return "";
         var value = unit == GlucoseUnit.MmolL ? delta.Value / MgdlToMmolFactor : delta.Value;
-        var formatted = unit == GlucoseUnit.MmolL
-            ? value.ToString("+0.0;-0.0;0.0")
-            : value.ToString("+0;-0;0");
+        var formatted =
+            unit == GlucoseUnit.MmolL ? value.ToString("+0.0;-0.0;0.0") : value.ToString("+0;-0;0");
         return formatted;
     }
 }

@@ -2721,6 +2721,7 @@ msgstr ""
 
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/reports/data-quality/+page.svelte
 #: src/routes/settings/data-quality/+page.svelte
 msgid "Data Quality"
 msgstr ""
@@ -15402,6 +15403,7 @@ msgid "View glucose readings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View and record glucose readings"
@@ -15413,18 +15415,21 @@ msgid "View treatments"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View and record treatments"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View device status"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View and update device status"
@@ -15436,48 +15441,56 @@ msgid "View profile settings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View and update profile settings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View notifications"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "Manage notifications"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View reports and analytics"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View basic account info"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "Manage sharing settings"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "View all health data (read-only)"
 msgstr ""
 
 #: src/lib/components/settings/ConnectedApps.svelte
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 #: src/routes/settings/security/+page.svelte
 msgid "Full access including delete"
@@ -15532,14 +15545,17 @@ msgstr ""
 msgid "<0/> Last used {0}"
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "View your glucose readings"
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "View your treatments"
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "View your profile settings"
 msgstr ""
@@ -15575,6 +15591,7 @@ msgstr ""
 msgid "The device will not be granted access."
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "Authorize Application"
 msgstr ""
@@ -15585,30 +15602,36 @@ msgid ""
 "your Nocturne data."
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid ""
 "This application is not in the Nocturne known app directory. Only\n"
 "approve if you trust this application."
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "This application is requesting permission to:"
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "This app cannot delete your data."
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid ""
 "This app is requesting full access, including the ability to delete\n"
 "data."
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "<0/> Deny"
 msgstr ""
 
+#: src/routes/oauth/consent/+page.svelte
 #: src/routes/oauth/device/+page.svelte
 msgid "<0/> Approve"
 msgstr ""
@@ -15774,4 +15797,60 @@ msgstr ""
 
 #: src/routes/settings/security/+page.svelte
 msgid "Shared Data"
+msgstr ""
+
+#~ msgid "Authentication Successful"
+#~ msgstr ""
+
+#~ msgid "You have been signed in. You can return to {0} and close this tab."
+#~ msgstr ""
+
+#~ msgid "You have been signed in. You can return to your application and close this tab."
+#~ msgstr ""
+
+#~ msgid "Open {0}"
+#~ msgstr ""
+
+#~ msgid "Open Application"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "If the application did not open automatically, click the button above\n"
+#~ "or check that it is running."
+#~ msgstr ""
+
+#. placeholder {0}: appName
+#: src/routes/oauth/consent/+page.svelte
+msgid "Authorize {0} - Nocturne"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Additional Permissions"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "<0/> is requesting additional access to your Nocturne data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "<0/> wants to access your Nocturne data."
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "New permissions requested"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Previously approved"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid "Only share data from the last 24 hours"
+msgstr ""
+
+#: src/routes/oauth/consent/+page.svelte
+msgid ""
+"When enabled, this app will only be able to access data from the\n"
+"last 24 hours. Historical reports will show a notice that data is\n"
+"limited."
 msgstr ""

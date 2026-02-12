@@ -409,6 +409,7 @@ public class AlertProcessingService : IAlertProcessingService
                 Group = "glucose-alerts",
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 Clear = true,
+                AlertType = alert.AlertType,
             };
             await _notifierDispatcher.DispatchAsync(
                 clearNotification,
@@ -452,6 +453,7 @@ public class AlertProcessingService : IAlertProcessingService
             Persistent =
                 alertEvent.AlertType == AlertType.UrgentLow
                 || alertEvent.AlertType == AlertType.UrgentHigh,
+            AlertType = alertEvent.AlertType.ToString(),
         };
     }
 
