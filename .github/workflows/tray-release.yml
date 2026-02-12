@@ -1,0 +1,140 @@
+name: Build and Release Tray App
+
+on:
+  push:
+    tags:
+      - "tray-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g. 0.1.0)"
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  build-x64:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } else {
+            # Strip tray-v prefix from tag name
+            $version = "${{ github.ref_name }}" -replace '^tray-v', ''
+          }
+          Write-Host "Version: $version"
+          "version=$version" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+
+      - name: Build tray app (x64)
+        shell: pwsh
+        run: |
+          $projectDir = "src/Desktop/Nocturne.Desktop.Tray"
+          $publishDir = Join-Path $projectDir "publish"
+          $version = "${{ steps.version.outputs.version }}"
+
+          # Clean previous output
+          if (Test-Path $publishDir) {
+            Remove-Item -Recurse -Force $publishDir
+          }
+
+          # Publish x64 only
+          $x64Output = Join-Path $publishDir "x64"
+          dotnet publish $projectDir `
+            -c Release `
+            -p:Platform=x64 `
+            -r win-x64 `
+            -p:Version=$version `
+            -p:GenerateNSwagClient=false `
+            -o $x64Output
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::x64 publish failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          # Add Inno Setup to PATH for this job
+          $isPath = "C:\Program Files (x86)\Inno Setup 6"
+          if (Test-Path $isPath) {
+            "$isPath" | Out-File -Append -FilePath $env:GITHUB_PATH
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          & src/Desktop/Nocturne.Desktop.Tray/installer/build-installer.ps1 -Version $version
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-installer-x64
+          path: src/Desktop/Nocturne.Desktop.Tray/installer/output/*.exe
+          retention-days: 90
+
+  release:
+    needs: build-x64
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Determine version and tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="tray-v${VERSION}"
+          else
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#tray-v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tray-installer-x64
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Nocturne Tray v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: artifacts/*.exe
+          make_latest: false
+          body: |
+            ## Nocturne Tray v${{ steps.version.outputs.version }}
+
+            Windows system tray app for monitoring glucose data from your Nocturne server.
+
+            ### Installation
+            Download and run `NocturneTray-${{ steps.version.outputs.version }}-x64-setup.exe` to install.
+
+            ### Requirements
+            - Windows 10 version 1903 (19041) or later
+            - x64 architecture

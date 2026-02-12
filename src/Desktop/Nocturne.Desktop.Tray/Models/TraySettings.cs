@@ -31,7 +31,7 @@ public sealed class TraySettings
         ("ForecastLow", "Forecast Low"),
         ("DeviceWarning", "Device Warning"),
     ];
-    public bool LaunchAtStartup { get; set; }
+    public bool StartOnLogin { get; set; }
     public int PollingIntervalSeconds { get; set; } = 60;
     public int ChartHours { get; set; } = 3;
 }

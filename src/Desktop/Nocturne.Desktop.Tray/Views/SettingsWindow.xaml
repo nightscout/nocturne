@@ -125,6 +125,25 @@
                     </Border>
                 </StackPanel>
 
+                <!-- General Section -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="General"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16">
+                        <ToggleSwitch
+                            x:Name="StartOnLoginToggle"
+                            Header="Start on login"
+                            IsOn="False" />
+                    </Border>
+                </StackPanel>
+
                 <!-- Thresholds Section -->
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="ThresholdHeader"

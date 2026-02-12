@@ -54,6 +54,7 @@ public sealed partial class SettingsWindow : Window
 
         UnitCombo.SelectedIndex = s.Unit == GlucoseUnit.MmolL ? 1 : 0;
         ChartHoursBox.Value = s.ChartHours;
+        StartOnLoginToggle.IsOn = s.StartOnLogin;
 
         var isMmol = s.Unit == GlucoseUnit.MmolL;
         ApplyThresholdRanges(isMmol);
@@ -217,6 +218,9 @@ public sealed partial class SettingsWindow : Window
             .Where(kv => !kv.Value.IsOn)
             .Select(kv => kv.Key)
             .ToHashSet();
+
+        s.StartOnLogin = StartOnLoginToggle.IsOn;
+        StartupHelper.SetStartOnLogin(s.StartOnLogin);
 
         await _settingsService.SaveAsync();
         SettingsSaved?.Invoke(this, EventArgs.Empty);
