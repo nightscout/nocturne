@@ -196,28 +196,6 @@ jobs:
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/freestyle-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
 
-      - name: Build and push MiniMed connector
-        if: github.event_name != 'pull_request'
-        working-directory: src/Connectors/Nocturne.Connectors.MiniMed
-        run: |
-          dotnet publish \
-            -c Release \
-            -p:PublishProfile=DefaultContainer \
-            -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/minimed-connector \
-            -p:ContainerImageTag=${{ steps.version.outputs.version }}
-
-      - name: Build and push Nightscout connector
-        if: github.event_name != 'pull_request'
-        working-directory: src/Connectors/Nocturne.Connectors.Nightscout
-        run: |
-          dotnet publish \
-            -c Release \
-            -p:PublishProfile=DefaultContainer \
-            -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nightscout-connector \
-            -p:ContainerImageTag=${{ steps.version.outputs.version }}
-
       - name: Build and push MyLife connector
         if: github.event_name != 'pull_request'
         working-directory: src/Connectors/Nocturne.Connectors.MyLife
@@ -228,38 +206,6 @@ jobs:
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/mylife-connector \
             -p:ContainerImageTag=${{ steps.version.outputs.version }}
-
-      - name: Build and push MyFitnessPal connector
-        if: github.event_name != 'pull_request'
-        working-directory: src/Connectors/Nocturne.Connectors.MyFitnessPal
-        run: |
-          dotnet publish \
-            -c Release \
-            -p:PublishProfile=DefaultContainer \
-            -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/myfitnesspal-connector \
-            -p:ContainerImageTag=${{ steps.version.outputs.version }}
-
-      - name: Build and push Tidepool connector
-        if: github.event_name != 'pull_request'
-        working-directory: src/Connectors/Nocturne.Connectors.Tidepool
-        run: |
-          dotnet publish \
-            -c Release \
-            -p:PublishProfile=DefaultContainer \
-            -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/tidepool-connector \
-            -p:ContainerImageTag=${{ steps.version.outputs.version }}
-
-      - name: Build and push TConnectSync connector
-        if: github.event_name != 'pull_request'
-        working-directory: src/Connectors/Nocturne.Connectors.TConnectSync
-        run: |
-          docker buildx build \
-            --platform linux/amd64 \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/tconnectsync-connector:${{ steps.version.outputs.version }} \
-            --push \
-            .
 
       # Build web app using standard Docker build (Node.js/Vite apps don't use .NET container publishing)
       - name: Build and push Nocturne.Web container
@@ -448,12 +394,7 @@ jobs:
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/dexcom-connector:${{ steps.version.outputs.version }}`
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/glooko-connector:${{ steps.version.outputs.version }}`
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/freestyle-connector:${{ steps.version.outputs.version }}`
-          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/minimed-connector:${{ steps.version.outputs.version }}`
-          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nightscout-connector:${{ steps.version.outputs.version }}`
-          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/myfitnesspal-connector:${{ steps.version.outputs.version }}`
           - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/mylife-connector:${{ steps.version.outputs.version }}`
-          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/tidepool-connector:${{ steps.version.outputs.version }}`
-          - `${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/tconnectsync-connector:${{ steps.version.outputs.version }}`
 
 
           ## Files in this release
@@ -504,9 +445,7 @@ jobs:
   #         - dexcom-connector
   #         - glooko-connector
   #         - freestyle-connector
-  #         - minimed-connector
-  #         - nightscout-connector
-  #         - myfitnesspal-connector
+  #         - mylife-connector
 
   #   steps:
   #     - name: Log in to GitHub Container Registry

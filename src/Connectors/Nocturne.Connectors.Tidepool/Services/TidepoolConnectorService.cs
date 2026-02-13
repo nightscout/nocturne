@@ -1,464 +1,188 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Connectors.Tidepool.Constants;
+using Nocturne.Connectors.Tidepool.Configurations;
+using Nocturne.Connectors.Tidepool.Mappers;
 using Nocturne.Connectors.Tidepool.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
-#nullable enable
-
 namespace Nocturne.Connectors.Tidepool.Services;
 
 /// <summary>
-/// Connector service for Tidepool data source
-/// Fetches CGM, bolus, food, and exercise data from Tidepool API
+///     Connector service for Tidepool data source.
+///     Fetches glucose readings, boluses, food entries, and exercise data.
 /// </summary>
 public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorConfiguration>
 {
-    private readonly TidepoolConnectorConfiguration _config;
-    private readonly IRetryDelayStrategy _retryDelayStrategy;
+    private readonly TidepoolEntryMapper _entryMapper;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
+    private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TidepoolAuthTokenProvider _tokenProvider;
-
-    public override string ConnectorSource => DataSources.TidepoolConnector;
-    public override string ServiceName => "Tidepool";
-    public override List<SyncDataType> SupportedDataTypes =>
-        [SyncDataType.Glucose, SyncDataType.Treatments, SyncDataType.Activity];
+    private readonly TidepoolTreatmentMapper _treatmentMapper;
 
     public TidepoolConnectorService(
         HttpClient httpClient,
-        IOptions<TidepoolConnectorConfiguration> config,
         ILogger<TidepoolConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         TidepoolAuthTokenProvider tokenProvider,
-        IApiDataSubmitter? apiDataSubmitter = null,
-        IConnectorMetricsTracker? metricsTracker = null,
-        IConnectorStateService? stateService = null
+        IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, apiDataSubmitter, metricsTracker, stateService)
+        : base(httpClient, logger, publisher)
     {
-        _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy =
             rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
-        _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+        _tokenProvider =
+            tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+        _entryMapper = new TidepoolEntryMapper(logger, ConnectorSource);
+        _treatmentMapper = new TidepoolTreatmentMapper(logger, ConnectorSource);
     }
+
+    protected override string ConnectorSource => DataSources.TidepoolConnector;
+    public override string ServiceName => "Tidepool";
+    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose, SyncDataType.Treatments];
 
     public override async Task<bool> AuthenticateAsync()
     {
         var token = await _tokenProvider.GetValidTokenAsync();
         if (token == null)
         {
-            _failedRequestCount++;
+            TrackFailedRequest("Failed to get valid Tidepool session token");
             return false;
         }
 
-        _failedRequestCount = 0;
+        if (string.IsNullOrEmpty(_tokenProvider.UserId))
+        {
+            TrackFailedRequest("Tidepool user ID not available after authentication");
+            return false;
+        }
+
+        TrackSuccessfulRequest();
         return true;
     }
 
+    public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
+    {
+        var bgValues = await FetchDataAsync<TidepoolBgValue[]>(
+            $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}",
+            since);
+
+        if (bgValues == null) return [];
+
+        var entries = _entryMapper.MapBgValues(bgValues).ToList();
+        _logger.LogInformation(
+            "[{ConnectorSource}] Retrieved {Count} glucose entries from Tidepool",
+            ConnectorSource,
+            entries.Count);
+
+        return entries;
+    }
+
     protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from,
-        DateTime? to
-    )
+        DateTime? from, DateTime? to)
     {
-        try
-        {
-            // Check if session is expired and re-authenticate if needed
-            if (_tokenProvider.IsTokenExpired)
-            {
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Session expired, attempting to re-authenticate",
-                    ConnectorSource
-                );
-                if (!await AuthenticateAsync())
-                {
-                    _failedRequestCount++;
-                    return Enumerable.Empty<Entry>();
-                }
-            }
+        var bgValues = await FetchDataAsync<TidepoolBgValue[]>(
+            $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}",
+            from, to);
 
-            // Apply rate limiting
-            await _rateLimitingStrategy.ApplyDelayAsync(0);
+        if (bgValues == null) return [];
 
-            var bgValues = await FetchBgValuesAsync(from, to);
-            var entries = TransformBgValuesToEntries(bgValues);
-
-            _logger.LogInformation(
-                "[{ConnectorSource}] Retrieved {Count} glucose entries from Tidepool",
-                ConnectorSource,
-                entries.Count()
-            );
-
-            return entries;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "[{ConnectorSource}] Error fetching glucose data from Tidepool",
-                ConnectorSource
-            );
-            _failedRequestCount++;
-            return Enumerable.Empty<Entry>();
-        }
-    }
-
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        return FetchGlucoseDataRangeAsync(since, null);
-    }
-
-    private async Task<List<TidepoolBgValue>> FetchBgValuesAsync(
-        DateTime? start = null,
-        DateTime? end = null
-    )
-    {
-        var results = new List<TidepoolBgValue>();
-        const int maxRetries = 3;
-
-        for (int attempt = 0; attempt < maxRetries; attempt++)
-        {
-            try
-            {
-                var startDate = start ?? DateTime.UtcNow.AddDays(-1);
-                var endDate = end ?? DateTime.UtcNow;
-
-                // Fetch both CGM and SMBG readings
-                var types = $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}";
-
-                var url =
-                    $"{string.Format(TidepoolConstants.Endpoints.DataFormat, _tokenProvider.UserId)}?type={types}&startDate={startDate:o}&endDate={endDate:o}";
-
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add(
-                    TidepoolConstants.Headers.SessionToken,
-                    (await _tokenProvider.GetValidTokenAsync())
-                );
-
-                var response = await _httpClient.SendAsync(request);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-
-                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                    {
-                        _logger.LogWarning(
-                            "Tidepool session expired, attempting re-authentication"
-                        );
-                        _tokenProvider.InvalidateToken();
-
-                        if (await AuthenticateAsync())
-                        {
-                            continue; // Retry with new session
-                        }
-                        else
-                        {
-                            _logger.LogError("Failed to re-authenticate with Tidepool");
-                            _failedRequestCount++;
-                            return results;
-                        }
-                    }
-
-                    if (
-                        response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
-                        || response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable
-                    )
-                    {
-                        _logger.LogWarning(
-                            "Tidepool data fetch failed with retryable error: {StatusCode}",
-                            response.StatusCode
-                        );
-                        await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                        continue;
-                    }
-
-                    _logger.LogError(
-                        "Tidepool data fetch failed: {StatusCode} - {Error}",
-                        response.StatusCode,
-                        errorContent
-                    );
-                    _failedRequestCount++;
-                    return results;
-                }
-
-                var jsonContent = await response.Content.ReadAsStringAsync();
-                var bgValues = JsonSerializer.Deserialize<List<TidepoolBgValue>>(
-                    jsonContent,
-                    JsonDefaults.CaseInsensitive
-                );
-
-                if (bgValues != null)
-                {
-                    results.AddRange(bgValues);
-                }
-
-                _failedRequestCount = 0;
-                break;
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "HTTP error during Tidepool data fetch attempt {Attempt}",
-                    attempt + 1
-                );
-
-                if (attempt < maxRetries - 1)
-                {
-                    await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-                }
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError(ex, "JSON parsing error during Tidepool data fetch");
-                _failedRequestCount++;
-                return results;
-            }
-        }
-
-        return results;
-    }
-
-    private IEnumerable<Entry> TransformBgValuesToEntries(List<TidepoolBgValue> bgValues)
-    {
-        return bgValues
-            .Where(bg => bg.Time.HasValue && bg.Value > 0)
-            .Select(bg =>
-            {
-                // Convert mmol/L to mg/dL if needed
-                var sgvValue = bg.Value;
-                if (bg.Units?.ToLower() is "mmol/l" or "mmol")
-                {
-                    sgvValue = bg.Value * 18.01559;
-                }
-
-                return new Entry
-                {
-                    Date = bg.Time!.Value,
-                    Sgv = (int)Math.Round(sgvValue),
-                    Type = "sgv",
-                    Device = $"tidepool-{bg.DeviceId ?? "unknown"}",
-                    Direction = "Flat", // Tidepool doesn't provide trend direction
-                };
-            })
-            .OrderBy(e => e.Date)
-            .ToList();
-    }
-
-    /// <summary>
-    /// Fetch bolus data from Tidepool
-    /// </summary>
-    /// <summary>
-    /// Fetch bolus data from Tidepool
-    /// </summary>
-    public async Task<List<TidepoolBolus>> FetchBolusDataAsync(DateTime? start, DateTime? end)
-    {
-        if (_tokenProvider.IsTokenExpired && !await AuthenticateAsync())
-        {
-            return new List<TidepoolBolus>();
-        }
-
-        return await FetchDataAsync<TidepoolBolus>(TidepoolConstants.DataTypes.Bolus, start, end);
-    }
-
-    /// <summary>
-    /// Fetch food/carb data from Tidepool
-    /// </summary>
-    /// <summary>
-    /// Fetch food/carb data from Tidepool
-    /// </summary>
-    public async Task<List<TidepoolFood>> FetchFoodDataAsync(DateTime? start, DateTime? end)
-    {
-        if (_tokenProvider.IsTokenExpired && !await AuthenticateAsync())
-        {
-            return new List<TidepoolFood>();
-        }
-
-        return await FetchDataAsync<TidepoolFood>(TidepoolConstants.DataTypes.Food, start, end);
-    }
-
-    /// <summary>
-    /// Fetch physical activity data from Tidepool
-    /// </summary>
-    /// <summary>
-    /// Fetch physical activity data from Tidepool
-    /// </summary>
-    public async Task<List<TidepoolPhysicalActivity>> FetchPhysicalActivityAsync(
-        DateTime? start,
-        DateTime? end
-    )
-    {
-        if (_tokenProvider.IsTokenExpired && !await AuthenticateAsync())
-        {
-            return new List<TidepoolPhysicalActivity>();
-        }
-
-        return await FetchDataAsync<TidepoolPhysicalActivity>(
-            TidepoolConstants.DataTypes.PhysicalActivity,
-            start,
-            end
-        );
-    }
-
-    private async Task<List<T>> FetchDataAsync<T>(
-        string dataType,
-        DateTime? start = null,
-        DateTime? end = null
-    )
-    {
-        var results = new List<T>();
-
-        try
-        {
-            var startDate = start ?? DateTime.UtcNow.AddDays(-1);
-            var endDate = end ?? DateTime.UtcNow;
-
-            var url =
-                $"{string.Format(TidepoolConstants.Endpoints.DataFormat, _tokenProvider.UserId)}?type={dataType}&startDate={startDate:o}&endDate={endDate:o}";
-
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add(
-                TidepoolConstants.Headers.SessionToken,
-                (await _tokenProvider.GetValidTokenAsync())
-            );
-
-            var response = await _httpClient.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var jsonContent = await response.Content.ReadAsStringAsync();
-                var items = JsonSerializer.Deserialize<List<T>>(
-                    jsonContent,
-                    JsonDefaults.CaseInsensitive
-                );
-                if (items != null)
-                {
-                    results.AddRange(items);
-                }
-            }
-            else
-            {
-                _logger.LogWarning(
-                    "Failed to fetch {DataType} from Tidepool: {StatusCode}",
-                    dataType,
-                    response.StatusCode
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching {DataType} from Tidepool", dataType);
-        }
-
-        return results;
+        return _entryMapper.MapBgValues(bgValues);
     }
 
     protected override async Task<IEnumerable<Treatment>> FetchTreatmentsAsync(
-        DateTime? from,
-        DateTime? to
-    )
+        DateTime? from, DateTime? to)
     {
-        var treatments = new List<Treatment>();
+        // Fetch boluses, food, and activities in parallel
+        var bolusTask = FetchDataAsync<TidepoolBolus[]>(
+            TidepoolConstants.DataTypes.Bolus, from, to);
+        var foodTask = FetchDataAsync<TidepoolFood[]>(
+            TidepoolConstants.DataTypes.Food, from, to);
+        var activityTask = FetchDataAsync<TidepoolPhysicalActivity[]>(
+            TidepoolConstants.DataTypes.PhysicalActivity, from, to);
 
-        // Fetch bolus data
-        var boluses = await FetchBolusDataAsync(from, to);
-        foreach (var bolus in boluses.Where(b => b.Time.HasValue))
-        {
-            treatments.Add(
-                new Treatment
-                {
-                    Created_at = bolus.Time!.Value.ToString("o"),
-                    EventType = "Bolus",
-                    Insulin = bolus.TotalInsulin,
-                    Duration = bolus.Duration?.TotalMinutes,
-                    EnteredBy = "Tidepool",
-                }
-            );
-        }
+        await Task.WhenAll(bolusTask, foodTask, activityTask);
 
-        // Fetch food data
-        var foods = await FetchFoodDataAsync(from, to);
-        foreach (var food in foods.Where(f => f.Time.HasValue))
-        {
-            var carbs = food.Nutrition?.Carbohydrate?.Net;
-            if (carbs.HasValue && carbs > 0)
-            {
-                treatments.Add(
-                    new Treatment
-                    {
-                        Created_at = food.Time!.Value.ToString("o"),
-                        EventType = "Meal Bolus",
-                        Carbs = carbs,
-                        EnteredBy = "Tidepool",
-                    }
-                );
-            }
-        }
+        var boluses = await bolusTask;
+        var foods = await foodTask;
+        var activities = await activityTask;
 
-        return treatments.OrderBy(t => t.Created_at);
+        var treatments = _treatmentMapper.MapTreatments(boluses, foods, activities).ToList();
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Retrieved {Count} treatments from Tidepool (boluses: {Boluses}, food: {Food}, activities: {Activities})",
+            ConnectorSource,
+            treatments.Count,
+            boluses?.Length ?? 0,
+            foods?.Length ?? 0,
+            activities?.Length ?? 0);
+
+        return treatments;
     }
 
-    protected override async Task<IEnumerable<Activity>> FetchActivitiesAsync(
-        DateTime? from,
-        DateTime? to
-    )
+    /// <summary>
+    ///     Fetches typed data from the Tidepool API data endpoint.
+    /// </summary>
+    private async Task<T?> FetchDataAsync<T>(
+        string dataType, DateTime? startDate = null, DateTime? endDate = null) where T : class
     {
-        var physicalActivities = await FetchPhysicalActivityAsync(from, to);
-        var activities = new List<Activity>();
-
-        foreach (var pa in physicalActivities.Where(a => a.Time.HasValue))
+        var token = await _tokenProvider.GetValidTokenAsync();
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(_tokenProvider.UserId))
         {
-            var activity = new Activity
-            {
-                CreatedAt = pa.Time!.Value.ToString("o"),
-                Mills = new DateTimeOffset(pa.Time.Value).ToUnixTimeMilliseconds(),
-                Name = pa.Name,
-                Type = "physicalActivity",
-                Description = pa.Name,
-                EnteredBy = "Tidepool",
-            };
-
-            // Convert duration from milliseconds to minutes
-            if (pa.Duration?.Value.HasValue == true)
-            {
-                activity.Duration = pa.Duration.Value / 60000;
-            }
-
-            // Add distance if available
-            if (pa.Distance?.Value.HasValue == true)
-            {
-                activity.Distance = pa.Distance.Value;
-                activity.DistanceUnits = pa.Distance.Units;
-            }
-
-            // Add energy if available
-            if (pa.Energy?.Value.HasValue == true)
-            {
-                activity.Energy = pa.Energy.Value;
-                activity.EnergyUnits = pa.Energy.Units;
-            }
-
-            activities.Add(activity);
+            _logger.LogWarning(
+                "[{ConnectorSource}] Cannot fetch data: missing token or user ID",
+                ConnectorSource);
+            return null;
         }
 
-        return activities.OrderBy(a => a.CreatedAt);
+        await _rateLimitingStrategy.ApplyDelayAsync(0);
+
+        return await ExecuteWithRetryAsync(
+            async () => await FetchDataCoreAsync<T>(token, dataType, startDate, endDate),
+            _retryDelayStrategy,
+            async () =>
+            {
+                _tokenProvider.InvalidateToken();
+                var newToken = await _tokenProvider.GetValidTokenAsync();
+                if (string.IsNullOrEmpty(newToken)) return false;
+                token = newToken;
+                return true;
+            },
+            operationName: $"FetchTidepoolData({dataType})"
+        );
+    }
+
+    private async Task<T?> FetchDataCoreAsync<T>(
+        string token, string dataType, DateTime? startDate, DateTime? endDate) where T : class
+    {
+        var userId = _tokenProvider.UserId;
+        var url = $"/data/{userId}?type={dataType}";
+
+        if (startDate.HasValue)
+            url += $"&startDate={startDate.Value.ToUniversalTime():o}";
+        if (endDate.HasValue)
+            url += $"&endDate={endDate.Value.ToUniversalTime():o}";
+
+        var headers = new Dictionary<string, string>
+        {
+            [TidepoolConstants.Headers.SessionToken] = token
+        };
+
+        var response = await GetWithHeadersAsync(url, headers);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException(
+                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
+                null,
+                response.StatusCode);
+        }
+
+        return await DeserializeResponseAsync<T>(response);
     }
 }

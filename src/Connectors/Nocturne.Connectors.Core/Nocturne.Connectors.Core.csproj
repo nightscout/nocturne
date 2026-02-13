@@ -1,21 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <RootNamespace>Nocturne.Connectors.Core</RootNamespace>
-  </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\Nocturne.Infrastructure.Cache.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
-    <PackageReference Include="DotNetEnv" />
-    <PackageReference Include="Polly" />
-  </ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Nocturne.Connectors.Core</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Cache\Nocturne.Infrastructure.Cache.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Http.Resilience"/>
+        <PackageReference Include="Polly"/>
+    </ItemGroup>
 </Project>

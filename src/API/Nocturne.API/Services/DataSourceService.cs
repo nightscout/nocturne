@@ -16,19 +16,16 @@ public class DataSourceService : IDataSourceService
 {
     private readonly NocturneDbContext _context;
     private readonly IPostgreSqlService _postgreSqlService;
-    private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<DataSourceService> _logger;
 
     public DataSourceService(
         NocturneDbContext context,
         IPostgreSqlService postgreSqlService,
-        IConnectorSyncService connectorSyncService,
         ILogger<DataSourceService> logger
     )
     {
         _context = context;
         _postgreSqlService = postgreSqlService;
-        _connectorSyncService = connectorSyncService;
         _logger = logger;
     }
 
@@ -139,278 +136,69 @@ public class DataSourceService : IDataSourceService
     /// <inheritdoc />
     public List<AvailableConnector> GetAvailableConnectors()
     {
-        var connectors = new List<AvailableConnector>
-        {
-            new()
+        var connectors = ConnectorMetadataService.GetAll()
+            .Select(connector => new AvailableConnector
             {
-                Id = "dexcom",
-                Name = "Dexcom Share",
-                Category = "cgm",
-                Description =
-                    "Connect to Dexcom Share/Clarity to automatically fetch CGM data. Requires Dexcom account credentials.",
-                Icon = "dexcom",
+                Id = connector.ConnectorName.ToLowerInvariant(),
+                Name = connector.DisplayName,
+                Category = connector.Category.ToString().ToLowerInvariant(),
+                Description = connector.Description,
+                Icon = connector.Icon,
                 Available = true,
                 RequiresServerConfig = true,
-                DataSourceId = DataSources.DexcomConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "username",
-                        Label = "Dexcom Username",
-                        Type = "text",
-                        Required = true,
-                        Placeholder = "your@email.com",
-                    },
-                    new()
-                    {
-                        Id = "password",
-                        Label = "Dexcom Password",
-                        Type = "password",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "server",
-                        Label = "Server Region",
-                        Type = "select",
-                        Required = true,
-                        Options = new()
-                        {
-                            new() { Value = "US", Label = "United States" },
-                            new() { Value = "EU", Label = "Outside US (EU/OUS)" },
-                        },
-                    },
-                },
-                DocumentationUrl = UrlConstants.External.DocsDexcom,
-            },
-            new()
-            {
-                Id = "libre",
-                Name = "FreeStyle Libre",
-                Category = "cgm",
-                Description =
-                    "Connect to LibreLinkUp to fetch Libre CGM data. Requires Abbott account credentials.",
-                Icon = "libre",
-                Available = true,
-                RequiresServerConfig = true,
-                DataSourceId = DataSources.LibreConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "username",
-                        Label = "LibreLinkUp Email",
-                        Type = "text",
-                        Required = true,
-                        Placeholder = "your@email.com",
-                    },
-                    new()
-                    {
-                        Id = "password",
-                        Label = "LibreLinkUp Password",
-                        Type = "password",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "region",
-                        Label = "Region",
-                        Type = "select",
-                        Required = true,
-                        Options = new()
-                        {
-                            new() { Value = "EU", Label = "Europe" },
-                            new() { Value = "US", Label = "United States" },
-                            new() { Value = "DE", Label = "Germany" },
-                            new() { Value = "FR", Label = "France" },
-                            new() { Value = "JP", Label = "Japan" },
-                            new() { Value = "AU", Label = "Australia" },
-                        },
-                    },
-                },
-                DocumentationUrl = UrlConstants.External.DocsLibre,
-            },
-            new()
-            {
-                Id = "carelink",
-                Name = "Medtronic CareLink",
-                Category = "pump",
-                Description = "Sync data from Medtronic MiniMed pumps via CareLink.",
-                Icon = "medtronic",
-                Available = true,
-                RequiresServerConfig = true,
-                DataSourceId = DataSources.MiniMedConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "username",
-                        Label = "CareLink Username",
-                        Type = "text",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "password",
-                        Label = "CareLink Password",
-                        Type = "password",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "country",
-                        Label = "Country Code",
-                        Type = "text",
-                        Required = true,
-                        Placeholder = "US",
-                        HelpText = "Two-letter country code",
-                    },
-                },
-                DocumentationUrl = UrlConstants.External.DocsCareLink,
-            },
-            new()
-            {
-                Id = "nightscout",
-                Name = "Nightscout Bridge",
-                Category = "data",
-                Description = "Sync data from another Nightscout instance.",
-                Icon = "nightscout",
-                Available = true,
-                RequiresServerConfig = true,
-                DataSourceId = DataSources.NightscoutConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "url",
-                        Label = "Nightscout URL",
-                        Type = "text",
-                        Required = true,
-                        Placeholder = "https://your-site.herokuapp.com",
-                    },
-                    new()
-                    {
-                        Id = "apiSecret",
-                        Label = "API Secret",
-                        Type = "password",
-                        Required = false,
-                        HelpText = "Required if Nightscout is secured",
-                    },
-                },
-                DocumentationUrl = UrlConstants.External.DocsNightscout,
-            },
-            new()
-            {
-                Id = "glooko",
-                Name = "Glooko",
-                Category = "data",
-                Description = "Import data from Glooko platform.",
-                Icon = "glooko",
-                Available = true,
-                RequiresServerConfig = true,
-                DataSourceId = DataSources.GlookoConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "username",
-                        Label = "Glooko Username",
-                        Type = "text",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "password",
-                        Label = "Glooko Password",
-                        Type = "password",
-                        Required = true,
-                    },
-                },
-                DocumentationUrl = UrlConstants.External.DocsGlooko,
-            },
-            new()
-            {
-                Id = "myfitnesspal",
-                Name = "MyFitnessPal",
-                Category = "food",
-                Description = "Import food diary data from MyFitnessPal for carb tracking.",
-                Icon = "myfitnesspal",
-                Available = true,
-                RequiresServerConfig = true,
-                DataSourceId = DataSources.MyFitnessPalConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "username",
-                        Label = "MyFitnessPal Username",
-                        Type = "text",
-                        Required = true,
-                        HelpText = "Your MyFitnessPal username (diary must be public)",
-                    },
-                },
-                DocumentationUrl = null,
-            },
-            new()
-            {
-                Id = "mylife",
-                Name = "MyLife",
-                Category = "pump",
-                Description = "Sync data from MyLife pump services.",
-                Icon = "mylife",
-                Available = true,
-                RequiresServerConfig = true,
-                DataSourceId = DataSources.MyLifeConnector,
-                ConfigFields = new List<ConnectorConfigField>
-                {
-                    new()
-                    {
-                        Id = "username",
-                        Label = "MyLife Username",
-                        Type = "text",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "password",
-                        Label = "MyLife Password",
-                        Type = "password",
-                        Required = true,
-                    },
-                    new()
-                    {
-                        Id = "patientId",
-                        Label = "Patient Id",
-                        Type = "text",
-                        Required = false,
-                    },
-                    new()
-                    {
-                        Id = "enableGlucoseSync",
-                        Label = "Enable Glucose Sync",
-                        Type = "checkbox",
-                        Required = false,
-                    },
-                    new()
-                    {
-                        Id = "enableManualBgSync",
-                        Label = "Enable Manual BG Sync",
-                        Type = "checkbox",
-                        Required = false,
-                    },
-                },
-                DocumentationUrl = null,
-            },
-        };
+                DataSourceId = connector.DataSourceId,
+                DocumentationUrl = GetConnectorDocumentationUrl(connector.ConnectorName),
+                ConfigFields = null,
+            })
+            .OrderBy(connector => connector.Name)
+            .ToList();
 
 
         foreach (var connector in connectors)
         {
-            connector.IsConfigured = _connectorSyncService.IsConnectorConfigured(connector.Id);
+            connector.IsConfigured = ConnectorMetadataService.GetByConnectorId(connector.Id) != null;
         }
 
         return connectors;
+    }
+
+    private static string? GetConnectorDocumentationUrl(string connectorName)
+    {
+        return connectorName.ToLowerInvariant() switch
+        {
+            "dexcom" => UrlConstants.External.DocsDexcom,
+            "librelinkup" => UrlConstants.External.DocsLibre,
+            "glooko" => UrlConstants.External.DocsGlooko,
+            _ => null,
+        };
+    }
+
+    /// <inheritdoc />
+    public ConnectorCapabilities? GetConnectorCapabilities(string connectorId)
+    {
+        if (string.IsNullOrWhiteSpace(connectorId))
+        {
+            return null;
+        }
+
+        var registration = ConnectorMetadataService.GetRegistrationByConnectorId(connectorId);
+        if (registration == null)
+        {
+            return null;
+        }
+
+        return new ConnectorCapabilities
+        {
+            SupportedDataTypes = registration.SupportedDataTypes
+                ?.Select(type => type.ToString())
+                .ToList()
+                ?? new List<string>(),
+            SupportsHistoricalSync = registration.SupportsHistoricalSync,
+            MaxHistoricalDays = registration.MaxHistoricalDays > 0
+                ? registration.MaxHistoricalDays
+                : null,
+            SupportsManualSync = registration.SupportsManualSync
+        };
     }
 
     /// <inheritdoc />
@@ -710,8 +498,6 @@ public class DataSourceService : IDataSourceService
     )
     {
         var dataSources = await GetActiveDataSourcesAsync(cancellationToken);
-
-        var hasEnabledConnectors = _connectorSyncService.HasEnabledConnectors();
 
         return new ServicesOverview
         {

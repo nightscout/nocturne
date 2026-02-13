@@ -1,6 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Models;
 
 namespace Nocturne.Connectors.MyLife.Services;
@@ -22,12 +23,12 @@ public class MyLifeAuthTokenProvider(
         CancellationToken cancellationToken)
     {
         var location = await _soapClient.GetUserLocationAsync(
-            _config.MyLifeUsername,
+            _config.Username,
             cancellationToken
         );
         if (location == null) return (null, DateTime.MinValue);
 
-        var serviceUrl = _config.MyLifeServiceUrl;
+        var serviceUrl = _config.ServiceUrl;
         if (string.IsNullOrWhiteSpace(serviceUrl))
             serviceUrl = location.Country20?.ServiceUrl ?? location.Country20?.RestServiceUrl ?? string.Empty;
 
@@ -37,8 +38,8 @@ public class MyLifeAuthTokenProvider(
             serviceUrl,
             _config.AppPlatform,
             _config.AppVersion,
-            _config.MyLifeUsername,
-            _config.MyLifePassword,
+            _config.Username,
+            _config.Password,
             cancellationToken
         );
         if (login == null) return (null, DateTime.MinValue);
@@ -52,7 +53,7 @@ public class MyLifeAuthTokenProvider(
         );
         if (patients.Count == 0) return (null, DateTime.MinValue);
 
-        var patient = ResolvePatient(patients, _config.MyLifePatientId);
+        var patient = ResolvePatient(patients, _config.PatientId);
         if (patient == null) return (null, DateTime.MinValue);
 
         _sessionStore.SetSession(

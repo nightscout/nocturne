@@ -14,12 +14,12 @@ public class BaseConnectorServiceTests
         public TestConnectorService(
             HttpClient httpClient,
             ILogger<TestConnectorService> logger,
-            IApiDataSubmitter? apiDataSubmitter = null)
-            : base(httpClient, logger, apiDataSubmitter)
+            IConnectorPublisher? publisher = null)
+            : base(httpClient, logger, publisher)
         {
         }
 
-        public override string ConnectorSource => "test";
+        protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
 
         public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
@@ -29,24 +29,11 @@ public class BaseConnectorServiceTests
 
     public class TestConfig : IConnectorConfiguration
     {
-        public string NightscoutUrl { get; set; } = "";
-        public string NightscoutApiSecret { get; set; } = "";
-        public string ApiSecret { get; set; } = "";
         public int SyncIntervalMinutes { get; set; } = 5;
         public bool Enabled { get; set; } = true;
-        public bool LoadFromFile { get; set; }
-        public string? LoadFilePath { get; set; }
-        public bool SaveRawData { get; set; }
-        public string DataDirectory { get; set; } = "";
-        public ConnectorMode Mode { get; set; } = ConnectorMode.Standalone;
-        public bool FallbackToDirectApi { get; set; }
         public int BatchSize { get; set; } = 100;
-        public bool UseAsyncProcessing { get; set; }
         public ConnectSource ConnectSource { get; set; } = ConnectSource.Dexcom;
-        public bool DeleteAfterUpload { get; set; }
-        public TimeSpan MessageTimeout { get; set; } = TimeSpan.FromSeconds(30);
         public int MaxRetryAttempts { get; set; } = 3;
-        public string? RoutingKeyPrefix { get; set; }
 
         public void Validate() { }
     }

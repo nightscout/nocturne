@@ -1293,7 +1293,7 @@ public class PostgreSqlService : IPostgreSqlService
 
         // Query entry stats
         var entryStats = await _context
-            .Entries.Where(e => e.DataSource == dataSource)
+            .Entries.Where(e => e.DataSource == dataSource || e.Device == dataSource)
             .GroupBy(_ => 1)
             .Select(g => new
             {
@@ -1306,7 +1306,7 @@ public class PostgreSqlService : IPostgreSqlService
 
         // Query treatment stats
         var treatmentStats = await _context
-            .Treatments.Where(t => t.DataSource == dataSource)
+            .Treatments.Where(t => t.DataSource == dataSource || t.EnteredBy == dataSource)
             .GroupBy(_ => 1)
             .Select(g => new
             {

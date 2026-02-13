@@ -45,10 +45,12 @@
     <OrefWasmPath>$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release\oref.wasm</OrefWasmPath>
     <OrefDownloadUrl>https://github.com/nightscout/nocturne/releases/download/oref-v$(OrefVersion)/oref.wasm</OrefDownloadUrl>
   </PropertyGroup>
-
   <!-- Download oref WASM from GitHub Releases if not present (default behavior) -->
   <Target Name="DownloadOrefWasm" BeforeTargets="Build" Condition="!Exists('$(OrefWasmPath)')">
-    <Message Importance="high" Text="Downloading pre-built oref WASM from GitHub Releases (v$(OrefVersion))..." />
+    <Message
+      Importance="high"
+      Text="Downloading pre-built oref WASM from GitHub Releases (v$(OrefVersion))..."
+    />
     <MakeDir Directories="$(MSBuildProjectDirectory)\..\..\Core\oref\target\wasm32-unknown-unknown\release" />
     <DownloadFile
       SourceUrl="$(OrefDownloadUrl)"
@@ -57,7 +59,6 @@
     />
     <Message Importance="high" Text="oref WASM download complete." />
   </Target>
-
   <ItemGroup>
     <Content
       Include="..\..\..\appsettings.json"
@@ -87,14 +88,13 @@
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Shared\Nocturne.Infrastructure.Shared.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MiniMed\Nocturne.Connectors.MiniMed.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tidepool\Nocturne.Connectors.Tidepool.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
   </ItemGroup>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs automatically after build in development mode -->
@@ -105,7 +105,6 @@
     <!-- Skip NSwag generation during publish to avoid issues with runtime dependencies -->
     <GenerateNSwagClient Condition="'$(PublishDir)' != ''">false</GenerateNSwagClient>
   </PropertyGroup>
-
   <Target Name="GenerateClient" AfterTargets="Build" Condition="'$(GenerateNSwagClient)' == 'true'">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
     <Exec

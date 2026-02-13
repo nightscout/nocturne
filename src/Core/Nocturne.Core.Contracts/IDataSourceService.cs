@@ -34,6 +34,13 @@ public interface IDataSourceService
     List<AvailableConnector> GetAvailableConnectors();
 
     /// <summary>
+    /// Get capabilities for a specific connector.
+    /// </summary>
+    /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
+    /// <returns>Connector capabilities if found</returns>
+    ConnectorCapabilities? GetConnectorCapabilities(string connectorId);
+
+    /// <summary>
     /// Get uploader apps that can push data to Nocturne
     /// </summary>
     /// <returns>List of uploader apps with setup instructions</returns>
