@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Infrastructure.Data.Entities.OwnedTypes;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -10,6 +11,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 [Table("treatments")]
 public class TreatmentEntity
 {
+    // === Identity ===
+
     /// <summary>
     /// Primary key - UUID Version 7 for time-ordered, globally unique identification
     /// </summary>
@@ -22,6 +25,8 @@ public class TreatmentEntity
     [Column("original_id")]
     [MaxLength(24)]
     public string? OriginalId { get; set; }
+
+    // === Core Treatment Fields ===
 
     /// <summary>
     /// Event type (e.g., "Meal Bolus", "Correction Bolus")
@@ -37,19 +42,6 @@ public class TreatmentEntity
     public string? Reason { get; set; }
 
     /// <summary>
-    /// Glucose value for the treatment
-    /// </summary>
-    [Column("glucose")]
-    public double? Glucose { get; set; }
-
-    /// <summary>
-    /// Glucose type (e.g., "Finger", "Sensor")
-    /// </summary>
-    [Column("glucoseType")]
-    [MaxLength(50)]
-    public string? GlucoseType { get; set; }
-
-    /// <summary>
     /// Carbohydrates in grams
     /// </summary>
     [Column("carbs")]
@@ -62,30 +54,12 @@ public class TreatmentEntity
     public double? Insulin { get; set; }
 
     /// <summary>
-    /// Protein content in grams
+    /// Treatment duration in minutes
     /// </summary>
-    [Column("protein")]
-    public double? Protein { get; set; }
+    [Column("duration")]
+    public double? Duration { get; set; }
 
-    /// <summary>
-    /// Fat content in grams
-    /// </summary>
-    [Column("fat")]
-    public double? Fat { get; set; }
-
-    /// <summary>
-    /// Food type
-    /// </summary>
-    [Column("foodType")]
-    [MaxLength(255)]
-    public string? FoodType { get; set; }
-
-    /// <summary>
-    /// Units (e.g., "mg/dl", "mmol")
-    /// </summary>
-    [Column("units")]
-    [MaxLength(10)]
-    public string? Units { get; set; }
+    // === Timestamps ===
 
     /// <summary>
     /// Time in milliseconds since Unix epoch
@@ -101,22 +75,24 @@ public class TreatmentEntity
     public string? Created_at { get; set; }
 
     /// <summary>
-    /// Treatment duration in minutes
+    /// When this treatment was created (timestamp)
     /// </summary>
-    [Column("duration")]
-    public double? Duration { get; set; }
+    [Column("date")]
+    public long? Date { get; set; }
 
     /// <summary>
-    /// Percent of temporary basal rate
+    /// Timestamp in milliseconds since Unix epoch
     /// </summary>
-    [Column("percent")]
-    public double? Percent { get; set; }
+    [Column("timestamp")]
+    public long? Timestamp { get; set; }
 
     /// <summary>
-    /// Absolute temporary basal rate
+    /// UTC offset
     /// </summary>
-    [Column("absolute")]
-    public double? Absolute { get; set; }
+    [Column("utcOffset")]
+    public int? UtcOffset { get; set; }
+
+    // === Metadata ===
 
     /// <summary>
     /// Treatment notes
@@ -132,6 +108,13 @@ public class TreatmentEntity
     public string? EnteredBy { get; set; }
 
     /// <summary>
+    /// Treatment status
+    /// </summary>
+    [Column("status")]
+    [MaxLength(255)]
+    public string? Status { get; set; }
+
+    /// <summary>
     /// Treatment target top
     /// </summary>
     [Column("targetTop")]
@@ -144,48 +127,11 @@ public class TreatmentEntity
     public double? TargetBottom { get; set; }
 
     /// <summary>
-    /// Treatment profile
-    /// </summary>
-    [Column("profile")]
-    [MaxLength(255)]
-    public string? Profile { get; set; }
-
-    /// <summary>
     /// Whether this entry was split from another
     /// </summary>
     [Column("split")]
     [MaxLength(255)]
     public string? Split { get; set; }
-
-    /// <summary>
-    /// When this treatment was created (timestamp)
-    /// </summary>
-    [Column("date")]
-    public long? Date { get; set; }
-
-    /// <summary>
-    /// Carb time offset
-    /// </summary>
-    [Column("carbTime")]
-    public int? CarbTime { get; set; }
-
-    /// <summary>
-    /// Bolus calculator values (stored as JSON)
-    /// </summary>
-    [Column("boluscalc", TypeName = "jsonb")]
-    public string? BolusCalcJson { get; set; }
-
-    /// <summary>
-    /// UTC offset
-    /// </summary>
-    [Column("utcOffset")]
-    public int? UtcOffset { get; set; }
-
-    /// <summary>
-    /// Timestamp in milliseconds since Unix epoch
-    /// </summary>
-    [Column("timestamp")]
-    public long? Timestamp { get; set; }
 
     /// <summary>
     /// Profile name that cut this treatment
@@ -200,118 +146,6 @@ public class TreatmentEntity
     [Column("cutting")]
     [MaxLength(255)]
     public string? Cutting { get; set; }
-
-    /// <summary>
-    /// Event time as ISO string (used by Glooko connector)
-    /// </summary>
-    [Column("eventTime")]
-    [MaxLength(50)]
-    public string? EventTime { get; set; }
-
-    /// <summary>
-    /// Pre-bolus time in minutes
-    /// </summary>
-    [Column("preBolus")]
-    public double? PreBolus { get; set; }
-
-    /// <summary>
-    /// Basal rate (used for temp basal treatments)
-    /// </summary>
-    [Column("rate")]
-    public double? Rate { get; set; }
-
-    /// <summary>
-    /// Blood glucose value in mg/dL
-    /// </summary>
-    [Column("mgdl")]
-    public double? Mgdl { get; set; }
-
-    /// <summary>
-    /// Blood glucose value in mmol/L
-    /// </summary>
-    [Column("mmol")]
-    public double? Mmol { get; set; }
-
-    /// <summary>
-    /// End time in milliseconds for duration treatments
-    /// </summary>
-    [Column("endmills")]
-    public long? EndMills { get; set; }
-
-    /// <summary>
-    /// Duration type (e.g., "indefinite")
-    /// </summary>
-    [Column("durationType")]
-    [MaxLength(50)]
-    public string? DurationType { get; set; }
-
-    /// <summary>
-    /// Whether this treatment is an announcement
-    /// </summary>
-    [Column("isAnnouncement")]
-    public bool? IsAnnouncement { get; set; }
-
-    /// <summary>
-    /// JSON string of profile data for profile switches
-    /// </summary>
-    [Column("profileJson", TypeName = "jsonb")]
-    public string? ProfileJson { get; set; }
-
-    /// <summary>
-    /// End profile name for profile switches
-    /// </summary>
-    [Column("endprofile")]
-    [MaxLength(255)]
-    public string? EndProfile { get; set; }
-
-    /// <summary>
-    /// Insulin scaling factor for adjustments
-    /// </summary>
-    [Column("insulinNeedsScaleFactor")]
-    public double? InsulinNeedsScaleFactor { get; set; }
-
-    /// <summary>
-    /// Carb absorption time in minutes
-    /// </summary>
-    [Column("absorptionTime")]
-    public int? AbsorptionTime { get; set; }
-
-    /// <summary>
-    /// Manually entered insulin amount
-    /// </summary>
-    [Column("enteredinsulin")]
-    public double? EnteredInsulin { get; set; }
-
-    /// <summary>
-    /// Percentage of combo bolus delivered immediately
-    /// </summary>
-    [Column("splitNow")]
-    public double? SplitNow { get; set; }
-
-    /// <summary>
-    /// Percentage of combo bolus delivered extended
-    /// </summary>
-    [Column("splitExt")]
-    public double? SplitExt { get; set; }
-
-    /// <summary>
-    /// Treatment status
-    /// </summary>
-    [Column("status")]
-    [MaxLength(255)]
-    public string? Status { get; set; }
-
-    /// <summary>
-    /// Relative basal rate change
-    /// </summary>
-    [Column("relative")]
-    public double? Relative { get; set; }
-
-    /// <summary>
-    /// Carb ratio
-    /// </summary>
-    [Column("CR")]
-    public double? CR { get; set; }
 
     /// <summary>
     /// Nightscout client identifier
@@ -333,29 +167,24 @@ public class TreatmentEntity
     public bool? End { get; set; }
 
     /// <summary>
-    /// Whether this is a CircadianPercentageProfile treatment
-    /// </summary>
-    [Column("CircadianPercentageProfile")]
-    public bool? CircadianPercentageProfile { get; set; }
-
-    /// <summary>
-    /// Percentage for CircadianPercentageProfile
-    /// </summary>
-    [Column("percentage")]
-    public double? Percentage { get; set; }
-
-    /// <summary>
-    /// Timeshift for CircadianPercentageProfile (in hours)
-    /// </summary>
-    [Column("timeshift")]
-    public double? Timeshift { get; set; }
-
-    /// <summary>
     /// Transmitter ID (used by CGM devices)
     /// </summary>
     [Column("transmitterId")]
     [MaxLength(255)]
     public string? TransmitterId { get; set; }
+
+    /// <summary>
+    /// Event time as ISO string (used by Glooko connector)
+    /// </summary>
+    [Column("eventTime")]
+    [MaxLength(50)]
+    public string? EventTime { get; set; }
+
+    /// <summary>
+    /// Whether this treatment is an announcement
+    /// </summary>
+    [Column("isAnnouncement")]
+    public bool? IsAnnouncement { get; set; }
 
     /// <summary>
     /// Data source identifier indicating where this treatment originated from.
@@ -366,89 +195,13 @@ public class TreatmentEntity
     [MaxLength(50)]
     public string? DataSource { get; set; }
 
-    // === APS/Bolus Calculator Fields ===
-
     /// <summary>
-    /// Insulin recommended by bolus calculator specifically for carbohydrate coverage
+    /// Additional properties from import (stored as JSON)
     /// </summary>
-    [Column("insulin_recommendation_for_carbs")]
-    public double? InsulinRecommendationForCarbs { get; set; }
+    [Column("additional_properties", TypeName = "jsonb")]
+    public string? AdditionalPropertiesJson { get; set; }
 
-    /// <summary>
-    /// Insulin recommended by bolus calculator for glucose correction
-    /// </summary>
-    [Column("insulin_recommendation_for_correction")]
-    public double? InsulinRecommendationForCorrection { get; set; }
-
-    /// <summary>
-    /// Total insulin amount programmed for delivery
-    /// </summary>
-    [Column("insulin_programmed")]
-    public double? InsulinProgrammed { get; set; }
-
-    /// <summary>
-    /// Actual insulin amount delivered
-    /// </summary>
-    [Column("insulin_delivered")]
-    public double? InsulinDelivered { get; set; }
-
-    /// <summary>
-    /// Insulin on board at the time of this treatment
-    /// </summary>
-    [Column("insulin_on_board")]
-    public double? InsulinOnBoard { get; set; }
-
-    /// <summary>
-    /// Blood glucose input value used for bolus calculation
-    /// </summary>
-    [Column("blood_glucose_input")]
-    public double? BloodGlucoseInput { get; set; }
-
-    /// <summary>
-    /// Source of blood glucose input (e.g., "Finger", "Sensor", "CGM")
-    /// </summary>
-    [Column("blood_glucose_input_source")]
-    [MaxLength(50)]
-    public string? BloodGlucoseInputSource { get; set; }
-
-    /// <summary>
-    /// How this bolus was calculated/initiated (Suggested, Manual, Automatic)
-    /// </summary>
-    [Column("calculation_type")]
-    [MaxLength(20)]
-    public string? CalculationType { get; set; }
-
-    /// <summary>
-    /// Remote carb entry amount in grams (for Loop remote commands)
-    /// </summary>
-    [Column("remoteCarbs")]
-    public double? RemoteCarbs { get; set; }
-
-    /// <summary>
-    /// Remote carb absorption time in hours (for Loop remote commands)
-    /// </summary>
-    [Column("remoteAbsorption")]
-    public double? RemoteAbsorption { get; set; }
-
-    /// <summary>
-    /// Remote bolus amount in units (for Loop remote commands)
-    /// </summary>
-    [Column("remoteBolus")]
-    public double? RemoteBolus { get; set; }
-
-    /// <summary>
-    /// Display name for override reason
-    /// </summary>
-    [Column("reasonDisplay")]
-    [MaxLength(255)]
-    public string? ReasonDisplay { get; set; }
-
-    /// <summary>
-    /// One-time password for secure remote operations
-    /// </summary>
-    [Column("otp")]
-    [MaxLength(255)]
-    public string? Otp { get; set; }
+    // === System Tracking ===
 
     /// <summary>
     /// System tracking: when record was inserted
@@ -462,105 +215,41 @@ public class TreatmentEntity
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
 
-    // === AAPS (AndroidAPS) Fields ===
+    // === Owned Types ===
+    // Column mappings configured via TreatmentEntityConfiguration.ConfigureOwnedTypes()
 
     /// <summary>
-    /// Treatment duration in milliseconds (AAPS uses this alongside the minutes-based Duration field)
+    /// Glucose reading data (glucose value, type, mg/dL, mmol/L, units)
     /// </summary>
-    [Column("duration_in_milliseconds")]
-    public long? DurationInMilliseconds { get; set; }
+    public TreatmentGlucoseData GlucoseData { get; set; } = new();
 
     /// <summary>
-    /// AAPS internal pump identifier for linking treatments to pump events
+    /// Nutritional/food data (protein, fat, food type, carb time, absorption time)
     /// </summary>
-    [Column("pump_id")]
-    public long? PumpId { get; set; }
+    public TreatmentNutritionalData Nutritional { get; set; } = new();
 
     /// <summary>
-    /// Serial number of the insulin pump that created this treatment
+    /// Basal delivery data (rate, percent, absolute, relative, duration type, end mills)
     /// </summary>
-    [Column("pump_serial")]
-    [MaxLength(255)]
-    public string? PumpSerial { get; set; }
+    public TreatmentBasalData Basal { get; set; } = new();
 
     /// <summary>
-    /// Type of insulin pump (e.g., "ACCU_CHEK_COMBO", "OMNIPOD_DASH", "VIRTUAL")
+    /// Bolus calculator data (recommendations, programmed/delivered insulin, BG input, calc type)
     /// </summary>
-    [Column("pump_type")]
-    [MaxLength(100)]
-    public string? PumpType { get; set; }
+    public TreatmentBolusCalcData BolusCalc { get; set; } = new();
 
     /// <summary>
-    /// AAPS internal identifier linking to the end event of a duration-based treatment (e.g., temp basal end)
+    /// Profile switch data (profile name/JSON, circadian percentage, timeshift)
     /// </summary>
-    [Column("end_id")]
-    public long? EndId { get; set; }
+    public TreatmentProfileData ProfileData { get; set; } = new();
 
     /// <summary>
-    /// Whether the treatment is valid. AAPS sets this to false for soft-deleted records.
+    /// AndroidAPS-specific data (pump info, validity flags, original values)
     /// </summary>
-    [Column("is_valid")]
-    public bool? IsValid { get; set; }
+    public TreatmentAapsData Aaps { get; set; } = new();
 
     /// <summary>
-    /// Whether the treatment is read-only and should not be modified by the client
+    /// Loop remote command data (remote carbs/bolus, OTP, reason display)
     /// </summary>
-    [Column("is_read_only")]
-    public bool? IsReadOnly { get; set; }
-
-    /// <summary>
-    /// Whether this insulin treatment represents basal insulin delivery (vs. bolus)
-    /// </summary>
-    [Column("is_basal_insulin")]
-    public bool? IsBasalInsulin { get; set; }
-
-    /// <summary>
-    /// JSON-serialized bolus calculator result from AAPS containing wizard inputs and outputs
-    /// </summary>
-    [Column("bolus_calculator_result")]
-    public string? BolusCalculatorResult { get; set; }
-
-    /// <summary>
-    /// Original duration before AAPS modified this treatment (for tracking changes to temp basals/profile switches)
-    /// </summary>
-    [Column("original_duration")]
-    public int? OriginalDuration { get; set; }
-
-    /// <summary>
-    /// Original profile name before a profile switch modification
-    /// </summary>
-    [Column("original_profile_name")]
-    [MaxLength(255)]
-    public string? OriginalProfileName { get; set; }
-
-    /// <summary>
-    /// Original basal percentage before modification
-    /// </summary>
-    [Column("original_percentage")]
-    public int? OriginalPercentage { get; set; }
-
-    /// <summary>
-    /// Original timeshift value in hours before modification
-    /// </summary>
-    [Column("original_timeshift")]
-    public int? OriginalTimeshift { get; set; }
-
-    /// <summary>
-    /// Original customized profile name before modification
-    /// </summary>
-    [Column("original_customized_name")]
-    [MaxLength(255)]
-    public string? OriginalCustomizedName { get; set; }
-
-    /// <summary>
-    /// Original end timestamp in milliseconds before modification
-    /// </summary>
-    [Column("original_end")]
-    public long? OriginalEnd { get; set; }
-
-    /// <summary>
-    /// Additional properties from import (stored as JSON)
-    /// </summary>
-    [Column("additional_properties", TypeName = "jsonb")]
-    public string? AdditionalPropertiesJson { get; set; }
+    public TreatmentLoopData Loop { get; set; } = new();
 }

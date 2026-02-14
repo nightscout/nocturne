@@ -39,6 +39,9 @@ public class MigrationDataContext : DbContext
         modelBuilder.Entity<FoodEntity>().ToTable("foods");
         modelBuilder.Entity<ActivityEntity>().ToTable("activities");
 
+        // Configure TreatmentEntity owned types (must match NocturneDbContext column mappings)
+        TreatmentEntityConfiguration.ConfigureOwnedTypes(modelBuilder);
+
         // Note: No migrations, no schema creation, no indexes defined here
         // This context assumes the schema already exists and is managed by NocturneDbContext
     }

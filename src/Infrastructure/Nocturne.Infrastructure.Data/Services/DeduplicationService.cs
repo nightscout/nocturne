@@ -693,7 +693,7 @@ public class DeduplicationService : IDeduplicationService
 
         var treatments = await _context.Treatments
             .OrderBy(t => t.Mills)
-            .Select(t => new { t.Id, t.Mills, t.EventType, t.Insulin, t.Carbs, t.Rate, t.DataSource })
+            .Select(t => new { t.Id, t.Mills, t.EventType, t.Insulin, t.Carbs, Rate = t.Basal.Rate, t.DataSource })
             .ToListAsync(cancellationToken);
 
         var groupedByTime = new Dictionary<long, List<(Guid Id, string? EventType, double? Insulin, double? Carbs, double? Rate, string? DataSource)>>();
