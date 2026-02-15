@@ -35,6 +35,7 @@ using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
 using NSwag;
@@ -438,6 +439,16 @@ builder.Services.AddScoped<
 >();
 builder.Services.AddScoped<IClockFaceService, ClockFaceService>();
 builder.Services.AddScoped<IChartDataService, ChartDataService>();
+
+// V4 Repositories
+builder.Services.AddScoped<SensorGlucoseRepository>();
+builder.Services.AddScoped<MeterGlucoseRepository>();
+builder.Services.AddScoped<CalibrationRepository>();
+builder.Services.AddScoped<BolusRepository>();
+builder.Services.AddScoped<CarbIntakeRepository>();
+builder.Services.AddScoped<BGCheckRepository>();
+builder.Services.AddScoped<NoteRepository>();
+builder.Services.AddScoped<BolusCalculationRepository>();
 
 // Note: Processing status service is registered by AddNocturneMemoryCache
 
