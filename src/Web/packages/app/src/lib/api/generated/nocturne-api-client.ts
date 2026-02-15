@@ -6454,6 +6454,932 @@ export class DeviceHealthClient {
     }
 }
 
+export class DeviceStatusClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get APS snapshots with optional filtering
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param limit (optional) 
+     * @param offset (optional) 
+     * @param sort (optional) 
+     * @param device (optional) 
+     * @param source (optional) 
+     */
+    getApsSnapshots(from?: number | null | undefined, to?: number | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, device?: string | null | undefined, source?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfApsSnapshot> {
+        let url_ = this.baseUrl + "/api/v4/device-status/aps?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        if (offset === null)
+            throw new globalThis.Error("The parameter 'offset' cannot be null.");
+        else if (offset !== undefined)
+            url_ += "offset=" + encodeURIComponent("" + offset) + "&";
+        if (sort === null)
+            throw new globalThis.Error("The parameter 'sort' cannot be null.");
+        else if (sort !== undefined)
+            url_ += "sort=" + encodeURIComponent("" + sort) + "&";
+        if (device !== undefined && device !== null)
+            url_ += "device=" + encodeURIComponent("" + device) + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetApsSnapshots(_response);
+        });
+    }
+
+    protected processGetApsSnapshots(response: Response): Promise<PaginatedResponseOfApsSnapshot> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PaginatedResponseOfApsSnapshot;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PaginatedResponseOfApsSnapshot>(null as any);
+    }
+
+    /**
+     * Get an APS snapshot by ID
+     */
+    getApsSnapshotById(id: string, signal?: AbortSignal): Promise<ApsSnapshot> {
+        let url_ = this.baseUrl + "/api/v4/device-status/aps/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetApsSnapshotById(_response);
+        });
+    }
+
+    protected processGetApsSnapshotById(response: Response): Promise<ApsSnapshot> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ApsSnapshot;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ApsSnapshot>(null as any);
+    }
+
+    /**
+     * Get pump snapshots with optional filtering
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param limit (optional) 
+     * @param offset (optional) 
+     * @param sort (optional) 
+     * @param device (optional) 
+     * @param source (optional) 
+     */
+    getPumpSnapshots(from?: number | null | undefined, to?: number | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, device?: string | null | undefined, source?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfPumpSnapshot> {
+        let url_ = this.baseUrl + "/api/v4/device-status/pump?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        if (offset === null)
+            throw new globalThis.Error("The parameter 'offset' cannot be null.");
+        else if (offset !== undefined)
+            url_ += "offset=" + encodeURIComponent("" + offset) + "&";
+        if (sort === null)
+            throw new globalThis.Error("The parameter 'sort' cannot be null.");
+        else if (sort !== undefined)
+            url_ += "sort=" + encodeURIComponent("" + sort) + "&";
+        if (device !== undefined && device !== null)
+            url_ += "device=" + encodeURIComponent("" + device) + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPumpSnapshots(_response);
+        });
+    }
+
+    protected processGetPumpSnapshots(response: Response): Promise<PaginatedResponseOfPumpSnapshot> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PaginatedResponseOfPumpSnapshot;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PaginatedResponseOfPumpSnapshot>(null as any);
+    }
+
+    /**
+     * Get a pump snapshot by ID
+     */
+    getPumpSnapshotById(id: string, signal?: AbortSignal): Promise<PumpSnapshot> {
+        let url_ = this.baseUrl + "/api/v4/device-status/pump/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPumpSnapshotById(_response);
+        });
+    }
+
+    protected processGetPumpSnapshotById(response: Response): Promise<PumpSnapshot> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PumpSnapshot;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PumpSnapshot>(null as any);
+    }
+
+    /**
+     * Get uploader snapshots with optional filtering
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param limit (optional) 
+     * @param offset (optional) 
+     * @param sort (optional) 
+     * @param device (optional) 
+     * @param source (optional) 
+     */
+    getUploaderSnapshots(from?: number | null | undefined, to?: number | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, device?: string | null | undefined, source?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfUploaderSnapshot> {
+        let url_ = this.baseUrl + "/api/v4/device-status/uploader?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        if (offset === null)
+            throw new globalThis.Error("The parameter 'offset' cannot be null.");
+        else if (offset !== undefined)
+            url_ += "offset=" + encodeURIComponent("" + offset) + "&";
+        if (sort === null)
+            throw new globalThis.Error("The parameter 'sort' cannot be null.");
+        else if (sort !== undefined)
+            url_ += "sort=" + encodeURIComponent("" + sort) + "&";
+        if (device !== undefined && device !== null)
+            url_ += "device=" + encodeURIComponent("" + device) + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetUploaderSnapshots(_response);
+        });
+    }
+
+    protected processGetUploaderSnapshots(response: Response): Promise<PaginatedResponseOfUploaderSnapshot> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PaginatedResponseOfUploaderSnapshot;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PaginatedResponseOfUploaderSnapshot>(null as any);
+    }
+
+    /**
+     * Get an uploader snapshot by ID
+     */
+    getUploaderSnapshotById(id: string, signal?: AbortSignal): Promise<UploaderSnapshot> {
+        let url_ = this.baseUrl + "/api/v4/device-status/uploader/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetUploaderSnapshotById(_response);
+        });
+    }
+
+    protected processGetUploaderSnapshotById(response: Response): Promise<UploaderSnapshot> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as UploaderSnapshot;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<UploaderSnapshot>(null as any);
+    }
+
+    /**
+     * Get device status records with V3 API features including pagination, field selection, and advanced filtering
+     * @return V3 device status collection response
+     */
+    getDeviceStatus(signal?: AbortSignal): Promise<V3CollectionResponseOfObject> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceStatus(_response);
+        });
+    }
+
+    protected processGetDeviceStatus(response: Response): Promise<V3CollectionResponseOfObject> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3CollectionResponseOfObject;
+            return result200;
+            });
+        } else if (status === 304) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<V3CollectionResponseOfObject>(null as any);
+    }
+
+    /**
+     * Create new device status records with V3 format and deduplication support
+     * @param deviceStatusData Device status data to create (single object or array)
+     * @return Created device status records
+     */
+    createDeviceStatus(deviceStatusData: any, signal?: AbortSignal): Promise<DeviceStatus[]> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(deviceStatusData);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateDeviceStatus(_response);
+        });
+    }
+
+    protected processCreateDeviceStatus(response: Response): Promise<DeviceStatus[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceStatus[]>(null as any);
+    }
+
+    /**
+     * Get a specific device status record by ID with V3 format
+     * @param id Device status ID
+     * @return Single device status record in V3 format
+     */
+    getDeviceStatusById(id: string, signal?: AbortSignal): Promise<DeviceStatus> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceStatusById(_response);
+        });
+    }
+
+    protected processGetDeviceStatusById(response: Response): Promise<DeviceStatus> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceStatus>(null as any);
+    }
+
+    /**
+     * Update a device status record by ID with V3 format
+     * @param id Device status ID to update
+     * @param request Updated device status data
+     * @return Updated device status record
+     */
+    updateDeviceStatus(id: string, request: any, signal?: AbortSignal): Promise<{ [key: string]: any; }> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateDeviceStatus(_response);
+        });
+    }
+
+    protected processUpdateDeviceStatus(response: Response): Promise<{ [key: string]: any; }> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as { [key: string]: any; };
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<{ [key: string]: any; }>(null as any);
+    }
+
+    /**
+     * Delete a device status record by ID
+     * @param id Device status ID to delete
+     * @return No content on success
+     */
+    deleteDeviceStatus(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteDeviceStatus(_response);
+        });
+    }
+
+    protected processDeleteDeviceStatus(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Get device status records modified since a given timestamp (for AAPS incremental sync)
+     * @param limit (optional) 
+     */
+    getDeviceStatusHistory(lastModified: number, limit?: number | undefined, signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus/history/{lastModified}?";
+        if (lastModified === undefined || lastModified === null)
+            throw new globalThis.Error("The parameter 'lastModified' must be defined.");
+        url_ = url_.replace("{lastModified}", encodeURIComponent("" + lastModified));
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceStatusHistory(_response);
+        });
+    }
+
+    protected processGetDeviceStatusHistory(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
+     * Get device status entries with optional filtering and pagination
+     * @param count (optional) Maximum number of device status entries to return (default: 10)
+     * @param skip (optional) Number of device status entries to skip for pagination (default: 0)
+     * @param format (optional) Output format: json (default), csv, tsv, or txt
+     * @return Array of device status entries ordered by most recent first
+     */
+    getDeviceStatus2(count?: number | undefined, skip?: number | undefined, format?: string | undefined, signal?: AbortSignal): Promise<DeviceStatus[]> {
+        let url_ = this.baseUrl + "/api/v1/DeviceStatus?";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        if (format === null)
+            throw new globalThis.Error("The parameter 'format' cannot be null.");
+        else if (format !== undefined)
+            url_ += "format=" + encodeURIComponent("" + format) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceStatus2(_response);
+        });
+    }
+
+    protected processGetDeviceStatus2(response: Response): Promise<DeviceStatus[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceStatus[]>(null as any);
+    }
+
+    /**
+     * Create new device status entries
+     * @param body Device status entry or array of entries to create (accepts both single object and array)
+     * @return Created device status entries with assigned IDs
+     */
+    createDeviceStatus2(body: any, signal?: AbortSignal): Promise<DeviceStatus[]> {
+        let url_ = this.baseUrl + "/api/v1/DeviceStatus";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateDeviceStatus2(_response);
+        });
+    }
+
+    protected processCreateDeviceStatus2(response: Response): Promise<DeviceStatus[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceStatus[]>(null as any);
+    }
+
+    /**
+     * Bulk delete device status entries using query filters
+     * @return Number of deleted entries
+     */
+    bulkDeleteDeviceStatus(signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v1/DeviceStatus";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processBulkDeleteDeviceStatus(_response);
+        });
+    }
+
+    protected processBulkDeleteDeviceStatus(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
+     * Delete a device status entry by ID
+     * @param id Device status ID to delete
+     * @return Success status
+     */
+    deleteDeviceStatus2(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v1/DeviceStatus/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteDeviceStatus2(_response);
+        });
+    }
+
+    protected processDeleteDeviceStatus2(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Alternative endpoint for device status - supports .json extension
+     * @param count (optional) Maximum number of device status entries to return (default: 10)
+     * @param skip (optional) Number of device status entries to skip for pagination (default: 0)
+     * @return Array of device status entries ordered by most recent first
+     */
+    getDeviceStatusJson(count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<DeviceStatus[]> {
+        let url_ = this.baseUrl + "/api/v1/devicestatus.json?";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceStatusJson(_response);
+        });
+    }
+
+    protected processGetDeviceStatusJson(response: Response): Promise<DeviceStatus[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceStatus[]>(null as any);
+    }
+}
+
 export class DiscrepancyClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -10017,6 +10943,238 @@ export class ObservationsClient {
     }
 
     protected processDeleteNote(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Get device events with optional filtering
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param limit (optional) 
+     * @param offset (optional) 
+     * @param sort (optional) 
+     * @param device (optional) 
+     * @param source (optional) 
+     */
+    getDeviceEvents(from?: number | null | undefined, to?: number | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, device?: string | null | undefined, source?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfDeviceEvent> {
+        let url_ = this.baseUrl + "/api/v4/observations/device-events?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        if (offset === null)
+            throw new globalThis.Error("The parameter 'offset' cannot be null.");
+        else if (offset !== undefined)
+            url_ += "offset=" + encodeURIComponent("" + offset) + "&";
+        if (sort === null)
+            throw new globalThis.Error("The parameter 'sort' cannot be null.");
+        else if (sort !== undefined)
+            url_ += "sort=" + encodeURIComponent("" + sort) + "&";
+        if (device !== undefined && device !== null)
+            url_ += "device=" + encodeURIComponent("" + device) + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceEvents(_response);
+        });
+    }
+
+    protected processGetDeviceEvents(response: Response): Promise<PaginatedResponseOfDeviceEvent> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PaginatedResponseOfDeviceEvent;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<PaginatedResponseOfDeviceEvent>(null as any);
+    }
+
+    /**
+     * Create a new device event
+     */
+    createDeviceEvent(model: DeviceEvent, signal?: AbortSignal): Promise<DeviceEvent> {
+        let url_ = this.baseUrl + "/api/v4/observations/device-events";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(model);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateDeviceEvent(_response);
+        });
+    }
+
+    protected processCreateDeviceEvent(response: Response): Promise<DeviceEvent> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceEvent;
+            return result201;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceEvent>(null as any);
+    }
+
+    /**
+     * Get a device event by ID
+     */
+    getDeviceEventById(id: string, signal?: AbortSignal): Promise<DeviceEvent> {
+        let url_ = this.baseUrl + "/api/v4/observations/device-events/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceEventById(_response);
+        });
+    }
+
+    protected processGetDeviceEventById(response: Response): Promise<DeviceEvent> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceEvent;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceEvent>(null as any);
+    }
+
+    /**
+     * Update an existing device event
+     */
+    updateDeviceEvent(id: string, model: DeviceEvent, signal?: AbortSignal): Promise<DeviceEvent> {
+        let url_ = this.baseUrl + "/api/v4/observations/device-events/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(model);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateDeviceEvent(_response);
+        });
+    }
+
+    protected processUpdateDeviceEvent(response: Response): Promise<DeviceEvent> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceEvent;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<DeviceEvent>(null as any);
+    }
+
+    /**
+     * Delete a device event
+     */
+    deleteDeviceEvent(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/observations/device-events/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteDeviceEvent(_response);
+        });
+    }
+
+    protected processDeleteDeviceEvent(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 204) {
@@ -14922,602 +16080,6 @@ export class WebhookSettingsClient {
             });
         }
         return Promise.resolve<WebhookTestResult>(null as any);
-    }
-}
-
-export class DeviceStatusClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Get device status records with V3 API features including pagination, field selection, and advanced filtering
-     * @return V3 device status collection response
-     */
-    getDeviceStatus(signal?: AbortSignal): Promise<V3CollectionResponseOfObject> {
-        let url_ = this.baseUrl + "/api/v3/DeviceStatus";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceStatus(_response);
-        });
-    }
-
-    protected processGetDeviceStatus(response: Response): Promise<V3CollectionResponseOfObject> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3CollectionResponseOfObject;
-            return result200;
-            });
-        } else if (status === 304) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<V3CollectionResponseOfObject>(null as any);
-    }
-
-    /**
-     * Create new device status records with V3 format and deduplication support
-     * @param deviceStatusData Device status data to create (single object or array)
-     * @return Created device status records
-     */
-    createDeviceStatus(deviceStatusData: any, signal?: AbortSignal): Promise<DeviceStatus[]> {
-        let url_ = this.baseUrl + "/api/v3/DeviceStatus";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(deviceStatusData);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processCreateDeviceStatus(_response);
-        });
-    }
-
-    protected processCreateDeviceStatus(response: Response): Promise<DeviceStatus[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
-            return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
-            return result201;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceStatus[]>(null as any);
-    }
-
-    /**
-     * Get a specific device status record by ID with V3 format
-     * @param id Device status ID
-     * @return Single device status record in V3 format
-     */
-    getDeviceStatusById(id: string, signal?: AbortSignal): Promise<DeviceStatus> {
-        let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceStatusById(_response);
-        });
-    }
-
-    protected processGetDeviceStatusById(response: Response): Promise<DeviceStatus> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus;
-            return result200;
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceStatus>(null as any);
-    }
-
-    /**
-     * Update a device status record by ID with V3 format
-     * @param id Device status ID to update
-     * @param request Updated device status data
-     * @return Updated device status record
-     */
-    updateDeviceStatus(id: string, request: any, signal?: AbortSignal): Promise<{ [key: string]: any; }> {
-        let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "PUT",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processUpdateDeviceStatus(_response);
-        });
-    }
-
-    protected processUpdateDeviceStatus(response: Response): Promise<{ [key: string]: any; }> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as { [key: string]: any; };
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<{ [key: string]: any; }>(null as any);
-    }
-
-    /**
-     * Delete a device status record by ID
-     * @param id Device status ID to delete
-     * @return No content on success
-     */
-    deleteDeviceStatus(id: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/api/v3/DeviceStatus/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processDeleteDeviceStatus(_response);
-        });
-    }
-
-    protected processDeleteDeviceStatus(response: Response): Promise<void> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 204) {
-            return response.text().then((_responseText) => {
-            return;
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<void>(null as any);
-    }
-
-    /**
-     * Get device status records modified since a given timestamp (for AAPS incremental sync)
-     * @param limit (optional) 
-     */
-    getDeviceStatusHistory(lastModified: number, limit?: number | undefined, signal?: AbortSignal): Promise<any> {
-        let url_ = this.baseUrl + "/api/v3/DeviceStatus/history/{lastModified}?";
-        if (lastModified === undefined || lastModified === null)
-            throw new globalThis.Error("The parameter 'lastModified' must be defined.");
-        url_ = url_.replace("{lastModified}", encodeURIComponent("" + lastModified));
-        if (limit === null)
-            throw new globalThis.Error("The parameter 'limit' cannot be null.");
-        else if (limit !== undefined)
-            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceStatusHistory(_response);
-        });
-    }
-
-    protected processGetDeviceStatusHistory(response: Response): Promise<any> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
-            return result200;
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<any>(null as any);
-    }
-
-    /**
-     * Get device status entries with optional filtering and pagination
-     * @param count (optional) Maximum number of device status entries to return (default: 10)
-     * @param skip (optional) Number of device status entries to skip for pagination (default: 0)
-     * @param format (optional) Output format: json (default), csv, tsv, or txt
-     * @return Array of device status entries ordered by most recent first
-     */
-    getDeviceStatus2(count?: number | undefined, skip?: number | undefined, format?: string | undefined, signal?: AbortSignal): Promise<DeviceStatus[]> {
-        let url_ = this.baseUrl + "/api/v1/DeviceStatus?";
-        if (count === null)
-            throw new globalThis.Error("The parameter 'count' cannot be null.");
-        else if (count !== undefined)
-            url_ += "count=" + encodeURIComponent("" + count) + "&";
-        if (skip === null)
-            throw new globalThis.Error("The parameter 'skip' cannot be null.");
-        else if (skip !== undefined)
-            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
-        if (format === null)
-            throw new globalThis.Error("The parameter 'format' cannot be null.");
-        else if (format !== undefined)
-            url_ += "format=" + encodeURIComponent("" + format) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceStatus2(_response);
-        });
-    }
-
-    protected processGetDeviceStatus2(response: Response): Promise<DeviceStatus[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceStatus[]>(null as any);
-    }
-
-    /**
-     * Create new device status entries
-     * @param body Device status entry or array of entries to create (accepts both single object and array)
-     * @return Created device status entries with assigned IDs
-     */
-    createDeviceStatus2(body: any, signal?: AbortSignal): Promise<DeviceStatus[]> {
-        let url_ = this.baseUrl + "/api/v1/DeviceStatus";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(body);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processCreateDeviceStatus2(_response);
-        });
-    }
-
-    protected processCreateDeviceStatus2(response: Response): Promise<DeviceStatus[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceStatus[]>(null as any);
-    }
-
-    /**
-     * Bulk delete device status entries using query filters
-     * @return Number of deleted entries
-     */
-    bulkDeleteDeviceStatus(signal?: AbortSignal): Promise<any> {
-        let url_ = this.baseUrl + "/api/v1/DeviceStatus";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processBulkDeleteDeviceStatus(_response);
-        });
-    }
-
-    protected processBulkDeleteDeviceStatus(response: Response): Promise<any> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<any>(null as any);
-    }
-
-    /**
-     * Delete a device status entry by ID
-     * @param id Device status ID to delete
-     * @return Success status
-     */
-    deleteDeviceStatus2(id: string, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/api/v1/DeviceStatus/{id}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processDeleteDeviceStatus2(_response);
-        });
-    }
-
-    protected processDeleteDeviceStatus2(response: Response): Promise<void> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            return;
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<void>(null as any);
-    }
-
-    /**
-     * Alternative endpoint for device status - supports .json extension
-     * @param count (optional) Maximum number of device status entries to return (default: 10)
-     * @param skip (optional) Number of device status entries to skip for pagination (default: 0)
-     * @return Array of device status entries ordered by most recent first
-     */
-    getDeviceStatusJson(count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<DeviceStatus[]> {
-        let url_ = this.baseUrl + "/api/v1/devicestatus.json?";
-        if (count === null)
-            throw new globalThis.Error("The parameter 'count' cannot be null.");
-        else if (count !== undefined)
-            url_ += "count=" + encodeURIComponent("" + count) + "&";
-        if (skip === null)
-            throw new globalThis.Error("The parameter 'skip' cannot be null.");
-        else if (skip !== undefined)
-            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetDeviceStatusJson(_response);
-        });
-    }
-
-    protected processGetDeviceStatusJson(response: Response): Promise<DeviceStatus[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as DeviceStatus[];
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<DeviceStatus[]>(null as any);
     }
 }
 
@@ -21939,6 +22501,10 @@ export enum DeviceEventType {
     SiteChange = "SiteChange",
     InsulinChange = "InsulinChange",
     PumpBatteryChange = "PumpBatteryChange",
+    PodChange = "PodChange",
+    ReservoirChange = "ReservoirChange",
+    CannulaChange = "CannulaChange",
+    TransmitterSensorInsert = "TransmitterSensorInsert",
 }
 
 export interface BgCheckMarkerDto {
@@ -22733,6 +23299,100 @@ export interface DeviceHealthUpdate {
     deviceSpecificData?: { [key: string]: any; } | undefined;
 }
 
+export interface PaginatedResponseOfApsSnapshot {
+    data?: ApsSnapshot[];
+    pagination?: PaginationInfo;
+}
+
+export interface ApsSnapshot {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    apsSystem?: ApsSystem;
+    iob?: number | undefined;
+    basalIob?: number | undefined;
+    bolusIob?: number | undefined;
+    cob?: number | undefined;
+    currentBg?: number | undefined;
+    eventualBg?: number | undefined;
+    targetBg?: number | undefined;
+    recommendedBolus?: number | undefined;
+    sensitivityRatio?: number | undefined;
+    enacted?: boolean;
+    enactedRate?: number | undefined;
+    enactedDuration?: number | undefined;
+    enactedBolusVolume?: number | undefined;
+    suggestedJson?: string | undefined;
+    enactedJson?: string | undefined;
+    predictedDefaultJson?: string | undefined;
+    predictedIobJson?: string | undefined;
+    predictedZtJson?: string | undefined;
+    predictedCobJson?: string | undefined;
+    predictedUamJson?: string | undefined;
+    predictedStartMills?: number | undefined;
+}
+
+export enum ApsSystem {
+    OpenAps = "OpenAps",
+    Loop = "Loop",
+}
+
+export interface PaginationInfo {
+    limit?: number;
+    offset?: number;
+    total?: number;
+}
+
+export interface PaginatedResponseOfPumpSnapshot {
+    data?: PumpSnapshot[];
+    pagination?: PaginationInfo;
+}
+
+export interface PumpSnapshot {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    manufacturer?: string | undefined;
+    model?: string | undefined;
+    reservoir?: number | undefined;
+    reservoirDisplay?: string | undefined;
+    batteryPercent?: number | undefined;
+    batteryVoltage?: number | undefined;
+    bolusing?: boolean | undefined;
+    suspended?: boolean | undefined;
+    pumpStatus?: string | undefined;
+    clock?: string | undefined;
+}
+
+export interface PaginatedResponseOfUploaderSnapshot {
+    data?: UploaderSnapshot[];
+    pagination?: PaginationInfo;
+}
+
+export interface UploaderSnapshot {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    name?: string | undefined;
+    battery?: number | undefined;
+    batteryVoltage?: number | undefined;
+    isCharging?: boolean | undefined;
+    temperature?: number | undefined;
+    type?: string | undefined;
+}
+
 export interface DiscrepancyAnalysisDto {
     id?: string;
     correlationId?: string;
@@ -22825,12 +23485,6 @@ export enum GlucoseTrend {
     RateOutOfRange = "RateOutOfRange",
 }
 
-export interface PaginationInfo {
-    limit?: number;
-    offset?: number;
-    total?: number;
-}
-
 export interface PaginatedResponseOfMeterGlucose {
     data?: MeterGlucose[];
     pagination?: PaginationInfo;
@@ -22894,6 +23548,13 @@ export interface Bolus {
     bolusType?: BolusType2 | undefined;
     automatic?: boolean;
     duration?: number | undefined;
+    syncIdentifier?: string | undefined;
+    insulinType?: string | undefined;
+    unabsorbed?: number | undefined;
+    isBasalInsulin?: boolean;
+    pumpId?: string | undefined;
+    pumpSerial?: string | undefined;
+    pumpType?: string | undefined;
 }
 
 export enum BolusType2 {
@@ -22925,6 +23586,12 @@ export interface BolusCalculation {
     insulinRecommendation?: number | undefined;
     carbRatio?: number | undefined;
     calculationType?: CalculationType2 | undefined;
+    insulinRecommendationForCarbs?: number | undefined;
+    insulinProgrammed?: number | undefined;
+    enteredInsulin?: number | undefined;
+    splitNow?: number | undefined;
+    splitExt?: number | undefined;
+    preBolus?: number | undefined;
 }
 
 export enum CalculationType2 {
@@ -23111,6 +23778,8 @@ export interface CarbIntake {
     fat?: number | undefined;
     foodType?: string | undefined;
     absorptionTime?: number | undefined;
+    syncIdentifier?: string | undefined;
+    carbTime?: number | undefined;
 }
 
 export interface PaginatedResponseOfBGCheck {
@@ -23134,6 +23803,7 @@ export interface BGCheck {
     mgdl?: number;
     mmol?: number | undefined;
     units?: GlucoseUnit | undefined;
+    syncIdentifier?: string | undefined;
 }
 
 export enum GlucoseType {
@@ -23165,6 +23835,28 @@ export interface Note {
     text?: string;
     eventType?: string | undefined;
     isAnnouncement?: boolean;
+    syncIdentifier?: string | undefined;
+}
+
+export interface PaginatedResponseOfDeviceEvent {
+    data?: DeviceEvent[];
+    pagination?: PaginationInfo;
+}
+
+export interface DeviceEvent {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    app?: string | undefined;
+    dataSource?: string | undefined;
+    correlationId?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    eventType?: DeviceEventType;
+    notes?: string | undefined;
+    syncIdentifier?: string | undefined;
 }
 
 /** Response containing glucose predictions. */

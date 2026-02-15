@@ -92,25 +92,24 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
         status.CollectionProgress["entries"].IsComplete.Should().BeTrue();
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(_migration.EntryCount);
 
-        // Verify data via database
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        // Verify data via V3 API with dataSource filtering
+        var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
+        var entriesResponse = await ApiClient.GetAsync(
+            $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit={_migration.EntryCount + 10}");
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*), MIN(sgv), MAX(sgv) FROM entries WHERE data_source = '{DataSources.MongoDbImport}'";
-        await using var reader = await cmd.ExecuteReaderAsync();
-        reader.Read().Should().BeTrue();
+        entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var responseBody = await entriesResponse.Content.ReadAsStringAsync();
+        var v3Response = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
 
-        var count = reader.GetInt64(0);
-        count.Should().Be(_migration.EntryCount);
+        var entries = v3Response.GetProperty("result").EnumerateArray().ToList();
+        entries.Count.Should().Be(_migration.EntryCount);
 
-        var minSgv = reader.GetDouble(1);
-        var maxSgv = reader.GetDouble(2);
+        var minSgv = entries.Min(e => e.GetProperty("sgv").GetDouble());
+        var maxSgv = entries.Max(e => e.GetProperty("sgv").GetDouble());
         minSgv.Should().BeGreaterThan(0);
         maxSgv.Should().BeGreaterThan(0);
 
-        Log($"Migrated {count} entries with all fields preserved");
+        Log($"Migrated {entries.Count} entries with all fields preserved");
     }
 
     [Fact]
@@ -140,19 +139,22 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
             MigrationMode.MongoDb,
             collections: ["entries"]);
 
-        // Assert — query migrated entries and check directions via database
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        // Assert — query migrated entries via V3 API and check directions
+        var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
+        var entriesResponse = await ApiClient.GetAsync(
+            $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit={_migration.EntryCount + 10}");
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT DISTINCT direction FROM entries WHERE data_source = '{DataSources.MongoDbImport}' AND direction IS NOT NULL ORDER BY direction";
-        var directions = new List<string>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            directions.Add(reader.GetString(0));
-        }
+        entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var responseBody = await entriesResponse.Content.ReadAsStringAsync();
+        var v3Response = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
+
+        var entries = v3Response.GetProperty("result").EnumerateArray().ToList();
+        var directions = entries
+            .Where(e => e.TryGetProperty("direction", out var dir) && dir.ValueKind == JsonValueKind.String)
+            .Select(e => e.GetProperty("direction").GetString()!)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
 
         // The fixture data contains FortyFiveUp, FortyFiveDown, SingleUp, and Flat
         directions.Should().Contain("Flat");

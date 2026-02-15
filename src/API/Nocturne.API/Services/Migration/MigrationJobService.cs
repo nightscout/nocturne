@@ -795,7 +795,12 @@ internal class MigrationJob
         double? sgv = doc.Contains("sgv") ? doc["sgv"].ToDouble() : null;
 
         // Check for duplicates
-        var exists = await dbContext.Entries.AnyAsync(e => e.Mills == mills && e.Sgv == sgv, ct);
+        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
+        var exists = await dbContext.Entries.AnyAsync(
+            e => (originalId != null && e.OriginalId == originalId) ||
+                 (e.Mills == mills && e.Sgv == sgv),
+            ct
+        );
 
         if (exists)
             return;
@@ -803,7 +808,7 @@ internal class MigrationJob
         var entity = new Infrastructure.Data.Entities.EntryEntity
         {
             Id = Guid.CreateVersion7(),
-            OriginalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null,
+            OriginalId = originalId,
             Type = doc.Contains("type") ? doc["type"].AsString : "sgv",
             Sgv = sgv,
             Mgdl = sgv ?? 0,
@@ -832,8 +837,10 @@ internal class MigrationJob
         var eventType = doc.Contains("eventType") ? doc["eventType"].AsString : "Note";
 
         // Check for duplicates
+        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
         var exists = await dbContext.Treatments.AnyAsync(
-            t => t.Mills == mills && t.EventType == eventType,
+            t => (originalId != null && t.OriginalId == originalId) ||
+                 (t.Mills == mills && t.EventType == eventType),
             ct
         );
 
@@ -843,7 +850,7 @@ internal class MigrationJob
         var entity = new Infrastructure.Data.Entities.TreatmentEntity
         {
             Id = Guid.CreateVersion7(),
-            OriginalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null,
+            OriginalId = originalId,
             EventType = eventType,
             Insulin = doc.Contains("insulin") ? doc["insulin"].ToDouble() : null,
             Carbs = doc.Contains("carbs") ? doc["carbs"].ToDouble() : null,

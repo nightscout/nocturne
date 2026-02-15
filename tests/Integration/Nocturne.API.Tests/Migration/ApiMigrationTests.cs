@@ -85,25 +85,24 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
         status.CollectionProgress["entries"].IsComplete.Should().BeTrue();
         status.CollectionProgress["entries"].DocumentsMigrated.Should().BeGreaterThan(0);
 
-        // Verify data via database
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        // Verify data via V3 API with dataSource filtering
+        var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
+        var entriesResponse = await ApiClient.GetAsync(
+            $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit=100");
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*), MIN(sgv), MAX(sgv) FROM entries WHERE data_source = '{DataSources.MongoDbImport}'";
-        await using var reader = await cmd.ExecuteReaderAsync();
-        reader.Read().Should().BeTrue();
+        entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var responseBody = await entriesResponse.Content.ReadAsStringAsync();
+        var v3Response = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
 
-        var count = reader.GetInt64(0);
-        count.Should().Be(status.CollectionProgress["entries"].DocumentsMigrated);
+        var entries = v3Response.GetProperty("result").EnumerateArray().ToList();
+        entries.Count.Should().Be((int)status.CollectionProgress["entries"].DocumentsMigrated);
 
-        var minSgv = reader.GetDouble(1);
-        var maxSgv = reader.GetDouble(2);
+        var minSgv = entries.Min(e => e.GetProperty("sgv").GetDouble());
+        var maxSgv = entries.Max(e => e.GetProperty("sgv").GetDouble());
         minSgv.Should().BeGreaterThan(0);
         maxSgv.Should().BeGreaterThan(0);
 
-        Log($"Migrated {count} entries from mock Nightscout API");
+        Log($"Migrated {entries.Count} entries from mock Nightscout API");
     }
 
     [Fact]

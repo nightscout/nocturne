@@ -5203,6 +5203,405 @@
         }
       }
     },
+    "/api/v4/device-status/aps": {
+      "get": {
+        "tags": [
+          "V4 Device Status"
+        ],
+        "summary": "Get APS snapshots with optional filtering",
+        "operationId": "DeviceStatus_GetApsSnapshots",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 3
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 4
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "mills_desc"
+            },
+            "x-position": 5
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 7
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfApsSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/device-status/aps/{id}": {
+      "get": {
+        "tags": [
+          "V4 Device Status"
+        ],
+        "summary": "Get an APS snapshot by ID",
+        "operationId": "DeviceStatus_GetApsSnapshotById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApsSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/device-status/pump": {
+      "get": {
+        "tags": [
+          "V4 Device Status"
+        ],
+        "summary": "Get pump snapshots with optional filtering",
+        "operationId": "DeviceStatus_GetPumpSnapshots",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 3
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 4
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "mills_desc"
+            },
+            "x-position": 5
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 7
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfPumpSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/device-status/pump/{id}": {
+      "get": {
+        "tags": [
+          "V4 Device Status"
+        ],
+        "summary": "Get a pump snapshot by ID",
+        "operationId": "DeviceStatus_GetPumpSnapshotById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PumpSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/device-status/uploader": {
+      "get": {
+        "tags": [
+          "V4 Device Status"
+        ],
+        "summary": "Get uploader snapshots with optional filtering",
+        "operationId": "DeviceStatus_GetUploaderSnapshots",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 3
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 4
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "mills_desc"
+            },
+            "x-position": 5
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 7
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfUploaderSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/device-status/uploader/{id}": {
+      "get": {
+        "tags": [
+          "V4 Device Status"
+        ],
+        "summary": "Get an uploader snapshot by ID",
+        "operationId": "DeviceStatus_GetUploaderSnapshotById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploaderSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/Discrepancy/metrics": {
       "get": {
         "tags": [
@@ -8029,6 +8428,237 @@
         ],
         "summary": "Delete a note",
         "operationId": "Observations_DeleteNote",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/observations/device-events": {
+      "get": {
+        "tags": [
+          "V4 Observations"
+        ],
+        "summary": "Get device events with optional filtering",
+        "operationId": "Observations_GetDeviceEvents",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            },
+            "x-position": 3
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 4
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "mills_desc"
+            },
+            "x-position": 5
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 6
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 7
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseOfDeviceEvent"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Observations"
+        ],
+        "summary": "Create a new device event",
+        "operationId": "Observations_CreateDeviceEvent",
+        "requestBody": {
+          "x-name": "model",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceEvent"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/observations/device-events/{id}": {
+      "get": {
+        "tags": [
+          "V4 Observations"
+        ],
+        "summary": "Get a device event by ID",
+        "operationId": "Observations_GetDeviceEventById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceEvent"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "V4 Observations"
+        ],
+        "summary": "Update an existing device event",
+        "operationId": "Observations_UpdateDeviceEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "model",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceEvent"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceEvent"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Observations"
+        ],
+        "summary": "Delete a device event",
+        "operationId": "Observations_DeleteDeviceEvent",
         "parameters": [
           {
             "name": "id",
@@ -22903,7 +23533,11 @@
           "SensorStop",
           "SiteChange",
           "InsulinChange",
-          "PumpBatteryChange"
+          "PumpBatteryChange",
+          "PodChange",
+          "ReservoirChange",
+          "CannulaChange",
+          "TransmitterSensorInsert"
         ],
         "enum": [
           "SensorStart",
@@ -22911,7 +23545,11 @@
           "SensorStop",
           "SiteChange",
           "InsulinChange",
-          "PumpBatteryChange"
+          "PumpBatteryChange",
+          "PodChange",
+          "ReservoirChange",
+          "CannulaChange",
+          "TransmitterSensorInsert"
         ]
       },
       "BgCheckMarkerDto": {
@@ -25346,6 +25984,355 @@
           }
         }
       },
+      "PaginatedResponseOfApsSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApsSnapshot"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "ApsSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "apsSystem": {
+            "$ref": "#/components/schemas/ApsSystem"
+          },
+          "iob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "basalIob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "bolusIob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "cob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "currentBg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "eventualBg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "targetBg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "recommendedBolus": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "sensitivityRatio": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "enacted": {
+            "type": "boolean"
+          },
+          "enactedRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "enactedDuration": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "enactedBolusVolume": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "suggestedJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "enactedJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "predictedDefaultJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "predictedIobJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "predictedZtJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "predictedCobJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "predictedUamJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "predictedStartMills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "ApsSystem": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "OpenAps",
+          "Loop"
+        ],
+        "enum": [
+          "OpenAps",
+          "Loop"
+        ]
+      },
+      "PaginationInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PaginatedResponseOfPumpSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PumpSnapshot"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "PumpSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "manufacturer": {
+            "type": "string",
+            "nullable": true
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "reservoir": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reservoirDisplay": {
+            "type": "string",
+            "nullable": true
+          },
+          "batteryPercent": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "batteryVoltage": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "bolusing": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "suspended": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "pumpStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "clock": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PaginatedResponseOfUploaderSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploaderSnapshot"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "UploaderSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "battery": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "batteryVoltage": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isCharging": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "temperature": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "DiscrepancyAnalysisDto": {
         "type": "object",
         "additionalProperties": false,
@@ -25645,24 +26632,6 @@
           "RateOutOfRange"
         ]
       },
-      "PaginationInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "limit": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
       "PaginatedResponseOfMeterGlucose": {
         "type": "object",
         "additionalProperties": false,
@@ -25903,6 +26872,34 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "insulinType": {
+            "type": "string",
+            "nullable": true
+          },
+          "unabsorbed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isBasalInsulin": {
+            "type": "boolean"
+          },
+          "pumpId": {
+            "type": "string",
+            "nullable": true
+          },
+          "pumpSerial": {
+            "type": "string",
+            "nullable": true
+          },
+          "pumpType": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -26017,6 +27014,36 @@
                 "$ref": "#/components/schemas/CalculationType2"
               }
             ]
+          },
+          "insulinRecommendationForCarbs": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "insulinProgrammed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "enteredInsulin": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "splitNow": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "splitExt": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "preBolus": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         }
       },
@@ -26560,6 +27587,15 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "carbTime": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         }
       },
@@ -26652,6 +27688,10 @@
                 "$ref": "#/components/schemas/GlucoseUnit"
               }
             ]
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -26749,6 +27789,84 @@
           },
           "isAnnouncement": {
             "type": "boolean"
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PaginatedResponseOfDeviceEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceEvent"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "DeviceEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "app": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/DeviceEventType"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
