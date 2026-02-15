@@ -1307,6 +1307,42 @@ public class NocturneDbContext : DbContext
             .Entity<BolusCalculationEntity>()
             .HasIndex(e => e.CorrelationId)
             .HasDatabaseName("ix_bolus_calculations_correlation_id");
+
+        // ApsSnapshot indexes
+        modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_aps_snapshots_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_aps_snapshots_legacy_id");
+
+        // PumpSnapshot indexes
+        modelBuilder
+            .Entity<PumpSnapshotEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_pump_snapshots_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<PumpSnapshotEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_pump_snapshots_legacy_id");
+
+        // UploaderSnapshot indexes
+        modelBuilder
+            .Entity<UploaderSnapshotEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_uploader_snapshots_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<UploaderSnapshotEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_uploader_snapshots_legacy_id");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1484,6 +1520,18 @@ public class NocturneDbContext : DbContext
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
             .Entity<BolusCalculationEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<PumpSnapshotEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<UploaderSnapshotEntity>()
             .Property(e => e.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 
@@ -2287,6 +2335,30 @@ public class NocturneDbContext : DbContext
                     bolusCalculationEntity.SysCreatedAt = utcNow;
                 }
                 bolusCalculationEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is ApsSnapshotEntity apsSnapshotEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    apsSnapshotEntity.SysCreatedAt = utcNow;
+                }
+                apsSnapshotEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is PumpSnapshotEntity pumpSnapshotEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    pumpSnapshotEntity.SysCreatedAt = utcNow;
+                }
+                pumpSnapshotEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is UploaderSnapshotEntity uploaderSnapshotEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    uploaderSnapshotEntity.SysCreatedAt = utcNow;
+                }
+                uploaderSnapshotEntity.SysUpdatedAt = utcNow;
             }
         }
     }
