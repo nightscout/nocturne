@@ -22576,6 +22576,12 @@
               "$ref": "#/components/schemas/DeviceEventMarkerDto"
             }
           },
+          "bgCheckMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BgCheckMarkerDto"
+            }
+          },
           "pumpModeSpans": {
             "type": "array",
             "items": {
@@ -22907,6 +22913,28 @@
           "InsulinChange",
           "PumpBatteryChange"
         ]
+      },
+      "BgCheckMarkerDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "glucose": {
+            "type": "number",
+            "format": "double"
+          },
+          "glucoseType": {
+            "type": "string",
+            "nullable": true
+          },
+          "treatmentId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       },
       "ChartStateSpanDto": {
         "type": "object",

@@ -30,6 +30,7 @@ public class ChartDataServiceTests
     private readonly Mock<SensorGlucoseRepository> _mockSensorGlucoseRepo;
     private readonly Mock<BolusRepository> _mockBolusRepo;
     private readonly Mock<CarbIntakeRepository> _mockCarbIntakeRepo;
+    private readonly Mock<BGCheckRepository> _mockBgCheckRepo;
     private readonly Mock<StateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<SystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<TrackerRepository> _mockTrackerRepo;
@@ -47,6 +48,7 @@ public class ChartDataServiceTests
         _mockSensorGlucoseRepo = new Mock<SensorGlucoseRepository>(MockBehavior.Loose, null!, null!);
         _mockBolusRepo = new Mock<BolusRepository>(MockBehavior.Loose, null!, null!);
         _mockCarbIntakeRepo = new Mock<CarbIntakeRepository>(MockBehavior.Loose, null!, null!);
+        _mockBgCheckRepo = new Mock<BGCheckRepository>(MockBehavior.Loose, null!, null!);
         _mockStateSpanRepo = new Mock<StateSpanRepository>(MockBehavior.Loose, null!, null!, null!);
         _mockSystemEventRepo = new Mock<SystemEventRepository>(MockBehavior.Loose, null!);
         _mockTrackerRepo = new Mock<TrackerRepository>(MockBehavior.Loose, null!);
@@ -62,6 +64,7 @@ public class ChartDataServiceTests
             _mockSensorGlucoseRepo.Object,
             _mockBolusRepo.Object,
             _mockCarbIntakeRepo.Object,
+            _mockBgCheckRepo.Object,
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
@@ -510,6 +513,280 @@ public class ChartDataServiceTests
             var result = ChartDataService.BuildDeviceEventMarkers(treatments);
 
             result.Should().BeEmpty();
+        }
+    }
+
+    #endregion
+
+    #region BuildBgCheckMarkers Tests
+
+    public class BuildBgCheckMarkersTests
+    {
+        [Fact]
+        public void EmptyList_ReturnsEmpty()
+        {
+            var result = ChartDataService.BuildBgCheckMarkers(new List<BGCheck>());
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void BgCheck_MappedCorrectly()
+        {
+            var checkId = Guid.NewGuid();
+            var checks = new List<BGCheck>
+            {
+                new()
+                {
+                    Id = checkId,
+                    LegacyId = "treat-bg-1",
+                    Mgdl = 120.0,
+                    Mills = TestMills,
+                    GlucoseType = GlucoseType.Finger,
+                },
+            };
+
+            var result = ChartDataService.BuildBgCheckMarkers(checks);
+
+            result.Should().HaveCount(1);
+            result[0].Glucose.Should().Be(120.0);
+            result[0].GlucoseType.Should().Be("Finger");
+            result[0].Time.Should().Be(TestMills);
+            result[0].TreatmentId.Should().Be("treat-bg-1");
+        }
+
+        [Fact]
+        public void ZeroMgdl_NotIncluded()
+        {
+            var checks = new List<BGCheck>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Mgdl = 0.0,
+                    Mills = TestMills,
+                },
+            };
+
+            var result = ChartDataService.BuildBgCheckMarkers(checks);
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void NoLegacyId_UsesGuidId()
+        {
+            var checkId = Guid.NewGuid();
+            var checks = new List<BGCheck>
+            {
+                new()
+                {
+                    Id = checkId,
+                    LegacyId = null,
+                    Mgdl = 95.0,
+                    Mills = TestMills,
+                },
+            };
+
+            var result = ChartDataService.BuildBgCheckMarkers(checks);
+
+            result[0].TreatmentId.Should().Be(checkId.ToString());
+        }
+
+        [Fact]
+        public void NullGlucoseType_MapsToNull()
+        {
+            var checks = new List<BGCheck>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Mgdl = 110.0,
+                    Mills = TestMills,
+                    GlucoseType = null,
+                },
+            };
+
+            var result = ChartDataService.BuildBgCheckMarkers(checks);
+
+            result[0].GlucoseType.Should().BeNull();
+        }
+    }
+
+    #endregion
+
+    #region BuildTreatmentsFromV4Data Tests
+
+    public class BuildTreatmentsFromV4DataTests
+    {
+        [Fact]
+        public void EmptyInputs_ReturnsEmpty()
+        {
+            var result = ChartDataService.BuildTreatmentsFromV4Data(
+                new List<Bolus>(),
+                new List<CarbIntake>()
+            );
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void BolusWithInsulin_CreatesTreatmentWithInsulinAndMills()
+        {
+            var bolusId = Guid.NewGuid();
+            var boluses = new List<Bolus>
+            {
+                new()
+                {
+                    Id = bolusId,
+                    LegacyId = "legacy-1",
+                    Mills = TestMills,
+                    Insulin = 5.0,
+                },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(boluses, new List<CarbIntake>());
+
+            result.Should().HaveCount(1);
+            result[0].Id.Should().Be("legacy-1");
+            result[0].Mills.Should().Be(TestMills);
+            result[0].Insulin.Should().Be(5.0);
+            result[0].Carbs.Should().BeNull();
+        }
+
+        [Fact]
+        public void BolusWithZeroInsulin_Excluded()
+        {
+            var boluses = new List<Bolus>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Mills = TestMills,
+                    Insulin = 0.0,
+                },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(boluses, new List<CarbIntake>());
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void CarbIntakeWithCarbs_CreatesTreatmentWithCarbFields()
+        {
+            var carbId = Guid.NewGuid();
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = carbId,
+                    LegacyId = "legacy-2",
+                    Mills = TestMills,
+                    Carbs = 30.0,
+                    AbsorptionTime = 45.0,
+                    Fat = 12.0,
+                },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(new List<Bolus>(), carbs);
+
+            result.Should().HaveCount(1);
+            result[0].Id.Should().Be("legacy-2");
+            result[0].Mills.Should().Be(TestMills);
+            result[0].Carbs.Should().Be(30.0);
+            result[0].AbsorptionTime.Should().Be(45);
+            result[0].Fat.Should().Be(12.0);
+            result[0].Insulin.Should().BeNull();
+        }
+
+        [Fact]
+        public void CarbIntakeWithZeroCarbs_Excluded()
+        {
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Mills = TestMills,
+                    Carbs = 0.0,
+                },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(new List<Bolus>(), carbs);
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void MixedBolusAndCarb_BothIncluded()
+        {
+            var boluses = new List<Bolus>
+            {
+                new() { Id = Guid.NewGuid(), Mills = TestMills, Insulin = 3.0 },
+            };
+            var carbs = new List<CarbIntake>
+            {
+                new() { Id = Guid.NewGuid(), Mills = TestMills + 1000, Carbs = 20.0 },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(boluses, carbs);
+
+            result.Should().HaveCount(2);
+            result.Should().Contain(t => t.Insulin == 3.0);
+            result.Should().Contain(t => t.Carbs == 20.0);
+        }
+
+        [Fact]
+        public void BolusNoLegacyId_UsesGuidString()
+        {
+            var bolusId = Guid.NewGuid();
+            var boluses = new List<Bolus>
+            {
+                new() { Id = bolusId, LegacyId = null, Mills = TestMills, Insulin = 2.0 },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(boluses, new List<CarbIntake>());
+
+            result[0].Id.Should().Be(bolusId.ToString());
+        }
+
+        [Fact]
+        public void AbsorptionTimeRounded_ToInt()
+        {
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Mills = TestMills,
+                    Carbs = 25.0,
+                    AbsorptionTime = 37.6,
+                },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(new List<Bolus>(), carbs);
+
+            result[0].AbsorptionTime.Should().Be(38);
+        }
+
+        [Fact]
+        public void NullAbsorptionTime_StaysNull()
+        {
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Mills = TestMills,
+                    Carbs = 25.0,
+                    AbsorptionTime = null,
+                },
+            };
+
+            var result = ChartDataService.BuildTreatmentsFromV4Data(new List<Bolus>(), carbs);
+
+            result[0].AbsorptionTime.Should().BeNull();
         }
     }
 

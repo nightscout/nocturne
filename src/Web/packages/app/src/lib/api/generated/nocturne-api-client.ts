@@ -21818,6 +21818,7 @@ export interface DashboardChartData {
     bolusMarkers?: BolusMarkerDto[];
     carbMarkers?: CarbMarkerDto[];
     deviceEventMarkers?: DeviceEventMarkerDto[];
+    bgCheckMarkers?: BgCheckMarkerDto[];
     pumpModeSpans?: ChartStateSpanDto[];
     profileSpans?: ChartStateSpanDto[];
     overrideSpans?: ChartStateSpanDto[];
@@ -21938,6 +21939,13 @@ export enum DeviceEventType {
     SiteChange = "SiteChange",
     InsulinChange = "InsulinChange",
     PumpBatteryChange = "PumpBatteryChange",
+}
+
+export interface BgCheckMarkerDto {
+    time?: number;
+    glucose?: number;
+    glucoseType?: string | undefined;
+    treatmentId?: string | undefined;
 }
 
 export interface ChartStateSpanDto {

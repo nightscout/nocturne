@@ -15,8 +15,11 @@ namespace Nocturne.API.Services;
 
 /// <summary>
 /// Service that orchestrates all data fetching and computation for the dashboard chart.
-/// Loads profiles, fetches glucose/bolus/carb data from v4 tables, treatments for IOB/COB,
-/// state spans, builds IOB/COB/basal series, maps spans, and assembles the final DTO.
+/// Loads profiles, fetches glucose/bolus/carb/bg-check data from v4 tables, builds
+/// Treatment adapters for IOB/COB computation, state spans, and assembles the final DTO.
+///
+/// Legacy reads: Device event markers still come from ITreatmentService because there
+/// is no v4 DeviceEvent model yet. All other data flows through v4 repositories.
 /// </summary>
 public class ChartDataService : IChartDataService
 {
@@ -30,6 +33,7 @@ public class ChartDataService : IChartDataService
     private readonly SensorGlucoseRepository _sensorGlucoseRepository;
     private readonly BolusRepository _bolusRepository;
     private readonly CarbIntakeRepository _carbIntakeRepository;
+    private readonly BGCheckRepository _bgCheckRepository;
     private readonly StateSpanRepository _stateSpanRepository;
     private readonly SystemEventRepository _systemEventRepository;
     private readonly TrackerRepository _trackerRepository;
@@ -54,6 +58,7 @@ public class ChartDataService : IChartDataService
         SensorGlucoseRepository sensorGlucoseRepository,
         BolusRepository bolusRepository,
         CarbIntakeRepository carbIntakeRepository,
+        BGCheckRepository bgCheckRepository,
         StateSpanRepository stateSpanRepository,
         SystemEventRepository systemEventRepository,
         TrackerRepository trackerRepository,
@@ -71,6 +76,7 @@ public class ChartDataService : IChartDataService
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _bolusRepository = bolusRepository;
         _carbIntakeRepository = carbIntakeRepository;
+        _bgCheckRepository = bgCheckRepository;
         _stateSpanRepository = stateSpanRepository;
         _systemEventRepository = systemEventRepository;
         _trackerRepository = trackerRepository;
@@ -124,21 +130,32 @@ public class ChartDataService : IChartDataService
                 )
             ).ToList();
 
-        // Fetch bolus data from v4 Bolus table (display range only)
+        // Fetch bolus data from v4 Bolus table — extended range for IOB calculation
         var bolusList =
             (
                 await _bolusRepository.GetAsync(
-                    from: startTime, to: endTime,
+                    from: startTime - bufferMs, to: endTime,
                     device: null, source: null,
                     limit: treatmentLimit, offset: 0,
                     descending: true, ct: cancellationToken
                 )
             ).ToList();
 
-        // Fetch carb data from v4 CarbIntake table (display range only)
+        // Fetch carb data from v4 CarbIntake table — extended range for COB calculation
         var carbIntakeList =
             (
                 await _carbIntakeRepository.GetAsync(
+                    from: startTime - bufferMs, to: endTime,
+                    device: null, source: null,
+                    limit: treatmentLimit, offset: 0,
+                    descending: true, ct: cancellationToken
+                )
+            ).ToList();
+
+        // Fetch BG checks from v4 BGCheck table (display range only)
+        var bgCheckList =
+            (
+                await _bgCheckRepository.GetAsync(
                     from: startTime, to: endTime,
                     device: null, source: null,
                     limit: treatmentLimit, offset: 0,
@@ -146,13 +163,22 @@ public class ChartDataService : IChartDataService
                 )
             ).ToList();
 
-        // Treatments are still needed for IOB/COB calculation and device event markers
-        var treatmentFind = $"{{\"mills\":{{\"$gte\":{startTime - bufferMs},\"$lte\":{endTime}}}}}";
-        var relevantTreatments =
+        // Build Treatment adapter objects from v4 Bolus + CarbIntake for IOB/COB computation.
+        // The IOB/COB services (IIobService, ICobService) expect List<Treatment> — their interfaces
+        // are deeply coupled to the legacy Treatment type. Rather than rewriting those calculation
+        // engines, we build thin Treatment adapters containing only the fields they actually use.
+        var syntheticTreatments = BuildTreatmentsFromV4Data(bolusList, carbIntakeList);
+
+        // TODO: Device event markers still come from legacy treatments because there is no
+        // v4 DeviceEvent model yet. This fetch is scoped to the display range only (no buffer)
+        // and only used for device events (site changes, sensor starts, etc.).
+        var displayRangeLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 10));
+        var deviceEventFind = $"{{\"mills\":{{\"$gte\":{startTime},\"$lte\":{endTime}}}}}";
+        var deviceEventTreatments =
             (
                 await _treatmentService.GetTreatmentsAsync(
-                    find: treatmentFind,
-                    count: treatmentLimit,
+                    find: deviceEventFind,
+                    count: displayRangeLimit,
                     cancellationToken: cancellationToken
                 )
             )?.ToList() ?? new List<Treatment>();
@@ -167,9 +193,9 @@ public class ChartDataService : IChartDataService
                 )
             )?.ToList() ?? new List<DeviceStatus>();
 
-        var displayTreatments = relevantTreatments
-            .Where(t => t.Mills >= startTime && t.Mills <= endTime)
-            .ToList();
+        // Display-range subsets for markers
+        var displayBoluses = bolusList.Where(b => b.Mills >= startTime && b.Mills <= endTime).ToList();
+        var displayCarbIntakes = carbIntakeList.Where(c => c.Mills >= startTime && c.Mills <= endTime).ToList();
 
         // Fetch all state spans in a single batched query
         var stateSpanCategories = new[]
@@ -224,9 +250,9 @@ public class ChartDataService : IChartDataService
             ? _profileService.GetBasalRate(endTime, null)
             : 1.0;
 
-        // Build computed series
+        // Build computed series — IOB/COB uses synthetic Treatment objects built from v4 data
         var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
-            relevantTreatments,
+            syntheticTreatments,
             deviceStatusList,
             startTime,
             endTime,
@@ -247,15 +273,16 @@ public class ChartDataService : IChartDataService
 
         var (glucoseData, glucoseYMax) = BuildGlucoseData(sensorGlucoseList);
 
-        // Build markers from v4 tables
-        var bolusMarkers = BuildBolusMarkers(bolusList);
-        var carbMarkers = BuildCarbMarkers(carbIntakeList, timezone);
+        // Build markers from v4 tables (display range only)
+        var bolusMarkers = BuildBolusMarkers(displayBoluses);
+        var carbMarkers = BuildCarbMarkers(displayCarbIntakes, timezone);
+        var bgCheckMarkers = BuildBgCheckMarkers(bgCheckList);
 
         // Device event markers still come from legacy treatments (no v4 equivalent)
-        var deviceEventMarkers = BuildDeviceEventMarkers(displayTreatments);
+        var deviceEventMarkers = BuildDeviceEventMarkers(deviceEventTreatments);
 
-        // Process food offsets using carb intake correlation IDs
-        var carbTreatmentIds = carbIntakeList
+        // Process food offsets using carb intake correlation IDs and CarbIntake for base lookup
+        var carbTreatmentIds = displayCarbIntakes
             .Where(c => c.CorrelationId.HasValue)
             .Select(c => c.CorrelationId!.Value)
             .Distinct()
@@ -263,7 +290,7 @@ public class ChartDataService : IChartDataService
         await ProcessFoodOffsetsAsync(
             carbMarkers,
             carbTreatmentIds,
-            displayTreatments,
+            displayCarbIntakes,
             cancellationToken
         );
 
@@ -299,6 +326,7 @@ public class ChartDataService : IChartDataService
             BolusMarkers = bolusMarkers,
             CarbMarkers = carbMarkers,
             DeviceEventMarkers = deviceEventMarkers,
+            BgCheckMarkers = bgCheckMarkers,
 
             PumpModeSpans = pumpModeSpanDtos,
             ProfileSpans = profileSpanDtos,
@@ -553,6 +581,75 @@ public class ChartDataService : IChartDataService
         return markers;
     }
 
+    internal static List<BgCheckMarkerDto> BuildBgCheckMarkers(List<BGCheck> bgChecks)
+    {
+        return bgChecks
+            .Where(b => b.Mgdl > 0)
+            .Select(b => new BgCheckMarkerDto
+            {
+                Time = b.Mills,
+                Glucose = b.Mgdl,
+                GlucoseType = b.GlucoseType?.ToString(),
+                TreatmentId = b.LegacyId ?? b.Id.ToString(),
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Builds lightweight Treatment adapter objects from v4 Bolus and CarbIntake data.
+    /// The IOB/COB calculation services (IIobService, ICobService) are deeply coupled to the
+    /// legacy Treatment type through their interfaces. Rather than rewriting those calculation
+    /// engines (which implement exact 1:1 legacy JavaScript algorithm compatibility), we build
+    /// thin Treatment objects containing only the fields the calculations actually use:
+    ///   - IOB: Treatment.Mills, Treatment.Insulin, Treatment.EventType ("Temp Basal"),
+    ///          Treatment.Duration, Treatment.Absolute
+    ///   - COB: Treatment.Mills, Treatment.Carbs, Treatment.AbsorptionTime, Treatment.Fat,
+    ///          Treatment.Notes
+    /// </summary>
+    internal static List<Treatment> BuildTreatmentsFromV4Data(
+        List<Bolus> boluses,
+        List<CarbIntake> carbIntakes
+    )
+    {
+        var treatments = new List<Treatment>(boluses.Count + carbIntakes.Count);
+
+        foreach (var bolus in boluses)
+        {
+            if (bolus.Insulin <= 0)
+                continue;
+
+            treatments.Add(new Treatment
+            {
+                Id = bolus.LegacyId ?? bolus.Id.ToString(),
+                Mills = bolus.Mills,
+                Insulin = bolus.Insulin,
+            });
+        }
+
+        foreach (var carb in carbIntakes)
+        {
+            if (carb.Carbs <= 0)
+                continue;
+
+            treatments.Add(new Treatment
+            {
+                Id = carb.LegacyId ?? carb.Id.ToString(),
+                Mills = carb.Mills,
+                Carbs = carb.Carbs,
+                AbsorptionTime = carb.AbsorptionTime.HasValue
+                    ? (int)Math.Round(carb.AbsorptionTime.Value)
+                    : null,
+                Fat = carb.Fat,
+                // Notes field is not available on CarbIntake — COB advanced absorption
+                // adjustments based on notes (glucose tablets, juice, etc.) will not apply
+                // for v4-sourced carb records. This is acceptable as v4 records should use
+                // the AbsorptionTime field for explicit absorption control instead.
+            });
+        }
+
+        return treatments;
+    }
+
     /// <summary>
     /// Maps v4 BolusType enum to the chart BolusType enum.
     /// The v4 model uses a simpler BolusType (Normal, Square, Dual) plus an Automatic flag,
@@ -577,7 +674,7 @@ public class ChartDataService : IChartDataService
     internal async Task ProcessFoodOffsetsAsync(
         List<CarbMarkerDto> carbMarkers,
         List<Guid> carbTreatmentIds,
-        List<Treatment> displayTreatments,
+        List<CarbIntake> displayCarbIntakes,
         CancellationToken cancellationToken
     )
     {
@@ -595,6 +692,11 @@ public class ChartDataService : IChartDataService
             .GroupBy(f => f.TreatmentId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        // Build a lookup from correlation ID to carb intake for base treatment resolution
+        var carbByCorrelationId = displayCarbIntakes
+            .Where(c => c.CorrelationId.HasValue)
+            .ToDictionary(c => c.CorrelationId!.Value, c => c);
+
         foreach (var (treatmentId, treatmentFoods) in foodsByTreatment)
         {
             var offsetFoods = treatmentFoods.Where(f => f.TimeOffsetMinutes != 0).ToList();
@@ -602,13 +704,12 @@ public class ChartDataService : IChartDataService
             if (offsetFoods.Count == 0)
                 continue;
 
-            var baseTreatment = displayTreatments.FirstOrDefault(t =>
-                t.Id == treatmentId.ToString()
-            );
-            if (baseTreatment == null)
+            // Look up the base carb intake via correlation ID instead of legacy Treatment
+            if (!carbByCorrelationId.TryGetValue(treatmentId, out var baseCarbIntake))
                 continue;
 
-            var baseMills = baseTreatment.Mills;
+            var baseMills = baseCarbIntake.Mills;
+            var baseId = baseCarbIntake.LegacyId ?? baseCarbIntake.Id.ToString();
             var offsetGroups = offsetFoods.GroupBy(f => f.TimeOffsetMinutes).ToList();
 
             foreach (var group in offsetGroups)
@@ -630,7 +731,7 @@ public class ChartDataService : IChartDataService
                         Time = offsetTime,
                         Carbs = totalCarbs,
                         Label = label,
-                        TreatmentId = baseTreatment.Id,
+                        TreatmentId = baseId,
                         IsOffset = true,
                     }
                 );
@@ -647,7 +748,7 @@ public class ChartDataService : IChartDataService
                 if (baseLabels.Count > 0)
                 {
                     var baseMarker = carbMarkers.FirstOrDefault(m =>
-                        m.TreatmentId == baseTreatment.Id && !m.IsOffset
+                        m.TreatmentId == baseId && !m.IsOffset
                     );
                     if (baseMarker != null)
                     {

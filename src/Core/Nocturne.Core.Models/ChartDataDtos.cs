@@ -23,6 +23,7 @@ public class DashboardChartData
     public List<BolusMarkerDto> BolusMarkers { get; set; } = new();
     public List<CarbMarkerDto> CarbMarkers { get; set; } = new();
     public List<DeviceEventMarkerDto> DeviceEventMarkers { get; set; } = new();
+    public List<BgCheckMarkerDto> BgCheckMarkers { get; set; } = new();
 
     // === State spans ===
     public List<ChartStateSpanDto> PumpModeSpans { get; set; } = new();
@@ -98,6 +99,14 @@ public class DeviceEventMarkerDto
     public DeviceEventType EventType { get; set; }
     public string? Notes { get; set; }
     public ChartColor Color { get; set; }
+}
+
+public class BgCheckMarkerDto
+{
+    public long Time { get; set; }
+    public double Glucose { get; set; }
+    public string? GlucoseType { get; set; }
+    public string? TreatmentId { get; set; }
 }
 
 public class SystemEventMarkerDto
