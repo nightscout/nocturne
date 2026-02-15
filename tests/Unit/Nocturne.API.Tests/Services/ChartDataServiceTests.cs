@@ -4,10 +4,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Tests.Services;
 
@@ -23,10 +24,12 @@ public class ChartDataServiceTests
     private readonly Mock<ICobService> _mockCobService = new();
     private readonly Mock<ITreatmentService> _mockTreatmentService = new();
     private readonly Mock<ITreatmentFoodService> _mockTreatmentFoodService = new();
-    private readonly Mock<IEntryService> _mockEntryService = new();
     private readonly Mock<IDeviceStatusService> _mockDeviceStatusService = new();
     private readonly Mock<IProfileService> _mockProfileService = new();
     private readonly Mock<IProfileDataService> _mockProfileDataService = new();
+    private readonly Mock<SensorGlucoseRepository> _mockSensorGlucoseRepo;
+    private readonly Mock<BolusRepository> _mockBolusRepo;
+    private readonly Mock<CarbIntakeRepository> _mockCarbIntakeRepo;
     private readonly Mock<StateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<SystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<TrackerRepository> _mockTrackerRepo;
@@ -39,9 +42,11 @@ public class ChartDataServiceTests
 
     public ChartDataServiceTests()
     {
-        // StateSpanRepository, SystemEventRepository, TrackerRepository are concrete classes
-        // with virtual methods, so Moq can mock them if we pass null for their constructor deps.
-        // We use MockBehavior.Loose and suppress constructor args.
+        // V4 repositories and StateSpanRepository, SystemEventRepository, TrackerRepository
+        // are concrete classes. We use MockBehavior.Loose and suppress constructor args.
+        _mockSensorGlucoseRepo = new Mock<SensorGlucoseRepository>(MockBehavior.Loose, null!, null!);
+        _mockBolusRepo = new Mock<BolusRepository>(MockBehavior.Loose, null!, null!);
+        _mockCarbIntakeRepo = new Mock<CarbIntakeRepository>(MockBehavior.Loose, null!, null!);
         _mockStateSpanRepo = new Mock<StateSpanRepository>(MockBehavior.Loose, null!, null!, null!);
         _mockSystemEventRepo = new Mock<SystemEventRepository>(MockBehavior.Loose, null!);
         _mockTrackerRepo = new Mock<TrackerRepository>(MockBehavior.Loose, null!);
@@ -51,10 +56,12 @@ public class ChartDataServiceTests
             _mockCobService.Object,
             _mockTreatmentService.Object,
             _mockTreatmentFoodService.Object,
-            _mockEntryService.Object,
             _mockDeviceStatusService.Object,
             _mockProfileService.Object,
             _mockProfileDataService.Object,
+            _mockSensorGlucoseRepo.Object,
+            _mockBolusRepo.Object,
+            _mockCarbIntakeRepo.Object,
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
@@ -72,7 +79,7 @@ public class ChartDataServiceTests
         [Fact]
         public void EmptyList_ReturnsEmptyData_And_DefaultYMax()
         {
-            var (data, yMax) = ChartDataService.BuildGlucoseData(new List<Entry>());
+            var (data, yMax) = ChartDataService.BuildGlucoseData(new List<SensorGlucose>());
 
             data.Should().BeEmpty();
             // maxSgv defaults to 280 when no data, so yMax = Min(400, Max(280, 280) + 20) = 300
@@ -80,19 +87,19 @@ public class ChartDataServiceTests
         }
 
         [Fact]
-        public void SingleEntry_ReturnsOnePoint()
+        public void SingleReading_ReturnsOnePoint()
         {
-            var entries = new List<Entry>
+            var readings = new List<SensorGlucose>
             {
                 new()
                 {
                     Mills = TestMills,
-                    Sgv = 120.0,
-                    Direction = "Flat",
+                    Mgdl = 120.0,
+                    Direction = GlucoseDirection.Flat,
                 },
             };
 
-            var (data, yMax) = ChartDataService.BuildGlucoseData(entries);
+            var (data, yMax) = ChartDataService.BuildGlucoseData(readings);
 
             data.Should().HaveCount(1);
             data[0].Time.Should().Be(TestMills);
@@ -103,31 +110,25 @@ public class ChartDataServiceTests
         }
 
         [Fact]
-        public void FiltersEntriesWithNullSgv()
+        public void AllReadingsIncluded()
         {
-            var entries = new List<Entry>
+            var readings = new List<SensorGlucose>
             {
                 new()
                 {
                     Mills = TestMills,
-                    Sgv = 120.0,
-                    Direction = "Flat",
-                },
-                new()
-                {
-                    Mills = TestMills + 1000,
-                    Sgv = null,
-                    Direction = "Up",
+                    Mgdl = 120.0,
+                    Direction = GlucoseDirection.Flat,
                 },
                 new()
                 {
                     Mills = TestMills + 2000,
-                    Sgv = 150.0,
-                    Direction = "FortyFiveUp",
+                    Mgdl = 150.0,
+                    Direction = GlucoseDirection.FortyFiveUp,
                 },
             };
 
-            var (data, _) = ChartDataService.BuildGlucoseData(entries);
+            var (data, _) = ChartDataService.BuildGlucoseData(readings);
 
             data.Should().HaveCount(2);
             data.Should().OnlyContain(g => g.Sgv > 0);
@@ -136,19 +137,32 @@ public class ChartDataServiceTests
         [Fact]
         public void OrdersByTime()
         {
-            var entries = new List<Entry>
+            var readings = new List<SensorGlucose>
             {
-                new() { Mills = TestMills + 2000, Sgv = 150.0 },
-                new() { Mills = TestMills, Sgv = 120.0 },
-                new() { Mills = TestMills + 1000, Sgv = 130.0 },
+                new() { Mills = TestMills + 2000, Mgdl = 150.0 },
+                new() { Mills = TestMills, Mgdl = 120.0 },
+                new() { Mills = TestMills + 1000, Mgdl = 130.0 },
             };
 
-            var (data, _) = ChartDataService.BuildGlucoseData(entries);
+            var (data, _) = ChartDataService.BuildGlucoseData(readings);
 
             data.Should().HaveCount(3);
             data[0].Time.Should().Be(TestMills);
             data[1].Time.Should().Be(TestMills + 1000);
             data[2].Time.Should().Be(TestMills + 2000);
+        }
+
+        [Fact]
+        public void NullDirection_MapsToNullString()
+        {
+            var readings = new List<SensorGlucose>
+            {
+                new() { Mills = TestMills, Mgdl = 120.0, Direction = null },
+            };
+
+            var (data, _) = ChartDataService.BuildGlucoseData(readings);
+
+            data[0].Direction.Should().BeNull();
         }
 
         [Theory]
@@ -157,14 +171,14 @@ public class ChartDataServiceTests
         [InlineData(300, 320)] // maxSgv=300 > 280, yMax = Min(400, 300+20) = 320
         [InlineData(390, 400)] // maxSgv=390, yMax = Min(400, 390+20) = 400
         [InlineData(500, 400)] // maxSgv=500, yMax = Min(400, 500+20) = 400
-        public void YMaxCalculation_VariousSgvValues(double sgv, double expectedYMax)
+        public void YMaxCalculation_VariousMgdlValues(double mgdl, double expectedYMax)
         {
-            var entries = new List<Entry>
+            var readings = new List<SensorGlucose>
             {
-                new() { Mills = TestMills, Sgv = sgv },
+                new() { Mills = TestMills, Mgdl = mgdl },
             };
 
-            var (_, yMax) = ChartDataService.BuildGlucoseData(entries);
+            var (_, yMax) = ChartDataService.BuildGlucoseData(readings);
 
             yMax.Should().Be(expectedYMax);
         }
@@ -172,232 +186,257 @@ public class ChartDataServiceTests
 
     #endregion
 
-    #region CategorizeTreatments Tests
+    #region BuildBolusMarkers Tests
 
-    public class CategorizeTreatmentsTests
+    public class BuildBolusMarkersTests
     {
         [Fact]
-        public void EmptyList_ReturnsEmptyResults()
+        public void EmptyList_ReturnsEmpty()
         {
-            var (bolus, carbs, deviceEvents, carbIds) = ChartDataService.CategorizeTreatments(
-                new List<Treatment>(),
-                null
-            );
+            var result = ChartDataService.BuildBolusMarkers(new List<Bolus>());
 
-            bolus.Should().BeEmpty();
-            carbs.Should().BeEmpty();
-            deviceEvents.Should().BeEmpty();
-            carbIds.Should().BeEmpty();
+            result.Should().BeEmpty();
         }
 
         [Fact]
-        public void MealBolus_CategorizedAsBolus()
+        public void NormalBolus_MappedCorrectly()
         {
-            var treatments = new List<Treatment>
+            var bolusId = Guid.NewGuid();
+            var boluses = new List<Bolus>
             {
                 new()
                 {
-                    Id = "treat-1",
-                    EventType = "Meal Bolus",
+                    Id = bolusId,
+                    LegacyId = "treat-1",
                     Insulin = 5.0,
                     Mills = TestMills,
+                    BolusType = Nocturne.Core.Models.V4.BolusType.Normal,
+                    Automatic = false,
                 },
             };
 
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildBolusMarkers(boluses);
 
-            bolus.Should().HaveCount(1);
-            bolus[0].Insulin.Should().Be(5.0);
-            bolus[0].BolusType.Should().Be(BolusType.MealBolus);
-            bolus[0].Time.Should().Be(TestMills);
-            bolus[0].TreatmentId.Should().Be("treat-1");
+            result.Should().HaveCount(1);
+            result[0].Insulin.Should().Be(5.0);
+            result[0].BolusType.Should().Be(Nocturne.Core.Models.BolusType.Bolus);
+            result[0].Time.Should().Be(TestMills);
+            result[0].TreatmentId.Should().Be("treat-1");
         }
 
         [Fact]
-        public void CorrectionBolus_CategorizedAsBolus()
+        public void AutomaticBolus_MappedToAutomaticBolusType()
         {
-            var treatments = new List<Treatment>
+            var boluses = new List<Bolus>
             {
                 new()
                 {
-                    EventType = "Correction Bolus",
-                    Insulin = 2.5,
-                    Mills = TestMills,
-                },
-            };
-
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
-
-            bolus.Should().HaveCount(1);
-            bolus[0].BolusType.Should().Be(BolusType.CorrectionBolus);
-        }
-
-        [Fact]
-        public void Smb_CategorizedAsBolus()
-        {
-            var treatments = new List<Treatment>
-            {
-                new()
-                {
-                    EventType = "SMB",
+                    Id = Guid.NewGuid(),
                     Insulin = 0.3,
                     Mills = TestMills,
+                    Automatic = true,
                 },
             };
 
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildBolusMarkers(boluses);
 
-            bolus.Should().HaveCount(1);
-            bolus[0].BolusType.Should().Be(BolusType.Smb);
+            result.Should().HaveCount(1);
+            result[0].BolusType.Should().Be(Nocturne.Core.Models.BolusType.AutomaticBolus);
         }
 
         [Fact]
-        public void UnknownBolusTypeWithBolusInName_StillCategorized()
+        public void SquareBolus_MappedToComboBolus()
         {
-            var treatments = new List<Treatment>
+            var boluses = new List<Bolus>
             {
                 new()
                 {
-                    EventType = "Extended Bolus",
+                    Id = Guid.NewGuid(),
                     Insulin = 3.0,
                     Mills = TestMills,
+                    BolusType = Nocturne.Core.Models.V4.BolusType.Square,
+                    Automatic = false,
                 },
             };
 
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildBolusMarkers(boluses);
 
-            // "Extended Bolus" is not in BolusEventTypeMap but contains "Bolus" case-insensitive
-            bolus.Should().HaveCount(1);
+            result.Should().HaveCount(1);
+            result[0].BolusType.Should().Be(Nocturne.Core.Models.BolusType.ComboBolus);
         }
 
         [Fact]
-        public void TreatmentWithZeroInsulin_NotCategorizedAsBolus()
+        public void ZeroInsulin_NotIncluded()
         {
-            var treatments = new List<Treatment>
+            var boluses = new List<Bolus>
             {
                 new()
                 {
-                    EventType = "Meal Bolus",
+                    Id = Guid.NewGuid(),
                     Insulin = 0.0,
                     Mills = TestMills,
                 },
             };
 
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildBolusMarkers(boluses);
 
-            bolus.Should().BeEmpty();
+            result.Should().BeEmpty();
         }
 
         [Fact]
-        public void TreatmentWithNullInsulin_NotCategorizedAsBolus()
+        public void NoLegacyId_UsesGuidId()
         {
-            var treatments = new List<Treatment>
+            var bolusId = Guid.NewGuid();
+            var boluses = new List<Bolus>
             {
                 new()
                 {
-                    EventType = "Meal Bolus",
-                    Insulin = null,
+                    Id = bolusId,
+                    LegacyId = null,
+                    Insulin = 5.0,
                     Mills = TestMills,
                 },
             };
 
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildBolusMarkers(boluses);
 
-            bolus.Should().BeEmpty();
+            result[0].TreatmentId.Should().Be(bolusId.ToString());
         }
 
         [Fact]
-        public void CarbTreatment_CategorizedAsCarb()
+        public void IsOverride_AlwaysFalse()
         {
-            var treatmentId = Guid.NewGuid().ToString();
-            var treatments = new List<Treatment>
+            var boluses = new List<Bolus>
             {
                 new()
                 {
-                    Id = treatmentId,
-                    EventType = "Carb Correction",
+                    Id = Guid.NewGuid(),
+                    Insulin = 5.0,
+                    Mills = TestMills,
+                },
+            };
+
+            var result = ChartDataService.BuildBolusMarkers(boluses);
+
+            result[0].IsOverride.Should().BeFalse();
+        }
+    }
+
+    #endregion
+
+    #region BuildCarbMarkers Tests
+
+    public class BuildCarbMarkersTests
+    {
+        [Fact]
+        public void EmptyList_ReturnsEmpty()
+        {
+            var result = ChartDataService.BuildCarbMarkers(new List<CarbIntake>(), null);
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void CarbIntake_MappedCorrectly()
+        {
+            var carbId = Guid.NewGuid();
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = carbId,
+                    LegacyId = "treat-1",
                     Carbs = 30.0,
                     Mills = TestMills,
                     FoodType = "Pizza",
                 },
             };
 
-            var (_, carbs, _, carbIds) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, null);
 
-            carbs.Should().HaveCount(1);
-            carbs[0].Carbs.Should().Be(30.0);
-            carbs[0].Label.Should().Be("Pizza");
-            carbs[0].Time.Should().Be(TestMills);
-            carbs[0].IsOffset.Should().BeFalse();
-            carbIds.Should().HaveCount(1);
-            carbIds[0].Should().Be(Guid.Parse(treatmentId));
+            result.Should().HaveCount(1);
+            result[0].Carbs.Should().Be(30.0);
+            result[0].Label.Should().Be("Pizza");
+            result[0].Time.Should().Be(TestMills);
+            result[0].TreatmentId.Should().Be("treat-1");
+            result[0].IsOffset.Should().BeFalse();
         }
 
         [Fact]
-        public void CarbTreatment_WithoutFoodType_UsesNotesTruncated()
-        {
-            var treatments = new List<Treatment>
-            {
-                new()
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    EventType = "Carb Correction",
-                    Carbs = 20.0,
-                    Mills = TestMills,
-                    FoodType = null,
-                    Notes = "This is a really long note about what I ate",
-                },
-            };
-
-            var (_, carbs, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
-
-            carbs.Should().HaveCount(1);
-            carbs[0].Label.Should().Be("This is a really lon");
-            carbs[0].Label!.Length.Should().BeLessThanOrEqualTo(20);
-        }
-
-        [Fact]
-        public void CarbTreatment_WithoutFoodTypeOrNotes_UsesMealName()
+        public void WithoutFoodType_UsesMealName()
         {
             // 12:00 UTC = Lunch time
             var noonUtcMills = DateTimeOffset
                 .Parse("2023-11-15T12:00:00Z")
                 .ToUnixTimeMilliseconds();
-            var treatments = new List<Treatment>
+            var carbs = new List<CarbIntake>
             {
                 new()
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    EventType = "Carb Correction",
+                    Id = Guid.NewGuid(),
                     Carbs = 20.0,
                     Mills = noonUtcMills,
                     FoodType = null,
-                    Notes = null,
                 },
             };
 
-            var (_, carbs, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, null);
 
-            carbs.Should().HaveCount(1);
-            carbs[0].Label.Should().Be("Lunch");
+            result.Should().HaveCount(1);
+            result[0].Label.Should().Be("Lunch");
         }
 
         [Fact]
-        public void CarbTreatment_WithZeroCarbs_NotCategorized()
+        public void ZeroCarbs_NotIncluded()
         {
-            var treatments = new List<Treatment>
+            var carbs = new List<CarbIntake>
             {
                 new()
                 {
-                    EventType = "Carb Correction",
+                    Id = Guid.NewGuid(),
                     Carbs = 0.0,
                     Mills = TestMills,
                 },
             };
 
-            var (_, carbs, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, null);
 
-            carbs.Should().BeEmpty();
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void NoLegacyId_UsesGuidId()
+        {
+            var carbId = Guid.NewGuid();
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = carbId,
+                    LegacyId = null,
+                    Carbs = 30.0,
+                    Mills = TestMills,
+                },
+            };
+
+            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+
+            result[0].TreatmentId.Should().Be(carbId.ToString());
+        }
+    }
+
+    #endregion
+
+    #region BuildDeviceEventMarkers Tests
+
+    public class BuildDeviceEventMarkersTests
+    {
+        [Fact]
+        public void EmptyList_ReturnsEmpty()
+        {
+            var result = ChartDataService.BuildDeviceEventMarkers(new List<Treatment>());
+
+            result.Should().BeEmpty();
         }
 
         [Fact]
@@ -413,12 +452,12 @@ public class ChartDataServiceTests
                 },
             };
 
-            var (_, _, deviceEvents, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
 
-            deviceEvents.Should().HaveCount(1);
-            deviceEvents[0].EventType.Should().Be(DeviceEventType.SiteChange);
-            deviceEvents[0].Notes.Should().Be("Left arm");
-            deviceEvents[0].Color.Should().Be(ChartColor.InsulinBolus);
+            result.Should().HaveCount(1);
+            result[0].EventType.Should().Be(DeviceEventType.SiteChange);
+            result[0].Notes.Should().Be("Left arm");
+            result[0].Color.Should().Be(ChartColor.InsulinBolus);
         }
 
         [Fact]
@@ -429,107 +468,11 @@ public class ChartDataServiceTests
                 new() { EventType = "Sensor Start", Mills = TestMills },
             };
 
-            var (_, _, deviceEvents, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
 
-            deviceEvents.Should().HaveCount(1);
-            deviceEvents[0].EventType.Should().Be(DeviceEventType.SensorStart);
-            deviceEvents[0].Color.Should().Be(ChartColor.GlucoseInRange);
-        }
-
-        [Fact]
-        public void ComboTreatment_BothBolusAndCarbs()
-        {
-            var treatmentId = Guid.NewGuid().ToString();
-            var treatments = new List<Treatment>
-            {
-                new()
-                {
-                    Id = treatmentId,
-                    EventType = "Meal Bolus",
-                    Insulin = 5.0,
-                    Carbs = 30.0,
-                    Mills = TestMills,
-                    FoodType = "Pasta",
-                },
-            };
-
-            var (bolus, carbs, _, carbIds) = ChartDataService.CategorizeTreatments(
-                treatments,
-                null
-            );
-
-            bolus.Should().HaveCount(1);
-            carbs.Should().HaveCount(1);
-            bolus[0].Insulin.Should().Be(5.0);
-            carbs[0].Carbs.Should().Be(30.0);
-            carbs[0].Label.Should().Be("Pasta");
-            carbIds.Should().HaveCount(1);
-        }
-
-        [Fact]
-        public void OverrideDetection_WhenSuggestedDiffersFromActual()
-        {
-            var treatments = new List<Treatment>
-            {
-                new()
-                {
-                    EventType = "Meal Bolus",
-                    Insulin = 5.0,
-                    Mills = TestMills,
-                    InsulinRecommendationForCarbs = 3.0,
-                    InsulinRecommendationForCorrection = 1.0,
-                    // suggestedTotal = 4.0, actual = 5.0, diff = 1.0 > 0.05
-                },
-            };
-
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
-
-            bolus.Should().HaveCount(1);
-            bolus[0].IsOverride.Should().BeTrue();
-        }
-
-        [Fact]
-        public void OverrideDetection_WhenSuggestedMatchesActual()
-        {
-            var treatments = new List<Treatment>
-            {
-                new()
-                {
-                    EventType = "Meal Bolus",
-                    Insulin = 4.0,
-                    Mills = TestMills,
-                    InsulinRecommendationForCarbs = 3.0,
-                    InsulinRecommendationForCorrection = 1.0,
-                    // suggestedTotal = 4.0, actual = 4.0, diff = 0.0 <= 0.05
-                },
-            };
-
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
-
-            bolus.Should().HaveCount(1);
-            bolus[0].IsOverride.Should().BeFalse();
-        }
-
-        [Fact]
-        public void OverrideDetection_WhenNoRecommendations()
-        {
-            var treatments = new List<Treatment>
-            {
-                new()
-                {
-                    EventType = "Bolus",
-                    Insulin = 5.0,
-                    Mills = TestMills,
-                    InsulinRecommendationForCarbs = null,
-                    InsulinRecommendationForCorrection = null,
-                    // suggestedTotal = 0.0, so isOverride is false (suggestedTotal not > 0)
-                },
-            };
-
-            var (bolus, _, _, _) = ChartDataService.CategorizeTreatments(treatments, null);
-
-            bolus.Should().HaveCount(1);
-            bolus[0].IsOverride.Should().BeFalse();
+            result.Should().HaveCount(1);
+            result[0].EventType.Should().Be(DeviceEventType.SensorStart);
+            result[0].Color.Should().Be(ChartColor.GlucoseInRange);
         }
 
         [Fact]
@@ -545,34 +488,84 @@ public class ChartDataServiceTests
                 new() { EventType = "Pump Battery Change", Mills = TestMills + 5000 },
             };
 
-            var (_, _, deviceEvents, _) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
 
-            deviceEvents.Should().HaveCount(6);
-            deviceEvents[0].EventType.Should().Be(DeviceEventType.SensorStart);
-            deviceEvents[1].EventType.Should().Be(DeviceEventType.SensorChange);
-            deviceEvents[2].EventType.Should().Be(DeviceEventType.SensorStop);
-            deviceEvents[3].EventType.Should().Be(DeviceEventType.SiteChange);
-            deviceEvents[4].EventType.Should().Be(DeviceEventType.InsulinChange);
-            deviceEvents[5].EventType.Should().Be(DeviceEventType.PumpBatteryChange);
+            result.Should().HaveCount(6);
+            result[0].EventType.Should().Be(DeviceEventType.SensorStart);
+            result[1].EventType.Should().Be(DeviceEventType.SensorChange);
+            result[2].EventType.Should().Be(DeviceEventType.SensorStop);
+            result[3].EventType.Should().Be(DeviceEventType.SiteChange);
+            result[4].EventType.Should().Be(DeviceEventType.InsulinChange);
+            result[5].EventType.Should().Be(DeviceEventType.PumpBatteryChange);
         }
 
         [Fact]
-        public void NonGuidTreatmentId_NotAddedToCarbIds()
+        public void NonDeviceEventTreatment_NotIncluded()
         {
             var treatments = new List<Treatment>
             {
-                new()
-                {
-                    Id = "not-a-guid",
-                    Carbs = 20.0,
-                    Mills = TestMills,
-                },
+                new() { EventType = "Meal Bolus", Insulin = 5.0, Mills = TestMills },
             };
 
-            var (_, carbs, _, carbIds) = ChartDataService.CategorizeTreatments(treatments, null);
+            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
 
-            carbs.Should().HaveCount(1);
-            carbIds.Should().BeEmpty();
+            result.Should().BeEmpty();
+        }
+    }
+
+    #endregion
+
+    #region MapV4BolusType Tests
+
+    public class MapV4BolusTypeTests
+    {
+        [Fact]
+        public void Automatic_ReturnsAutomaticBolus()
+        {
+            var result = ChartDataService.MapV4BolusType(Nocturne.Core.Models.V4.BolusType.Normal, true);
+
+            result.Should().Be(Nocturne.Core.Models.BolusType.AutomaticBolus);
+        }
+
+        [Fact]
+        public void Normal_ReturnsBolus()
+        {
+            var result = ChartDataService.MapV4BolusType(Nocturne.Core.Models.V4.BolusType.Normal, false);
+
+            result.Should().Be(Nocturne.Core.Models.BolusType.Bolus);
+        }
+
+        [Fact]
+        public void Square_ReturnsComboBolus()
+        {
+            var result = ChartDataService.MapV4BolusType(Nocturne.Core.Models.V4.BolusType.Square, false);
+
+            result.Should().Be(Nocturne.Core.Models.BolusType.ComboBolus);
+        }
+
+        [Fact]
+        public void Dual_ReturnsComboBolus()
+        {
+            var result = ChartDataService.MapV4BolusType(Nocturne.Core.Models.V4.BolusType.Dual, false);
+
+            result.Should().Be(Nocturne.Core.Models.BolusType.ComboBolus);
+        }
+
+        [Fact]
+        public void Null_ReturnsBolus()
+        {
+            var result = ChartDataService.MapV4BolusType(null, false);
+
+            result.Should().Be(Nocturne.Core.Models.BolusType.Bolus);
+        }
+
+        [Fact]
+        public void AutomaticOverridesBolusType()
+        {
+            // Even if it's a Square bolus, Automatic flag takes precedence
+            var result = ChartDataService.MapV4BolusType(Nocturne.Core.Models.V4.BolusType.Square, true);
+
+            result.Should().Be(Nocturne.Core.Models.BolusType.AutomaticBolus);
         }
     }
 

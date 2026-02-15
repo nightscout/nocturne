@@ -6,15 +6,17 @@ using Nocturne.API.Helpers;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Services;
 
 /// <summary>
 /// Service that orchestrates all data fetching and computation for the dashboard chart.
-/// Loads profiles, fetches entries/treatments/state spans, builds IOB/COB/basal series,
-/// categorizes treatments, maps spans, and assembles the final DTO.
+/// Loads profiles, fetches glucose/bolus/carb data from v4 tables, treatments for IOB/COB,
+/// state spans, builds IOB/COB/basal series, maps spans, and assembles the final DTO.
 /// </summary>
 public class ChartDataService : IChartDataService
 {
@@ -22,10 +24,12 @@ public class ChartDataService : IChartDataService
     private readonly ICobService _cobService;
     private readonly ITreatmentService _treatmentService;
     private readonly ITreatmentFoodService _treatmentFoodService;
-    private readonly IEntryService _entryService;
     private readonly IDeviceStatusService _deviceStatusService;
     private readonly IProfileService _profileService;
     private readonly IProfileDataService _profileDataService;
+    private readonly SensorGlucoseRepository _sensorGlucoseRepository;
+    private readonly BolusRepository _bolusRepository;
+    private readonly CarbIntakeRepository _carbIntakeRepository;
     private readonly StateSpanRepository _stateSpanRepository;
     private readonly SystemEventRepository _systemEventRepository;
     private readonly TrackerRepository _trackerRepository;
@@ -44,10 +48,12 @@ public class ChartDataService : IChartDataService
         ICobService cobService,
         ITreatmentService treatmentService,
         ITreatmentFoodService treatmentFoodService,
-        IEntryService entryService,
         IDeviceStatusService deviceStatusService,
         IProfileService profileService,
         IProfileDataService profileDataService,
+        SensorGlucoseRepository sensorGlucoseRepository,
+        BolusRepository bolusRepository,
+        CarbIntakeRepository carbIntakeRepository,
         StateSpanRepository stateSpanRepository,
         SystemEventRepository systemEventRepository,
         TrackerRepository trackerRepository,
@@ -59,10 +65,12 @@ public class ChartDataService : IChartDataService
         _cobService = cobService;
         _treatmentService = treatmentService;
         _treatmentFoodService = treatmentFoodService;
-        _entryService = entryService;
         _deviceStatusService = deviceStatusService;
         _profileService = profileService;
         _profileDataService = profileDataService;
+        _sensorGlucoseRepository = sensorGlucoseRepository;
+        _bolusRepository = bolusRepository;
+        _carbIntakeRepository = carbIntakeRepository;
         _stateSpanRepository = stateSpanRepository;
         _systemEventRepository = systemEventRepository;
         _trackerRepository = trackerRepository;
@@ -105,6 +113,40 @@ public class ChartDataService : IChartDataService
         var treatmentRangeHours = (endTime - (startTime - bufferMs)) / (60.0 * 60 * 1000);
         var treatmentLimit = (int)Math.Max(500, Math.Ceiling(treatmentRangeHours * 10));
 
+        // Fetch glucose data from v4 SensorGlucose table
+        var sensorGlucoseList =
+            (
+                await _sensorGlucoseRepository.GetAsync(
+                    from: startTime, to: endTime,
+                    device: null, source: null,
+                    limit: entryLimit, offset: 0,
+                    descending: true, ct: cancellationToken
+                )
+            ).ToList();
+
+        // Fetch bolus data from v4 Bolus table (display range only)
+        var bolusList =
+            (
+                await _bolusRepository.GetAsync(
+                    from: startTime, to: endTime,
+                    device: null, source: null,
+                    limit: treatmentLimit, offset: 0,
+                    descending: true, ct: cancellationToken
+                )
+            ).ToList();
+
+        // Fetch carb data from v4 CarbIntake table (display range only)
+        var carbIntakeList =
+            (
+                await _carbIntakeRepository.GetAsync(
+                    from: startTime, to: endTime,
+                    device: null, source: null,
+                    limit: treatmentLimit, offset: 0,
+                    descending: true, ct: cancellationToken
+                )
+            ).ToList();
+
+        // Treatments are still needed for IOB/COB calculation and device event markers
         var treatmentFind = $"{{\"mills\":{{\"$gte\":{startTime - bufferMs},\"$lte\":{endTime}}}}}";
         var relevantTreatments =
             (
@@ -114,16 +156,6 @@ public class ChartDataService : IChartDataService
                     cancellationToken: cancellationToken
                 )
             )?.ToList() ?? new List<Treatment>();
-
-        var entryFind = $"{{\"mills\":{{\"$gte\":{startTime},\"$lte\":{endTime}}}}}";
-        var relevantEntries =
-            (
-                await _entryService.GetEntriesAsync(
-                    find: entryFind,
-                    count: entryLimit,
-                    cancellationToken: cancellationToken
-                )
-            )?.ToList() ?? new List<Entry>();
 
         // Device status - only need recent entries for IOB source detection
         var deviceStatusList =
@@ -213,13 +245,21 @@ public class ChartDataService : IChartDataService
             basalSeries.Any() ? basalSeries.Max(b => b.Rate) : defaultBasalRate
         );
 
-        var (glucoseData, glucoseYMax) = BuildGlucoseData(relevantEntries);
+        var (glucoseData, glucoseYMax) = BuildGlucoseData(sensorGlucoseList);
 
-        // Categorize treatments
-        var (bolusMarkers, carbMarkers, deviceEventMarkers, carbTreatmentIds) =
-            CategorizeTreatments(displayTreatments, timezone);
+        // Build markers from v4 tables
+        var bolusMarkers = BuildBolusMarkers(bolusList);
+        var carbMarkers = BuildCarbMarkers(carbIntakeList, timezone);
 
-        // Process food offsets
+        // Device event markers still come from legacy treatments (no v4 equivalent)
+        var deviceEventMarkers = BuildDeviceEventMarkers(displayTreatments);
+
+        // Process food offsets using carb intake correlation IDs
+        var carbTreatmentIds = carbIntakeList
+            .Where(c => c.CorrelationId.HasValue)
+            .Select(c => c.CorrelationId!.Value)
+            .Distinct()
+            .ToList();
         await ProcessFoodOffsetsAsync(
             carbMarkers,
             carbTreatmentIds,
@@ -438,15 +478,14 @@ public class ChartDataService : IChartDataService
         return $"iobcob:{hash}:{roundedStart}:{roundedEnd}:{intervalMinutes}";
     }
 
-    internal static (List<GlucosePointDto> data, double yMax) BuildGlucoseData(List<Entry> entries)
+    internal static (List<GlucosePointDto> data, double yMax) BuildGlucoseData(List<SensorGlucose> readings)
     {
-        var glucoseData = entries
-            .Where(e => e.Sgv != null)
-            .Select(e => new GlucosePointDto
+        var glucoseData = readings
+            .Select(r => new GlucosePointDto
             {
-                Time = e.Mills,
-                Sgv = e.Sgv ?? 0,
-                Direction = e.Direction,
+                Time = r.Mills,
+                Sgv = r.Mgdl,
+                Direction = r.Direction?.ToString(),
             })
             .OrderBy(g => g.Time)
             .ToList();
@@ -457,70 +496,41 @@ public class ChartDataService : IChartDataService
         return (glucoseData, glucoseYMax);
     }
 
-    internal static (
-        List<BolusMarkerDto> bolus,
-        List<CarbMarkerDto> carbs,
-        List<DeviceEventMarkerDto> deviceEvents,
-        List<Guid> carbTreatmentIds
-    ) CategorizeTreatments(List<Treatment> treatments, string? timezone)
+    internal static List<BolusMarkerDto> BuildBolusMarkers(List<Bolus> boluses)
     {
-        var bolusMarkers = new List<BolusMarkerDto>();
-        var carbMarkers = new List<CarbMarkerDto>();
-        var deviceEventMarkers = new List<DeviceEventMarkerDto>();
-        var carbTreatmentIds = new List<Guid>();
+        return boluses
+            .Where(b => b.Insulin > 0)
+            .Select(b => new BolusMarkerDto
+            {
+                Time = b.Mills,
+                Insulin = b.Insulin,
+                TreatmentId = b.LegacyId ?? b.Id.ToString(),
+                BolusType = MapV4BolusType(b.BolusType, b.Automatic),
+                IsOverride = false,
+            })
+            .ToList();
+    }
 
+    internal static List<CarbMarkerDto> BuildCarbMarkers(List<CarbIntake> carbIntakes, string? timezone)
+    {
+        return carbIntakes
+            .Where(c => c.Carbs > 0)
+            .Select(c => new CarbMarkerDto
+            {
+                Time = c.Mills,
+                Carbs = c.Carbs,
+                Label = c.FoodType ?? GetMealNameForTime(c.Mills, timezone),
+                TreatmentId = c.LegacyId ?? c.Id.ToString(),
+                IsOffset = false,
+            })
+            .ToList();
+    }
+
+    internal static List<DeviceEventMarkerDto> BuildDeviceEventMarkers(List<Treatment> treatments)
+    {
+        var markers = new List<DeviceEventMarkerDto>();
         foreach (var t in treatments)
         {
-            // Bolus check
-            if (t.Insulin is > 0)
-            {
-                var eventType = t.EventType ?? "";
-                if (
-                    TreatmentTypes.BolusEventTypeMap.TryGetValue(eventType, out var bolusType)
-                    || eventType.Contains("Bolus", StringComparison.OrdinalIgnoreCase)
-                )
-                {
-                    var suggestedTotal =
-                        (t.InsulinRecommendationForCarbs ?? 0)
-                        + (t.InsulinRecommendationForCorrection ?? 0);
-                    var isOverride =
-                        suggestedTotal > 0 && Math.Abs(suggestedTotal - (t.Insulin ?? 0)) > 0.05;
-
-                    bolusMarkers.Add(
-                        new BolusMarkerDto
-                        {
-                            Time = t.Mills,
-                            Insulin = t.Insulin ?? 0,
-                            TreatmentId = t.Id,
-                            BolusType = bolusType,
-                            IsOverride = isOverride,
-                        }
-                    );
-                }
-            }
-
-            // Carb check
-            if (t.Carbs is > 0)
-            {
-                if (t.Id != null && Guid.TryParse(t.Id, out var treatmentGuid))
-                    carbTreatmentIds.Add(treatmentGuid);
-
-                carbMarkers.Add(
-                    new CarbMarkerDto
-                    {
-                        Time = t.Mills,
-                        Carbs = t.Carbs ?? 0,
-                        Label =
-                            t.FoodType
-                            ?? (t.Notes != null ? t.Notes[..Math.Min(t.Notes.Length, 20)] : null)
-                            ?? GetMealNameForTime(t.Mills, timezone),
-                        TreatmentId = t.Id,
-                        IsOffset = false,
-                    }
-                );
-            }
-
-            // Device event check
             if (
                 t.EventType != null
                 && TreatmentTypes.DeviceEventTypeMap.TryGetValue(
@@ -529,7 +539,7 @@ public class ChartDataService : IChartDataService
                 )
             )
             {
-                deviceEventMarkers.Add(
+                markers.Add(
                     new DeviceEventMarkerDto
                     {
                         Time = t.Mills,
@@ -540,8 +550,28 @@ public class ChartDataService : IChartDataService
                 );
             }
         }
+        return markers;
+    }
 
-        return (bolusMarkers, carbMarkers, deviceEventMarkers, carbTreatmentIds);
+    /// <summary>
+    /// Maps v4 BolusType enum to the chart BolusType enum.
+    /// The v4 model uses a simpler BolusType (Normal, Square, Dual) plus an Automatic flag,
+    /// while the chart uses a more granular BolusType derived from legacy event type strings.
+    /// </summary>
+    internal static Nocturne.Core.Models.BolusType MapV4BolusType(
+        Nocturne.Core.Models.V4.BolusType? v4Type,
+        bool automatic
+    )
+    {
+        if (automatic)
+            return Nocturne.Core.Models.BolusType.AutomaticBolus;
+
+        return v4Type switch
+        {
+            Nocturne.Core.Models.V4.BolusType.Square => Nocturne.Core.Models.BolusType.ComboBolus,
+            Nocturne.Core.Models.V4.BolusType.Dual => Nocturne.Core.Models.BolusType.ComboBolus,
+            _ => Nocturne.Core.Models.BolusType.Bolus,
+        };
     }
 
     internal async Task ProcessFoodOffsetsAsync(
