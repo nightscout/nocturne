@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -26,6 +27,7 @@ public class CacheIntegrationTests
     private readonly Mock<ICacheService> _mockCacheService;
     private readonly Mock<IOptions<CacheConfiguration>> _mockCacheConfig;
     private readonly Mock<IDemoModeService> _mockDemoModeService;
+    private readonly Mock<IEntryDecomposer> _mockEntryDecomposer;
     private readonly Mock<ILogger<EntryService>> _mockEntryLogger;
     private readonly Mock<ILogger<StatusService>> _mockStatusLogger;
 
@@ -36,6 +38,7 @@ public class CacheIntegrationTests
         _mockCacheService = new Mock<ICacheService>();
         _mockCacheConfig = new Mock<IOptions<CacheConfiguration>>();
         _mockDemoModeService = new Mock<IDemoModeService>();
+        _mockEntryDecomposer = new Mock<IEntryDecomposer>();
         _mockEntryLogger = new Mock<ILogger<EntryService>>();
         _mockStatusLogger = new Mock<ILogger<StatusService>>();
 
@@ -67,6 +70,7 @@ public class CacheIntegrationTests
             _mockCacheService.Object,
             _mockCacheConfig.Object,
             _mockDemoModeService.Object,
+            _mockEntryDecomposer.Object,
             _mockEntryLogger.Object
         );
 
@@ -128,6 +132,7 @@ public class CacheIntegrationTests
             _mockCacheService.Object,
             _mockCacheConfig.Object,
             _mockDemoModeService.Object,
+            _mockEntryDecomposer.Object,
             _mockEntryLogger.Object
         );
 
@@ -198,6 +203,7 @@ public class CacheIntegrationTests
             _mockCacheService.Object,
             _mockCacheConfig.Object,
             _mockDemoModeService.Object,
+            _mockEntryDecomposer.Object,
             _mockEntryLogger.Object
         );
 

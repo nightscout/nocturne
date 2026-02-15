@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
@@ -23,6 +24,7 @@ public class TreatmentService : ITreatmentService
     private readonly CacheConfiguration _cacheConfig;
     private readonly IDemoModeService _demoModeService;
     private readonly IStateSpanService _stateSpanService;
+    private readonly ITreatmentDecomposer _treatmentDecomposer;
     private readonly ILogger<TreatmentService> _logger;
     private const string CollectionName = "treatments";
     private const string DefaultTenantId = "default"; // TODO: Replace with actual tenant context
@@ -34,6 +36,7 @@ public class TreatmentService : ITreatmentService
         IOptions<CacheConfiguration> cacheConfig,
         IDemoModeService demoModeService,
         IStateSpanService stateSpanService,
+        ITreatmentDecomposer treatmentDecomposer,
         ILogger<TreatmentService> logger
     )
     {
@@ -43,6 +46,7 @@ public class TreatmentService : ITreatmentService
         _cacheConfig = cacheConfig.Value;
         _demoModeService = demoModeService;
         _stateSpanService = stateSpanService;
+        _treatmentDecomposer = treatmentDecomposer;
         _logger = logger;
     }
 
@@ -391,14 +395,14 @@ public class TreatmentService : ITreatmentService
     {
         var treatmentList = treatments.ToList();
         var regularTreatments = new List<Treatment>();
-        var tempBasalTreatments = new List<Treatment>();
+        var stateSpanTreatments = new List<Treatment>();
 
-        // Separate temp basals from regular treatments
+        // Separate StateSpan-backed types (temp basals, profile switches) from regular treatments
         foreach (var treatment in treatmentList)
         {
             if (TreatmentStateSpanMapper.IsTempBasalTreatment(treatment))
             {
-                tempBasalTreatments.Add(treatment);
+                stateSpanTreatments.Add(treatment);
             }
             else
             {
@@ -408,17 +412,24 @@ public class TreatmentService : ITreatmentService
 
         var results = new List<Treatment>();
 
-        // Process temp basals through StateSpanService (StateSpan is the source of truth)
-        foreach (var tempBasal in tempBasalTreatments)
+        // Process StateSpan-backed treatments through the decomposer (not written to legacy table)
+        foreach (var stateSpanTreatment in stateSpanTreatments)
         {
             try
             {
-                var stateSpan = await _stateSpanService.CreateBasalDeliveryFromTreatmentAsync(
-                    tempBasal,
+                var decompositionResult = await _treatmentDecomposer.DecomposeAsync(
+                    stateSpanTreatment,
                     cancellationToken
                 );
 
-                var createdTreatment = TreatmentStateSpanMapper.ToTreatment(stateSpan);
+                // Extract the created StateSpan from the decomposition result to build the treatment response
+                var createdStateSpan = decompositionResult.CreatedRecords
+                    .OfType<StateSpan>()
+                    .FirstOrDefault();
+                var createdTreatment = createdStateSpan != null
+                    ? TreatmentStateSpanMapper.ToTreatment(createdStateSpan)
+                    : null;
+
                 if (createdTreatment != null)
                 {
                     results.Add(createdTreatment);
@@ -444,8 +455,8 @@ public class TreatmentService : ITreatmentService
             {
                 _logger.LogError(
                     ex,
-                    "Failed to create temp basal StateSpan for treatment {Id}",
-                    tempBasal.Id
+                    "Failed to decompose StateSpan-backed treatment {Id}",
+                    stateSpanTreatment.Id
                 );
             }
         }
@@ -498,6 +509,23 @@ public class TreatmentService : ITreatmentService
                     _logger.LogError(
                         ex,
                         "Failed to broadcast storage create event for treatment {TreatmentId}",
+                        treatment.Id
+                    );
+                }
+            }
+
+            // Decompose each created treatment into v4 tables
+            foreach (var treatment in createdTreatments)
+            {
+                try
+                {
+                    await _treatmentDecomposer.DecomposeAsync(treatment, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to decompose treatment {TreatmentId} into v4 tables",
                         treatment.Id
                     );
                 }
@@ -616,6 +644,23 @@ public class TreatmentService : ITreatmentService
                 _logger.LogError(
                     ex,
                     "Failed to broadcast storage update event for treatment {TreatmentId}",
+                    regularUpdatedTreatment.Id
+                );
+            }
+
+            // Re-decompose the updated treatment to keep v4 tables in sync
+            try
+            {
+                await _treatmentDecomposer.DecomposeAsync(
+                    regularUpdatedTreatment,
+                    cancellationToken
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to re-decompose updated treatment {TreatmentId} into v4 tables",
                     regularUpdatedTreatment.Id
                 );
             }
@@ -793,6 +838,10 @@ public class TreatmentService : ITreatmentService
         CancellationToken cancellationToken = default
     )
     {
+        // TODO: Delete corresponding v4 records by LegacyId when DeleteByLegacyIdAsync
+        // is added to v4 repositories (BolusRepository, CarbIntakeRepository, BGCheckRepository,
+        // NoteRepository, BolusCalculationRepository)
+
         // Check if this is a basal delivery in StateSpans
         var existingStateSpan = await _stateSpanService.GetStateSpanByIdAsync(
             id,

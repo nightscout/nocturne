@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.API.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
@@ -23,6 +24,7 @@ public class EntryServiceTests
     private readonly Mock<ICacheService> _mockCacheService;
     private readonly Mock<IOptions<CacheConfiguration>> _mockCacheConfig;
     private readonly Mock<IDemoModeService> _mockDemoModeService;
+    private readonly Mock<IEntryDecomposer> _mockEntryDecomposer;
     private readonly Mock<ILogger<EntryService>> _mockLogger;
     private readonly EntryService _entryService;
 
@@ -36,6 +38,7 @@ public class EntryServiceTests
         _mockCacheService = new Mock<ICacheService>();
         _mockCacheConfig = new Mock<IOptions<CacheConfiguration>>();
         _mockDemoModeService = new Mock<IDemoModeService>();
+        _mockEntryDecomposer = new Mock<IEntryDecomposer>();
         _mockLogger = new Mock<ILogger<EntryService>>();
 
         _mockCacheConfig.Setup(x => x.Value).Returns(new CacheConfiguration());
@@ -47,6 +50,7 @@ public class EntryServiceTests
             _mockCacheService.Object,
             _mockCacheConfig.Object,
             _mockDemoModeService.Object,
+            _mockEntryDecomposer.Object,
             _mockLogger.Object
         );
     }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
@@ -25,6 +26,7 @@ public class TreatmentServiceTests
     private readonly Mock<IOptions<CacheConfiguration>> _mockCacheConfig;
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<IStateSpanService> _mockStateSpanService;
+    private readonly Mock<ITreatmentDecomposer> _mockTreatmentDecomposer;
     private readonly Mock<ILogger<TreatmentService>> _mockLogger;
     private readonly TreatmentService _treatmentService;
 
@@ -36,6 +38,7 @@ public class TreatmentServiceTests
         _mockCacheConfig = new Mock<IOptions<CacheConfiguration>>();
         _mockDemoModeService = new Mock<IDemoModeService>();
         _mockStateSpanService = new Mock<IStateSpanService>();
+        _mockTreatmentDecomposer = new Mock<ITreatmentDecomposer>();
         _mockLogger = new Mock<ILogger<TreatmentService>>();
 
         _mockCacheConfig.Setup(x => x.Value).Returns(new CacheConfiguration());
@@ -59,6 +62,7 @@ public class TreatmentServiceTests
             _mockCacheConfig.Object,
             _mockDemoModeService.Object,
             _mockStateSpanService.Object,
+            _mockTreatmentDecomposer.Object,
             _mockLogger.Object
         );
     }
@@ -482,14 +486,17 @@ public class TreatmentServiceTests
             Metadata = new Dictionary<string, object> { ["rate"] = 1.5 },
         };
 
-        _mockStateSpanService
+        var decompositionResult = new Core.Models.V4.DecompositionResult();
+        decompositionResult.CreatedRecords.Add(createdStateSpan);
+
+        _mockTreatmentDecomposer
             .Setup(x =>
-                x.CreateBasalDeliveryFromTreatmentAsync(
+                x.DecomposeAsync(
                     It.Is<Treatment>(t => t.EventType == "Temp Basal"),
                     It.IsAny<CancellationToken>()
                 )
             )
-            .ReturnsAsync(createdStateSpan);
+            .ReturnsAsync(decompositionResult);
 
         // Act
         var result = await _treatmentService.CreateTreatmentsAsync(
@@ -501,10 +508,10 @@ public class TreatmentServiceTests
         result.Should().ContainSingle();
         result.First().EventType.Should().Be("Temp Basal");
 
-        // Verify StateSpanService was called
-        _mockStateSpanService.Verify(
+        // Verify decomposer was called for the temp basal
+        _mockTreatmentDecomposer.Verify(
             x =>
-                x.CreateBasalDeliveryFromTreatmentAsync(
+                x.DecomposeAsync(
                     It.IsAny<Treatment>(),
                     It.IsAny<CancellationToken>()
                 ),
@@ -546,14 +553,27 @@ public class TreatmentServiceTests
             Metadata = new Dictionary<string, object> { ["rate"] = 1.5 },
         };
 
-        _mockStateSpanService
+        var decompositionResult = new Core.Models.V4.DecompositionResult();
+        decompositionResult.CreatedRecords.Add(createdStateSpan);
+
+        _mockTreatmentDecomposer
             .Setup(x =>
-                x.CreateBasalDeliveryFromTreatmentAsync(
+                x.DecomposeAsync(
                     It.Is<Treatment>(t => t.EventType == "Temp Basal"),
                     It.IsAny<CancellationToken>()
                 )
             )
-            .ReturnsAsync(createdStateSpan);
+            .ReturnsAsync(decompositionResult);
+
+        // Return empty decomposition result for regular treatments (bolus)
+        _mockTreatmentDecomposer
+            .Setup(x =>
+                x.DecomposeAsync(
+                    It.Is<Treatment>(t => t.EventType != "Temp Basal"),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(new Core.Models.V4.DecompositionResult());
 
         var createdBolus = new Treatment
         {
@@ -583,21 +603,31 @@ public class TreatmentServiceTests
         // Assert
         result.Should().HaveCount(2);
 
-        // Temp basal went through StateSpanService
-        _mockStateSpanService.Verify(
+        // Temp basal went through the decomposer
+        _mockTreatmentDecomposer.Verify(
             x =>
-                x.CreateBasalDeliveryFromTreatmentAsync(
-                    It.IsAny<Treatment>(),
+                x.DecomposeAsync(
+                    It.Is<Treatment>(t => t.EventType == "Temp Basal"),
                     It.IsAny<CancellationToken>()
                 ),
             Times.Once
         );
 
-        // Bolus went through PostgreSqlService
+        // Bolus went through PostgreSqlService and then the decomposer
         _mockPostgreSqlService.Verify(
             x =>
                 x.CreateTreatmentsAsync(
                     It.IsAny<IEnumerable<Treatment>>(),
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+
+        // Decomposer was also called for the regular bolus treatment after legacy write
+        _mockTreatmentDecomposer.Verify(
+            x =>
+                x.DecomposeAsync(
+                    It.Is<Treatment>(t => t.EventType == "Correction Bolus"),
                     It.IsAny<CancellationToken>()
                 ),
             Times.Once

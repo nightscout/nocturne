@@ -38,6 +38,8 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
+using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.V4;
 using NSwag;
 using OpenTelemetry.Logs;
 using Polly;
@@ -449,6 +451,10 @@ builder.Services.AddScoped<CarbIntakeRepository>();
 builder.Services.AddScoped<BGCheckRepository>();
 builder.Services.AddScoped<NoteRepository>();
 builder.Services.AddScoped<BolusCalculationRepository>();
+
+// V4 Decomposers
+builder.Services.AddScoped<IEntryDecomposer, EntryDecomposer>();
+builder.Services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
 
 // Note: Processing status service is registered by AddNocturneMemoryCache
 
