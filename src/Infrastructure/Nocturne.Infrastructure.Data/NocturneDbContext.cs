@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.ValueGenerators;
 
 namespace Nocturne.Infrastructure.Data;
@@ -227,6 +228,48 @@ public class NocturneDbContext : DbContext
     /// Gets or sets the CompressionLowSuggestions table for compression low detection
     /// </summary>
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
+
+    // V4 Granular Models
+
+    /// <summary>
+    /// Gets or sets the SensorGlucose table for CGM readings (v4 granular model)
+    /// </summary>
+    public DbSet<SensorGlucoseEntity> SensorGlucose { get; set; }
+
+    /// <summary>
+    /// Gets or sets the MeterGlucose table for blood glucose meter readings (v4 granular model)
+    /// </summary>
+    public DbSet<MeterGlucoseEntity> MeterGlucose { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Calibrations table for CGM sensor calibration records (v4 granular model)
+    /// </summary>
+    public DbSet<CalibrationEntity> Calibrations { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Boluses table for insulin bolus delivery records (v4 granular model)
+    /// </summary>
+    public DbSet<BolusEntity> Boluses { get; set; }
+
+    /// <summary>
+    /// Gets or sets the CarbIntakes table for carbohydrate intake records (v4 granular model)
+    /// </summary>
+    public DbSet<CarbIntakeEntity> CarbIntakes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the BGChecks table for blood glucose check records (v4 granular model)
+    /// </summary>
+    public DbSet<BGCheckEntity> BGChecks { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Notes table for user note/annotation records (v4 granular model)
+    /// </summary>
+    public DbSet<NoteEntity> Notes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the BolusCalculations table for bolus calculator/wizard records (v4 granular model)
+    /// </summary>
+    public DbSet<BolusCalculationEntity> BolusCalculations { get; set; }
 
 
     /// <summary>
@@ -1089,6 +1132,144 @@ public class NocturneDbContext : DbContext
             .Entity<CompressionLowSuggestionEntity>()
             .HasIndex(e => e.Status)
             .HasDatabaseName("ix_compression_low_suggestions_status");
+
+        // V4 Granular Model indexes
+
+        // SensorGlucose indexes
+        modelBuilder
+            .Entity<SensorGlucoseEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_sensor_glucose_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<SensorGlucoseEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_sensor_glucose_legacy_id");
+
+        modelBuilder
+            .Entity<SensorGlucoseEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_sensor_glucose_correlation_id");
+
+        // MeterGlucose indexes
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_meter_glucose_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_meter_glucose_legacy_id");
+
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_meter_glucose_correlation_id");
+
+        // Calibrations indexes
+        modelBuilder
+            .Entity<CalibrationEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_calibrations_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<CalibrationEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_calibrations_legacy_id");
+
+        modelBuilder
+            .Entity<CalibrationEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_calibrations_correlation_id");
+
+        // Boluses indexes
+        modelBuilder
+            .Entity<BolusEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_boluses_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<BolusEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_boluses_legacy_id");
+
+        modelBuilder
+            .Entity<BolusEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_boluses_correlation_id");
+
+        // CarbIntakes indexes
+        modelBuilder
+            .Entity<CarbIntakeEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_carb_intakes_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<CarbIntakeEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_carb_intakes_legacy_id");
+
+        modelBuilder
+            .Entity<CarbIntakeEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_carb_intakes_correlation_id");
+
+        // BGChecks indexes
+        modelBuilder
+            .Entity<BGCheckEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_bg_checks_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<BGCheckEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_bg_checks_legacy_id");
+
+        modelBuilder
+            .Entity<BGCheckEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_bg_checks_correlation_id");
+
+        // Notes indexes
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_notes_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_notes_legacy_id");
+
+        modelBuilder
+            .Entity<NoteEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_notes_correlation_id");
+
+        // BolusCalculations indexes
+        modelBuilder
+            .Entity<BolusCalculationEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_bolus_calculations_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<BolusCalculationEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_bolus_calculations_legacy_id");
+
+        modelBuilder
+            .Entity<BolusCalculationEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_bolus_calculations_correlation_id");
     }
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
@@ -1229,6 +1410,40 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<CompressionLowSuggestionEntity>()
             .Property(c => c.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        // V4 Granular Model UUID generators
+        modelBuilder
+            .Entity<SensorGlucoseEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<CalibrationEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<BolusEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<CarbIntakeEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<BGCheckEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<NoteEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<BolusCalculationEntity>()
+            .Property(e => e.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 
         modelBuilder
@@ -1958,6 +2173,71 @@ public class NocturneDbContext : DbContext
                 }
                 clockFaceEntity.UpdatedAt = utcNow;
                 clockFaceEntity.SysUpdatedAt = utcNow;
+            }
+            // V4 Granular Model entities
+            else if (entry.Entity is SensorGlucoseEntity sensorGlucoseEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    sensorGlucoseEntity.SysCreatedAt = utcNow;
+                }
+                sensorGlucoseEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is MeterGlucoseEntity meterGlucoseEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    meterGlucoseEntity.SysCreatedAt = utcNow;
+                }
+                meterGlucoseEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is CalibrationEntity calibrationEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    calibrationEntity.SysCreatedAt = utcNow;
+                }
+                calibrationEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is BolusEntity bolusEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    bolusEntity.SysCreatedAt = utcNow;
+                }
+                bolusEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is CarbIntakeEntity carbIntakeEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    carbIntakeEntity.SysCreatedAt = utcNow;
+                }
+                carbIntakeEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is BGCheckEntity bgCheckEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    bgCheckEntity.SysCreatedAt = utcNow;
+                }
+                bgCheckEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is NoteEntity noteEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    noteEntity.SysCreatedAt = utcNow;
+                }
+                noteEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is BolusCalculationEntity bolusCalculationEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    bolusCalculationEntity.SysCreatedAt = utcNow;
+                }
+                bolusCalculationEntity.SysUpdatedAt = utcNow;
             }
         }
     }
