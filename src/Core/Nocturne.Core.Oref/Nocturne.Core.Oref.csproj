@@ -1,26 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>P/Invoke bindings for the oref Rust library (OpenAPS Reference Implementation)</Description>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Description>P/Invoke bindings for the oref Rust library (OpenAPS Reference Implementation)</Description>
+    </PropertyGroup>
 
-  <!-- Native library deployment - the oref library will be built and placed in runtimes folder -->
-  <ItemGroup Condition="Exists('..\oref\target\release\oref.dll')">
-    <Content Include="..\oref\target\release\oref.dll" Link="runtimes\win-x64\native\oref.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup Condition="Exists('..\oref\target\release\liboref.so')">
-    <Content Include="..\oref\target\release\liboref.so" Link="runtimes\linux-x64\native\liboref.so">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup Condition="Exists('..\oref\target\release\liboref.dylib')">
-    <Content Include="..\oref\target\release\liboref.dylib" Link="runtimes\osx-x64\native\liboref.dylib">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+    <!-- Native library deployment - the oref library will be built and placed in runtimes folder -->
+    <ItemGroup Condition="Exists('..\oref\target\release\oref.dll')">
+        <Content Include="..\oref\target\release\oref.dll" Link="runtimes\win-x64\native\oref.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+    <ItemGroup Condition="Exists('..\oref\target\release\liboref.so')">
+        <Content Include="..\oref\target\release\liboref.so" Link="runtimes\linux-x64\native\liboref.so">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+    <ItemGroup Condition="Exists('..\oref\target\release\liboref.dylib')">
+        <Content Include="..\oref\target\release\liboref.dylib" Link="runtimes\osx-x64\native\liboref.dylib">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 # Nocturne MCP Server
 
-This is a Model Context Protocol (MCP) server for the Nocturne API, allowing AI agents to interact with glucose data and other Nocturne API features.
+This is a Model Context Protocol (MCP) server for the Nocturne API, allowing AI agents to interact with glucose data and
+other Nocturne API features.
 
 ## Overview
 
@@ -64,7 +65,8 @@ docker-compose --profile mcp-web up mcp-server-web
 
 ### 3. Configuration
 
-The server automatically inherits configuration from the root Nocturne project and supports multiple configuration sources:
+The server automatically inherits configuration from the root Nocturne project and supports multiple configuration
+sources:
 
 1. **Environment Variables** (highest priority):
    ```bash
@@ -82,7 +84,7 @@ The server automatically inherits configuration from the root Nocturne project a
    ```
 
 3. **Root project appsettings.json** (lowest priority):
-   - Automatically loads from `../../../../appsettings.json`
+    - Automatically loads from `../../../../appsettings.json`
 
 **Default API URL**: `http://localhost:1612` (if no configuration is provided)
 
@@ -153,6 +155,7 @@ Once the server is running, AI agents can use these tools to:
 ## Transport Options
 
 ### Stdio Transport (Default)
+
 **Best for**: Local Claude Desktop, VS Code, development
 
 - **AI Clients manage the process**: Claude Desktop, VS Code, etc. spawn the MCP server as a child process
@@ -161,6 +164,7 @@ Once the server is running, AI agents can use these tools to:
 - **Simplicity**: Direct process communication without network complexity
 
 ### SSE Transport (Server-Sent Events)
+
 **Best for**: Remote hosting, cloud deployment, shared servers
 
 - **Web-based**: Runs as HTTP server with `/sse` endpoint
@@ -170,13 +174,13 @@ Once the server is running, AI agents can use these tools to:
 
 ### When to Use Each:
 
-| Scenario | Transport | Command |
-|----------|-----------|---------|
-| Claude Desktop (local) | stdio | `dotnet run server` |
-| VS Code (local) | stdio | `dotnet run server` |
-| Remote Claude Desktop | SSE | `dotnet run server --web` |
-| Cloud deployment | SSE | `dotnet run server --web` |
-| Shared team server | SSE | `dotnet run server --web` |
+| Scenario               | Transport | Command                   |
+|------------------------|-----------|---------------------------|
+| Claude Desktop (local) | stdio     | `dotnet run server`       |
+| VS Code (local)        | stdio     | `dotnet run server`       |
+| Remote Claude Desktop  | SSE       | `dotnet run server --web` |
+| Cloud deployment       | SSE       | `dotnet run server --web` |
+| Shared team server     | SSE       | `dotnet run server --web` |
 
 ## MCP Client Integration
 
@@ -260,6 +264,7 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ### VS Code MCP Extension
 
 **Stdio Transport (Local):**
+
 ```json
 {
   "servers": {
@@ -281,6 +286,7 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
 
 **SSE Transport (Remote):**
+
 ```json
 {
   "servers": {
@@ -310,6 +316,7 @@ For **remote/hosted** MCP servers using SSE transport:
 ### Remote Deployment Examples
 
 **Docker on cloud server:**
+
 ```bash
 # On your cloud server
 docker run -d -p 8080:8080 \
@@ -320,6 +327,7 @@ docker run -d -p 8080:8080 \
 ```
 
 **Kubernetes deployment:**
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -360,7 +368,8 @@ spec:
 
 ### Other MCP Clients
 
-This server uses the standard MCP protocol and can be integrated with any MCP-compatible AI client or agent framework. The server supports both **stdio** and **SSE** transports for maximum flexibility.
+This server uses the standard MCP protocol and can be integrated with any MCP-compatible AI client or agent framework.
+The server supports both **stdio** and **SSE** transports for maximum flexibility.
 
 ## Error Handling
 

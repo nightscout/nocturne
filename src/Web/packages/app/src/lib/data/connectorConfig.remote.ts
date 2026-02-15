@@ -141,9 +141,12 @@ export const saveConnectorConfiguration = command(
 		const { apiClient } = locals;
 
 		try {
-			const result = await apiClient.configuration.saveConfiguration(connectorName, {
-				rootElement: configuration,
-			});
+			// Pass configuration directly - NSwag wraps JsonDocument with rootElement
+			// but we want to send the raw JSON object as the request body
+			const result = await apiClient.configuration.saveConfiguration(
+				connectorName,
+				configuration as any,
+			);
 			await getAllConnectorStatus().refresh();
 			return {
 				success: true,

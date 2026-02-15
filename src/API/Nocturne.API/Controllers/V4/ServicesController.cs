@@ -18,25 +18,25 @@ namespace Nocturne.API.Controllers.V4;
 public class ServicesController : ControllerBase
 {
     private readonly IDataSourceService _dataSourceService;
-    private readonly IConnectorSyncService _connectorSyncService;
     private readonly IPostgreSqlService _postgreSqlService;
     private readonly IConnectorHealthService _connectorHealthService;
+    private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
     private readonly IConfiguration _configuration;
 
     public ServicesController(
         IDataSourceService dataSourceService,
-        IConnectorSyncService connectorSyncService,
         IPostgreSqlService postgreSqlService,
         IConnectorHealthService connectorHealthService,
+        IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
         IConfiguration configuration
     )
     {
         _dataSourceService = dataSourceService;
-        _connectorSyncService = connectorSyncService;
         _postgreSqlService = postgreSqlService;
         _connectorHealthService = connectorHealthService;
+        _connectorSyncService = connectorSyncService;
         _logger = logger;
         _configuration = configuration;
     }
@@ -146,6 +146,27 @@ public class ServicesController : ControllerBase
         _logger.LogDebug("Getting available connectors");
         var connectors = _dataSourceService.GetAvailableConnectors();
         return Ok(connectors);
+    }
+
+    /// <summary>
+    /// Get capabilities for a specific connector.
+    /// </summary>
+    /// <param name="id">The connector ID (e.g., "dexcom", "libre")</param>
+    /// <returns>Connector capabilities</returns>
+    [HttpGet("connectors/{id}/capabilities")]
+    [ProducesResponseType(typeof(ConnectorCapabilities), 200)]
+    [ProducesResponseType(404)]
+    public ActionResult<ConnectorCapabilities> GetConnectorCapabilities(string id)
+    {
+        _logger.LogDebug("Getting connector capabilities for: {Id}", id);
+
+        var capabilities = _dataSourceService.GetConnectorCapabilities(id);
+        if (capabilities == null)
+        {
+            return NotFound(new { error = $"Connector not found: {id}" });
+        }
+
+        return Ok(capabilities);
     }
 
     /// <summary>
@@ -289,7 +310,6 @@ public class ServicesController : ControllerBase
             }
             return Ok(result);
         }
-
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting data for data source: {Id}", id);
@@ -316,7 +336,10 @@ public class ServicesController : ControllerBase
 
         try
         {
-            var summary = await _dataSourceService.GetConnectorDataSummaryAsync(id, cancellationToken);
+            var summary = await _dataSourceService.GetConnectorDataSummaryAsync(
+                id,
+                cancellationToken
+            );
             return Ok(summary);
         }
         catch (Exception ex)
@@ -367,81 +390,29 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
-    /// Trigger a manual sync for a specific connector with granular control.
+    /// Trigger a manual sync for a specific connector.
     /// </summary>
-    /// <param name="id">Connector ID</param>
-    /// <param name="request">Sync request parameters</param>
+    /// <param name="id">Connector ID (e.g., "dexcom", "tidepool")</param>
+    /// <param name="request">Sync request parameters (date range and data types)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result of the manual sync operation</returns>
+    /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
-    [ProducesResponseType(404)]
-    [ProducesResponseType(500)]
-    public async Task<ActionResult<Nocturne.Connectors.Core.Models.SyncResult>> TriggerConnectorSync(
+    public async Task<
+        ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
+    > TriggerConnectorSync(
         string id,
         [FromBody] Nocturne.Connectors.Core.Models.SyncRequest request,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
-        _logger.LogInformation("Granular sync triggered for connector {Id} via API", id);
+        if (string.IsNullOrWhiteSpace(id))
+            return BadRequest(new { error = "Connector ID is required" });
 
-        try
-        {
-            var result = await _connectorSyncService.TriggerConnectorSyncAsync(id, request, cancellationToken);
-
-            if (!result.Success)
-            {
-                if (result.Message?.Contains("not found") == true)
-                {
-                    return NotFound(new { error = result.Message });
-                }
-                if (result.Message?.Contains("not configured") == true)
-                {
-                    return BadRequest(new { error = result.Message });
-                }
-                return StatusCode(500, result);
-            }
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error triggering granular sync for {Id}", id);
-            return StatusCode(500, new { error = "Failed to trigger sync" });
-        }
+        var result = await _connectorSyncService.TriggerSyncAsync(id, request, cancellationToken);
+        return Ok(result);
     }
-
-    /// <summary>
-    /// Get the supported sync capabilities for a specific connector.
-    /// </summary>
-    /// <param name="id">Connector ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>List of supported data types</returns>
-    [HttpGet("connectors/{id}/capabilities")]
-    [ProducesResponseType(typeof(List<Nocturne.Connectors.Core.Models.SyncDataType>), 200)]
-    [ProducesResponseType(404)]
-    [ProducesResponseType(500)]
-    public async Task<ActionResult<List<Nocturne.Connectors.Core.Models.SyncDataType>>> GetConnectorCapabilities(
-        string id,
-        CancellationToken cancellationToken = default
-    )
-    {
-        _logger.LogDebug("Getting capabilities for connector {Id}", id);
-
-        try
-        {
-            var capabilities = await _connectorSyncService.GetConnectorCapabilitiesAsync(id, cancellationToken);
-            return Ok(capabilities);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting capabilities for {Id}", id);
-            return StatusCode(500, new { error = "Failed to get connector capabilities" });
-        }
-    }
-
-
 
     /// <summary>
     /// Get sync status for a specific connector, including latest timestamps and connector state.
@@ -477,41 +448,49 @@ public class ServicesController : ControllerBase
                 cancellationToken
             );
 
-            var oldestEntryTimestamp = await _postgreSqlService.GetOldestEntryTimestampBySourceAsync(
-                dataSource,
-                cancellationToken
-            );
+            var oldestEntryTimestamp =
+                await _postgreSqlService.GetOldestEntryTimestampBySourceAsync(
+                    dataSource,
+                    cancellationToken
+                );
 
-            var treatmentTimestamp = await _postgreSqlService.GetLatestTreatmentTimestampBySourceAsync(
-                dataSource,
-                cancellationToken
-            );
+            var treatmentTimestamp =
+                await _postgreSqlService.GetLatestTreatmentTimestampBySourceAsync(
+                    dataSource,
+                    cancellationToken
+                );
 
-            var oldestTreatmentTimestamp = await _postgreSqlService.GetOldestTreatmentTimestampBySourceAsync(
-                dataSource,
-                cancellationToken
-            );
+            var oldestTreatmentTimestamp =
+                await _postgreSqlService.GetOldestTreatmentTimestampBySourceAsync(
+                    dataSource,
+                    cancellationToken
+                );
 
             // Get connector health/state
-            var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(cancellationToken);
+            var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(
+                cancellationToken
+            );
             var connectorStatus = connectorStatuses.FirstOrDefault(c =>
-                c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+                c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+            );
 
-            return Ok(new ConnectorSyncStatus
-            {
-                ConnectorId = id,
-                DataSource = dataSource,
-                LatestEntryTimestamp = entryTimestamp,
-                OldestEntryTimestamp = oldestEntryTimestamp,
-                LatestTreatmentTimestamp = treatmentTimestamp,
-                OldestTreatmentTimestamp = oldestTreatmentTimestamp,
-                HasEntries = entryTimestamp.HasValue,
-                HasTreatments = treatmentTimestamp.HasValue,
-                State = connectorStatus?.State ?? "Unknown",
-                StateMessage = connectorStatus?.StateMessage,
-                IsHealthy = connectorStatus?.IsHealthy ?? false,
-                QueriedAt = DateTime.UtcNow
-            });
+            return Ok(
+                new ConnectorSyncStatus
+                {
+                    ConnectorId = id,
+                    DataSource = dataSource,
+                    LatestEntryTimestamp = entryTimestamp,
+                    OldestEntryTimestamp = oldestEntryTimestamp,
+                    LatestTreatmentTimestamp = treatmentTimestamp,
+                    OldestTreatmentTimestamp = oldestTreatmentTimestamp,
+                    HasEntries = entryTimestamp.HasValue,
+                    HasTreatments = treatmentTimestamp.HasValue,
+                    State = connectorStatus?.State ?? "Unknown",
+                    StateMessage = connectorStatus?.StateMessage,
+                    IsHealthy = connectorStatus?.IsHealthy ?? false,
+                    QueriedAt = DateTime.UtcNow,
+                }
+            );
         }
         catch (Exception ex)
         {
@@ -535,7 +514,7 @@ public class ServicesController : ControllerBase
             "carelink" => "carelink-connector",
             "myfitnesspal" => "myfitnesspal-connector",
             "tidepool" => "tidepool-connector",
-            _ => $"{connectorId.ToLowerInvariant()}-connector"
+            _ => $"{connectorId.ToLowerInvariant()}-connector",
         };
     }
 

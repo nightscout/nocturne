@@ -2,8 +2,6 @@ using System.Collections.Concurrent;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Nightscout.Services;
-using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Models;
 using Nocturne.Core.Constants;

@@ -3,23 +3,23 @@ using Nocturne.Core.Models;
 namespace Nocturne.Connectors.Core.Constants;
 
 /// <summary>
-/// Standard treatment type strings for consistency across connectors.
-/// These match Nightscout's expected event types.
+///     Standard treatment type strings for consistency across connectors.
+///     These match Nightscout's expected event types.
 /// </summary>
 public static class TreatmentTypes
 {
     /// <summary>
-    /// Treatment with both carbs and insulin (meal with bolus).
+    ///     Treatment with both carbs and insulin (meal with bolus).
     /// </summary>
     public const string MealBolus = "Meal Bolus";
 
     /// <summary>
-    /// Treatment with insulin only (correction for high blood glucose).
+    ///     Treatment with insulin only (correction for high blood glucose).
     /// </summary>
     public const string CorrectionBolus = "Correction Bolus";
 
     /// <summary>
-    /// Treatment with carbs only (eating without bolusing).
+    ///     Treatment with carbs only (eating without bolusing).
     /// </summary>
     public const string CarbCorrection = "Carb Correction";
 
@@ -117,7 +117,9 @@ public static class TreatmentTypes
     /// Map from Nightscout eventType strings to typed BolusType enum.
     /// Used for treatment categorization in chart data.
     /// </summary>
-    public static readonly Dictionary<string, BolusType> BolusEventTypeMap = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly Dictionary<string, BolusType> BolusEventTypeMap = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         [Bolus] = BolusType.Bolus,
         [MealBolus] = BolusType.MealBolus,
@@ -133,7 +135,9 @@ public static class TreatmentTypes
     /// Map from Nightscout eventType strings to typed DeviceEventType enum.
     /// Used for treatment categorization in chart data.
     /// </summary>
-    public static readonly Dictionary<string, DeviceEventType> DeviceEventTypeMap = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly Dictionary<string, DeviceEventType> DeviceEventTypeMap = new(
+        StringComparer.OrdinalIgnoreCase
+    )
     {
         [SensorStart] = DeviceEventType.SensorStart,
         [SensorChange] = DeviceEventType.SensorChange,

@@ -110,12 +110,6 @@ public class ConfigCommand : AsyncCommand<ConfigSettings>
                 Console.WriteLine($"   Timezone Offset: {config.GlookoTimezoneOffset}");
                 break;
 
-            case "minimedcarelink":
-                Console.WriteLine();
-                Console.WriteLine("🩺 CareLink Configuration:");
-                Console.WriteLine($"   Username: {MaskSensitiveValue(config.CarelinkUsername)}");
-                Console.WriteLine($"   Region: {config.CarelinkRegion}");
-                break;
 
             case "dexcomshare":
                 Console.WriteLine();
@@ -131,11 +125,6 @@ public class ConfigCommand : AsyncCommand<ConfigSettings>
                 Console.WriteLine($"   Region: {config.LibreRegion}");
                 break;
 
-            case "nightscout":
-                Console.WriteLine();
-                Console.WriteLine("🌙 Nightscout Source Configuration:");
-                Console.WriteLine($"   Source URL: {config.SourceEndpoint}");
-                break;
         }
     }
 

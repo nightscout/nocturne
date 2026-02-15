@@ -1354,7 +1354,7 @@ public class PostgreSqlService : IPostgreSqlService
 
         // Query entry stats
         var entryStats = await _context
-            .Entries.Where(e => e.DataSource == dataSource)
+            .Entries.Where(e => e.DataSource == dataSource || e.Device == dataSource)
             .GroupBy(_ => 1)
             .Select(g => new
             {
@@ -1367,7 +1367,7 @@ public class PostgreSqlService : IPostgreSqlService
 
         // Query treatment stats
         var treatmentStats = await _context
-            .Treatments.Where(t => t.DataSource == dataSource)
+            .Treatments.Where(t => t.DataSource == dataSource || t.EnteredBy == dataSource)
             .GroupBy(_ => 1)
             .Select(g => new
             {
@@ -1375,6 +1375,19 @@ public class PostgreSqlService : IPostgreSqlService
                 TreatmentsLast24Hours = g.Count(t => t.Mills >= oneDayAgo),
                 LastTreatmentMills = g.Max(t => (long?)t.Mills),
                 FirstTreatmentMills = g.Min(t => (long?)t.Mills),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // Query state span stats
+        var stateSpanStats = await _context
+            .StateSpans.Where(s => s.Source == dataSource)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalStateSpans = g.LongCount(),
+                StateSpansLast24Hours = g.Count(s => s.StartMills >= oneDayAgo),
+                LastStateSpanMills = g.Max(s => (long?)s.StartMills),
+                FirstStateSpanMills = g.Min(s => (long?)s.StartMills),
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -1407,6 +1420,20 @@ public class PostgreSqlService : IPostgreSqlService
                     .UtcDateTime
                 : (DateTime?)null;
 
+        var lastStateSpanTime =
+            stateSpanStats?.LastStateSpanMills.HasValue == true
+                ? DateTimeOffset
+                    .FromUnixTimeMilliseconds(stateSpanStats.LastStateSpanMills.Value)
+                    .UtcDateTime
+                : (DateTime?)null;
+
+        var firstStateSpanTime =
+            stateSpanStats?.FirstStateSpanMills.HasValue == true
+                ? DateTimeOffset
+                    .FromUnixTimeMilliseconds(stateSpanStats.FirstStateSpanMills.Value)
+                    .UtcDateTime
+                : (DateTime?)null;
+
         return new DataSourceStats(
             dataSource,
             entryStats?.TotalEntries ?? 0,
@@ -1416,7 +1443,11 @@ public class PostgreSqlService : IPostgreSqlService
             treatmentStats?.TotalTreatments ?? 0,
             treatmentStats?.TreatmentsLast24Hours ?? 0,
             lastTreatmentTime,
-            firstTreatmentTime
+            firstTreatmentTime,
+            stateSpanStats?.TotalStateSpans ?? 0,
+            stateSpanStats?.StateSpansLast24Hours ?? 0,
+            lastStateSpanTime,
+            firstStateSpanTime
         );
     }
 

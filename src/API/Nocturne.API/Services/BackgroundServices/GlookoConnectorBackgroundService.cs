@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Glooko.Models;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;

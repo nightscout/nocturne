@@ -1,4 +1,5 @@
-using Nocturne.Connectors.MyLife.Constants;
+using Nocturne.Connectors.MyLife.Configurations.Constants;
+using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Constants;
@@ -24,10 +25,7 @@ internal static class MyLifeTreatmentFactory
     internal static Treatment CreateWithSuffix(MyLifeEvent ev, string eventType, string suffix)
     {
         var treatment = Create(ev, eventType);
-        if (!string.IsNullOrWhiteSpace(suffix))
-        {
-            treatment.Id = $"{treatment.Id}-{suffix}";
-        }
+        if (!string.IsNullOrWhiteSpace(suffix)) treatment.Id = $"{treatment.Id}-{suffix}";
 
         return treatment;
     }

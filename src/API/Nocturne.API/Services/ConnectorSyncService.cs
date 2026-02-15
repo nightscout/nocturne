@@ -1,278 +1,233 @@
-using System.Net.Http.Json;
-using Nocturne.Connectors.Core.Services;
+using System.Reflection;
+using System.Text.Json;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Dexcom.Configurations;
+using Nocturne.Connectors.Dexcom.Services;
+using Nocturne.Connectors.FreeStyle.Configurations;
+using Nocturne.Connectors.FreeStyle.Services;
+using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Connectors.Glooko.Services;
+using Nocturne.Connectors.MyFitnessPal.Configurations;
+using Nocturne.Connectors.MyFitnessPal.Services;
+using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services;
+using Nocturne.Connectors.MyLife.Configurations;
+using Nocturne.Connectors.MyLife.Services;
+using Nocturne.Connectors.Tidepool.Configurations;
+using Nocturne.Connectors.Tidepool.Services;
+using Nocturne.Core.Contracts;
 
 namespace Nocturne.API.Services;
 
 /// <summary>
-/// Service for triggering manual data synchronization via connector sidecar services.
-/// Determines connector availability by querying the connector's health endpoint directly.
+/// Dispatches manual sync requests to the correct connector service by name.
+/// </summary>
+public interface IConnectorSyncService
+{
+    Task<SyncResult> TriggerSyncAsync(
+        string connectorId,
+        SyncRequest request,
+        CancellationToken ct
+    );
+}
+
+/// <summary>
+/// Resolves the concrete connector service by name and executes a sync.
+/// Follows the same scope/resolve pattern as the connector background services.
 /// </summary>
 public class ConnectorSyncService : IConnectorSyncService
 {
-    /// <summary>
-    /// Named HTTP client for connector sync operations.
-    /// This client has generous timeout settings to allow for long-running sync operations.
-    /// </summary>
-    public const string HttpClientName = "ConnectorSync";
-
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ConnectorSyncService> _logger;
-    private readonly IHttpClientFactory _httpClientFactory;
 
     public ConnectorSyncService(
-        ILogger<ConnectorSyncService> logger,
-        IHttpClientFactory httpClientFactory
+        IServiceProvider serviceProvider,
+        ILogger<ConnectorSyncService> logger
     )
     {
+        _serviceProvider = serviceProvider;
         _logger = logger;
-        _httpClientFactory = httpClientFactory;
     }
 
-    /// <inheritdoc />
-    public bool HasEnabledConnectors()
-    {
-        // This is a synchronous check - we'll assume connectors exist if metadata exists
-        // The actual availability is checked when triggering sync
-        return ConnectorMetadataService.GetAll().Any();
-    }
-
-    /// <inheritdoc />
-    public bool IsConnectorConfigured(string connectorId)
-    {
-        if (string.IsNullOrEmpty(connectorId))
-        {
-            return false;
-        }
-
-        // Check if connector metadata exists
-        var connector = ConnectorMetadataService
-            .GetAll()
-            .FirstOrDefault(c =>
-                c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
-                || c.ServiceName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
-            );
-
-        return connector != null;
-    }
-
-    /// <summary>
-    /// Checks if a connector is reachable and enabled by querying its health endpoint.
-    /// </summary>
-    private async Task<(bool IsAvailable, string? ErrorMessage)> CheckConnectorAvailabilityAsync(
-        string serviceName,
-        string displayName,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient(HttpClientName);
-            var healthUrl = $"http://{serviceName}/health";
-
-            _logger.LogDebug("Checking connector availability at {Url}", healthUrl);
-
-            var response = await client.GetAsync(healthUrl, cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return (false, $"Connector '{displayName}' health check failed with status {response.StatusCode}");
-            }
-
-            // Connector is reachable and healthy - it's available for sync
-            _logger.LogDebug("Connector {DisplayName} is available", displayName);
-            return (true, null);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Failed to reach connector {DisplayName} at {ServiceName}", displayName, serviceName);
-            return (false, $"Connector '{displayName}' is not reachable: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error checking connector {DisplayName} availability", displayName);
-            return (false, $"Error checking connector '{displayName}': {ex.Message}");
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task<Nocturne.Connectors.Core.Models.SyncResult> TriggerConnectorSyncAsync(
+    public async Task<SyncResult> TriggerSyncAsync(
         string connectorId,
-        Nocturne.Connectors.Core.Models.SyncRequest request,
-        CancellationToken cancellationToken = default
+        SyncRequest request,
+        CancellationToken ct
     )
     {
-        // Find connector metadata
-        var connector = ConnectorMetadataService
-            .GetAll()
-            .FirstOrDefault(c =>
-                c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
-                || c.ServiceName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
-            );
-
-        if (connector == null)
-        {
-            return new Nocturne.Connectors.Core.Models.SyncResult
-            {
-                Success = false,
-                Message = $"Connector '{connectorId}' not found",
-            };
-        }
-
-        // Check if connector is actually reachable by querying its health endpoint
-        var (isAvailable, errorMessage) = await CheckConnectorAvailabilityAsync(
-            connector.ServiceName,
-            connector.DisplayName,
-            cancellationToken
-        );
-
-        if (!isAvailable)
-        {
-            return new Nocturne.Connectors.Core.Models.SyncResult
-            {
-                Success = false,
-                Message = errorMessage ?? $"Connector '{connector.DisplayName}' is not available",
-            };
-        }
-
-        return await SyncConnectorAsync(
-            connector.DisplayName,
-            connector.ServiceName,
-            request,
-            cancellationToken
-        );
-    }
-
-    /// <inheritdoc />
-    public async Task<
-        List<Nocturne.Connectors.Core.Models.SyncDataType>
-    > GetConnectorCapabilitiesAsync(
-        string connectorId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var connector = ConnectorMetadataService
-            .GetAll()
-            .FirstOrDefault(c =>
-                c.ConnectorName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
-                || c.ServiceName.Equals(connectorId, StringComparison.OrdinalIgnoreCase)
-            );
-
-        if (connector == null || string.IsNullOrEmpty(connector.ServiceName))
-        {
-            return new List<Nocturne.Connectors.Core.Models.SyncDataType>();
-        }
+        _logger.LogInformation("Manual sync triggered for connector {ConnectorId}", connectorId);
 
         try
         {
-            var url = $"http://{connector.ServiceName}/capabilities";
-            var client = _httpClientFactory.CreateClient(HttpClientName);
-            var response = await client.GetAsync(url, cancellationToken);
-
-            if (response.IsSuccessStatusCode)
+            var result = connectorId.ToLowerInvariant() switch
             {
-                var capabilities = await response.Content.ReadFromJsonAsync<
-                    List<Nocturne.Connectors.Core.Models.SyncDataType>
-                >(cancellationToken: cancellationToken);
-                return capabilities ?? new List<Nocturne.Connectors.Core.Models.SyncDataType>();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching capabilities for {ConnectorId}", connectorId);
-        }
-
-        return new List<Nocturne.Connectors.Core.Models.SyncDataType>();
-    }
-
-    /// <summary>
-    /// Syncs a single connector by calling the sidecar service
-    /// </summary>
-    private async Task<Nocturne.Connectors.Core.Models.SyncResult> SyncConnectorAsync(
-        string displayName,
-        string serviceName,
-        Nocturne.Connectors.Core.Models.SyncRequest request,
-        CancellationToken cancellationToken
-    )
-    {
-        var startTime = DateTimeOffset.UtcNow;
-
-        try
-        {
-            var url = $"http://{serviceName}/sync";
-
-            _logger.LogInformation(
-                "Triggering sidecar sync for {ConnectorName} at {Url} with request {@Request}",
-                displayName,
-                url,
-                request
-            );
-
-            // Use the named HTTP client with connector-specific timeout settings
-            var client = _httpClientFactory.CreateClient(HttpClientName);
-
-            // Send SyncRequest as JSON
-            var response = await client.PostAsJsonAsync(
-                url,
-                request,
-                cancellationToken: cancellationToken
-            );
-
-            if (response.IsSuccessStatusCode)
-            {
-                var syncResult =
-                    await response.Content.ReadFromJsonAsync<Nocturne.Connectors.Core.Models.SyncResult>(
-                        cancellationToken: cancellationToken
-                    );
-
-                _logger.LogInformation(
-                    "Sidecar sync successful for {ConnectorName}. Items: {@ItemsSynced}",
-                    displayName,
-                    syncResult?.ItemsSynced
-                );
-
-                return syncResult
-                    ?? new Nocturne.Connectors.Core.Models.SyncResult
-                    {
-                        Success = true,
-                        StartTime = startTime,
-                        EndTime = DateTimeOffset.UtcNow,
-                    };
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning(
-                    "Sidecar sync failed for {ConnectorName}: {StatusCode} - {Error}",
-                    displayName,
-                    response.StatusCode,
-                    error
-                );
-
-                return new Nocturne.Connectors.Core.Models.SyncResult
+                "dexcom" => await ExecuteSyncAsync<
+                    DexcomConnectorService,
+                    DexcomConnectorConfiguration
+                >("Dexcom", request, ct),
+                "tidepool" => await ExecuteSyncAsync<
+                    TidepoolConnectorService,
+                    TidepoolConnectorConfiguration
+                >("Tidepool", request, ct),
+                "librelinkup" => await ExecuteSyncAsync<
+                    LibreConnectorService,
+                    LibreLinkUpConnectorConfiguration
+                >("LibreLinkUp", request, ct),
+                "glooko" => await ExecuteSyncAsync<
+                    GlookoConnectorService,
+                    GlookoConnectorConfiguration
+                >("Glooko", request, ct),
+                "mylife" => await ExecuteSyncAsync<
+                    MyLifeConnectorService,
+                    MyLifeConnectorConfiguration
+                >("MyLife", request, ct),
+                "myfitnesspal" => await ExecuteSyncAsync<
+                    MyFitnessPalConnectorService,
+                    MyFitnessPalConnectorConfiguration
+                >("MyFitnessPal", request, ct),
+                "nightscout" => await ExecuteSyncAsync<
+                    NightscoutConnectorService,
+                    NightscoutConnectorConfiguration
+                >("Nightscout", request, ct),
+                _ => new SyncResult
                 {
                     Success = false,
-                    Message = $"Sidecar returned {response.StatusCode}: {error}",
-                    StartTime = startTime,
-                    EndTime = DateTimeOffset.UtcNow,
-                };
-            }
+                    Message = $"Unknown connector: {connectorId}",
+                },
+            };
+
+            _logger.LogInformation(
+                "Manual sync for {ConnectorId} completed: Success={Success}, Message={Message}",
+                connectorId,
+                result.Success,
+                result.Message
+            );
+
+            return result;
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("No service for type"))
+        {
+            _logger.LogWarning(
+                "Connector {ConnectorId} is not registered (likely disabled)",
+                connectorId
+            );
+            return new SyncResult
+            {
+                Success = false,
+                Message = $"Connector '{connectorId}' is not configured or is disabled",
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Error triggering sidecar sync for {ConnectorName}: {Message}",
-                displayName,
-                ex.Message
+                "Error during manual sync for connector {ConnectorId}",
+                connectorId
             );
+            return new SyncResult { Success = false, Message = $"Sync failed: {ex.Message}" };
+        }
+    }
 
-            return new Nocturne.Connectors.Core.Models.SyncResult
+    private async Task<SyncResult> ExecuteSyncAsync<TService, TConfig>(
+        string connectorName,
+        SyncRequest request,
+        CancellationToken ct
+    )
+        where TService : class, IConnectorService<TConfig>
+        where TConfig : class, IConnectorConfiguration
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<TService>();
+        var config = scope.ServiceProvider.GetRequiredService<TConfig>();
+
+        await LoadDatabaseConfigurationAsync(scope.ServiceProvider, connectorName, config, ct);
+
+        return await service.SyncDataAsync(request, config, ct);
+    }
+
+    /// <summary>
+    /// Loads runtime configuration and secrets from the database and applies them
+    /// to the config singleton. Ensures DB-stored values (including encrypted
+    /// passwords) are available for manual sync requests.
+    /// </summary>
+    private async Task LoadDatabaseConfigurationAsync<TConfig>(
+        IServiceProvider scopedProvider,
+        string connectorName,
+        TConfig config,
+        CancellationToken ct)
+        where TConfig : class, IConnectorConfiguration
+    {
+        try
+        {
+            var configService = scopedProvider.GetRequiredService<IConnectorConfigurationService>();
+
+            var dbConfig = await configService.GetConfigurationAsync(connectorName, ct);
+            if (dbConfig?.Configuration != null)
             {
-                Success = false,
-                Message = ex.Message,
-                StartTime = startTime,
-                EndTime = DateTimeOffset.UtcNow,
-                Errors = new List<string> { ex.Message },
-            };
+                ApplyJsonToConfig(dbConfig.Configuration, config);
+            }
+
+            var secrets = await configService.GetSecretsAsync(connectorName, ct);
+            if (secrets.Count > 0)
+            {
+                ApplySecretsToConfig(secrets, config);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to load database configuration for {ConnectorName} during manual sync",
+                connectorName);
+        }
+    }
+
+    private static void ApplyJsonToConfig<TConfig>(JsonDocument configuration, TConfig config)
+        where TConfig : class
+    {
+        var properties = config.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var root = configuration.RootElement;
+
+        foreach (var property in properties)
+        {
+            if (!property.CanWrite) continue;
+
+            var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
+            if (!root.TryGetProperty(camelName, out var element)) continue;
+
+            try
+            {
+                if (property.PropertyType == typeof(string) && element.ValueKind == JsonValueKind.String)
+                    property.SetValue(config, element.GetString());
+                else if (property.PropertyType == typeof(int) && element.ValueKind == JsonValueKind.Number)
+                    property.SetValue(config, element.GetInt32());
+                else if (property.PropertyType == typeof(double) && element.ValueKind == JsonValueKind.Number)
+                    property.SetValue(config, element.GetDouble());
+                else if (property.PropertyType == typeof(bool) &&
+                         (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
+                    property.SetValue(config, element.GetBoolean());
+            }
+            catch (Exception)
+            {
+                // Skip properties that can't be set
+            }
+        }
+    }
+
+    private static void ApplySecretsToConfig<TConfig>(Dictionary<string, string> secrets, TConfig config)
+        where TConfig : class
+    {
+        var properties = config.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var property in properties)
+        {
+            if (!property.CanWrite || property.PropertyType != typeof(string)) continue;
+
+            var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
+            if (secrets.TryGetValue(camelName, out var value))
+            {
+                property.SetValue(config, value);
+            }
         }
     }
 }

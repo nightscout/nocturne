@@ -72,14 +72,13 @@
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Shared\Nocturne.Infrastructure.Shared.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MiniMed\Nocturne.Connectors.MiniMed.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tidepool\Nocturne.Connectors.Tidepool.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
   </ItemGroup>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs automatically after build in development mode -->
@@ -90,7 +89,6 @@
     <!-- Skip NSwag generation during publish to avoid issues with runtime dependencies -->
     <GenerateNSwagClient Condition="'$(PublishDir)' != ''">false</GenerateNSwagClient>
   </PropertyGroup>
-
   <Target Name="GenerateClient" AfterTargets="Build" Condition="'$(GenerateNSwagClient)' == 'true'">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
     <Exec

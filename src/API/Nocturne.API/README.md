@@ -4,7 +4,8 @@ A high-performance C# rewrite of the Nightscout API with full feature parity.
 
 ## What is this?
 
-Nocturne is a modern C# implementation of the complete Nightscout API. It runs natively without requiring a legacy Nightscout installation, providing all the same endpoints and functionality you expect from Nightscout.
+Nocturne is a modern C# implementation of the complete Nightscout API. It runs natively without requiring a legacy
+Nightscout installation, providing all the same endpoints and functionality you expect from Nightscout.
 
 **Key Features:**
 
@@ -147,7 +148,8 @@ Configure JWT authentication:
 
 ## Compatibility Proxy (Migration Support)
 
-If you're migrating from an existing Nightscout instance, you can enable the Compatibility Proxy to run both systems side-by-side and compare responses:
+If you're migrating from an existing Nightscout instance, you can enable the Compatibility Proxy to run both systems
+side-by-side and compare responses:
 
 ```json
 {
@@ -164,9 +166,11 @@ If you're migrating from an existing Nightscout instance, you can enable the Com
 }
 ```
 
-This allows you to "try before you buy" - point your data sources at Nocturne, which will forward requests to your existing Nightscout while comparing responses to ensure compatibility.
+This allows you to "try before you buy" - point your data sources at Nocturne, which will forward requests to your
+existing Nightscout while comparing responses to ensure compatibility.
 
-**Note:** The Compatibility Proxy is intended for migration testing. Once you're confident in Nocturne, disable it for optimal performance.
+**Note:** The Compatibility Proxy is intended for migration testing. Once you're confident in Nocturne, disable it for
+optimal performance.
 
 ## Development
 
