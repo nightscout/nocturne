@@ -450,6 +450,7 @@ builder.Services.AddScoped<BolusRepository>();
 builder.Services.AddScoped<CarbIntakeRepository>();
 builder.Services.AddScoped<BGCheckRepository>();
 builder.Services.AddScoped<NoteRepository>();
+builder.Services.AddScoped<DeviceEventRepository>();
 builder.Services.AddScoped<BolusCalculationRepository>();
 
 // V4 Decomposers

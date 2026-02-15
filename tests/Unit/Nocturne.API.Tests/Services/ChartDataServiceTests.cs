@@ -22,7 +22,6 @@ public class ChartDataServiceTests
 
     private readonly Mock<IIobService> _mockIobService = new();
     private readonly Mock<ICobService> _mockCobService = new();
-    private readonly Mock<ITreatmentService> _mockTreatmentService = new();
     private readonly Mock<ITreatmentFoodService> _mockTreatmentFoodService = new();
     private readonly Mock<IDeviceStatusService> _mockDeviceStatusService = new();
     private readonly Mock<IProfileService> _mockProfileService = new();
@@ -31,6 +30,7 @@ public class ChartDataServiceTests
     private readonly Mock<BolusRepository> _mockBolusRepo;
     private readonly Mock<CarbIntakeRepository> _mockCarbIntakeRepo;
     private readonly Mock<BGCheckRepository> _mockBgCheckRepo;
+    private readonly Mock<DeviceEventRepository> _mockDeviceEventRepo;
     private readonly Mock<StateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<SystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<TrackerRepository> _mockTrackerRepo;
@@ -49,6 +49,7 @@ public class ChartDataServiceTests
         _mockBolusRepo = new Mock<BolusRepository>(MockBehavior.Loose, null!, null!);
         _mockCarbIntakeRepo = new Mock<CarbIntakeRepository>(MockBehavior.Loose, null!, null!);
         _mockBgCheckRepo = new Mock<BGCheckRepository>(MockBehavior.Loose, null!, null!);
+        _mockDeviceEventRepo = new Mock<DeviceEventRepository>(MockBehavior.Loose, null!, null!);
         _mockStateSpanRepo = new Mock<StateSpanRepository>(MockBehavior.Loose, null!, null!, null!);
         _mockSystemEventRepo = new Mock<SystemEventRepository>(MockBehavior.Loose, null!);
         _mockTrackerRepo = new Mock<TrackerRepository>(MockBehavior.Loose, null!);
@@ -56,7 +57,6 @@ public class ChartDataServiceTests
         _service = new ChartDataService(
             _mockIobService.Object,
             _mockCobService.Object,
-            _mockTreatmentService.Object,
             _mockTreatmentFoodService.Object,
             _mockDeviceStatusService.Object,
             _mockProfileService.Object,
@@ -65,6 +65,7 @@ public class ChartDataServiceTests
             _mockBolusRepo.Object,
             _mockCarbIntakeRepo.Object,
             _mockBgCheckRepo.Object,
+            _mockDeviceEventRepo.Object,
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
@@ -437,7 +438,7 @@ public class ChartDataServiceTests
         [Fact]
         public void EmptyList_ReturnsEmpty()
         {
-            var result = ChartDataService.BuildDeviceEventMarkers(new List<Treatment>());
+            var result = ChartDataService.BuildDeviceEventMarkers(new List<DeviceEvent>());
 
             result.Should().BeEmpty();
         }
@@ -445,17 +446,17 @@ public class ChartDataServiceTests
         [Fact]
         public void DeviceEvent_SiteChange_Categorized()
         {
-            var treatments = new List<Treatment>
+            var deviceEvents = new List<DeviceEvent>
             {
                 new()
                 {
-                    EventType = "Site Change",
+                    EventType = DeviceEventType.SiteChange,
                     Mills = TestMills,
                     Notes = "Left arm",
                 },
             };
 
-            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
+            var result = ChartDataService.BuildDeviceEventMarkers(deviceEvents);
 
             result.Should().HaveCount(1);
             result[0].EventType.Should().Be(DeviceEventType.SiteChange);
@@ -466,12 +467,12 @@ public class ChartDataServiceTests
         [Fact]
         public void DeviceEvent_SensorStart_Categorized()
         {
-            var treatments = new List<Treatment>
+            var deviceEvents = new List<DeviceEvent>
             {
-                new() { EventType = "Sensor Start", Mills = TestMills },
+                new() { EventType = DeviceEventType.SensorStart, Mills = TestMills },
             };
 
-            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
+            var result = ChartDataService.BuildDeviceEventMarkers(deviceEvents);
 
             result.Should().HaveCount(1);
             result[0].EventType.Should().Be(DeviceEventType.SensorStart);
@@ -481,17 +482,17 @@ public class ChartDataServiceTests
         [Fact]
         public void AllDeviceEventTypes_Categorized()
         {
-            var treatments = new List<Treatment>
+            var deviceEvents = new List<DeviceEvent>
             {
-                new() { EventType = "Sensor Start", Mills = TestMills },
-                new() { EventType = "Sensor Change", Mills = TestMills + 1000 },
-                new() { EventType = "Sensor Stop", Mills = TestMills + 2000 },
-                new() { EventType = "Site Change", Mills = TestMills + 3000 },
-                new() { EventType = "Insulin Change", Mills = TestMills + 4000 },
-                new() { EventType = "Pump Battery Change", Mills = TestMills + 5000 },
+                new() { EventType = DeviceEventType.SensorStart, Mills = TestMills },
+                new() { EventType = DeviceEventType.SensorChange, Mills = TestMills + 1000 },
+                new() { EventType = DeviceEventType.SensorStop, Mills = TestMills + 2000 },
+                new() { EventType = DeviceEventType.SiteChange, Mills = TestMills + 3000 },
+                new() { EventType = DeviceEventType.InsulinChange, Mills = TestMills + 4000 },
+                new() { EventType = DeviceEventType.PumpBatteryChange, Mills = TestMills + 5000 },
             };
 
-            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
+            var result = ChartDataService.BuildDeviceEventMarkers(deviceEvents);
 
             result.Should().HaveCount(6);
             result[0].EventType.Should().Be(DeviceEventType.SensorStart);
@@ -503,16 +504,27 @@ public class ChartDataServiceTests
         }
 
         [Fact]
-        public void NonDeviceEventTreatment_NotIncluded()
+        public void NewDeviceEventTypes_Categorized()
         {
-            var treatments = new List<Treatment>
+            var deviceEvents = new List<DeviceEvent>
             {
-                new() { EventType = "Meal Bolus", Insulin = 5.0, Mills = TestMills },
+                new() { EventType = DeviceEventType.PodChange, Mills = TestMills },
+                new() { EventType = DeviceEventType.ReservoirChange, Mills = TestMills + 1000 },
+                new() { EventType = DeviceEventType.CannulaChange, Mills = TestMills + 2000 },
+                new() { EventType = DeviceEventType.TransmitterSensorInsert, Mills = TestMills + 3000 },
             };
 
-            var result = ChartDataService.BuildDeviceEventMarkers(treatments);
+            var result = ChartDataService.BuildDeviceEventMarkers(deviceEvents);
 
-            result.Should().BeEmpty();
+            result.Should().HaveCount(4);
+            result[0].EventType.Should().Be(DeviceEventType.PodChange);
+            result[0].Color.Should().Be(ChartColor.InsulinBolus);
+            result[1].EventType.Should().Be(DeviceEventType.ReservoirChange);
+            result[1].Color.Should().Be(ChartColor.InsulinBasal);
+            result[2].EventType.Should().Be(DeviceEventType.CannulaChange);
+            result[2].Color.Should().Be(ChartColor.InsulinBolus);
+            result[3].EventType.Should().Be(DeviceEventType.TransmitterSensorInsert);
+            result[3].Color.Should().Be(ChartColor.GlucoseInRange);
         }
     }
 
@@ -1832,6 +1844,10 @@ public class ChartDataServiceTests
         [InlineData(DeviceEventType.SiteChange, ChartColor.InsulinBolus)]
         [InlineData(DeviceEventType.InsulinChange, ChartColor.InsulinBasal)]
         [InlineData(DeviceEventType.PumpBatteryChange, ChartColor.Carbs)]
+        [InlineData(DeviceEventType.PodChange, ChartColor.InsulinBolus)]
+        [InlineData(DeviceEventType.ReservoirChange, ChartColor.InsulinBasal)]
+        [InlineData(DeviceEventType.CannulaChange, ChartColor.InsulinBolus)]
+        [InlineData(DeviceEventType.TransmitterSensorInsert, ChartColor.GlucoseInRange)]
         public void FromDeviceEvent_AllTypes(DeviceEventType type, ChartColor expected)
         {
             ChartColorMapper.FromDeviceEvent(type).Should().Be(expected);

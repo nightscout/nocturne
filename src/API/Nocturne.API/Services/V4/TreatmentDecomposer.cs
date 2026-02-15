@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -20,6 +21,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer
     private readonly CarbIntakeRepository _carbIntakeRepository;
     private readonly BGCheckRepository _bgCheckRepository;
     private readonly NoteRepository _noteRepository;
+    private readonly DeviceEventRepository _deviceEventRepository;
     private readonly BolusCalculationRepository _bolusCalculationRepository;
     private readonly IStateSpanService _stateSpanService;
     private readonly ILogger<TreatmentDecomposer> _logger;
@@ -39,6 +41,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         CarbIntakeRepository carbIntakeRepository,
         BGCheckRepository bgCheckRepository,
         NoteRepository noteRepository,
+        DeviceEventRepository deviceEventRepository,
         BolusCalculationRepository bolusCalculationRepository,
         IStateSpanService stateSpanService,
         ILogger<TreatmentDecomposer> logger)
@@ -47,6 +50,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         _carbIntakeRepository = carbIntakeRepository;
         _bgCheckRepository = bgCheckRepository;
         _noteRepository = noteRepository;
+        _deviceEventRepository = deviceEventRepository;
         _bolusCalculationRepository = bolusCalculationRepository;
         _stateSpanService = stateSpanService;
         _logger = logger;
@@ -70,9 +74,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         var produceBGCheck = false;
         var produceNote = false;
         var produceBolusCalc = false;
+        var produceDeviceEvent = false;
         var delegateToStateSpan = false;
         var isProfileSwitch = false;
         var isAnnouncement = false;
+        DeviceEventType parsedDeviceEventType = default;
 
         if (IsTempBasal(eventType))
         {
@@ -82,6 +88,10 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         {
             isProfileSwitch = true;
             delegateToStateSpan = true;
+        }
+        else if (eventType != null && TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
+        {
+            produceDeviceEvent = true;
         }
         else if (string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
               || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase))
@@ -167,9 +177,14 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             await DecomposeBolusCalculationAsync(treatment, result, ct);
         }
 
+        if (produceDeviceEvent)
+        {
+            await DecomposeDeviceEventAsync(treatment, result, parsedDeviceEventType, ct);
+        }
+
         // If nothing was produced and there's no delegation, log a warning
         if (!produceBolus && !produceCarbIntake && !produceBGCheck
-            && !produceNote && !produceBolusCalc && !delegateToStateSpan)
+            && !produceNote && !produceBolusCalc && !produceDeviceEvent && !delegateToStateSpan)
         {
             _logger.LogWarning(
                 "Unknown event type '{EventType}' for treatment {Id} with no insulin/carbs, skipping decomposition",
@@ -270,6 +285,29 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             var created = await _noteRepository.CreateAsync(model, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created Note from legacy treatment {LegacyId}", treatment.Id);
+        }
+    }
+
+    private async Task DecomposeDeviceEventAsync(Treatment treatment, V4Models.DecompositionResult result, DeviceEventType deviceEventType, CancellationToken ct)
+    {
+        var existing = treatment.Id != null
+            ? await _deviceEventRepository.GetByLegacyIdAsync(treatment.Id, ct)
+            : null;
+
+        var model = MapToDeviceEvent(treatment, result.CorrelationId, deviceEventType);
+
+        if (existing != null)
+        {
+            model.Id = existing.Id;
+            var updated = await _deviceEventRepository.UpdateAsync(existing.Id, model, ct);
+            result.UpdatedRecords.Add(updated);
+            _logger.LogDebug("Updated existing DeviceEvent {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
+        }
+        else
+        {
+            var created = await _deviceEventRepository.CreateAsync(model, ct);
+            result.CreatedRecords.Add(created);
+            _logger.LogDebug("Created DeviceEvent from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
@@ -391,6 +429,21 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Text = treatment.Notes ?? string.Empty,
             EventType = treatment.EventType,
             IsAnnouncement = isAnnouncement || (treatment.IsAnnouncement ?? false),
+            Device = treatment.EnteredBy,
+            DataSource = treatment.DataSource,
+            UtcOffset = treatment.UtcOffset,
+            CorrelationId = correlationId
+        };
+    }
+
+    internal static V4Models.DeviceEvent MapToDeviceEvent(Treatment treatment, Guid? correlationId, DeviceEventType deviceEventType)
+    {
+        return new V4Models.DeviceEvent
+        {
+            LegacyId = treatment.Id,
+            Mills = treatment.Mills,
+            EventType = deviceEventType,
+            Notes = treatment.Notes,
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,

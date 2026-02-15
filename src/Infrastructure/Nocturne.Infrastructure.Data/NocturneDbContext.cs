@@ -267,6 +267,11 @@ public class NocturneDbContext : DbContext
     public DbSet<NoteEntity> Notes { get; set; }
 
     /// <summary>
+    /// Gets or sets the DeviceEvents table for device event records (v4 granular model)
+    /// </summary>
+    public DbSet<DeviceEventEntity> DeviceEvents { get; set; }
+
+    /// <summary>
     /// Gets or sets the BolusCalculations table for bolus calculator/wizard records (v4 granular model)
     /// </summary>
     public DbSet<BolusCalculationEntity> BolusCalculations { get; set; }
@@ -1254,6 +1259,23 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.CorrelationId)
             .HasDatabaseName("ix_notes_correlation_id");
 
+        // DeviceEvents indexes
+        modelBuilder
+            .Entity<DeviceEventEntity>()
+            .HasIndex(e => e.Mills)
+            .HasDatabaseName("ix_device_events_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<DeviceEventEntity>()
+            .HasIndex(e => e.LegacyId)
+            .HasDatabaseName("ix_device_events_legacy_id");
+
+        modelBuilder
+            .Entity<DeviceEventEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_device_events_correlation_id");
+
         // BolusCalculations indexes
         modelBuilder
             .Entity<BolusCalculationEntity>()
@@ -1439,6 +1461,10 @@ public class NocturneDbContext : DbContext
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
             .Entity<NoteEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<DeviceEventEntity>()
             .Property(e => e.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
@@ -2230,6 +2256,14 @@ public class NocturneDbContext : DbContext
                     noteEntity.SysCreatedAt = utcNow;
                 }
                 noteEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is DeviceEventEntity deviceEventEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    deviceEventEntity.SysCreatedAt = utcNow;
+                }
+                deviceEventEntity.SysUpdatedAt = utcNow;
             }
             else if (entry.Entity is BolusCalculationEntity bolusCalculationEntity)
             {

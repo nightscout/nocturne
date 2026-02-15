@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.API.Helpers;
-using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -15,17 +14,14 @@ namespace Nocturne.API.Services;
 
 /// <summary>
 /// Service that orchestrates all data fetching and computation for the dashboard chart.
-/// Loads profiles, fetches glucose/bolus/carb/bg-check data from v4 tables, builds
-/// Treatment adapters for IOB/COB computation, state spans, and assembles the final DTO.
-///
-/// Legacy reads: Device event markers still come from ITreatmentService because there
-/// is no v4 DeviceEvent model yet. All other data flows through v4 repositories.
+/// Loads profiles, fetches glucose/bolus/carb/bg-check/device-event data from v4 tables,
+/// builds Treatment adapters for IOB/COB computation, state spans, and assembles the final DTO.
+/// All data flows through v4 repositories.
 /// </summary>
 public class ChartDataService : IChartDataService
 {
     private readonly IIobService _iobService;
     private readonly ICobService _cobService;
-    private readonly ITreatmentService _treatmentService;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDeviceStatusService _deviceStatusService;
     private readonly IProfileService _profileService;
@@ -34,6 +30,7 @@ public class ChartDataService : IChartDataService
     private readonly BolusRepository _bolusRepository;
     private readonly CarbIntakeRepository _carbIntakeRepository;
     private readonly BGCheckRepository _bgCheckRepository;
+    private readonly DeviceEventRepository _deviceEventRepository;
     private readonly StateSpanRepository _stateSpanRepository;
     private readonly SystemEventRepository _systemEventRepository;
     private readonly TrackerRepository _trackerRepository;
@@ -50,7 +47,6 @@ public class ChartDataService : IChartDataService
     public ChartDataService(
         IIobService iobService,
         ICobService cobService,
-        ITreatmentService treatmentService,
         ITreatmentFoodService treatmentFoodService,
         IDeviceStatusService deviceStatusService,
         IProfileService profileService,
@@ -59,6 +55,7 @@ public class ChartDataService : IChartDataService
         BolusRepository bolusRepository,
         CarbIntakeRepository carbIntakeRepository,
         BGCheckRepository bgCheckRepository,
+        DeviceEventRepository deviceEventRepository,
         StateSpanRepository stateSpanRepository,
         SystemEventRepository systemEventRepository,
         TrackerRepository trackerRepository,
@@ -68,7 +65,6 @@ public class ChartDataService : IChartDataService
     {
         _iobService = iobService;
         _cobService = cobService;
-        _treatmentService = treatmentService;
         _treatmentFoodService = treatmentFoodService;
         _deviceStatusService = deviceStatusService;
         _profileService = profileService;
@@ -77,6 +73,7 @@ public class ChartDataService : IChartDataService
         _bolusRepository = bolusRepository;
         _carbIntakeRepository = carbIntakeRepository;
         _bgCheckRepository = bgCheckRepository;
+        _deviceEventRepository = deviceEventRepository;
         _stateSpanRepository = stateSpanRepository;
         _systemEventRepository = systemEventRepository;
         _trackerRepository = trackerRepository;
@@ -169,19 +166,17 @@ public class ChartDataService : IChartDataService
         // engines, we build thin Treatment adapters containing only the fields they actually use.
         var syntheticTreatments = BuildTreatmentsFromV4Data(bolusList, carbIntakeList);
 
-        // TODO: Device event markers still come from legacy treatments because there is no
-        // v4 DeviceEvent model yet. This fetch is scoped to the display range only (no buffer)
-        // and only used for device events (site changes, sensor starts, etc.).
+        // Fetch device events from v4 DeviceEvent table (display range only)
         var displayRangeLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 10));
-        var deviceEventFind = $"{{\"mills\":{{\"$gte\":{startTime},\"$lte\":{endTime}}}}}";
-        var deviceEventTreatments =
+        var deviceEventList =
             (
-                await _treatmentService.GetTreatmentsAsync(
-                    find: deviceEventFind,
-                    count: displayRangeLimit,
-                    cancellationToken: cancellationToken
+                await _deviceEventRepository.GetAsync(
+                    from: startTime, to: endTime,
+                    device: null, source: null,
+                    limit: displayRangeLimit, offset: 0,
+                    descending: true, ct: cancellationToken
                 )
-            )?.ToList() ?? new List<Treatment>();
+            ).ToList();
 
         // Device status - only need recent entries for IOB source detection
         var deviceStatusList =
@@ -278,8 +273,8 @@ public class ChartDataService : IChartDataService
         var carbMarkers = BuildCarbMarkers(displayCarbIntakes, timezone);
         var bgCheckMarkers = BuildBgCheckMarkers(bgCheckList);
 
-        // Device event markers still come from legacy treatments (no v4 equivalent)
-        var deviceEventMarkers = BuildDeviceEventMarkers(deviceEventTreatments);
+        // Device event markers from v4 DeviceEvent table
+        var deviceEventMarkers = BuildDeviceEventMarkers(deviceEventList);
 
         // Process food offsets using carb intake correlation IDs and CarbIntake for base lookup
         var carbTreatmentIds = displayCarbIntakes
@@ -554,31 +549,17 @@ public class ChartDataService : IChartDataService
             .ToList();
     }
 
-    internal static List<DeviceEventMarkerDto> BuildDeviceEventMarkers(List<Treatment> treatments)
+    internal static List<DeviceEventMarkerDto> BuildDeviceEventMarkers(List<DeviceEvent> deviceEvents)
     {
-        var markers = new List<DeviceEventMarkerDto>();
-        foreach (var t in treatments)
-        {
-            if (
-                t.EventType != null
-                && TreatmentTypes.DeviceEventTypeMap.TryGetValue(
-                    t.EventType,
-                    out var deviceEventType
-                )
-            )
+        return deviceEvents
+            .Select(e => new DeviceEventMarkerDto
             {
-                markers.Add(
-                    new DeviceEventMarkerDto
-                    {
-                        Time = t.Mills,
-                        EventType = deviceEventType,
-                        Notes = t.Notes,
-                        Color = ChartColorMapper.FromDeviceEvent(deviceEventType),
-                    }
-                );
-            }
-        }
-        return markers;
+                Time = e.Mills,
+                EventType = e.EventType,
+                Notes = e.Notes,
+                Color = ChartColorMapper.FromDeviceEvent(e.EventType),
+            })
+            .ToList();
     }
 
     internal static List<BgCheckMarkerDto> BuildBgCheckMarkers(List<BGCheck> bgChecks)

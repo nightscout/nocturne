@@ -114,6 +114,26 @@ public static class TreatmentTypes
     public const string PumpBatteryChange = "Pump Battery Change";
 
     /// <summary>
+    /// Pod change event (Omnipod).
+    /// </summary>
+    public const string PodChange = "Pod Change";
+
+    /// <summary>
+    /// Reservoir/cartridge change event.
+    /// </summary>
+    public const string ReservoirChangeEvent = "Reservoir Change";
+
+    /// <summary>
+    /// Cannula change event.
+    /// </summary>
+    public const string CannulaChange = "Cannula Change";
+
+    /// <summary>
+    /// Transmitter or sensor insert event.
+    /// </summary>
+    public const string TransmitterSensorInsert = "Transmitter Sensor Insert";
+
+    /// <summary>
     /// Map from Nightscout eventType strings to typed BolusType enum.
     /// Used for treatment categorization in chart data.
     /// </summary>
@@ -141,5 +161,9 @@ public static class TreatmentTypes
         [SiteChange] = DeviceEventType.SiteChange,
         [InsulinChange] = DeviceEventType.InsulinChange,
         [PumpBatteryChange] = DeviceEventType.PumpBatteryChange,
+        [PodChange] = DeviceEventType.PodChange,
+        [ReservoirChangeEvent] = DeviceEventType.ReservoirChange,
+        [CannulaChange] = DeviceEventType.CannulaChange,
+        [TransmitterSensorInsert] = DeviceEventType.TransmitterSensorInsert,
     };
 }

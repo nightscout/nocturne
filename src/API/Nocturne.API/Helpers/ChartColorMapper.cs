@@ -36,11 +36,15 @@ public static class ChartColorMapper
     public static ChartColor FromDeviceEvent(DeviceEventType type) =>
         type switch
         {
-            DeviceEventType.SensorStart or DeviceEventType.SensorChange =>
+            DeviceEventType.SensorStart or DeviceEventType.SensorChange
+                or DeviceEventType.TransmitterSensorInsert =>
                 ChartColor.GlucoseInRange,
             DeviceEventType.SensorStop => ChartColor.GlucoseLow,
-            DeviceEventType.SiteChange => ChartColor.InsulinBolus,
-            DeviceEventType.InsulinChange => ChartColor.InsulinBasal,
+            DeviceEventType.SiteChange or DeviceEventType.PodChange
+                or DeviceEventType.CannulaChange =>
+                ChartColor.InsulinBolus,
+            DeviceEventType.InsulinChange or DeviceEventType.ReservoirChange =>
+                ChartColor.InsulinBasal,
             DeviceEventType.PumpBatteryChange => ChartColor.Carbs,
             _ => ChartColor.MutedForeground,
         };

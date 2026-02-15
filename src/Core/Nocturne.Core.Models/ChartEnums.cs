@@ -15,6 +15,10 @@ public enum DeviceEventType
     SiteChange,
     InsulinChange,
     PumpBatteryChange,
+    PodChange,
+    ReservoirChange,
+    CannulaChange,
+    TransmitterSensorInsert,
 }
 
 /// <summary>

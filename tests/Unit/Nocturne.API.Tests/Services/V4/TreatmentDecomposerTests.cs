@@ -26,11 +26,12 @@ public class TreatmentDecomposerTests : IDisposable
         var carbIntakeRepo = new CarbIntakeRepository(_context, NullLogger<CarbIntakeRepository>.Instance);
         var bgCheckRepo = new BGCheckRepository(_context, NullLogger<BGCheckRepository>.Instance);
         var noteRepo = new NoteRepository(_context, NullLogger<NoteRepository>.Instance);
+        var deviceEventRepo = new DeviceEventRepository(_context, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(_context, NullLogger<BolusCalculationRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
 
         _decomposer = new TreatmentDecomposer(
-            bolusRepo, carbIntakeRepo, bgCheckRepo, noteRepo, bolusCalcRepo,
+            bolusRepo, carbIntakeRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             _stateSpanServiceMock.Object,
             NullLogger<TreatmentDecomposer>.Instance);
     }
@@ -856,6 +857,103 @@ public class TreatmentDecomposerTests : IDisposable
         // Assert
         var note = result.CreatedRecords[0].Should().BeOfType<V4Models.Note>().Subject;
         note.IsAnnouncement.Should().BeTrue("the treatment's IsAnnouncement flag should be respected");
+    }
+
+    #endregion
+
+    #region Device Events → DeviceEvent
+
+    [Theory]
+    [InlineData("Site Change", DeviceEventType.SiteChange)]
+    [InlineData("Sensor Start", DeviceEventType.SensorStart)]
+    [InlineData("Sensor Change", DeviceEventType.SensorChange)]
+    [InlineData("Sensor Stop", DeviceEventType.SensorStop)]
+    [InlineData("Insulin Change", DeviceEventType.InsulinChange)]
+    [InlineData("Pump Battery Change", DeviceEventType.PumpBatteryChange)]
+    [InlineData("Pod Change", DeviceEventType.PodChange)]
+    [InlineData("Reservoir Change", DeviceEventType.ReservoirChange)]
+    [InlineData("Cannula Change", DeviceEventType.CannulaChange)]
+    [InlineData("Transmitter Sensor Insert", DeviceEventType.TransmitterSensorInsert)]
+    public async Task DecomposeAsync_DeviceEventTypes_CreatesDeviceEvent(string eventType, DeviceEventType expectedType)
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = $"device-event-{eventType.GetHashCode()}",
+            EventType = eventType,
+            Mills = 1700000000000,
+            Notes = "Test device event",
+            EnteredBy = "xDrip+",
+            DataSource = "manual",
+            UtcOffset = -300
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        var deviceEvent = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
+        deviceEvent.LegacyId.Should().Be(treatment.Id);
+        deviceEvent.Mills.Should().Be(1700000000000);
+        deviceEvent.EventType.Should().Be(expectedType);
+        deviceEvent.Notes.Should().Be("Test device event");
+        deviceEvent.Device.Should().Be("xDrip+");
+        deviceEvent.DataSource.Should().Be("manual");
+        deviceEvent.UtcOffset.Should().Be(-300);
+        deviceEvent.CorrelationId.Should().Be(result.CorrelationId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SiteChangeTwice_UpdatesInsteadOfCreatingDuplicate()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "idempotent-site-change",
+            EventType = "Site Change",
+            Mills = 1700000000000,
+            Notes = "Right arm"
+        };
+
+        // Act - first call creates
+        var firstResult = await _decomposer.DecomposeAsync(treatment);
+        firstResult.CreatedRecords.Should().HaveCount(1);
+        firstResult.UpdatedRecords.Should().BeEmpty();
+
+        // Modify notes
+        treatment.Notes = "Left arm";
+
+        // Act - second call should update
+        var secondResult = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        secondResult.CreatedRecords.Should().BeEmpty();
+        secondResult.UpdatedRecords.Should().HaveCount(1);
+
+        var updated = secondResult.UpdatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
+        updated.LegacyId.Should().Be("idempotent-site-change");
+        updated.Notes.Should().Be("Left arm");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_DeviceEventWithNullNotes_MapsNullNotes()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "sensor-start-no-notes",
+            EventType = "Sensor Start",
+            Mills = 1700000000000,
+            Notes = null
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        var deviceEvent = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
+        deviceEvent.Notes.Should().BeNull();
     }
 
     #endregion
