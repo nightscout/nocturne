@@ -276,6 +276,21 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<BolusCalculationEntity> BolusCalculations { get; set; }
 
+    /// <summary>
+    /// Gets or sets the ApsSnapshots table for APS algorithm snapshot records (v4 granular model)
+    /// </summary>
+    public DbSet<ApsSnapshotEntity> ApsSnapshots { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PumpSnapshots table for pump status snapshot records (v4 granular model)
+    /// </summary>
+    public DbSet<PumpSnapshotEntity> PumpSnapshots { get; set; }
+
+    /// <summary>
+    /// Gets or sets the UploaderSnapshots table for uploader/phone status snapshot records (v4 granular model)
+    /// </summary>
+    public DbSet<UploaderSnapshotEntity> UploaderSnapshots { get; set; }
+
 
     /// <summary>
     /// Configure the database model and relationships
