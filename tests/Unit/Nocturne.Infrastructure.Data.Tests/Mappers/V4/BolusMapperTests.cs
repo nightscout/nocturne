@@ -319,6 +319,63 @@ public class BolusMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void ToEntity_MapsApsFields()
+    {
+        var model = new Bolus
+        {
+            Mills = 1700000000000,
+            Insulin = 3.0,
+            SyncIdentifier = "loop-sync-abc123",
+            InsulinType = "Humalog",
+            Unabsorbed = 1.5,
+            IsBasalInsulin = true,
+            PumpId = "pump-42",
+            PumpSerial = "SN-12345",
+            PumpType = "Omnipod DASH"
+        };
+
+        var entity = BolusMapper.ToEntity(model);
+
+        entity.SyncIdentifier.Should().Be("loop-sync-abc123");
+        entity.InsulinType.Should().Be("Humalog");
+        entity.Unabsorbed.Should().Be(1.5);
+        entity.IsBasalInsulin.Should().BeTrue();
+        entity.PumpId.Should().Be("pump-42");
+        entity.PumpSerial.Should().Be("SN-12345");
+        entity.PumpType.Should().Be("Omnipod DASH");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MapsApsFields()
+    {
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Mills = 1700000000000,
+            Insulin = 3.0,
+            SyncIdentifier = "loop-sync-abc123",
+            InsulinType = "Humalog",
+            Unabsorbed = 1.5,
+            IsBasalInsulin = true,
+            PumpId = "pump-42",
+            PumpSerial = "SN-12345",
+            PumpType = "Omnipod DASH"
+        };
+
+        var model = BolusMapper.ToDomainModel(entity);
+
+        model.SyncIdentifier.Should().Be("loop-sync-abc123");
+        model.InsulinType.Should().Be("Humalog");
+        model.Unabsorbed.Should().Be(1.5);
+        model.IsBasalInsulin.Should().BeTrue();
+        model.PumpId.Should().Be("pump-42");
+        model.PumpSerial.Should().Be("SN-12345");
+        model.PumpType.Should().Be("Omnipod DASH");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void RoundTrip_PreservesAllFields()
     {
         var id = Guid.CreateVersion7();

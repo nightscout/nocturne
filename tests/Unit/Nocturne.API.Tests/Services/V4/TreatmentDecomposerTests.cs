@@ -836,6 +836,221 @@ public class TreatmentDecomposerTests : IDisposable
 
     #endregion
 
+    #region Temporary Override → Delegates to IStateSpanService
+
+    [Fact]
+    public async Task DecomposeAsync_TemporaryOverride_DelegatesToStateSpanService()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "override-1",
+            EventType = "Temporary Override",
+            Mills = 1700000000000,
+            Duration = 60,
+            Reason = "Workout",
+            TargetTop = 150,
+            TargetBottom = 80,
+            InsulinNeedsScaleFactor = 0.8,
+            EnteredBy = "AAPS"
+        };
+
+        var expectedStateSpan = new StateSpan
+        {
+            Id = "state-span-789",
+            Category = StateSpanCategory.Override,
+            StartMills = 1700000000000
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        result.CreatedRecords[0].Should().BeOfType<StateSpan>();
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss =>
+                    ss.Category == StateSpanCategory.Override
+                    && ss.State == "Custom"
+                    && ss.StartMills == 1700000000000
+                    && ss.OriginalId == "override-1"
+                    && ss.Metadata != null
+                    && ss.Metadata.ContainsKey("reason")
+                    && ss.Metadata.ContainsKey("targetTop")
+                    && ss.Metadata.ContainsKey("targetBottom")
+                    && ss.Metadata.ContainsKey("insulinNeedsScaleFactor")
+                    && ss.Metadata.ContainsKey("enteredBy")),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    #endregion
+
+    #region APS Field Mapping - Bolus
+
+    [Fact]
+    public void MapToBolus_MapsApsFields()
+    {
+        // Arrange
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment
+        {
+            Id = "aps-bolus-1",
+            Mills = 1700000000000,
+            Insulin = 3.5,
+            SyncIdentifier = "loop-sync-abc123",
+            InsulinType = "Humalog",
+            Unabsorbed = 1.2,
+            IsBasalInsulin = true,
+            PumpId = 42,
+            PumpSerial = "SN-12345",
+            PumpType = "Omnipod DASH"
+        };
+
+        // Act
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, correlationId);
+
+        // Assert
+        bolus.SyncIdentifier.Should().Be("loop-sync-abc123");
+        bolus.InsulinType.Should().Be("Humalog");
+        bolus.Unabsorbed.Should().Be(1.2);
+        bolus.IsBasalInsulin.Should().BeTrue();
+        bolus.PumpId.Should().Be("42");
+        bolus.PumpSerial.Should().Be("SN-12345");
+        bolus.PumpType.Should().Be("Omnipod DASH");
+    }
+
+    #endregion
+
+    #region APS Field Mapping - CarbIntake
+
+    [Fact]
+    public void MapToCarbIntake_MapsApsFields()
+    {
+        // Arrange
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment
+        {
+            Id = "aps-carb-1",
+            Mills = 1700000000000,
+            Carbs = 45,
+            SyncIdentifier = "loop-sync-carb456",
+            CarbTime = 15
+        };
+
+        // Act
+        var carbIntake = TreatmentDecomposer.MapToCarbIntake(treatment, correlationId);
+
+        // Assert
+        carbIntake.SyncIdentifier.Should().Be("loop-sync-carb456");
+        carbIntake.CarbTime.Should().Be(15);
+    }
+
+    #endregion
+
+    #region APS Field Mapping - BolusCalculation
+
+    [Fact]
+    public void MapToBolusCalculation_MapsApsFields()
+    {
+        // Arrange
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment
+        {
+            Id = "aps-calc-1",
+            Mills = 1700000000000,
+            InsulinRecommendationForCarbs = 3.0,
+            InsulinProgrammed = 4.5,
+            EnteredInsulin = 4.0,
+            SplitNow = 60,
+            SplitExt = 40,
+            PreBolus = 15
+        };
+
+        // Act
+        var calc = TreatmentDecomposer.MapToBolusCalculation(treatment, correlationId);
+
+        // Assert
+        calc.InsulinRecommendationForCarbs.Should().Be(3.0);
+        calc.InsulinProgrammed.Should().Be(4.5);
+        calc.EnteredInsulin.Should().Be(4.0);
+        calc.SplitNow.Should().Be(60);
+        calc.SplitExt.Should().Be(40);
+        calc.PreBolus.Should().Be(15);
+    }
+
+    #endregion
+
+    #region SyncIdentifier Mapping - BGCheck, Note, DeviceEvent
+
+    [Fact]
+    public void MapToBGCheck_MapsSyncIdentifier()
+    {
+        // Arrange
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment
+        {
+            Id = "bgcheck-sync-1",
+            Mills = 1700000000000,
+            Glucose = 120,
+            SyncIdentifier = "loop-sync-bg789"
+        };
+
+        // Act
+        var bgCheck = TreatmentDecomposer.MapToBGCheck(treatment, correlationId);
+
+        // Assert
+        bgCheck.SyncIdentifier.Should().Be("loop-sync-bg789");
+    }
+
+    [Fact]
+    public void MapToNote_MapsSyncIdentifier()
+    {
+        // Arrange
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment
+        {
+            Id = "note-sync-1",
+            Mills = 1700000000000,
+            Notes = "Test note",
+            EventType = "Note",
+            SyncIdentifier = "loop-sync-note101"
+        };
+
+        // Act
+        var note = TreatmentDecomposer.MapToNote(treatment, correlationId, false);
+
+        // Assert
+        note.SyncIdentifier.Should().Be("loop-sync-note101");
+    }
+
+    [Fact]
+    public void MapToDeviceEvent_MapsSyncIdentifier()
+    {
+        // Arrange
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment
+        {
+            Id = "device-sync-1",
+            Mills = 1700000000000,
+            SyncIdentifier = "loop-sync-device202"
+        };
+
+        // Act
+        var deviceEvent = TreatmentDecomposer.MapToDeviceEvent(treatment, correlationId, DeviceEventType.SiteChange);
+
+        // Assert
+        deviceEvent.SyncIdentifier.Should().Be("loop-sync-device202");
+    }
+
+    #endregion
+
     #region Announcement with IsAnnouncement property
 
     [Fact]
