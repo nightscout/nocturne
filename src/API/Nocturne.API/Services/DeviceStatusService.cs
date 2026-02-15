@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -13,6 +14,7 @@ public class DeviceStatusService : IDeviceStatusService
     private readonly IPostgreSqlService _postgreSqlService;
     private readonly ISignalRBroadcastService _broadcastService;
     private readonly ICacheService _cacheService;
+    private readonly IDeviceStatusDecomposer _deviceStatusDecomposer;
     private readonly ILogger<DeviceStatusService> _logger;
     private const string CollectionName = "devicestatus";
 
@@ -20,12 +22,14 @@ public class DeviceStatusService : IDeviceStatusService
         IPostgreSqlService postgreSqlService,
         ISignalRBroadcastService broadcastService,
         ICacheService cacheService,
+        IDeviceStatusDecomposer deviceStatusDecomposer,
         ILogger<DeviceStatusService> logger
     )
     {
         _postgreSqlService = postgreSqlService;
         _broadcastService = broadcastService;
         _cacheService = cacheService;
+        _deviceStatusDecomposer = deviceStatusDecomposer;
         _logger = logger;
     }
 
@@ -137,6 +141,23 @@ public class DeviceStatusService : IDeviceStatusService
                 _logger.LogError(
                     ex,
                     "Failed to broadcast storage create event for device status {DeviceStatusId}",
+                    deviceStatus.Id
+                );
+            }
+        }
+
+        // Decompose each device status into v4 snapshot tables
+        foreach (var deviceStatus in createdDeviceStatus)
+        {
+            try
+            {
+                await _deviceStatusDecomposer.DecomposeAsync(deviceStatus, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to decompose device status {DeviceStatusId} into v4 tables",
                     deviceStatus.Id
                 );
             }
