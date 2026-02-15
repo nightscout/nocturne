@@ -32,8 +32,16 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../../src/API/Nocturne.API/Nocturne.API.csproj" />
     <ProjectReference Include="../../../src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj" />
     <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data/Nocturne.Infrastructure.Data.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Migration\Fixtures\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

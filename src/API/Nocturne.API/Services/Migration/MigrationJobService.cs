@@ -1,14 +1,14 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using Microsoft.Extensions.Options;
-using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Configurations;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Models;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace Nocturne.API.Services.Migration;
 
@@ -17,13 +17,21 @@ namespace Nocturne.API.Services.Migration;
 /// </summary>
 public interface IMigrationJobService
 {
-    Task<MigrationJobInfo> StartMigrationAsync(StartMigrationRequest request, CancellationToken ct = default);
+    Task<MigrationJobInfo> StartMigrationAsync(
+        StartMigrationRequest request,
+        CancellationToken ct = default
+    );
+
     /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found.</exception>
     Task<MigrationJobStatus> GetStatusAsync(Guid jobId);
+
     /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found.</exception>
     Task CancelAsync(Guid jobId);
     Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync();
-    Task<TestMigrationConnectionResult> TestConnectionAsync(TestMigrationConnectionRequest request, CancellationToken ct = default);
+    Task<TestMigrationConnectionResult> TestConnectionAsync(
+        TestMigrationConnectionRequest request,
+        CancellationToken ct = default
+    );
     PendingMigrationConfig GetPendingConfig();
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(CancellationToken ct = default);
 }
@@ -43,26 +51,31 @@ public class MigrationJobService : IMigrationJobService
     public MigrationJobService(
         ILogger<MigrationJobService> logger,
         IServiceProvider serviceProvider,
-        IConfiguration configuration)
+        IConfiguration configuration
+    )
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _configuration = configuration;
     }
 
-    public async Task<MigrationJobInfo> StartMigrationAsync(StartMigrationRequest request, CancellationToken ct = default)
+    public async Task<MigrationJobInfo> StartMigrationAsync(
+        StartMigrationRequest request,
+        CancellationToken ct = default
+    )
     {
         var jobId = Guid.CreateVersion7();
-        var sourceDesc = request.Mode == MigrationMode.Api
-            ? request.NightscoutUrl
-            : $"MongoDB: {request.MongoDatabaseName}";
+        var sourceDesc =
+            request.Mode == MigrationMode.Api
+                ? request.NightscoutUrl
+                : $"MongoDB: {request.MongoDatabaseName}";
 
         var jobInfo = new MigrationJobInfo
         {
             Id = jobId,
             Mode = request.Mode,
             CreatedAt = DateTime.UtcNow,
-            SourceDescription = sourceDesc
+            SourceDescription = sourceDesc,
         };
 
         var job = new MigrationJob(jobId, request, jobInfo, _logger, _serviceProvider);
@@ -74,20 +87,27 @@ public class MigrationJobService : IMigrationJobService
         }
 
         // Start migration in background
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await job.ExecuteAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Migration job {JobId} failed", jobId);
-            }
-        }, ct);
+                try
+                {
+                    await job.ExecuteAsync(ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Migration job {JobId} failed", jobId);
+                }
+            },
+            ct
+        );
 
-        _logger.LogInformation("Started migration job {JobId} in {Mode} mode from {Source}",
-            jobId, request.Mode, sourceDesc);
+        _logger.LogInformation(
+            "Started migration job {JobId} in {Mode} mode from {Source}",
+            jobId,
+            request.Mode,
+            sourceDesc
+        );
 
         return jobInfo;
     }
@@ -124,7 +144,8 @@ public class MigrationJobService : IMigrationJobService
 
     public async Task<TestMigrationConnectionResult> TestConnectionAsync(
         TestMigrationConnectionRequest request,
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         try
         {
@@ -143,21 +164,22 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
             };
         }
     }
 
     private async Task<TestMigrationConnectionResult> TestApiConnectionAsync(
         TestMigrationConnectionRequest request,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         if (string.IsNullOrEmpty(request.NightscoutUrl))
         {
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = "Nightscout URL is required"
+                ErrorMessage = "Nightscout URL is required",
             };
         }
 
@@ -180,7 +202,7 @@ public class MigrationJobService : IMigrationJobService
                 return new TestMigrationConnectionResult
                 {
                     IsSuccess = false,
-                    ErrorMessage = $"Failed to connect: {response.StatusCode}"
+                    ErrorMessage = $"Failed to connect: {response.StatusCode}",
                 };
             }
 
@@ -188,7 +210,7 @@ public class MigrationJobService : IMigrationJobService
             {
                 IsSuccess = true,
                 SiteName = request.NightscoutUrl,
-                AvailableCollections = ["entries", "treatments", "profile", "devicestatus"]
+                AvailableCollections = ["entries", "treatments", "profile", "devicestatus"],
             };
         }
         catch (HttpRequestException ex)
@@ -196,21 +218,22 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = $"Connection failed: {ex.Message}"
+                ErrorMessage = $"Connection failed: {ex.Message}",
             };
         }
     }
 
     private async Task<TestMigrationConnectionResult> TestMongoConnectionAsync(
         TestMigrationConnectionRequest request,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         if (string.IsNullOrEmpty(request.MongoConnectionString))
         {
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = "MongoDB connection string is required"
+                ErrorMessage = "MongoDB connection string is required",
             };
         }
 
@@ -219,7 +242,7 @@ public class MigrationJobService : IMigrationJobService
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = "MongoDB database name is required"
+                ErrorMessage = "MongoDB database name is required",
             };
         }
 
@@ -237,13 +260,19 @@ public class MigrationJobService : IMigrationJobService
         if (collectionList.Contains("entries"))
         {
             var entriesCollection = database.GetCollection<BsonDocument>("entries");
-            entryCount = await entriesCollection.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct);
+            entryCount = await entriesCollection.CountDocumentsAsync(
+                FilterDefinition<BsonDocument>.Empty,
+                cancellationToken: ct
+            );
         }
 
         if (collectionList.Contains("treatments"))
         {
             var treatmentsCollection = database.GetCollection<BsonDocument>("treatments");
-            treatmentCount = await treatmentsCollection.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct);
+            treatmentCount = await treatmentsCollection.CountDocumentsAsync(
+                FilterDefinition<BsonDocument>.Empty,
+                cancellationToken: ct
+            );
         }
 
         return new TestMigrationConnectionResult
@@ -252,7 +281,7 @@ public class MigrationJobService : IMigrationJobService
             SiteName = request.MongoDatabaseName,
             EntryCount = entryCount,
             TreatmentCount = treatmentCount,
-            AvailableCollections = collectionList
+            AvailableCollections = collectionList,
         };
     }
 
@@ -275,18 +304,22 @@ public class MigrationJobService : IMigrationJobService
             Mode = mode,
             NightscoutUrl = _configuration["MIGRATION_NS_URL"],
             HasApiSecret = !string.IsNullOrEmpty(_configuration["MIGRATION_NS_API_SECRET"]),
-            HasMongoConnectionString = !string.IsNullOrEmpty(_configuration["MIGRATION_MONGO_CONNECTION_STRING"]),
-            MongoDatabaseName = _configuration["MIGRATION_MONGO_DATABASE_NAME"]
+            HasMongoConnectionString = !string.IsNullOrEmpty(
+                _configuration["MIGRATION_MONGO_CONNECTION_STRING"]
+            ),
+            MongoDatabaseName = _configuration["MIGRATION_MONGO_DATABASE_NAME"],
         };
     }
 
-    public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(
+        CancellationToken ct = default
+    )
     {
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
-        var sources = await dbContext.MigrationSources
-            .OrderByDescending(s => s.LastMigrationAt ?? s.CreatedAt)
+        var sources = await dbContext
+            .MigrationSources.OrderByDescending(s => s.LastMigrationAt ?? s.CreatedAt)
             .Select(s => new MigrationSourceDto
             {
                 Id = s.Id,
@@ -295,14 +328,13 @@ public class MigrationJobService : IMigrationJobService
                 MongoDatabaseName = s.MongoDatabaseName,
                 LastMigrationAt = s.LastMigrationAt,
                 LastMigratedDataTimestamp = s.LastMigratedDataTimestamp,
-                CreatedAt = s.CreatedAt
+                CreatedAt = s.CreatedAt,
             })
             .ToListAsync(ct);
 
         return sources;
     }
 }
-
 
 /// <summary>
 /// Represents a running migration job
@@ -328,7 +360,8 @@ internal class MigrationJob
         StartMigrationRequest request,
         MigrationJobInfo info,
         ILogger logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider
+    )
     {
         _id = id;
         _request = request;
@@ -337,17 +370,18 @@ internal class MigrationJob
         _serviceProvider = serviceProvider;
     }
 
-    public MigrationJobStatus GetStatus() => new()
-    {
-        JobId = _id,
-        State = _state,
-        ProgressPercentage = _progressPercentage,
-        CurrentOperation = _currentOperation,
-        ErrorMessage = _errorMessage,
-        StartedAt = _startedAt,
-        CompletedAt = _completedAt,
-        CollectionProgress = _collectionProgress.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
-    };
+    public MigrationJobStatus GetStatus() =>
+        new()
+        {
+            JobId = _id,
+            State = _state,
+            ProgressPercentage = _progressPercentage,
+            CurrentOperation = _currentOperation,
+            ErrorMessage = _errorMessage,
+            StartedAt = _startedAt,
+            CompletedAt = _completedAt,
+            CollectionProgress = _collectionProgress.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+        };
 
     public void Cancel()
     {
@@ -357,7 +391,10 @@ internal class MigrationJob
 
     public async Task ExecuteAsync(CancellationToken externalCt)
     {
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, externalCt);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            _cts.Token,
+            externalCt
+        );
         var ct = linkedCts.Token;
 
         _startedAt = DateTime.UtcNow;
@@ -386,7 +423,10 @@ internal class MigrationJob
         catch (Exception ex)
         {
             _state = MigrationJobState.Failed;
-            _errorMessage = ex.Message;
+            _errorMessage =
+                ex.InnerException != null
+                    ? $"{ex.Message} Inner: {ex.InnerException.Message}"
+                    : ex.Message;
             _completedAt = DateTime.UtcNow;
             _logger.LogError(ex, "Migration job {JobId} failed", _id);
         }
@@ -425,7 +465,8 @@ internal class MigrationJob
     private async Task MigrateEntriesViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         _currentOperation = "Migrating entries";
         var collectionName = "entries";
@@ -436,7 +477,7 @@ internal class MigrationJob
             TotalDocuments = 0,
             DocumentsMigrated = 0,
             DocumentsFailed = 0,
-            IsComplete = false
+            IsComplete = false,
         };
 
         var totalMigrated = 0L;
@@ -464,22 +505,26 @@ internal class MigrationJob
                     var mills = entry.Mills;
 
                     // Check for duplicates
-                    var exists = await dbContext.Entries
-                        .AnyAsync(e => e.Mills == mills && e.Sgv == entry.Sgv, ct);
+                    var exists = await dbContext.Entries.AnyAsync(
+                        e => e.Mills == mills && e.Sgv == entry.Sgv,
+                        ct
+                    );
 
                     if (!exists)
                     {
-                        dbContext.Entries.Add(new Infrastructure.Data.Entities.EntryEntity
-                        {
-                            Id = Guid.CreateVersion7(),
-                            Type = entry.Type ?? "sgv",
-                            Sgv = entry.Sgv,
-                            Mgdl = entry.Mgdl,
-                            Direction = entry.Direction,
-                            Device = entry.Device,
-                            Mills = mills,
-                            DataSource = DataSources.MongoDbImport
-                        });
+                        dbContext.Entries.Add(
+                            new Infrastructure.Data.Entities.EntryEntity
+                            {
+                                Id = Guid.CreateVersion7(),
+                                Type = entry.Type ?? "sgv",
+                                Sgv = entry.Sgv,
+                                Mgdl = entry.Mgdl,
+                                Direction = entry.Direction,
+                                Device = entry.Device,
+                                Mills = mills,
+                                DataSource = DataSources.MongoDbImport,
+                            }
+                        );
                         totalMigrated++;
                     }
                 }
@@ -497,7 +542,7 @@ internal class MigrationJob
                 TotalDocuments = entries.Length,
                 DocumentsMigrated = totalMigrated,
                 DocumentsFailed = totalFailed,
-                IsComplete = true
+                IsComplete = true,
             };
         }
         catch (Exception ex)
@@ -511,7 +556,8 @@ internal class MigrationJob
     private async Task MigrateTreatmentsViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         _currentOperation = "Migrating treatments";
         var collectionName = "treatments";
@@ -522,7 +568,7 @@ internal class MigrationJob
             TotalDocuments = 0,
             DocumentsMigrated = 0,
             DocumentsFailed = 0,
-            IsComplete = false
+            IsComplete = false,
         };
 
         var totalMigrated = 0L;
@@ -538,7 +584,8 @@ internal class MigrationJob
             }
 
             var content = await response.Content.ReadAsStringAsync(ct);
-            var treatments = System.Text.Json.JsonSerializer.Deserialize<Treatment[]>(content) ?? [];
+            var treatments =
+                System.Text.Json.JsonSerializer.Deserialize<Treatment[]>(content) ?? [];
 
             foreach (var treatment in treatments)
             {
@@ -549,22 +596,26 @@ internal class MigrationJob
                     var mills = treatment.CalculatedMills;
 
                     // Check for duplicates
-                    var exists = await dbContext.Treatments
-                        .AnyAsync(t => t.Mills == mills && t.EventType == treatment.EventType, ct);
+                    var exists = await dbContext.Treatments.AnyAsync(
+                        t => t.Mills == mills && t.EventType == treatment.EventType,
+                        ct
+                    );
 
                     if (!exists)
                     {
-                        dbContext.Treatments.Add(new Infrastructure.Data.Entities.TreatmentEntity
-                        {
-                            Id = Guid.CreateVersion7(),
-                            EventType = treatment.EventType,
-                            Insulin = treatment.Insulin,
-                            Carbs = treatment.Carbs,
-                            Notes = treatment.Notes,
-                            Duration = treatment.Duration,
-                            Mills = mills,
-                            DataSource = DataSources.MongoDbImport
-                        });
+                        dbContext.Treatments.Add(
+                            new Infrastructure.Data.Entities.TreatmentEntity
+                            {
+                                Id = Guid.CreateVersion7(),
+                                EventType = treatment.EventType,
+                                Insulin = treatment.Insulin,
+                                Carbs = treatment.Carbs,
+                                Notes = treatment.Notes,
+                                Duration = treatment.Duration,
+                                Mills = mills,
+                                DataSource = DataSources.MongoDbImport,
+                            }
+                        );
                         totalMigrated++;
                     }
                 }
@@ -582,7 +633,7 @@ internal class MigrationJob
                 TotalDocuments = treatments.Length,
                 DocumentsMigrated = totalMigrated,
                 DocumentsFailed = totalFailed,
-                IsComplete = true
+                IsComplete = true,
             };
         }
         catch (Exception ex)
@@ -608,9 +659,12 @@ internal class MigrationJob
         var collectionList = await collections.ToListAsync(ct);
 
         // Filter to requested collections
-        var collectionsToMigrate = _request.Collections.Count > 0
-            ? collectionList.Where(c => _request.Collections.Contains(c)).ToList()
-            : collectionList.Where(c => c is "entries" or "treatments" or "devicestatus" or "profile").ToList();
+        var collectionsToMigrate =
+            _request.Collections.Count > 0
+                ? collectionList.Where(c => _request.Collections.Contains(c)).ToList()
+                : collectionList
+                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile")
+                    .ToList();
 
         var totalCollections = collectionsToMigrate.Count;
         var processedCollections = 0;
@@ -632,10 +686,14 @@ internal class MigrationJob
         IMongoDatabase database,
         string collectionName,
         NocturneDbContext dbContext,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         var collection = database.GetCollection<BsonDocument>(collectionName);
-        var totalDocs = await collection.CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken: ct);
+        var totalDocs = await collection.CountDocumentsAsync(
+            FilterDefinition<BsonDocument>.Empty,
+            cancellationToken: ct
+        );
 
         _collectionProgress[collectionName] = new CollectionProgress
         {
@@ -643,7 +701,7 @@ internal class MigrationJob
             TotalDocuments = totalDocs,
             DocumentsMigrated = 0,
             DocumentsFailed = 0,
-            IsComplete = false
+            IsComplete = false,
         };
 
         var totalMigrated = 0L;
@@ -651,7 +709,11 @@ internal class MigrationJob
         var batchSize = 1000;
 
         var findOptions = new FindOptions<BsonDocument> { BatchSize = batchSize };
-        var cursor = await collection.FindAsync(FilterDefinition<BsonDocument>.Empty, findOptions, ct);
+        var cursor = await collection.FindAsync(
+            FilterDefinition<BsonDocument>.Empty,
+            findOptions,
+            ct
+        );
 
         while (await cursor.MoveNextAsync(ct))
         {
@@ -665,7 +727,11 @@ internal class MigrationJob
                 catch (Exception ex)
                 {
                     totalFailed++;
-                    _logger.LogWarning(ex, "Failed to migrate document in {Collection}", collectionName);
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to migrate document in {Collection}",
+                        collectionName
+                    );
                 }
             }
 
@@ -677,24 +743,29 @@ internal class MigrationJob
                 TotalDocuments = totalDocs,
                 DocumentsMigrated = totalMigrated,
                 DocumentsFailed = totalFailed,
-                IsComplete = false
+                IsComplete = false,
             };
         }
 
         _collectionProgress[collectionName] = _collectionProgress[collectionName] with
         {
-            IsComplete = true
+            IsComplete = true,
         };
 
-        _logger.LogInformation("Migrated {Count}/{Total} documents from {Collection}",
-            totalMigrated, totalDocs, collectionName);
+        _logger.LogInformation(
+            "Migrated {Count}/{Total} documents from {Collection}",
+            totalMigrated,
+            totalDocs,
+            collectionName
+        );
     }
 
     private async Task TransformAndSaveDocumentAsync(
         string collectionName,
         BsonDocument doc,
         NocturneDbContext dbContext,
-        CancellationToken ct)
+        CancellationToken ct
+    )
     {
         switch (collectionName)
         {
@@ -710,62 +781,76 @@ internal class MigrationJob
         }
     }
 
-    private async Task TransformEntryAsync(BsonDocument doc, NocturneDbContext dbContext, CancellationToken ct)
+    private async Task TransformEntryAsync(
+        BsonDocument doc,
+        NocturneDbContext dbContext,
+        CancellationToken ct
+    )
     {
-        var mills = doc.Contains("date") ? doc["date"].ToInt64() :
-            doc.Contains("mills") ? doc["mills"].ToInt64() :
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var mills =
+            doc.Contains("date") ? doc["date"].ToInt64()
+            : doc.Contains("mills") ? doc["mills"].ToInt64()
+            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         double? sgv = doc.Contains("sgv") ? doc["sgv"].ToDouble() : null;
 
         // Check for duplicates
-        var exists = await dbContext.Entries
-            .AnyAsync(e => e.Mills == mills && e.Sgv == sgv, ct);
+        var exists = await dbContext.Entries.AnyAsync(e => e.Mills == mills && e.Sgv == sgv, ct);
 
-        if (exists) return;
+        if (exists)
+            return;
 
         var entity = new Infrastructure.Data.Entities.EntryEntity
         {
             Id = Guid.CreateVersion7(),
-            OriginalId = doc.Contains("_id") ? doc["_id"].ToString() : null,
+            OriginalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null,
             Type = doc.Contains("type") ? doc["type"].AsString : "sgv",
             Sgv = sgv,
             Mgdl = sgv ?? 0,
             Direction = doc.Contains("direction") ? doc["direction"].AsString : null,
             Device = doc.Contains("device") ? doc["device"].AsString : null,
             Mills = mills,
-            DataSource = DataSources.MongoDbImport
+            DataSource = DataSources.MongoDbImport,
         };
 
         dbContext.Entries.Add(entity);
     }
 
-    private async Task TransformTreatmentAsync(BsonDocument doc, NocturneDbContext dbContext, CancellationToken ct)
+    private async Task TransformTreatmentAsync(
+        BsonDocument doc,
+        NocturneDbContext dbContext,
+        CancellationToken ct
+    )
     {
-        var mills = doc.Contains("mills") ? doc["mills"].ToInt64() :
-            doc.Contains("created_at") && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
+        var mills =
+            doc.Contains("mills") ? doc["mills"].ToInt64()
+            : doc.Contains("created_at")
+            && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
                 ? new DateTimeOffset(createdAt).ToUnixTimeMilliseconds()
-                : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var eventType = doc.Contains("eventType") ? doc["eventType"].AsString : "Note";
 
         // Check for duplicates
-        var exists = await dbContext.Treatments
-            .AnyAsync(t => t.Mills == mills && t.EventType == eventType, ct);
+        var exists = await dbContext.Treatments.AnyAsync(
+            t => t.Mills == mills && t.EventType == eventType,
+            ct
+        );
 
-        if (exists) return;
+        if (exists)
+            return;
 
         var entity = new Infrastructure.Data.Entities.TreatmentEntity
         {
             Id = Guid.CreateVersion7(),
-            OriginalId = doc.Contains("_id") ? doc["_id"].ToString() : null,
+            OriginalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null,
             EventType = eventType,
             Insulin = doc.Contains("insulin") ? doc["insulin"].ToDouble() : null,
             Carbs = doc.Contains("carbs") ? doc["carbs"].ToDouble() : null,
             Notes = doc.Contains("notes") ? doc["notes"].AsString : null,
             Duration = doc.Contains("duration") ? doc["duration"].ToDouble() : null,
             Mills = mills,
-            DataSource = DataSources.MongoDbImport
+            DataSource = DataSources.MongoDbImport,
         };
 
         dbContext.Treatments.Add(entity);

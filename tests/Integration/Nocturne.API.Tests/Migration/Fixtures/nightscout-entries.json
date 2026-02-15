@@ -1,0 +1,362 @@
+[
+  {
+    "_id": {
+      "$oid": "68141c6533472940fa0cc62b"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746148449968,
+    "dateString": "2025-05-02T01:14:09.968Z",
+    "sgv": 177,
+    "delta": 6,
+    "direction": "FortyFiveUp",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:14:09.968Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "68141d9633472940fa0cc62c"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746148749958,
+    "dateString": "2025-05-02T01:19:09.958Z",
+    "sgv": 180,
+    "delta": 6,
+    "direction": "FortyFiveUp",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:19:09.958Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "68141ebd33472940fa0cc62d"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746149050031,
+    "dateString": "2025-05-02T01:24:10.031Z",
+    "sgv": 185,
+    "delta": 5.5,
+    "direction": "FortyFiveUp",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:24:10.031Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "6814305133472940fa0cc63c"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746153550090,
+    "dateString": "2025-05-02T02:39:10.090Z",
+    "sgv": 158,
+    "delta": -5,
+    "direction": "FortyFiveDown",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T02:39:10.090Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "6814317d33472940fa0cc63d"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746153849903,
+    "dateString": "2025-05-02T02:44:09.903Z",
+    "sgv": 152,
+    "delta": -5.5,
+    "direction": "FortyFiveDown",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T02:44:09.903Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681432a933472940fa0cc63e"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746154150062,
+    "dateString": "2025-05-02T02:49:10.062Z",
+    "sgv": 145,
+    "delta": -6,
+    "direction": "FortyFiveDown",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T02:49:10.062Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a3b3d3bbbd49547ccf41a"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746549562004,
+    "dateString": "2025-05-06T16:39:22.004Z",
+    "sgv": 110,
+    "delta": 15.001,
+    "direction": "SingleUp",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T16:39:22.004Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681acdb53bbbd49547ccf454"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746587058539,
+    "dateString": "2025-05-07T03:04:18.539Z",
+    "sgv": 90,
+    "delta": 12.998,
+    "direction": "SingleUp",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-07T03:04:18.539Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a0eb43bbbd49547ccf3fd"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746538161446,
+    "dateString": "2025-05-06T13:29:21.446Z",
+    "sgv": 123,
+    "delta": 4.46,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T13:29:21.446Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a0fe03bbbd49547ccf3fe"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746538460870,
+    "dateString": "2025-05-06T13:34:20.870Z",
+    "sgv": 121,
+    "delta": -2.004,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T13:34:20.870Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a123a3bbbd49547ccf400"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746539063191,
+    "dateString": "2025-05-06T13:44:23.191Z",
+    "sgv": 114,
+    "delta": -0.996,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T13:44:23.191Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a13653bbbd49547ccf401"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746539362166,
+    "dateString": "2025-05-06T13:49:22.166Z",
+    "sgv": 115,
+    "delta": 1.003,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T13:49:22.166Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a14903bbbd49547ccf402"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746539661337,
+    "dateString": "2025-05-06T13:54:21.337Z",
+    "sgv": 114,
+    "delta": -1.003,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T13:54:21.337Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "681a15bc3bbbd49547ccf403"
+    },
+    "device": "xDrip-UiBased",
+    "date": 1746539961528,
+    "dateString": "2025-05-06T13:59:21.528Z",
+    "sgv": 114,
+    "delta": 0,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-06T13:59:21.528Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "68141a0d33472940fa0cc628"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746147849975,
+    "dateString": "2025-05-02T01:04:09.975Z",
+    "sgv": 159,
+    "delta": 2.5,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:04:09.975Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "68141a0d33472940fa0cc629"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746147549845,
+    "dateString": "2025-05-02T00:59:09.845Z",
+    "sgv": 152,
+    "delta": 1.5,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T00:59:09.845Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "68141b3933472940fa0cc62a"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746148150002,
+    "dateString": "2025-05-02T01:09:10.002Z",
+    "sgv": 169,
+    "delta": 4.5,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:09:10.002Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "68141fe933472940fa0cc62e"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746149349884,
+    "dateString": "2025-05-02T01:29:09.884Z",
+    "sgv": 190,
+    "delta": 5,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:29:09.884Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "6814224133472940fa0cc630"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746149949907,
+    "dateString": "2025-05-02T01:39:09.907Z",
+    "sgv": 200,
+    "delta": 5,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:39:09.907Z",
+    "utcOffset": 600
+  },
+  {
+    "_id": {
+      "$oid": "6814236d33472940fa0cc631"
+    },
+    "device": "xDrip-DexcomG5",
+    "date": 1746150249847,
+    "dateString": "2025-05-02T01:44:09.847Z",
+    "sgv": 203,
+    "delta": 4.5,
+    "direction": "Flat",
+    "type": "sgv",
+    "filtered": 0,
+    "unfiltered": 0,
+    "rssi": 100,
+    "noise": 1,
+    "sysTime": "2025-05-02T01:44:09.847Z",
+    "utcOffset": 600
+  }
+]

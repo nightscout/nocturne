@@ -971,7 +971,6 @@ msgstr "Insuline :"
 
 #. placeholder {0}: marker.insulin.toFixed(1)
 #. placeholder {0}: insulin.toFixed(1)
-#. placeholder {0}: averageTdd.toFixed(1)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)
 #. placeholder {0}: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.basal)
 #. placeholder {0}: formatInsulinDisplay((treatmentSummary?.totals?.insulin?.bolus ?? 0) + (treatmentSummary?.totals?.insulin?.basal ?? 0))
@@ -993,7 +992,6 @@ msgstr "Insuline :"
 #. placeholder {0}: formatInsulinDisplay(treatment.insulin)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
-#: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
@@ -3739,22 +3737,18 @@ msgstr ""
 msgid "No temp basal or basal treatments found in this period"
 msgstr ""
 
-#: src/lib/components/reports/BasalBolusRatioChart.svelte
-msgid "Avg Basal"
-msgstr ""
+#~ msgid "Avg Basal"
+#~ msgstr ""
 
-#: src/lib/components/reports/BasalBolusRatioChart.svelte
-msgid "Avg Bolus"
-msgstr ""
+#~ msgid "Avg Bolus"
+#~ msgstr ""
 
-#: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "Avg TDD"
 msgstr ""
 
-#: src/lib/components/reports/BasalBolusRatioChart.svelte
-msgid "Days"
-msgstr ""
+#~ msgid "Days"
+#~ msgstr ""
 
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Basal (U)"

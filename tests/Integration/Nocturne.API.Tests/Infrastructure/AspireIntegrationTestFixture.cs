@@ -37,10 +37,13 @@ public class AspireIntegrationTestFixture : IAsyncLifetime
     /// Creates an HttpClient for a specific resource in the Aspire application
     /// </summary>
     /// <param name="resourceName">Name of the resource (from ServiceNames)</param>
+    /// <param name="endpointName">Optional endpoint name (e.g., "api" for the Nocturne API)</param>
     /// <returns>Configured HttpClient for the resource</returns>
-    public HttpClient CreateHttpClient(string resourceName)
+    public HttpClient CreateHttpClient(string resourceName, string? endpointName = null)
     {
-        return App.CreateHttpClient(resourceName);
+        return endpointName != null
+            ? App.CreateHttpClient(resourceName, endpointName)
+            : App.CreateHttpClient(resourceName);
     }
 
     public async Task InitializeAsync()
@@ -74,7 +77,8 @@ public class AspireIntegrationTestFixture : IAsyncLifetime
         await WaitForResourceHealthyAsync(ServiceNames.NocturneApi, TimeSpan.FromSeconds(60));
 
         // Create and cache the API client for convenience
-        _apiClient = _app.CreateHttpClient(ServiceNames.NocturneApi);
+        // The API endpoint is named "api" in the AppHost configuration
+        _apiClient = _app.CreateHttpClient(ServiceNames.NocturneApi, "api");
     }
 
     public async Task DisposeAsync()

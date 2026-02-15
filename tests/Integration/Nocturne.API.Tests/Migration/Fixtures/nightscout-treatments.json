@@ -1,0 +1,359 @@
+[
+  {
+    "_id": {
+      "$oid": "6825b6af25f06de57bad7a82"
+    },
+    "eventType": "Meal Bolus",
+    "carbs": 84,
+    "notes": "{\"pumpTimestamp\":\"2025-05-13T21:28:23.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-13T12:11:14.745Z\",\"insulinDelivered\":0,\"carbsInput\":84,\"guid\":\"5e022c36-2ff3-11f0-b445-0242ac110002\",\"insulinOnBoard\":null,\"totalInsulinRecommendation\":0,\"bloodGlucoseInput\":null,\"insulinProgrammed\":0,\"insulinRecommendationForCarbs\":null,\"insulinRecommendationForCorrection\":null,\"override\":null,\"type\":\"manual\",\"pumpName\":\"CamDiab CamAPS FX\",\"bloodGlucoseInputSource\":null,\"softDeleted\":false,\"updatedAt\":\"2025-05-13T12:11:14.901Z\",\"updatedBy\":\"server\"}",
+    "created_at": "2025-05-14T11:28:23.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6825bb7f25f06de57bad7a88"
+    },
+    "eventType": "Meal Bolus",
+    "insulin": 2.32,
+    "carbs": 83,
+    "notes": "{\"pumpTimestamp\":\"2025-05-13T20:58:58.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-13T13:11:23.402Z\",\"insulinDelivered\":2.32,\"carbsInput\":83,\"guid\":\"c4eea188-2ffb-11f0-b96d-0242ac110002\",\"insulinOnBoard\":null,\"totalInsulinRecommendation\":4.2,\"bloodGlucoseInput\":null,\"insulinProgrammed\":2.32,\"insulinRecommendationForCarbs\":4.2,\"insulinRecommendationForCorrection\":null,\"override\":null,\"type\":\"suggested\",\"pumpName\":\"CamDiab CamAPS FX\",\"bloodGlucoseInputSource\":null,\"softDeleted\":false,\"updatedAt\":\"2025-05-13T13:11:23.537Z\",\"updatedBy\":\"server\"}",
+    "created_at": "2025-05-14T10:58:58.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6829c12825f06de57bad7dcb"
+    },
+    "eventType": "Meal Bolus",
+    "carbs": 4.2,
+    "notes": "{\"pumpTimestamp\":\"2025-05-16T20:43:13.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-16T12:19:17.664Z\",\"insulinDelivered\":0,\"carbsInput\":4.2,\"guid\":\"fd1b9b64-324f-11f0-98ca-0242ac110002\",\"insulinOnBoard\":null,\"totalInsulinRecommendation\":0,\"bloodGlucoseInput\":null,\"insulinProgrammed\":0,\"insulinRecommendationForCarbs\":null,\"insulinRecommendationForCorrection\":null,\"override\":null,\"type\":\"manual\",\"pumpName\":\"CamDiab CamAPS FX\",\"bloodGlucoseInputSource\":null,\"softDeleted\":false,\"updatedAt\":\"2025-05-16T12:19:17.854Z\",\"updatedBy\":\"server\"}",
+    "created_at": "2025-05-17T10:43:13.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "683c0a8125f06de57bad8d37"
+    },
+    "eventType": "Meal Bolus",
+    "insulin": 1.9,
+    "notes": "{\"pumpTimestamp\":\"2025-05-12T13:09:17.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-12T04:19:51.295Z\",\"insulinDelivered\":1.9,\"carbsInput\":0,\"guid\":\"5963756a-2ee8-11f0-becc-0242ac110002\",\"insulinOnBoard\":null,\"totalInsulinRecommendation\":1.9,\"bloodGlucoseInput\":null,\"insulinProgrammed\":1.9,\"insulinRecommendationForCarbs\":1.9,\"insulinRecommendationForCorrection\":null,\"override\":null,\"type\":\"suggested\",\"pumpName\":\"CamDiab CamAPS FX\",\"bloodGlucoseInputSource\":null,\"softDeleted\":false,\"updatedAt\":\"2025-05-12T04:19:51.480Z\",\"updatedBy\":\"server\"}",
+    "created_at": "2025-05-13T03:09:17.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "683c0baf25f06de57bad8d3a"
+    },
+    "eventType": "Meal Bolus",
+    "carbs": 37,
+    "notes": "{\"pumpTimestamp\":\"2025-05-12T14:10:07.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-12T04:19:51.295Z\",\"insulinDelivered\":0,\"carbsInput\":37,\"guid\":\"59638d02-2ee8-11f0-becc-0242ac110002\",\"insulinOnBoard\":null,\"totalInsulinRecommendation\":0,\"bloodGlucoseInput\":null,\"insulinProgrammed\":0,\"insulinRecommendationForCarbs\":null,\"insulinRecommendationForCorrection\":null,\"override\":null,\"type\":\"manual\",\"pumpName\":\"CamDiab CamAPS FX\",\"bloodGlucoseInputSource\":null,\"softDeleted\":false,\"updatedAt\":\"2025-05-12T04:19:51.480Z\",\"updatedBy\":\"server\"}",
+    "created_at": "2025-05-13T04:10:07.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6814b76c33472940fa0cc6b0"
+    },
+    "eventType": "Carb Correction",
+    "enteredBy": "MyFitnessPal",
+    "created_at": "2025-05-02T00:14:00.000Z",
+    "carbs": 49,
+    "fat": 2,
+    "protein": 7,
+    "energy": "1050",
+    "meal": "Breakfast",
+    "mfp_id": "208228509003581",
+    "mfp_uuid": "25d04b0b-3ae6-498c-9b6f-92bbb39b933a",
+    "name": "Cafe Quality - Fruit Loaf",
+    "notes": "Cafe Quality - Fruit Loaf",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6814b76d33472940fa0cc6b1"
+    },
+    "eventType": "Carb Correction",
+    "enteredBy": "MyFitnessPal",
+    "created_at": "2025-05-02T03:14:00.000Z",
+    "carbs": 107,
+    "fat": 37,
+    "protein": 32,
+    "energy": "3770",
+    "meal": "Lunch",
+    "mfp_id": "274626536877429",
+    "mfp_uuid": "c5aca7c2-70dd-47ac-8f7e-9ab1bc105536",
+    "name": "Sumosalad - Broccoli Pesto Pasta",
+    "notes": "Sumosalad - Broccoli Pesto Pasta",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6814b76d33472940fa0cc6b2"
+    },
+    "eventType": "Carb Correction",
+    "enteredBy": "MyFitnessPal",
+    "created_at": "2025-05-02T08:30:00.000Z",
+    "carbs": 221,
+    "fat": 31,
+    "protein": 50,
+    "energy": "5748",
+    "meal": "Dinner",
+    "mfp_id": "98283375552357",
+    "mfp_uuid": "559b3002-dc9f-445f-ab78-c73bc58b43e9",
+    "name": "Homemade Pizza",
+    "notes": "Homemade Pizza",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6815e8cb33472940fa0cc7b7"
+    },
+    "eventType": "Carb Correction",
+    "enteredBy": "MyFitnessPal",
+    "created_at": "2025-05-03T00:05:00.000Z",
+    "carbs": 49,
+    "fat": 2,
+    "protein": 7,
+    "energy": "1050",
+    "meal": "Breakfast",
+    "mfp_id": "208228509003581",
+    "mfp_uuid": "56fc4520-7150-45bd-a6fd-547f0707a99b",
+    "name": "Cafe Quality - Fruit Loaf",
+    "notes": "Cafe Quality - Fruit Loaf",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6815f8a433472940fa0cc7c6"
+    },
+    "eventType": "Carb Correction",
+    "enteredBy": "MyFitnessPal",
+    "created_at": "2025-05-03T08:30:00.000Z",
+    "carbs": 88,
+    "fat": 23,
+    "protein": 16,
+    "energy": "2432",
+    "meal": "Dinner",
+    "mfp_id": "203578930015349",
+    "mfp_uuid": "f2deb3c4-cddb-4e08-9907-2fbdd0e13fcd",
+    "name": "Moroccan Veggies",
+    "notes": "Moroccan Veggies",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6825b6af25f06de57bad7a83"
+    },
+    "eventType": "Temp Basal",
+    "created_at": "2025-05-14T07:09:14.000Z",
+    "rate": 0,
+    "absolute": 0,
+    "duration": 54.45,
+    "notes": "{\"pumpTimestamp\":\"2025-05-13T17:09:14.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-13T10:10:51.688Z\",\"startTime\":61754,\"duration\":3267,\"segmentId\":null,\"rate\":0,\"guid\":\"8cab9b0a-2fe2-11f0-aafa-0242ac110002\",\"softDeleted\":false,\"updatedAt\":\"2025-05-13T10:10:51.759Z\",\"updatedBy\":\"server\"}",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6825bb7f25f06de57bad7a89"
+    },
+    "eventType": "Temp Basal",
+    "created_at": "2025-05-14T08:03:41.000Z",
+    "rate": 0.16,
+    "absolute": 0.16,
+    "duration": 11.083333333333334,
+    "notes": "{\"pumpTimestamp\":\"2025-05-13T18:03:41.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-13T10:10:51.688Z\",\"startTime\":65021,\"duration\":665,\"segmentId\":null,\"rate\":0.16,\"guid\":\"8caba4b0-2fe2-11f0-aafa-0242ac110002\",\"softDeleted\":false,\"updatedAt\":\"2025-05-13T10:10:51.759Z\",\"updatedBy\":\"server\"}",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6829c12825f06de57bad7dcc"
+    },
+    "eventType": "Temp Basal",
+    "created_at": "2025-05-17T08:48:37.000Z",
+    "rate": 0,
+    "absolute": 0,
+    "duration": 10.783333333333333,
+    "notes": "{\"pumpTimestamp\":\"2025-05-16T18:48:37.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-16T11:19:03.846Z\",\"startTime\":67717,\"duration\":647,\"segmentId\":null,\"rate\":0,\"guid\":\"9312a846-3247-11f0-976a-0242ac110002\",\"softDeleted\":false,\"updatedAt\":\"2025-05-16T11:19:03.996Z\",\"updatedBy\":\"server\"}",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "683c0a8125f06de57bad8d38"
+    },
+    "eventType": "Temp Basal",
+    "created_at": "2025-05-13T02:00:00.000Z",
+    "rate": 0,
+    "absolute": 0,
+    "duration": 1.15,
+    "notes": "{\"pumpTimestamp\":\"2025-05-12T12:00:00.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-12T04:19:51.295Z\",\"startTime\":43200,\"duration\":69,\"segmentId\":null,\"rate\":0,\"guid\":\"597c62be-2ee8-11f0-becc-0242ac110002\",\"softDeleted\":false,\"updatedAt\":\"2025-05-12T04:19:51.480Z\",\"updatedBy\":\"server\"}",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "683c0baf25f06de57bad8d3b"
+    },
+    "eventType": "Temp Basal",
+    "created_at": "2025-05-13T02:01:09.000Z",
+    "rate": 0.41,
+    "absolute": 0.41,
+    "duration": 2.15,
+    "notes": "{\"pumpTimestamp\":\"2025-05-12T12:01:09.000Z\",\"pumpTimestampUtcOffset\":\"+00:00\",\"pumpGuid\":\"8d882d06-6f3f-4267-aa99-8a2bbd29553f\",\"syncTimestamp\":\"2025-05-12T04:19:51.295Z\",\"startTime\":43269,\"duration\":129,\"segmentId\":null,\"rate\":0.41,\"guid\":\"597c7a92-2ee8-11f0-becc-0242ac110002\",\"softDeleted\":false,\"updatedAt\":\"2025-05-12T04:19:51.480Z\",\"updatedBy\":\"server\"}",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "685c95a97db878b1b872849a"
+    },
+    "enteredBy": "undefined",
+    "eventType": "Sensor Start",
+    "created_at": "2025-06-25T22:34:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "686a411e18fc80f1155b2e3a"
+    },
+    "enteredBy": "undefined",
+    "eventType": "Sensor Start",
+    "created_at": "2025-07-05T21:30:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "685c958f7db878b1b8728498"
+    },
+    "enteredBy": "undefined",
+    "eventType": "Sensor Stop",
+    "created_at": "2025-06-25T22:34:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "682167f13bbbd49547ccf9c0"
+    },
+    "eventType": "Site Change",
+    "created_at": "2025-05-12T02:15:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6823e31525f06de57bad78ed"
+    },
+    "eventType": "Site Change",
+    "created_at": "2025-05-13T10:25:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6821681a3bbbd49547ccf9c2"
+    },
+    "eventType": "Insulin Change",
+    "created_at": "2025-05-12T03:16:40.856Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6838e31725f06de57bad8a89"
+    },
+    "enteredBy": "undefined",
+    "eventType": "Insulin Change",
+    "created_at": "2025-05-27T14:00:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "6821680a3bbbd49547ccf9c1"
+    },
+    "eventType": "Pump Battery Change",
+    "created_at": "2025-05-12T03:16:23.584Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "685c959c7db878b1b8728499"
+    },
+    "enteredBy": "undefined",
+    "eventType": "",
+    "created_at": "2025-06-25T22:34:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "686a410618fc80f1155b2e39"
+    },
+    "enteredBy": "undefined",
+    "eventType": "",
+    "created_at": "2025-07-05T21:25:00.000Z",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "5afb96304168403f9a9e5e09"
+    },
+    "timestamp": 1746158465552,
+    "eventType": "<none>",
+    "enteredBy": "xdrip",
+    "uuid": "5afb9630-4168-403f-9a9e-5e09b4f2e858",
+    "insulin": 6,
+    "insulinInjections": "[]",
+    "created_at": "2025-05-02T04:01:05.000Z",
+    "sysTime": "2025-05-02T14:01:05.552+1000",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "c15e62d194bb44f78328d86d"
+    },
+    "timestamp": 1746173961102,
+    "eventType": "<none>",
+    "enteredBy": "xdrip",
+    "uuid": "c15e62d1-94bb-44f7-8328-d86d80724e54",
+    "insulin": 8,
+    "insulinInjections": "[]",
+    "created_at": "2025-05-02T08:19:21.000Z",
+    "sysTime": "2025-05-02T18:19:21.102+1000",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "9e5749fd648545368e7472d9"
+    },
+    "timestamp": 1746230021943,
+    "eventType": "<none>",
+    "enteredBy": "xdrip",
+    "uuid": "9e5749fd-6485-4536-8e74-72d96cd5b2a1",
+    "insulin": 5,
+    "insulinInjections": "[]",
+    "created_at": "2025-05-02T23:53:41.000Z",
+    "sysTime": "2025-05-03T09:53:41.943+1000",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "4873d20b30e443d3aaba826a"
+    },
+    "timestamp": 1746260373700,
+    "eventType": "<none>",
+    "enteredBy": "xdrip",
+    "uuid": "4873d20b-30e4-43d3-aaba-826aa3914b04",
+    "insulin": 8,
+    "insulinInjections": "[]",
+    "created_at": "2025-05-03T08:19:33.000Z",
+    "sysTime": "2025-05-03T18:19:33.700+1000",
+    "utcOffset": 0
+  },
+  {
+    "_id": {
+      "$oid": "893280814d184e3698542150"
+    },
+    "timestamp": 1746317874435,
+    "eventType": "<none>",
+    "enteredBy": "xdrip",
+    "uuid": "89328081-4d18-4e36-9854-21503bbcaf21",
+    "insulin": 5,
+    "insulinInjections": "[]",
+    "created_at": "2025-05-04T00:17:54.000Z",
+    "sysTime": "2025-05-04T10:17:54.435+1000",
+    "utcOffset": 0
+  }
+]
