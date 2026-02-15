@@ -77,6 +77,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         var produceDeviceEvent = false;
         var delegateToStateSpan = false;
         var isProfileSwitch = false;
+        var isOverride = false;
         var isAnnouncement = false;
         DeviceEventType parsedDeviceEventType = default;
 
@@ -87,6 +88,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         else if (string.Equals(eventType, "Profile Switch", StringComparison.OrdinalIgnoreCase))
         {
             isProfileSwitch = true;
+            delegateToStateSpan = true;
+        }
+        else if (string.Equals(eventType, "Temporary Override", StringComparison.OrdinalIgnoreCase))
+        {
+            isOverride = true;
             delegateToStateSpan = true;
         }
         else if (eventType != null && TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
@@ -144,6 +150,10 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             if (isProfileSwitch)
             {
                 await DecomposeProfileSwitchAsync(treatment, result, ct);
+            }
+            else if (isOverride)
+            {
+                await DecomposeOverrideAsync(treatment, result, ct);
             }
             else
             {
@@ -361,6 +371,26 @@ public class TreatmentDecomposer : ITreatmentDecomposer
         _logger.LogDebug("Delegated ProfileSwitch treatment {LegacyId} to IStateSpanService", treatment.Id);
     }
 
+    private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    {
+        var stateSpan = new StateSpan
+        {
+            Category = StateSpanCategory.Override,
+            State = OverrideState.Custom.ToString(),
+            StartMills = treatment.Mills,
+            EndMills = treatment.Duration is > 0
+                ? treatment.Mills + (long)(treatment.Duration.Value * 60 * 1000)
+                : null,
+            Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
+            OriginalId = treatment.Id,
+            Metadata = BuildOverrideMetadata(treatment)
+        };
+
+        var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
+        result.CreatedRecords.Add(upserted);
+        _logger.LogDebug("Delegated Temporary Override treatment {LegacyId} to IStateSpanService", treatment.Id);
+    }
+
     #endregion
 
     #region Mapping Methods
@@ -380,7 +410,14 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
-            CorrelationId = correlationId
+            CorrelationId = correlationId,
+            SyncIdentifier = treatment.SyncIdentifier,
+            InsulinType = treatment.InsulinType,
+            Unabsorbed = treatment.Unabsorbed,
+            IsBasalInsulin = treatment.IsBasalInsulin ?? false,
+            PumpId = treatment.PumpId?.ToString(),
+            PumpSerial = treatment.PumpSerial,
+            PumpType = treatment.PumpType,
         };
     }
 
@@ -398,7 +435,9 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
-            CorrelationId = correlationId
+            CorrelationId = correlationId,
+            SyncIdentifier = treatment.SyncIdentifier,
+            CarbTime = treatment.CarbTime,
         };
     }
 
@@ -416,7 +455,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
-            CorrelationId = correlationId
+            CorrelationId = correlationId,
+            SyncIdentifier = treatment.SyncIdentifier,
         };
     }
 
@@ -432,7 +472,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
-            CorrelationId = correlationId
+            CorrelationId = correlationId,
+            SyncIdentifier = treatment.SyncIdentifier,
         };
     }
 
@@ -447,7 +488,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
-            CorrelationId = correlationId
+            CorrelationId = correlationId,
+            SyncIdentifier = treatment.SyncIdentifier,
         };
     }
 
@@ -467,7 +509,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer
             Device = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
-            CorrelationId = correlationId
+            CorrelationId = correlationId,
+            InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs,
+            InsulinProgrammed = treatment.InsulinProgrammed,
+            EnteredInsulin = treatment.EnteredInsulin,
+            SplitNow = treatment.SplitNow,
+            SplitExt = treatment.SplitExt,
+            PreBolus = treatment.PreBolus,
         };
     }
 
@@ -557,6 +605,36 @@ public class TreatmentDecomposer : ITreatmentDecomposer
 
         if (treatment.Timeshift.HasValue)
             metadata["timeshift"] = treatment.Timeshift.Value;
+
+        if (!string.IsNullOrEmpty(treatment.EnteredBy))
+            metadata["enteredBy"] = treatment.EnteredBy;
+
+        metadata["utcOffset"] = treatment.UtcOffset ?? 0;
+
+        return metadata.Count > 0 ? metadata : null;
+    }
+
+    private static Dictionary<string, object>? BuildOverrideMetadata(Treatment treatment)
+    {
+        var metadata = new Dictionary<string, object>();
+
+        if (!string.IsNullOrEmpty(treatment.Reason))
+            metadata["reason"] = treatment.Reason;
+
+        if (!string.IsNullOrEmpty(treatment.ReasonDisplay))
+            metadata["reasonDisplay"] = treatment.ReasonDisplay;
+
+        if (treatment.TargetTop.HasValue)
+            metadata["targetTop"] = treatment.TargetTop.Value;
+
+        if (treatment.TargetBottom.HasValue)
+            metadata["targetBottom"] = treatment.TargetBottom.Value;
+
+        if (treatment.InsulinNeedsScaleFactor.HasValue)
+            metadata["insulinNeedsScaleFactor"] = treatment.InsulinNeedsScaleFactor.Value;
+
+        if (!string.IsNullOrEmpty(treatment.DurationType))
+            metadata["durationType"] = treatment.DurationType;
 
         if (!string.IsNullOrEmpty(treatment.EnteredBy))
             metadata["enteredBy"] = treatment.EnteredBy;

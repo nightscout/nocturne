@@ -69,4 +69,9 @@ public class Note
     /// Whether this note is an announcement
     /// </summary>
     public bool IsAnnouncement { get; set; }
+
+    /// <summary>
+    /// APS system sync/deduplication identifier (used by Loop and AAPS)
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
 }

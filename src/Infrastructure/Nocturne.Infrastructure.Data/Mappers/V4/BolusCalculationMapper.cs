@@ -32,6 +32,12 @@ public static class BolusCalculationMapper
             InsulinRecommendation = model.InsulinRecommendation,
             CarbRatio = model.CarbRatio,
             CalculationType = model.CalculationType?.ToString(),
+            InsulinRecommendationForCarbs = model.InsulinRecommendationForCarbs,
+            InsulinProgrammed = model.InsulinProgrammed,
+            EnteredInsulin = model.EnteredInsulin,
+            SplitNow = model.SplitNow,
+            SplitExt = model.SplitExt,
+            PreBolus = model.PreBolus,
         };
     }
 
@@ -59,6 +65,12 @@ public static class BolusCalculationMapper
             InsulinRecommendation = entity.InsulinRecommendation,
             CarbRatio = entity.CarbRatio,
             CalculationType = Enum.TryParse<CalculationType>(entity.CalculationType, out var ct) ? ct : null,
+            InsulinRecommendationForCarbs = entity.InsulinRecommendationForCarbs,
+            InsulinProgrammed = entity.InsulinProgrammed,
+            EnteredInsulin = entity.EnteredInsulin,
+            SplitNow = entity.SplitNow,
+            SplitExt = entity.SplitExt,
+            PreBolus = entity.PreBolus,
         };
     }
 
@@ -82,5 +94,11 @@ public static class BolusCalculationMapper
         entity.InsulinRecommendation = model.InsulinRecommendation;
         entity.CarbRatio = model.CarbRatio;
         entity.CalculationType = model.CalculationType?.ToString();
+        entity.InsulinRecommendationForCarbs = model.InsulinRecommendationForCarbs;
+        entity.InsulinProgrammed = model.InsulinProgrammed;
+        entity.EnteredInsulin = model.EnteredInsulin;
+        entity.SplitNow = model.SplitNow;
+        entity.SplitExt = model.SplitExt;
+        entity.PreBolus = model.PreBolus;
     }
 }

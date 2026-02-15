@@ -105,4 +105,8 @@ public class BGCheckEntity
     [Column("units")]
     [MaxLength(32)]
     public string? Units { get; set; }
+
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
 }

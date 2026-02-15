@@ -93,4 +93,8 @@ public class NoteEntity
     /// </summary>
     [Column("is_announcement")]
     public bool IsAnnouncement { get; set; }
+
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
 }

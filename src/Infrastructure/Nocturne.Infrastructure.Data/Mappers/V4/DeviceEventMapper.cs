@@ -28,6 +28,7 @@ public static class DeviceEventMapper
             SysUpdatedAt = DateTime.UtcNow,
             EventType = model.EventType.ToString(),
             Notes = model.Notes,
+            SyncIdentifier = model.SyncIdentifier,
         };
     }
 
@@ -52,6 +53,7 @@ public static class DeviceEventMapper
                 ? parsed
                 : DeviceEventType.SiteChange,
             Notes = entity.Notes,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -70,5 +72,6 @@ public static class DeviceEventMapper
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.EventType = model.EventType.ToString();
         entity.Notes = model.Notes;
+        entity.SyncIdentifier = model.SyncIdentifier;
     }
 }

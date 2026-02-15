@@ -28,6 +28,7 @@ public static class NoteMapper
             Text = model.Text,
             EventType = model.EventType,
             IsAnnouncement = model.IsAnnouncement,
+            SyncIdentifier = model.SyncIdentifier,
         };
     }
 
@@ -51,6 +52,7 @@ public static class NoteMapper
             Text = entity.Text,
             EventType = entity.EventType,
             IsAnnouncement = entity.IsAnnouncement,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -70,5 +72,6 @@ public static class NoteMapper
         entity.Text = model.Text;
         entity.EventType = model.EventType;
         entity.IsAnnouncement = model.IsAnnouncement;
+        entity.SyncIdentifier = model.SyncIdentifier;
     }
 }

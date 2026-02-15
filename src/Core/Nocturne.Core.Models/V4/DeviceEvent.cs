@@ -64,4 +64,9 @@ public class DeviceEvent
     /// Free-text notes about the device event
     /// </summary>
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// APS system sync/deduplication identifier (used by Loop and AAPS)
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
 }

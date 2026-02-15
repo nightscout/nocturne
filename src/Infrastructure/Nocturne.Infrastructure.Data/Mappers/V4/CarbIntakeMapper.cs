@@ -30,6 +30,8 @@ public static class CarbIntakeMapper
             Fat = model.Fat,
             FoodType = model.FoodType,
             AbsorptionTime = model.AbsorptionTime,
+            SyncIdentifier = model.SyncIdentifier,
+            CarbTime = model.CarbTime,
         };
     }
 
@@ -55,6 +57,8 @@ public static class CarbIntakeMapper
             Fat = entity.Fat,
             FoodType = entity.FoodType,
             AbsorptionTime = entity.AbsorptionTime,
+            SyncIdentifier = entity.SyncIdentifier,
+            CarbTime = entity.CarbTime,
         };
     }
 
@@ -76,5 +80,7 @@ public static class CarbIntakeMapper
         entity.Fat = model.Fat;
         entity.FoodType = model.FoodType;
         entity.AbsorptionTime = model.AbsorptionTime;
+        entity.SyncIdentifier = model.SyncIdentifier;
+        entity.CarbTime = model.CarbTime;
     }
 }

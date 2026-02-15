@@ -79,4 +79,9 @@ public class BGCheck
     /// Unit of measurement for the glucose value
     /// </summary>
     public GlucoseUnit? Units { get; set; }
+
+    /// <summary>
+    /// APS system sync/deduplication identifier (used by Loop and AAPS)
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
 }

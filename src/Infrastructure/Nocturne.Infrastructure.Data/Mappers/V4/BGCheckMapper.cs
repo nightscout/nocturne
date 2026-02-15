@@ -30,6 +30,7 @@ public static class BGCheckMapper
             Mgdl = model.Mgdl,
             Mmol = model.Mmol,
             Units = model.Units?.ToString(),
+            SyncIdentifier = model.SyncIdentifier,
         };
     }
 
@@ -55,6 +56,7 @@ public static class BGCheckMapper
             Mgdl = entity.Mgdl,
             Mmol = entity.Mmol,
             Units = Enum.TryParse<GlucoseUnit>(entity.Units, out var u) ? u : null,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -76,5 +78,6 @@ public static class BGCheckMapper
         entity.Mgdl = model.Mgdl;
         entity.Mmol = model.Mmol;
         entity.Units = model.Units?.ToString();
+        entity.SyncIdentifier = model.SyncIdentifier;
     }
 }

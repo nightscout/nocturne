@@ -89,4 +89,34 @@ public class BolusCalculation
     /// How this calculation was determined (Suggested, Manual, Automatic)
     /// </summary>
     public CalculationType? CalculationType { get; set; }
+
+    /// <summary>
+    /// Insulin recommended specifically for carb coverage
+    /// </summary>
+    public double? InsulinRecommendationForCarbs { get; set; }
+
+    /// <summary>
+    /// Total insulin programmed for delivery
+    /// </summary>
+    public double? InsulinProgrammed { get; set; }
+
+    /// <summary>
+    /// Manually entered insulin amount
+    /// </summary>
+    public double? EnteredInsulin { get; set; }
+
+    /// <summary>
+    /// Percentage of combo bolus delivered immediately
+    /// </summary>
+    public double? SplitNow { get; set; }
+
+    /// <summary>
+    /// Percentage of combo bolus delivered as extended
+    /// </summary>
+    public double? SplitExt { get; set; }
+
+    /// <summary>
+    /// Pre-bolus time in minutes
+    /// </summary>
+    public double? PreBolus { get; set; }
 }

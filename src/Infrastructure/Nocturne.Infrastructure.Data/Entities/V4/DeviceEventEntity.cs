@@ -87,4 +87,8 @@ public class DeviceEventEntity
     [Column("notes")]
     [MaxLength(4096)]
     public string? Notes { get; set; }
+
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
 }

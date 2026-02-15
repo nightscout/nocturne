@@ -84,4 +84,39 @@ public class Bolus
     /// Duration in minutes for extended/square boluses
     /// </summary>
     public double? Duration { get; set; }
+
+    /// <summary>
+    /// APS system sync/deduplication identifier (used by Loop and AAPS)
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
+    /// Insulin type name (e.g. "Humalog", "Novolog")
+    /// </summary>
+    public string? InsulinType { get; set; }
+
+    /// <summary>
+    /// Unabsorbed insulin from previous boluses at time of delivery
+    /// </summary>
+    public double? Unabsorbed { get; set; }
+
+    /// <summary>
+    /// Whether this represents basal insulin delivery (AAPS-specific)
+    /// </summary>
+    public bool IsBasalInsulin { get; set; }
+
+    /// <summary>
+    /// AAPS internal pump identifier
+    /// </summary>
+    public string? PumpId { get; set; }
+
+    /// <summary>
+    /// Pump serial number
+    /// </summary>
+    public string? PumpSerial { get; set; }
+
+    /// <summary>
+    /// Pump type/model name
+    /// </summary>
+    public string? PumpType { get; set; }
 }

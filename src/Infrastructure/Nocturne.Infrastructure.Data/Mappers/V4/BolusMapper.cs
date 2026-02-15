@@ -31,6 +31,13 @@ public static class BolusMapper
             BolusType = model.BolusType?.ToString(),
             Automatic = model.Automatic,
             Duration = model.Duration,
+            SyncIdentifier = model.SyncIdentifier,
+            InsulinType = model.InsulinType,
+            Unabsorbed = model.Unabsorbed,
+            IsBasalInsulin = model.IsBasalInsulin,
+            PumpId = model.PumpId,
+            PumpSerial = model.PumpSerial,
+            PumpType = model.PumpType,
         };
     }
 
@@ -57,6 +64,13 @@ public static class BolusMapper
             BolusType = Enum.TryParse<BolusType>(entity.BolusType, out var bt) ? bt : null,
             Automatic = entity.Automatic,
             Duration = entity.Duration,
+            SyncIdentifier = entity.SyncIdentifier,
+            InsulinType = entity.InsulinType,
+            Unabsorbed = entity.Unabsorbed,
+            IsBasalInsulin = entity.IsBasalInsulin,
+            PumpId = entity.PumpId,
+            PumpSerial = entity.PumpSerial,
+            PumpType = entity.PumpType,
         };
     }
 
@@ -79,5 +93,12 @@ public static class BolusMapper
         entity.BolusType = model.BolusType?.ToString();
         entity.Automatic = model.Automatic;
         entity.Duration = model.Duration;
+        entity.SyncIdentifier = model.SyncIdentifier;
+        entity.InsulinType = model.InsulinType;
+        entity.Unabsorbed = model.Unabsorbed;
+        entity.IsBasalInsulin = model.IsBasalInsulin;
+        entity.PumpId = model.PumpId;
+        entity.PumpSerial = model.PumpSerial;
+        entity.PumpType = model.PumpType;
     }
 }

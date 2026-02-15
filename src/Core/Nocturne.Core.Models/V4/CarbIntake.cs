@@ -79,4 +79,14 @@ public class CarbIntake
     /// Carbohydrate absorption time in minutes
     /// </summary>
     public double? AbsorptionTime { get; set; }
+
+    /// <summary>
+    /// APS system sync/deduplication identifier (used by Loop and AAPS)
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
+    /// Carb time offset in minutes
+    /// </summary>
+    public double? CarbTime { get; set; }
 }

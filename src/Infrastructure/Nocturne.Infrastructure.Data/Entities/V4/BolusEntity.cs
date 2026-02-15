@@ -110,4 +110,30 @@ public class BolusEntity
     /// </summary>
     [Column("duration")]
     public double? Duration { get; set; }
+
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
+
+    [Column("insulin_type")]
+    [MaxLength(128)]
+    public string? InsulinType { get; set; }
+
+    [Column("unabsorbed")]
+    public double? Unabsorbed { get; set; }
+
+    [Column("is_basal_insulin")]
+    public bool IsBasalInsulin { get; set; }
+
+    [Column("pump_id")]
+    [MaxLength(256)]
+    public string? PumpId { get; set; }
+
+    [Column("pump_serial")]
+    [MaxLength(128)]
+    public string? PumpSerial { get; set; }
+
+    [Column("pump_type")]
+    [MaxLength(128)]
+    public string? PumpType { get; set; }
 }

@@ -117,4 +117,22 @@ public class BolusCalculationEntity
     [Column("calculation_type")]
     [MaxLength(32)]
     public string? CalculationType { get; set; }
+
+    [Column("insulin_recommendation_for_carbs")]
+    public double? InsulinRecommendationForCarbs { get; set; }
+
+    [Column("insulin_programmed")]
+    public double? InsulinProgrammed { get; set; }
+
+    [Column("entered_insulin")]
+    public double? EnteredInsulin { get; set; }
+
+    [Column("split_now")]
+    public double? SplitNow { get; set; }
+
+    [Column("split_ext")]
+    public double? SplitExt { get; set; }
+
+    [Column("pre_bolus")]
+    public double? PreBolus { get; set; }
 }

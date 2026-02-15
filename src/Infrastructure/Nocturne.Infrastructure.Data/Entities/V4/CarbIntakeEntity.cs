@@ -104,4 +104,11 @@ public class CarbIntakeEntity
     /// </summary>
     [Column("absorption_time")]
     public double? AbsorptionTime { get; set; }
+
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
+
+    [Column("carb_time")]
+    public double? CarbTime { get; set; }
 }
