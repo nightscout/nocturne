@@ -455,6 +455,7 @@ builder.Services.AddScoped<BolusCalculationRepository>();
 // V4 Decomposers
 builder.Services.AddScoped<IEntryDecomposer, EntryDecomposer>();
 builder.Services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
+builder.Services.AddScoped<V4BackfillService>();
 
 // Note: Processing status service is registered by AddNocturneMemoryCache
 
