@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -18,6 +19,7 @@ public class DeviceStatusServiceTests
     private readonly Mock<IPostgreSqlService> _mockPostgreSqlService;
     private readonly Mock<ISignalRBroadcastService> _mockSignalRBroadcastService;
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<IDeviceStatusDecomposer> _mockDeviceStatusDecomposer;
     private readonly Mock<ILogger<DeviceStatusService>> _mockLogger;
     private readonly DeviceStatusService _deviceStatusService;
 
@@ -26,12 +28,14 @@ public class DeviceStatusServiceTests
         _mockPostgreSqlService = new Mock<IPostgreSqlService>();
         _mockSignalRBroadcastService = new Mock<ISignalRBroadcastService>();
         _mockCacheService = new Mock<ICacheService>();
+        _mockDeviceStatusDecomposer = new Mock<IDeviceStatusDecomposer>();
         _mockLogger = new Mock<ILogger<DeviceStatusService>>();
 
         _deviceStatusService = new DeviceStatusService(
             _mockPostgreSqlService.Object,
             _mockSignalRBroadcastService.Object,
             _mockCacheService.Object,
+            _mockDeviceStatusDecomposer.Object,
             _mockLogger.Object
         );
     }
