@@ -11851,6 +11851,54 @@ export class ServicesClient {
     }
 
     /**
+     * Get capabilities for a specific connector.
+     * @param id The connector ID (e.g., "dexcom", "libre")
+     * @return Connector capabilities
+     */
+    getConnectorCapabilities(id: string, signal?: AbortSignal): Promise<ConnectorCapabilities> {
+        let url_ = this.baseUrl + "/api/v4/services/connectors/{id}/capabilities";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetConnectorCapabilities(_response);
+        });
+    }
+
+    protected processGetConnectorCapabilities(response: Response): Promise<ConnectorCapabilities> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ConnectorCapabilities;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ConnectorCapabilities>(null as any);
+    }
+
+    /**
      * Get uploader apps that can push data to Nocturne with setup instructions.
      * @return List of uploader apps with setup instructions
      */
@@ -12118,10 +12166,10 @@ export class ServicesClient {
     }
 
     /**
-     * Trigger a manual sync for a specific connector with granular control.
-     * @param id Connector ID
-     * @param request Sync request parameters
-     * @return Result of the manual sync operation
+     * Trigger a manual sync for a specific connector.
+     * @param id Connector ID (e.g., "dexcom", "tidepool")
+     * @param request Sync request parameters (date range and data types)
+     * @return Sync result with success status and details
      */
     triggerConnectorSync(id: string, request: SyncRequest, signal?: AbortSignal): Promise<SyncResult> {
         let url_ = this.baseUrl + "/api/v4/services/connectors/{id}/sync";
@@ -12162,74 +12210,12 @@ export class ServicesClient {
             result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
             return throwException("A server side error occurred.", status, _responseText, _headers, result400);
             });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
         return Promise.resolve<SyncResult>(null as any);
-    }
-
-    /**
-     * Get the supported sync capabilities for a specific connector.
-     * @param id Connector ID
-     * @return List of supported data types
-     */
-    getConnectorCapabilities(id: string, signal?: AbortSignal): Promise<SyncDataType[]> {
-        let url_ = this.baseUrl + "/api/v4/services/connectors/{id}/capabilities";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetConnectorCapabilities(_response);
-        });
-    }
-
-    protected processGetConnectorCapabilities(response: Response): Promise<SyncDataType[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SyncDataType[];
-            return result200;
-            });
-        } else if (status === 404) {
-            return response.text().then((_responseText) => {
-            let result404: any = null;
-            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
-            });
-        } else if (status === 500) {
-            return response.text().then((_responseText) => {
-            return throwException("A server side error occurred.", status, _responseText, _headers);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<SyncDataType[]>(null as any);
     }
 
     /**
@@ -24105,6 +24091,13 @@ export interface ApiEndpointInfo {
     entriesEndpoint?: string;
     treatmentsEndpoint?: string;
     deviceStatusEndpoint?: string;
+}
+
+export interface ConnectorCapabilities {
+    supportedDataTypes?: string[];
+    supportsHistoricalSync?: boolean;
+    maxHistoricalDays?: number | undefined;
+    supportsManualSync?: boolean;
 }
 
 /** Response model for uploader setup instructions */

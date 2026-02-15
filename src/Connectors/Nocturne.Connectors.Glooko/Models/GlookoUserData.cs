@@ -1,19 +1,15 @@
 using System.Text.Json.Serialization;
 
-namespace Nocturne.Connectors.Glooko.Models
+namespace Nocturne.Connectors.Glooko.Models;
+
+public class GlookoUserData
 {
-    public class GlookoUserData
-    {
-        [JsonPropertyName("userLogin")]
-        public UserLogin UserLogin { get; set; } = new();
-    }
+    [JsonPropertyName("userLogin")] public UserLogin UserLogin { get; set; } = new();
+}
 
-    public class UserLogin
-    {
-        [JsonPropertyName("email")]
-        public string Email { get; set; } = string.Empty;
+public class UserLogin
+{
+    [JsonPropertyName("email")] public string Email { get; set; } = string.Empty;
 
-        [JsonPropertyName("glookoCode")]
-        public string GlookoCode { get; set; } = string.Empty;
-    }
+    [JsonPropertyName("glookoCode")] public string GlookoCode { get; set; } = string.Empty;
 }

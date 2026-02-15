@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.Connectors.Configurations;
@@ -797,8 +798,9 @@ internal class MigrationJob
         // Check for duplicates
         var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
         var exists = await dbContext.Entries.AnyAsync(
-            e => (originalId != null && e.OriginalId == originalId) ||
-                 (e.Mills == mills && e.Sgv == sgv),
+            e =>
+                (originalId != null && e.OriginalId == originalId)
+                || (e.Mills == mills && e.Sgv == sgv),
             ct
         );
 
@@ -839,8 +841,9 @@ internal class MigrationJob
         // Check for duplicates
         var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
         var exists = await dbContext.Treatments.AnyAsync(
-            t => (originalId != null && t.OriginalId == originalId) ||
-                 (t.Mills == mills && t.EventType == eventType),
+            t =>
+                (originalId != null && t.OriginalId == originalId)
+                || (t.Mills == mills && t.EventType == eventType),
             ct
         );
 

@@ -25,8 +25,18 @@ public class Entry : ProcessableDocumentBase
     {
         get
         {
+            if (_mills != 0)
+                return _mills;
+
+            // If mills is not set but date is available, calculate it
+            if (_date.HasValue)
+            {
+                return ((DateTimeOffset)DateTime.SpecifyKind(_date.Value, DateTimeKind.Utc))
+                    .ToUnixTimeMilliseconds();
+            }
+
             // If mills is not set but dateString is available, calculate it
-            if (_mills == 0 && !string.IsNullOrEmpty(_dateString))
+            if (!string.IsNullOrEmpty(_dateString))
             {
                 if (
                     DateTime.TryParse(
@@ -42,6 +52,7 @@ public class Entry : ProcessableDocumentBase
                     ).ToUnixTimeMilliseconds();
                 }
             }
+
             return _mills;
         }
         set => _mills = value;

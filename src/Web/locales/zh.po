@@ -1079,7 +1079,6 @@ msgstr ""
 #: src/routes/auth/register/+page.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/dashboard/+page.svelte
-#: src/routes/roadmap/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Try Again"
@@ -1181,6 +1180,8 @@ msgstr ""
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/devices/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 #: src/routes/settings/migration/+page.svelte
@@ -1207,7 +1208,6 @@ msgstr ""
 
 #: src/routes/dashboard/+page.svelte
 #: src/routes/reports/battery/+page.svelte
-#: src/routes/roadmap/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -1880,7 +1880,6 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: src/lib/components/MilestoneCard.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/routes/notifications/+page.svelte
@@ -9769,6 +9768,7 @@ msgid "Critical only"
 msgstr ""
 
 #: src/routes/settings/alarms/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 msgid "Enabled"
 msgstr ""
 
@@ -11179,6 +11179,8 @@ msgstr ""
 
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Sync failed"
@@ -11980,6 +11982,7 @@ msgstr ""
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11995,7 +11998,6 @@ msgid "<0/> Disabled"
 msgstr ""
 
 #. placeholder {0}: entries24h.toLocaleString()
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "({0} in 24h)"
 msgstr ""
@@ -12296,7 +12298,6 @@ msgid "{0} records (24h)"
 msgstr ""
 
 #. placeholder {0}: connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0
-#: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid ""
 "{0} records\n"
@@ -14974,10 +14975,6 @@ msgstr ""
 msgid "Exceeds tracker lifespan"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
-msgid "Webhook URLs"
-msgstr ""
-
 #: src/lib/stores/settings-store.svelte.ts
 msgid "Validation error"
 msgstr ""
@@ -15015,6 +15012,39 @@ msgstr ""
 msgid "Send alert events to external services"
 msgstr ""
 
+#~ msgid "Historical sync not supported."
+#~ msgstr ""
+
+#~ msgid "Historical sync limited to {0} days."
+#~ msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Loading connector capabilities..."
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Supported data types"
+msgstr ""
+
+#. placeholder {0}: selectedConnectorCapabilities.maxHistoricalDays
+#: src/routes/settings/connectors/+page.svelte
+msgid "Recent data only (last {0} days)."
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "Historical sync is not supported for this connector. <0/>"
+msgstr ""
+
+#. placeholder {0}: selectedConnectorCapabilities.maxHistoricalDays
+#: src/routes/settings/connectors/+page.svelte
+msgid "Historical sync limited to the last {0} days."
+msgstr ""
+
+#: src/routes/settings/connectors/+page.svelte
+msgid "This connector only supports recent syncs."
+msgstr ""
+
 #: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 msgid "Webhook Settings"
 msgstr ""
@@ -15025,6 +15055,18 @@ msgstr ""
 
 #: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 msgid "Send Test"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookSettingsForm.svelte
+msgid "Webhook URLs"
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "No webhook URLs configured."
+msgstr ""
+
+#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
+msgid "<0/> Add URL"
 msgstr ""
 
 #: src/lib/components/settings/notifications/webhooks/WebhookSecurity.svelte
@@ -15043,85 +15085,65 @@ msgstr ""
 msgid "The API signs each webhook with HMAC-SHA256 using this secret."
 msgstr ""
 
-#~ msgid "MMM d"
-#~ msgstr ""
-
-#. placeholder {0}: dateStr
-#. placeholder {1}: nextDayStr
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Night of {0}-{1}"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Sync Capabilities"
 msgstr ""
 
-#~ msgid "Compression Low Review"
-#~ msgstr ""
-
-#~ msgid "Review and confirm detected compression lows"
-#~ msgstr ""
-
-#~ msgid "No pending suggestions"
-#~ msgstr ""
-
-#~ msgid "There are no compression lows waiting for review."
-#~ msgstr ""
-
-#~ msgid "Select date to test"
-#~ msgstr ""
-
-#: src/routes/reports/data-quality/+page.svelte
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "<0/> Run Detection"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "What this connector supports for manual sync"
 msgstr ""
 
-#~ msgid "Low: {0} mg/dL"
-#~ msgstr ""
-
-#~ msgid "Recovery: {0}min"
-#~ msgstr ""
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Drop Rate (mg/dL/min)"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Historical sync"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Recovery (min)"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Supported"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Selected Range"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Not supported"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Drag the handles on the chart to adjust"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Max historical days"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "<0/> Accept"
+#: src/routes/settings/connectors/[connector]/+page.svelte
+msgid "Manual sync"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "<0/> Dismiss"
+#: src/routes/settings/connectors/+page.svelte
+msgid "Sync started"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
-msgid "No webhook URLs configured."
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorStart"
 msgstr ""
 
-#: src/lib/components/settings/notifications/webhooks/WebhookUrlList.svelte
-msgid "<0/> Add URL"
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorChange"
 msgstr ""
 
-#: src/routes/reports/data-quality/+page.svelte
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "End Date (optional)"
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SensorStop"
 msgstr ""
 
-#. placeholder {0}: detectionResult.totalSuggestionsCreated
-#. placeholder {1}: detectionResult.nightsProcessed
-#. placeholder {0}: detectionResult.totalSuggestionsCreated
-#. placeholder {1}: detectionResult.nightsProcessed
-#: src/routes/reports/data-quality/+page.svelte
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Found {0} compression low(s) across {1} night(s)"
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "SiteChange"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "InsulinChange"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/icons/DeviceEventIcon.svelte
+msgid "PumpBatteryChange"
 msgstr ""
 
 #: src/routes/settings/data-quality/+page.svelte
@@ -15182,44 +15204,74 @@ msgid ""
 "detected, you'll be notified to review and confirm them."
 msgstr ""
 
-#~ msgid "MMM d, yyyy"
-#~ msgstr ""
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Error Loading Compression Low History"
+msgstr ""
 
-#~ msgid "Compression Low History - Nocturne"
-#~ msgstr ""
+#. placeholder {0}: dateStr
+#. placeholder {1}: nextDayStr
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Night of {0}-{1}"
+msgstr ""
 
-#~ msgid "Compression Low History"
-#~ msgstr ""
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Compression Lows - Nocturne"
+msgstr ""
 
-#~ msgid "View past compression low detections and their outcomes"
-#~ msgstr ""
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Compression Lows"
+msgstr ""
 
-#~ msgid "<0/> Review Pending"
-#~ msgstr ""
+#. placeholder {0}: pendingCount
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "{0} pending review"
+msgstr ""
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Review history and manage exclusions"
+msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Status:"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Accepted"
 msgstr ""
 
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Dismissed"
 msgstr ""
-
-#~ msgid "{0} result{1}"
-#~ msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "No compression lows detected yet"
 msgstr ""
 
-#~ msgid "When compression lows are detected during your sleep, they'll appear here."
-#~ msgstr ""
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "When compression lows are detected during your sleep, they will appear here."
+msgstr ""
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "End Date (optional)"
+msgstr ""
+
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Run Detection"
+msgstr ""
+
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
+#. placeholder {0}: detectionResult.totalSuggestionsCreated
+#. placeholder {1}: detectionResult.nightsProcessed
+#: src/routes/reports/data-quality/+page.svelte
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Found {0} compression low(s) across {1} night(s)"
+msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "No matching results"
@@ -15233,70 +15285,44 @@ msgstr ""
 msgid "Unknown date"
 msgstr ""
 
-#~ msgid "Lowest: {0} mg/dL"
-#~ msgstr ""
-
-#~ msgid "Confidence: {0}"
-#~ msgstr ""
-
-#: src/routes/reports/data-quality/+page.svelte
-msgid "Data Quality - Nocturne"
-msgstr ""
-
-#~ msgid "Review data quality issues and exclusions"
-#~ msgstr ""
-
-#~ msgid "<0/> Review Pending ({0})"
-#~ msgstr ""
-
-#: src/routes/reports/data-quality/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Compression Lows"
-msgstr ""
-
-#~ msgid "Failed to load suggestions"
-#~ msgstr ""
-
-#: src/routes/reports/data-quality/+page.svelte
-msgid "Error Loading Data Quality Report"
+msgid "Drop Rate (mg/dL/min)"
 msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "When compression lows are detected during your sleep, they will appear here."
-msgstr ""
-
-#~ msgid "Error Loading Pending Suggestions"
-#~ msgstr ""
-
-#~ msgid "Review Compression Lows - Nocturne"
-#~ msgstr ""
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Error Loading Compression Low History"
+msgid "Recovery (min)"
 msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Compression Lows - Nocturne"
-msgstr ""
-
-#. placeholder {0}: pendingCount
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "{0} pending review"
-msgstr ""
-
-#: src/routes/reports/data-quality/compression-lows/+page.svelte
-msgid "Review history and manage exclusions"
+msgid "Selected Range"
 msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Exclusion Range"
 msgstr ""
 
-#~ msgid "This compression low has been {0}."
-#~ msgstr ""
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "Drag the handles on the chart to adjust"
+msgstr ""
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Accept"
+msgstr ""
+
+#: src/routes/reports/data-quality/compression-lows/+page.svelte
+msgid "<0/> Dismiss"
+msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 msgid "Select a compression low to view details"
+msgstr ""
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Error Loading Data Quality Report"
+msgstr ""
+
+#: src/routes/reports/data-quality/+page.svelte
+msgid "Data Quality - Nocturne"
 msgstr ""
 
 #: src/routes/reports/data-quality/+page.svelte
@@ -15320,11 +15346,10 @@ msgstr ""
 msgid "{0} pending"
 msgstr ""
 
-#~ msgid "{0} total detected"
-#~ msgstr ""
-
-#~ msgid "{0} excluded from stats"
-#~ msgstr ""
+#. placeholder {0}: acceptedCount
+#: src/routes/reports/data-quality/+page.svelte
+msgid "{0} events"
+msgstr ""
 
 #: src/routes/reports/data-quality/+page.svelte
 msgid "Additional data quality categories coming soon"
@@ -15344,21 +15369,6 @@ msgstr ""
 msgid "Review Now"
 msgstr ""
 
-#~ msgid ""
-#~ "You have {0} item{1} waiting\n"
-#~ "for review"
-#~ msgstr ""
-
-#~ msgid ""
-#~ "Review detected compression lows to improve your statistics\n"
-#~ "accuracy"
-#~ msgstr ""
-
-#. placeholder {0}: acceptedCount
-#: src/routes/reports/data-quality/+page.svelte
-msgid "{0} events"
-msgstr ""
-
 #: src/routes/reports/data-quality/+page.svelte
 msgid "Run Detection"
 msgstr ""
@@ -15367,85 +15377,12 @@ msgstr ""
 msgid "Manually scan a date range for compression lows"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/icons/DeviceEventIcon.svelte
-msgid "SensorStart"
+#. placeholder {0}: connectorStatus.entriesLast24Hours?.toLocaleString() ?? 0
+#: src/routes/settings/connectors/+page.svelte
+msgid "{0} records in the last 24 hours"
 msgstr ""
 
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/icons/DeviceEventIcon.svelte
-msgid "SensorChange"
-msgstr ""
-
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/icons/DeviceEventIcon.svelte
-msgid "SiteChange"
-msgstr ""
-
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/icons/DeviceEventIcon.svelte
-msgid "InsulinChange"
-msgstr ""
-
-#: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/icons/DeviceEventIcon.svelte
-msgid "PumpBatteryChange"
-msgstr ""
-
-#: src/lib/components/icons/DeviceEventIcon.svelte
-msgid "SensorStop"
-msgstr ""
-
-#: src/lib/components/SiteHeader.svelte
-#: src/routes/roadmap/+page.svelte
-msgid "Roadmap"
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-#: src/routes/roadmap/+page.svelte
-msgid "Failed to load roadmap"
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid ""
-"Track the development progress of Nocturne. See what we're working on,\n"
-"what's coming next, and what's been completed."
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid "<0/> View on GitHub <1/>"
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid "Loading roadmap from GitHub..."
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid "No milestones found"
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid "<0/> In Progress"
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid "<0/> Upcoming"
-msgstr ""
-
-#: src/routes/roadmap/+page.svelte
-msgid "<0/> Completed"
-msgstr ""
-
-#: src/lib/components/MilestoneCard.svelte
-msgid "Due"
-msgstr ""
-
-#. placeholder {0}: milestone.closed_issues
-#. placeholder {1}: totalIssues
-#: src/lib/components/MilestoneCard.svelte
-msgid "{0} / {1} issues completed"
-msgstr ""
-
-#: src/lib/components/MilestoneCard.svelte
-msgid "No issues in this milestone yet"
+#. placeholder {0}: entries24h.toLocaleString()
+#: src/routes/settings/connectors/+page.svelte
+msgid "({0} in last 24 hours)"
 msgstr ""

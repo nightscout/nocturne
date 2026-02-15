@@ -4,7 +4,7 @@ using Nocturne.Core.Models;
 namespace Nocturne.Infrastructure.Data.Abstractions;
 
 /// <summary>
-/// Statistics for a data source's data in the database (entries + treatments)
+/// Statistics for a data source's data in the database (entries + treatments + state spans)
 /// </summary>
 public record DataSourceStats(
     string DataSource,
@@ -15,24 +15,37 @@ public record DataSourceStats(
     long TotalTreatments,
     int TreatmentsLast24Hours,
     DateTime? LastTreatmentTime,
-    DateTime? FirstTreatmentTime
+    DateTime? FirstTreatmentTime,
+    long TotalStateSpans,
+    int StateSpansLast24Hours,
+    DateTime? LastStateSpanTime,
+    DateTime? FirstStateSpanTime
 )
 {
     /// <summary>
-    /// Total items (entries + treatments) from this data source
+    /// Total items (entries + treatments + state spans) from this data source
     /// </summary>
-    public long TotalItems => TotalEntries + TotalTreatments;
+    public long TotalItems => TotalEntries + TotalTreatments + TotalStateSpans;
 
     /// <summary>
     /// Total items in the last 24 hours
     /// </summary>
-    public int ItemsLast24Hours => EntriesLast24Hours + TreatmentsLast24Hours;
+    public int ItemsLast24Hours => EntriesLast24Hours + TreatmentsLast24Hours + StateSpansLast24Hours;
 
     /// <summary>
-    /// Most recent item time (entry or treatment)
+    /// Most recent item time (entry, treatment, or state span)
     /// </summary>
-    public DateTime? LastItemTime =>
-        LastEntryTime > LastTreatmentTime ? LastEntryTime : LastTreatmentTime ?? LastEntryTime;
+    public DateTime? LastItemTime
+    {
+        get
+        {
+            var times = new[] { LastEntryTime, LastTreatmentTime, LastStateSpanTime }
+                .Where(t => t.HasValue)
+                .ToArray();
+
+            return times.Length > 0 ? times.Max() : null;
+        }
+    }
 };
 
 /// <summary>

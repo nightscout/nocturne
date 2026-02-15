@@ -1,44 +1,68 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 
-namespace Nocturne.Connectors.Core.Extensions
+namespace Nocturne.Connectors.Core.Extensions;
+
+/// <summary>
+///     Options for configuring a connector via AddConnector
+/// </summary>
+public abstract class ConnectorOptions
 {
-    public static class ConnectorServiceCollectionExtensions
+    /// <summary>
+    ///     The connector name used in configuration paths (e.g., "Dexcom", "LibreLinkUp")
+    /// </summary>
+    public required string ConnectorName { get; init; }
+
+    /// <summary>
+    ///     Server mapping for region-based server resolution.
+    ///     Key: region code (e.g., "US", "EU"), Value: server URL
+    /// </summary>
+    public Dictionary<string, string>? ServerMapping { get; init; }
+
+    /// <summary>
+    ///     Default server URL if no region mapping matches
+    /// </summary>
+    public string? DefaultServer { get; init; }
+
+    /// <summary>
+    ///     Function to extract the server/region from the configuration
+    /// </summary>
+    public Func<BaseConnectorConfiguration, string>? GetServerRegion { get; init; }
+
+    /// <summary>
+    ///     Additional headers to include in HTTP requests
+    /// </summary>
+    public Dictionary<string, string>? AdditionalHeaders { get; init; }
+
+    /// <summary>
+    ///     Custom User-Agent string
+    /// </summary>
+    public string? UserAgent { get; init; }
+
+    /// <summary>
+    ///     Request timeout
+    /// </summary>
+    public TimeSpan? Timeout { get; init; }
+
+    /// <summary>
+    ///     Whether to add resilience policies (retry, circuit breaker)
+    /// </summary>
+    public bool AddResilience { get; init; }
+}
+
+public static class ConnectorServiceCollectionExtensions
+{
+    /// <param name="services">Service collection</param>
+    extension(IServiceCollection services)
     {
-        /// <summary>
-        /// Checks if this connector is enabled and logs appropriately.
-        /// Call at the start of Main() and return early if false.
-        /// This supports the runtime configuration model where all connectors are deployed
-        /// but self-disable based on environment variables.
-        /// </summary>
-        /// <param name="configuration">Application configuration</param>
-        /// <param name="connectorName">Name of the connector (e.g., "Dexcom", "Glooko")</param>
-        /// <returns>True if connector should run, false if it should exit</returns>
-        /// <example>
-        /// if (!builder.Configuration.IsConnectorEnabled("Dexcom")) return;
-        /// </example>
-        public static bool IsConnectorEnabled(this IConfiguration configuration, string connectorName)
+        public IServiceCollection AddBaseConnectorServices()
         {
-            // Check the standard config path: Parameters:Connectors:{Name}:Enabled
-            // Environment variable form: Parameters__Connectors__{Name}__Enabled
-            var enabled = configuration.GetValue<bool>($"Parameters:Connectors:{connectorName}:Enabled", false);
-            if (!enabled)
-            {
-                Console.WriteLine($"[{connectorName}] Connector not enabled. Exiting.");
-            }
-            return enabled;
-        }
-
-        public static IServiceCollection AddBaseConnectorServices(this IServiceCollection services)
-        {
-            // Core state and metrics services
-            services.TryAddSingleton<IConnectorStateService, ConnectorStateService>();
-            services.TryAddSingleton<IConnectorMetricsTracker, ConnectorMetricsTracker>();
-
             // Default strategies
             services.TryAddSingleton<IRetryDelayStrategy, ProductionRetryDelayStrategy>();
             services.TryAddSingleton<IRateLimitingStrategy, ProductionRateLimitingStrategy>();
@@ -49,52 +73,146 @@ namespace Nocturne.Connectors.Core.Extensions
             return services;
         }
 
-        public static IServiceCollection AddConnectorApiDataSubmitter(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration configuration)
+        public TConfig AddConnectorConfiguration<TConfig>(IConfiguration configuration,
+            string connectorName)
+            where TConfig : BaseConnectorConfiguration, new()
         {
-            var apiUrl = configuration["NocturneApiUrl"];
-            var apiSecret = configuration["ApiSecret"];
+            var config = new TConfig();
+            configuration.BindConnectorConfiguration(config, connectorName);
 
-            services.AddSingleton<IApiDataSubmitter>(sp =>
-            {
-                var httpClientFactory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
-                var httpClient = httpClientFactory.CreateClient("NocturneApi");
-                var logger = sp.GetRequiredService<ILogger<ApiDataSubmitter>>();
-                if (string.IsNullOrEmpty(apiUrl))
-                {
-                    throw new InvalidOperationException("NocturneApiUrl configuration is missing.");
-                }
-                return new ApiDataSubmitter(httpClient, apiUrl, apiSecret, logger);
-            });
+            services.AddSingleton(config);
+            services.AddSingleton<IOptions<TConfig>>(
+                new OptionsWrapper<TConfig>(config)
+            );
 
-            return services;
+            return config;
         }
 
         /// <summary>
-        /// Adds the configuration client for fetching runtime configuration from the API.
+        ///     Registers a connector with its configuration, service, and token provider.
+        ///     This is the preferred method for registering new connectors.
         /// </summary>
-        /// <param name="services">The service collection</param>
-        /// <param name="configuration">Application configuration</param>
-        /// <returns>The service collection for chaining</returns>
-        public static IServiceCollection AddConfigurationClient(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration configuration)
+        /// <typeparam name="TConfig">Configuration type</typeparam>
+        /// <typeparam name="TService">Connector service type</typeparam>
+        /// <typeparam name="TTokenProvider">Token provider type</typeparam>
+        /// <param name="configuration">Configuration</param>
+        /// <param name="options">Connector options</param>
+        /// <returns>The configuration if enabled, null otherwise</returns>
+        public TConfig? AddConnector<TConfig, TService, TTokenProvider>(IConfiguration configuration,
+            ConnectorOptions options)
+            where TConfig : BaseConnectorConfiguration, new()
+            where TService : class
+            where TTokenProvider : class
         {
-            var apiUrl = configuration["NocturneApiUrl"]
-                      ?? configuration["services:nocturne-api:https:0"]
-                      ?? configuration["services:nocturne-api:http:0"];
+            // Register configuration
+            var config = services.AddConnectorConfiguration<TConfig>(
+                configuration,
+                options.ConnectorName
+            );
 
-            if (string.IsNullOrEmpty(apiUrl))
+            // Skip registration if disabled
+            if (!config.Enabled)
+                return null;
+
+            // Resolve server URL if mapping is provided
+            string? serverUrl = null;
+            if (options is { ServerMapping: not null, GetServerRegion: not null })
             {
-                throw new InvalidOperationException("NocturneApiUrl configuration is missing. Set NocturneApiUrl or use Aspire service discovery.");
+                var region = options.GetServerRegion(config);
+                serverUrl = ConnectorServerResolver.Resolve(
+                    region,
+                    options.ServerMapping,
+                    options.DefaultServer ?? options.ServerMapping.Values.FirstOrDefault() ?? ""
+                );
+            }
+            else if (options.DefaultServer != null)
+            {
+                serverUrl = options.DefaultServer;
             }
 
-            services.AddSingleton<IConfigurationClient>(sp =>
+            // Register HttpClients with configuration
+            if (serverUrl != null)
             {
-                var httpClientFactory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
-                var httpClient = httpClientFactory.CreateClient("ConfigurationClient");
-                var logger = sp.GetRequiredService<ILogger<ConfigurationClient>>();
-                return new ConfigurationClient(httpClient, apiUrl, logger);
-            });
+                services.AddHttpClient<TService>()
+                    .ConfigureConnectorClient(
+                        serverUrl,
+                        options.AdditionalHeaders,
+                        options.UserAgent,
+                        options.Timeout,
+                        addResilience: options.AddResilience
+                    );
 
-            return services;
+                services.AddHttpClient<TTokenProvider>()
+                    .ConfigureConnectorClient(
+                        serverUrl,
+                        options.AdditionalHeaders,
+                        options.UserAgent,
+                        options.Timeout,
+                        addResilience: options.AddResilience
+                    );
+            }
+            else
+            {
+                // Register without specific configuration
+                services.AddHttpClient<TService>();
+                services.AddHttpClient<TTokenProvider>();
+            }
+
+            return config;
+        }
+
+        /// <summary>
+        ///     Simplified connector registration for connectors without token providers.
+        /// </summary>
+        public TConfig? AddConnector<TConfig, TService>(IConfiguration configuration,
+            ConnectorOptions options)
+            where TConfig : BaseConnectorConfiguration, new()
+            where TService : class
+        {
+            // Register configuration
+            var config = services.AddConnectorConfiguration<TConfig>(
+                configuration,
+                options.ConnectorName
+            );
+
+            // Skip registration if disabled
+            if (!config.Enabled)
+                return null;
+
+            // Resolve server URL if mapping is provided
+            string? serverUrl = null;
+            if (options.ServerMapping != null && options.GetServerRegion != null)
+            {
+                var region = options.GetServerRegion(config);
+                serverUrl = ConnectorServerResolver.Resolve(
+                    region,
+                    options.ServerMapping,
+                    options.DefaultServer ?? options.ServerMapping.Values.FirstOrDefault() ?? ""
+                );
+            }
+            else if (options.DefaultServer != null)
+            {
+                serverUrl = options.DefaultServer;
+            }
+
+            // Register HttpClient with configuration
+            if (serverUrl != null)
+            {
+                services.AddHttpClient<TService>()
+                    .ConfigureConnectorClient(
+                        serverUrl,
+                        options.AdditionalHeaders,
+                        options.UserAgent,
+                        options.Timeout,
+                        addResilience: options.AddResilience
+                    );
+            }
+            else
+            {
+                services.AddHttpClient<TService>();
+            }
+
+            return config;
         }
     }
 }

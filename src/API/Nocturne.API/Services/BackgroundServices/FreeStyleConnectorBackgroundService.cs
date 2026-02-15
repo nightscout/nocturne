@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.FreeStyle.Configurations;
 using Nocturne.Connectors.FreeStyle.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;

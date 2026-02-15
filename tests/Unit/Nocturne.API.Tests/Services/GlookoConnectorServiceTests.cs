@@ -7,10 +7,12 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using Nocturne.Connectors.Configurations;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Services;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Xunit;
 
@@ -37,42 +39,14 @@ namespace Nocturne.API.Tests.Services
             _httpClient = new HttpClient();
         }
 
-        private GlookoConnectorService CreateService(GlookoConnectorConfiguration config)
+        private GlookoTreatmentMapper CreateTreatmentMapper(GlookoConnectorConfiguration config)
         {
-            _mockOptions.Setup(o => o.Value).Returns(config);
-            var tokenProvider = new GlookoAuthTokenProvider(
-                _mockOptions.Object,
-                _httpClient,
-                _mockTokenLogger.Object
-            );
-
-            // Set up classification service with standard rules:
-            // Carbs > 0 AND Insulin > 0 → Meal Bolus
-            // Carbs > 0 AND Insulin ≤ 0 → Carb Correction
-            // Insulin > 0 AND Carbs ≤ 0 → Correction Bolus
-            _mockClassificationService
-                .Setup(s => s.ClassifyTreatment(It.IsAny<double?>(), It.IsAny<double?>()))
-                .Returns((double? carbs, double? insulin) =>
-                {
-                    var hasCarbs = carbs.HasValue && carbs.Value > 0;
-                    var hasInsulin = insulin.HasValue && insulin.Value > 0;
-                    return (hasCarbs, hasInsulin) switch
-                    {
-                        (true, true) => "Meal Bolus",
-                        (true, false) => "Carb Correction",
-                        (false, true) => "Correction Bolus",
-                        _ => "Note"
-                    };
-                });
-
-            return new GlookoConnectorService(
-                _httpClient,
-                _mockOptions.Object,
-                _mockLogger.Object,
-                _mockRetryDelay.Object,
-                _mockRateLimiting.Object,
-                tokenProvider,
-                _mockClassificationService.Object
+            var timeMapper = new GlookoTimeMapper(config, _mockLogger.Object);
+            return new GlookoTreatmentMapper(
+                DataSources.GlookoConnector,
+                _mockClassificationService.Object,
+                timeMapper,
+                _mockLogger.Object
             );
         }
 
@@ -91,7 +65,11 @@ namespace Nocturne.API.Tests.Services
                 TimezoneOffset = 11 // Sydney +11
             };
 
-            var service = CreateService(config);
+            _mockClassificationService
+                .Setup(s => s.ClassifyTreatment(It.IsAny<double?>(), It.IsAny<double?>()))
+                .Returns("Meal Bolus");
+
+            var mapper = CreateTreatmentMapper(config);
 
             var batchData = new GlookoBatchData
             {
@@ -103,20 +81,11 @@ namespace Nocturne.API.Tests.Services
                         Timestamp = "2025-12-16T17:30:00",
                         Carbs = 50
                     }
-                },
-                // Insulin at 17:30 Local
-                Insulins = new[]
-                {
-                    new GlookoInsulin
-                    {
-                        Timestamp = "2025-12-16T17:30:00",
-                        Value = 5.0
-                    }
                 }
             };
 
             // Act
-            var treatments = service.TransformBatchDataToTreatments(batchData);
+            var treatments = mapper.TransformBatchDataToTreatments(batchData);
 
             // Assert
             var mealBolus = treatments.FirstOrDefault(t => t.EventType == "Meal Bolus");

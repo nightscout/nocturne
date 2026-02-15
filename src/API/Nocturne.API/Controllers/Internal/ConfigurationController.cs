@@ -160,13 +160,25 @@ public class ConfigurationController : ControllerBase
 
         var configRoot = configuration.RootElement;
 
-        // Validate required fields
+        // Build set of secret fields to skip in required validation
+        // (secrets are saved via a separate endpoint)
+        var secretFields = new HashSet<string>();
+        if (schemaRoot.TryGetProperty("secrets", out var secretsArray))
+        {
+            foreach (var secret in secretsArray.EnumerateArray())
+            {
+                var name = secret.GetString();
+                if (name != null) secretFields.Add(name);
+            }
+        }
+
+        // Validate required fields (skip secrets - they're saved separately)
         if (schemaRoot.TryGetProperty("required", out var requiredFields))
         {
             foreach (var requiredField in requiredFields.EnumerateArray())
             {
                 var fieldName = requiredField.GetString();
-                if (fieldName != null && !configRoot.TryGetProperty(fieldName, out _))
+                if (fieldName != null && !secretFields.Contains(fieldName) && !configRoot.TryGetProperty(fieldName, out _))
                 {
                     errors.Add($"Required field '{fieldName}' is missing");
                 }

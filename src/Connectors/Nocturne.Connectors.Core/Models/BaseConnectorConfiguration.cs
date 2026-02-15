@@ -1,150 +1,155 @@
-using System;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
+using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 
-#nullable enable
+namespace Nocturne.Connectors.Core.Models;
 
-namespace Nocturne.Connectors.Core.Models
+/// <summary>
+///     Base implementation of connector configuration with common properties
+/// </summary>
+public abstract class BaseConnectorConfiguration : IConnectorConfiguration
 {
     /// <summary>
-    /// Base implementation of connector configuration with common properties
+    ///     Gets the connector name from the ConnectorRegistration attribute.
+    ///     Used for error messages and logging.
     /// </summary>
-    public abstract class BaseConnectorConfiguration : IConnectorConfiguration
+    private string ConnectorName =>
+        GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName
+        ?? GetType().Name.Replace("Configuration", "");
+
+    /// <summary>
+    ///     Gets the environment variable prefix from the ConnectorRegistration attribute.
+    /// </summary>
+    private string? EnvPrefix =>
+        GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.EnvironmentPrefix;
+    /// <summary>
+    ///     Timezone offset in hours (default 0).
+    ///     Can be set via environment variable: CONNECT_{CONNECTORNAME}_TIMEZONE_OFFSET
+    ///     or appsettings: {Configuration}:TimezoneOffset
+    /// </summary>
+    [ConnectorProperty("TimezoneOffset",
+        RuntimeConfigurable = true,
+        DisplayName = "Timezone Offset",
+        Category = "General",
+        MinValue = -12,
+        MaxValue = 14)]
+    public double TimezoneOffset { get; set; } = 0;
+
+    [Required] public ConnectSource ConnectSource { get; set; }
+
+    /// <summary>
+    ///     Whether the connector is enabled and should sync data.
+    ///     When disabled, the connector enters standby mode.
+    /// </summary>
+    [ConnectorProperty("Enabled",
+        RuntimeConfigurable = true,
+        DisplayName = "Enabled",
+        Category = "General")]
+    public bool Enabled { get; set; } = true;
+
+    [ConnectorProperty("MaxRetryAttempts",
+        RuntimeConfigurable = true,
+        DisplayName = "Max Retry Attempts",
+        Category = "Advanced",
+        MinValue = 0,
+        MaxValue = 10)]
+    public int MaxRetryAttempts { get; set; } = 3;
+
+    [ConnectorProperty("BatchSize",
+        RuntimeConfigurable = true,
+        DisplayName = "Batch Size",
+        Category = "Advanced",
+        MinValue = 1,
+        MaxValue = 500)]
+    public int BatchSize { get; set; } = 50;
+
+    [ConnectorProperty("SyncIntervalMinutes",
+        RuntimeConfigurable = true,
+        DisplayName = "Sync Interval (Minutes)",
+        Category = "Sync",
+        MinValue = 1,
+        MaxValue = 60)]
+    public int SyncIntervalMinutes { get; set; } = 5;
+
+    public virtual void Validate()
     {
-        private string _dataDirectory = "./data";
-        private string? _contentRootPath;
+        if (!Enum.IsDefined(typeof(ConnectSource), ConnectSource))
+            throw new ArgumentException($"Invalid connector source: {ConnectSource}");
 
-        [Required]
-        public ConnectSource ConnectSource { get; set; }
+        if (MaxRetryAttempts < 0)
+            throw new ArgumentException("MaxRetryAttempts cannot be negative");
 
-        [RuntimeConfigurable("Save Raw Data", "Advanced")]
-        public bool SaveRawData { get; set; } = false;
+        if (BatchSize <= 0)
+            throw new ArgumentException("BatchSize must be greater than zero");
 
-        /// <summary>
-        /// Whether the connector is enabled and should sync data.
-        /// When disabled, the connector enters standby mode.
-        /// </summary>
-        [RuntimeConfigurable("Enabled", "General")]
-        public bool Enabled { get; set; } = true;
+        // Validate properties marked with [Required] or [ConnectorProperty(Required = true)]
+        ValidateRequiredProperties();
 
-        /// <summary>
-        /// Gets or sets the data directory path. Can be relative or absolute.
-        /// Relative paths are resolved against the content root path.
-        /// Default is "data" (resolved to {ContentRootPath}/data).
-        /// </summary>
-        public string DataDirectory
+        // Allow derived classes to add additional validation
+        ValidateSourceSpecificConfiguration();
+    }
+
+    /// <summary>
+    ///     Validates all properties marked with [Required] attribute or
+    ///     [ConnectorProperty(Required = true)].
+    ///     Throws ArgumentException if any required string property is null or empty.
+    /// </summary>
+    private void ValidateRequiredProperties()
+    {
+        var properties = GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var property in properties)
         {
-            get => GetResolvedDataDirectory();
-            set => _dataDirectory = value;
-        }
+            var isRequired = false;
+            string? displayName = null;
 
-        /// <summary>
-        /// Gets or sets the content root path used to resolve relative DataDirectory paths.
-        /// Set automatically during configuration binding.
-        /// </summary>
-        public string? ContentRootPath
-        {
-            get => _contentRootPath;
-            set => _contentRootPath = value;
-        }
-
-        [RuntimeConfigurable("Load From File", "Advanced")]
-        public bool LoadFromFile { get; set; } = false;
-
-        public string? LoadFilePath { get; set; }
-
-        [RuntimeConfigurable("Delete After Upload", "Advanced")]
-        public bool DeleteAfterUpload { get; set; } = false;
-
-        public bool UseAsyncProcessing { get; set; } = true;
-
-        public TimeSpan MessageTimeout { get; set; } = TimeSpan.FromMinutes(5);
-
-        [RuntimeConfigurable("Max Retry Attempts", "Advanced")]
-        [ConfigSchema(Minimum = 0, Maximum = 10)]
-        public int MaxRetryAttempts { get; set; } = 3;
-
-        [RuntimeConfigurable("Batch Size", "Advanced")]
-        [ConfigSchema(Minimum = 1, Maximum = 500)]
-        public int BatchSize { get; set; } = 50;
-
-        /// <summary>
-        /// Timezone offset in hours (default 0).
-        /// Can be set via environment variable: CONNECT_{CONNECTORNAME}_TIMEZONE_OFFSET
-        /// or appsettings: {Configuration}:TimezoneOffset
-        /// </summary>
-        [RuntimeConfigurable("Timezone Offset", "General")]
-        [ConfigSchema(Minimum = -12, Maximum = 14)]
-        public double TimezoneOffset { get; set; } = 0;
-
-        public string? RoutingKeyPrefix { get; set; }
-
-        [RuntimeConfigurable("Sync Interval (Minutes)", "Sync")]
-        [ConfigSchema(Minimum = 1, Maximum = 60)]
-        public int SyncIntervalMinutes { get; set; } = 5;
-
-        public virtual void Validate()
-        {
-            if (!Enum.IsDefined(typeof(ConnectSource), ConnectSource))
-                throw new ArgumentException($"Invalid connector source: {ConnectSource}");
-
-            if (UseAsyncProcessing)
+            // Check for [Required] attribute
+            if (property.GetCustomAttribute<RequiredAttribute>() != null)
             {
-                if (MessageTimeout <= TimeSpan.Zero)
-                    throw new ArgumentException("MessageTimeout must be greater than zero");
-
-                if (MaxRetryAttempts < 0)
-                    throw new ArgumentException("MaxRetryAttempts cannot be negative");
-
-                if (BatchSize <= 0)
-                    throw new ArgumentException("BatchSize must be greater than zero");
-
-                if (!string.IsNullOrEmpty(RoutingKeyPrefix))
-                {
-                    if (
-                        !System.Text.RegularExpressions.Regex.IsMatch(
-                            RoutingKeyPrefix,
-                            "^[a-zA-Z0-9.]*$"
-                        )
-                    )
-                        throw new ArgumentException(
-                            "RoutingKeyPrefix can only contain alphanumeric characters and dots"
-                        );
-                }
+                isRequired = true;
+                displayName = property.Name;
             }
 
-            ValidateSourceSpecificConfiguration();
-        }
-
-        /// <summary>
-        /// Override this method to validate connector-specific configuration
-        /// </summary>
-        protected abstract void ValidateSourceSpecificConfiguration();
-
-        /// <summary>
-        /// Resolves the data directory to an absolute path.
-        /// If DataDirectory is relative, it is resolved against ContentRootPath.
-        /// If ContentRootPath is not set, falls back to AppContext.BaseDirectory.
-        /// </summary>
-        private string GetResolvedDataDirectory()
-        {
-            // If already absolute, return as-is
-            if (Path.IsPathRooted(_dataDirectory))
+            // Check for [ConnectorProperty(Required = true)]
+            var connectorProp = property.GetCustomAttribute<ConnectorPropertyAttribute>();
+            if (connectorProp is { Required: true })
             {
-                return _dataDirectory;
+                isRequired = true;
+                displayName = connectorProp.GetDisplayName();
             }
 
-            if (string.IsNullOrEmpty(_contentRootPath))
+            if (!isRequired)
+                continue;
+
+            var value = property.GetValue(this);
+
+            // For string properties, check for null or whitespace
+            if (property.PropertyType == typeof(string))
             {
-                return _dataDirectory;
+                if (!string.IsNullOrWhiteSpace(value as string)) continue;
+                var envVarHint = connectorProp != null && EnvPrefix != null
+                    ? $" (set via {connectorProp.GetFullEnvVarName(EnvPrefix)} or configuration)"
+                    : "";
+                throw new ArgumentException(
+                    $"{ConnectorName}: {displayName} is required{envVarHint}");
             }
-
-            // Determine the base path to resolve against
-            var basePath = _contentRootPath;
-
-            return Path.GetFullPath(Path.Combine(basePath, _dataDirectory));
+            // For nullable value types, check for null
+            else if (Nullable.GetUnderlyingType(property.PropertyType) != null && value == null)
+            {
+                throw new ArgumentException(
+                    $"{ConnectorName}: {displayName} is required");
+            }
         }
+    }
+
+    /// <summary>
+    ///     Override this method to add connector-specific validation beyond [Required] properties.
+    ///     The base implementation does nothing - derived classes can add custom validation rules.
+    /// </summary>
+    protected virtual void ValidateSourceSpecificConfiguration()
+    {
+        // Default implementation: no additional validation needed
+        // Derived classes can override to add custom validation
     }
 }

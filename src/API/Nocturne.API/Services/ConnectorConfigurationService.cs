@@ -1,11 +1,14 @@
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -21,7 +24,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly NocturneDbContext _context;
     private readonly ISecretEncryptionService _encryptionService;
     private readonly ISignalRBroadcastService _broadcastService;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -29,31 +33,19 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
-    /// <summary>
-    /// Maps connector IDs to their Aspire service names for HTTP calls.
-    /// </summary>
-    private static readonly Dictionary<string, string> ConnectorServiceNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["nightscout"] = ServiceNames.NightscoutConnector,
-        ["dexcom"] = ServiceNames.DexcomConnector,
-        ["libre"] = ServiceNames.LibreConnector,
-        ["glooko"] = ServiceNames.GlookoConnector,
-        ["carelink"] = ServiceNames.MiniMedConnector,
-        ["myfitnesspal"] = ServiceNames.MyFitnessPalConnector,
-        ["mylife"] = ServiceNames.MyLifeConnector,
-    };
-
     public ConnectorConfigurationService(
         NocturneDbContext context,
         ISecretEncryptionService encryptionService,
         ISignalRBroadcastService broadcastService,
-        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        IHostEnvironment environment,
         ILogger<ConnectorConfigurationService> logger)
     {
         _context = context;
         _encryptionService = encryptionService;
         _broadcastService = broadcastService;
-        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -64,7 +56,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     {
         var entity = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         if (entity == null)
         {
@@ -96,7 +88,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         var configJson = configuration.RootElement.GetRawText();
 
@@ -159,7 +151,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
         var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
@@ -209,7 +201,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         var entity = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         if (entity == null || string.IsNullOrEmpty(entity.SecretsJson) || entity.SecretsJson == "{}")
         {
@@ -248,9 +240,12 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     public async Task<IReadOnlyList<ConnectorStatusInfo>> GetAllConnectorStatusAsync(CancellationToken ct = default)
     {
         var allConnectors = ConnectorMetadataService.GetAll();
-        var dbConfigs = await _context.ConnectorConfigurations
+        var dbConfigsList = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .ToDictionaryAsync(c => c.ConnectorName, ct);
+            .ToListAsync(ct);
+        var dbConfigs = dbConfigsList.ToDictionary(
+            c => c.ConnectorName,
+            StringComparer.OrdinalIgnoreCase);
 
         var result = new List<ConnectorStatusInfo>();
 
@@ -309,7 +304,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         // Create the config JSON with the enabled field
         var configWithEnabled = CreateConfigWithEnabled(entity?.ConfigurationJson ?? "{}", isActive);
@@ -371,7 +366,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     public async Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default)
     {
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName == connectorName, ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
 
         if (entity == null)
         {
@@ -397,39 +392,28 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
-        if (!ConnectorServiceNames.TryGetValue(connectorName, out var serviceName))
+        var configType = FindConfigurationType(connectorName);
+        if (configType == null)
         {
             _logger.LogWarning("Unknown connector {ConnectorName} for effective config", connectorName);
             return null;
         }
 
-        try
+        if (Activator.CreateInstance(configType) is not BaseConnectorConfiguration config)
         {
-            var client = _httpClientFactory.CreateClient(ConnectorHealthService.HttpClientName);
-            var url = $"http://{serviceName}/config/effective";
-
-            _logger.LogDebug("Fetching effective config for {Connector} at {Url}", connectorName, url);
-
-            var response = await client.GetAsync(url, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning(
-                    "Failed to get effective config for {Connector}: {StatusCode}",
-                    connectorName,
-                    response.StatusCode);
-                return null;
-            }
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-            var result = JsonSerializer.Deserialize<Dictionary<string, object?>>(json, _jsonOptions);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch effective config for {Connector}", connectorName);
+            _logger.LogWarning("Could not create configuration for connector {ConnectorName}", connectorName);
             return null;
         }
+
+        var registration = configType.GetCustomAttribute<ConnectorRegistrationAttribute>();
+        var bindingName = registration?.ConnectorName ?? connectorName;
+
+        _configuration.BindConnectorConfiguration(
+            config,
+            bindingName
+        );
+
+        return GetEffectiveConfiguration(config);
     }
 
     /// <summary>
@@ -481,53 +465,62 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         {
             defaultInstance = Activator.CreateInstance(configType);
         }
-        catch
+        catch (Exception)
         {
             // Could not create default instance - continue without defaults
         }
 
         var allProps = configType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
+        // Get connector registration for environment variable prefix (used by ConnectorPropertyAttribute)
+        var registration = configType.GetCustomAttribute<ConnectorRegistrationAttribute>();
+        var envPrefix = registration?.EnvironmentPrefix;
+
         foreach (var property in allProps)
         {
-            var secretAttr = property.GetCustomAttribute<SecretAttribute>();
-            var runtimeAttr = property.GetCustomAttribute<RuntimeConfigurableAttribute>();
+            var connectorPropAttr = property.GetCustomAttribute<ConnectorPropertyAttribute>();
+            if (connectorPropAttr == null)
+                continue;
+
+            var propName = ToCamelCase(property.Name);
 
             // Handle secret fields - include in schema and mark as secret
-            if (secretAttr != null)
+            if (connectorPropAttr.Secret)
             {
-                var envVarAttr = property.GetCustomAttribute<EnvironmentVariableAttribute>();
-                var propName = ToCamelCase(property.Name);
                 secrets.Add(propName);
 
-                // Add secret property schema with title and description
                 var secretSchema = new Dictionary<string, object>
                 {
                     ["type"] = "string",
-                    ["title"] = FormatPropertyNameForDisplay(property.Name)
+                    ["title"] = connectorPropAttr.GetDisplayName()
                 };
 
-                if (envVarAttr != null && !string.IsNullOrEmpty(envVarAttr.Name))
+                if (!string.IsNullOrEmpty(envPrefix))
                 {
-                    secretSchema["x-envVar"] = envVarAttr.Name;
-                    secretSchema["description"] = $"Configure via environment variable: {envVarAttr.Name}";
+                    var envVarName = connectorPropAttr.GetFullEnvVarName(envPrefix);
+                    secretSchema["x-envVar"] = envVarName;
+                    secretSchema["description"] = connectorPropAttr.Description
+                        ?? $"Configure via environment variable: {envVarName}";
                 }
                 else
                 {
-                    secretSchema["description"] = "Sensitive credential (stored encrypted)";
+                    secretSchema["description"] = connectorPropAttr.Description
+                        ?? "Sensitive credential (stored encrypted)";
+                }
+
+                if (connectorPropAttr.Required)
+                {
+                    required.Add(propName);
                 }
 
                 properties[propName] = secretSchema;
                 continue;
             }
 
-            if (runtimeAttr == null)
+            if (!connectorPropAttr.RuntimeConfigurable)
             {
-                continue; // Only include runtime-configurable properties
+                continue;
             }
-
-            var schemaAttr = property.GetCustomAttribute<ConfigSchemaAttribute>();
-            var envVarAttr2 = property.GetCustomAttribute<EnvironmentVariableAttribute>();
 
             // Get default value from instance
             object? defaultValue = null;
@@ -537,20 +530,24 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 {
                     defaultValue = property.GetValue(defaultInstance);
                 }
-                catch
+                catch (TargetInvocationException)
                 {
-                    // Ignore errors getting default value
+                    continue;
+                }
+                catch (InvalidOperationException)
+                {
+                    continue;
                 }
             }
 
-            var propertySchema = GeneratePropertySchema(property.PropertyType, runtimeAttr, schemaAttr, envVarAttr2, defaultValue);
+            var propertySchema = GeneratePropertySchema(
+                property.PropertyType, connectorPropAttr, envPrefix, defaultValue);
 
-            properties[ToCamelCase(property.Name)] = propertySchema;
+            properties[propName] = propertySchema;
 
-            // Check for Required attribute
-            if (property.GetCustomAttribute<System.ComponentModel.DataAnnotations.RequiredAttribute>() != null)
+            if (connectorPropAttr.Required)
             {
-                required.Add(ToCamelCase(property.Name));
+                required.Add(propName);
             }
         }
 
@@ -576,22 +573,48 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         return JsonDocument.Parse(json);
     }
 
-    private static string FormatPropertyNameForDisplay(string name)
+    private static Dictionary<string, object?> GetEffectiveConfiguration(IConnectorConfiguration config)
     {
-        // Convert camelCase/PascalCase to Title Case with spaces
-        var result = System.Text.RegularExpressions.Regex.Replace(name, "([A-Z])", " $1").Trim();
-        return char.ToUpperInvariant(result[0]) + result.Substring(1);
+        var result = new Dictionary<string, object?>();
+        var configType = config.GetType();
+
+        foreach (var property in configType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var connectorPropAttr = property.GetCustomAttribute<ConnectorPropertyAttribute>();
+            if (connectorPropAttr is not { RuntimeConfigurable: true })
+                continue;
+
+            if (connectorPropAttr.Secret)
+                continue;
+
+            object? value = null;
+            try
+            {
+                value = property.GetValue(config);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (value != null && property.PropertyType.IsEnum)
+            {
+                value = value.ToString();
+            }
+
+            result[ToCamelCase(property.Name)] = value;
+        }
+
+        return result;
     }
 
     /// <summary>
-    /// Generates a JSON Schema property definition for a property.
-    /// Includes default value and environment variable name for UI display.
+    /// Generates a JSON Schema property definition from a ConnectorPropertyAttribute.
     /// </summary>
     private static Dictionary<string, object> GeneratePropertySchema(
         Type propertyType,
-        RuntimeConfigurableAttribute runtimeAttr,
-        ConfigSchemaAttribute? schemaAttr,
-        EnvironmentVariableAttribute? envVarAttr,
+        ConnectorPropertyAttribute connectorAttr,
+        string? envPrefix,
         object? defaultValue)
     {
         var schema = new Dictionary<string, object>();
@@ -623,27 +646,24 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             schema["type"] = "string";
         }
 
-        // Add title/description from RuntimeConfigurable
-        if (!string.IsNullOrEmpty(runtimeAttr.DisplayName))
+        // Title from ConnectorProperty
+        schema["title"] = connectorAttr.GetDisplayName();
+
+        // Description
+        if (!string.IsNullOrEmpty(connectorAttr.Description))
         {
-            schema["title"] = runtimeAttr.DisplayName;
+            schema["description"] = connectorAttr.Description;
         }
 
-        if (!string.IsNullOrEmpty(runtimeAttr.Description))
+        // Category for UI grouping
+        if (!string.IsNullOrEmpty(connectorAttr.Category))
         {
-            schema["description"] = runtimeAttr.Description;
+            schema["x-category"] = connectorAttr.Category;
         }
 
-        // Add category for UI grouping
-        if (!string.IsNullOrEmpty(runtimeAttr.Category))
-        {
-            schema["x-category"] = runtimeAttr.Category;
-        }
-
-        // Add default value if available
+        // Default value: prefer instance default, fall back to attribute DefaultValue
         if (defaultValue != null)
         {
-            // Handle enums specially - convert to string
             if (underlyingType.IsEnum)
             {
                 schema["default"] = defaultValue.ToString()!;
@@ -653,50 +673,36 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 schema["default"] = defaultValue;
             }
         }
-
-        // Add environment variable name for UI display
-        if (envVarAttr != null && !string.IsNullOrEmpty(envVarAttr.Name))
+        else if (!string.IsNullOrEmpty(connectorAttr.DefaultValue))
         {
-            schema["x-envVar"] = envVarAttr.Name;
+            schema["default"] = connectorAttr.DefaultValue;
         }
 
-        // Add constraints from ConfigSchema
-        if (schemaAttr != null)
+        // Environment variable name
+        if (!string.IsNullOrEmpty(envPrefix))
         {
-            if (schemaAttr.HasMinimum)
-            {
-                schema["minimum"] = schemaAttr.Minimum;
-            }
+            schema["x-envVar"] = connectorAttr.GetFullEnvVarName(envPrefix);
+        }
 
-            if (schemaAttr.HasMaximum)
-            {
-                schema["maximum"] = schemaAttr.Maximum;
-            }
+        // Constraints
+        if (connectorAttr.HasMinValue)
+        {
+            schema["minimum"] = connectorAttr.MinValue;
+        }
 
-            if (schemaAttr.HasMinLength)
-            {
-                schema["minLength"] = schemaAttr.MinLength;
-            }
+        if (connectorAttr.HasMaxValue)
+        {
+            schema["maximum"] = connectorAttr.MaxValue;
+        }
 
-            if (schemaAttr.HasMaxLength)
-            {
-                schema["maxLength"] = schemaAttr.MaxLength;
-            }
+        if (connectorAttr.AllowedValues != null && connectorAttr.AllowedValues.Length > 0)
+        {
+            schema["enum"] = connectorAttr.AllowedValues;
+        }
 
-            if (!string.IsNullOrEmpty(schemaAttr.Pattern))
-            {
-                schema["pattern"] = schemaAttr.Pattern;
-            }
-
-            if (schemaAttr.Enum != null && schemaAttr.Enum.Length > 0)
-            {
-                schema["enum"] = schemaAttr.Enum;
-            }
-
-            if (!string.IsNullOrEmpty(schemaAttr.Format))
-            {
-                schema["format"] = schemaAttr.Format;
-            }
+        if (!string.IsNullOrEmpty(connectorAttr.Format))
+        {
+            schema["format"] = connectorAttr.Format;
         }
 
         return schema;

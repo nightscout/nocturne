@@ -10,39 +10,47 @@ namespace Nocturne.Infrastructure.Shared.Services;
 /// <summary>
 /// Encrypts and decrypts secrets using AES-256-GCM with a key derived from api-secret.
 /// The key is derived using PBKDF2-SHA256 with 100,000 iterations.
-/// Uses an installation-specific salt combined with a static component for added security.
+/// The salt is derived deterministically from the api-secret via HMAC-SHA256,
+/// ensuring stability across restarts without requiring external persistence.
+/// An explicit salt can still be provided via configuration as an override.
 /// </summary>
 public class SecretEncryptionService : ISecretEncryptionService
 {
     private const int NonceSize = 12; // AES-GCM standard nonce size
-    private const int TagSize = 16;   // AES-GCM standard tag size
-    private const int KeySize = 32;   // 256 bits for AES-256
-    private const int SaltSize = 16;  // 128-bit installation salt
+    private const int TagSize = 16; // AES-GCM standard tag size
+    private const int KeySize = 32; // 256 bits for AES-256
+    private const int SaltSize = 16; // 128-bit installation salt
     private const int Iterations = 100_000;
     private const string SaltConfigKey = "Nocturne:EncryptionSalt";
-    private static readonly byte[] StaticSaltComponent = Encoding.UTF8.GetBytes("nocturne-secrets-v2");
+    private static readonly byte[] SaltDerivationKey = Encoding.UTF8.GetBytes(
+        "nocturne-encryption-salt-derivation"
+    );
 
     private readonly byte[]? _encryptionKey;
     private readonly ILogger<SecretEncryptionService> _logger;
 
-    public SecretEncryptionService(IConfiguration configuration, ILogger<SecretEncryptionService> logger)
+    public SecretEncryptionService(
+        IConfiguration configuration,
+        ILogger<SecretEncryptionService> logger
+    )
     {
         _logger = logger;
 
         // Get api-secret from configuration (same as used for authentication)
-        var apiSecret = configuration["Parameters:api-secret"]
-                     ?? configuration["API_SECRET"]
-                     ?? string.Empty;
+        var apiSecret =
+            configuration["Parameters:api-secret"] ?? configuration["API_SECRET"] ?? string.Empty;
 
         if (string.IsNullOrEmpty(apiSecret))
         {
-            _logger.LogWarning("api-secret not configured - secret encryption will not be available");
+            _logger.LogWarning(
+                "api-secret not configured - secret encryption will not be available"
+            );
             _encryptionKey = null;
             return;
         }
 
-        // Get or generate installation-specific salt
-        var salt = GetOrCreateInstallationSalt(configuration);
+        // Get or derive deterministic salt
+        var salt = GetSalt(configuration, apiSecret);
 
         // Derive encryption key from api-secret using PBKDF2
         _encryptionKey = KeyDerivation.Pbkdf2(
@@ -50,67 +58,51 @@ public class SecretEncryptionService : ISecretEncryptionService
             salt: salt,
             prf: KeyDerivationPrf.HMACSHA256,
             iterationCount: Iterations,
-            numBytesRequested: KeySize);
+            numBytesRequested: KeySize
+        );
 
-        _logger.LogDebug("Secret encryption service initialized with installation-specific salt");
+        _logger.LogDebug("Secret encryption service initialized");
     }
 
     /// <summary>
-    /// Gets the installation-specific salt from configuration, or generates a new one.
-    /// The salt is a combination of a static component and an installation-specific component.
+    /// Gets the encryption salt. Uses an explicit configuration value if provided,
+    /// otherwise derives a deterministic salt from the api-secret via HMAC-SHA256.
+    /// This ensures the salt is stable across restarts without requiring external persistence.
     /// </summary>
-    private byte[] GetOrCreateInstallationSalt(IConfiguration configuration)
+    private byte[] GetSalt(IConfiguration configuration, string apiSecret)
     {
-        // Try to get existing installation salt from configuration
+        // Allow explicit override via configuration
         var installationSaltBase64 = configuration[SaltConfigKey];
-
-        byte[] installationSalt;
         if (!string.IsNullOrEmpty(installationSaltBase64))
         {
             try
             {
-                installationSalt = Convert.FromBase64String(installationSaltBase64);
-                if (installationSalt.Length >= SaltSize)
+                var explicitSalt = Convert.FromBase64String(installationSaltBase64);
+                if (explicitSalt.Length >= SaltSize)
                 {
-                    _logger.LogDebug("Using existing installation-specific encryption salt");
+                    _logger.LogDebug("Using explicit encryption salt from configuration");
+                    return explicitSalt;
                 }
-                else
-                {
-                    _logger.LogWarning("Installation salt too short, generating new one");
-                    installationSalt = GenerateNewSalt();
-                }
+
+                _logger.LogWarning(
+                    "Configured encryption salt too short, falling back to derived salt"
+                );
             }
             catch (FormatException)
             {
-                _logger.LogWarning("Invalid installation salt format, generating new one");
-                installationSalt = GenerateNewSalt();
+                _logger.LogWarning(
+                    "Invalid encryption salt format in configuration, falling back to derived salt"
+                );
             }
         }
-        else
-        {
-            // Generate a new installation-specific salt
-            // Note: In production, this should be persisted to appsettings.json or a secrets manager
-            installationSalt = GenerateNewSalt();
-            _logger.LogInformation(
-                "Generated new installation-specific encryption salt. " +
-                "To persist across restarts, add to configuration: {Key}={Value}",
-                SaltConfigKey,
-                Convert.ToBase64String(installationSalt));
-        }
 
-        // Combine static and installation-specific components
-        var combinedSalt = new byte[StaticSaltComponent.Length + installationSalt.Length];
-        Buffer.BlockCopy(StaticSaltComponent, 0, combinedSalt, 0, StaticSaltComponent.Length);
-        Buffer.BlockCopy(installationSalt, 0, combinedSalt, StaticSaltComponent.Length, installationSalt.Length);
+        // Derive a deterministic salt from the api-secret using HMAC-SHA256.
+        // This follows the HKDF pattern: use HMAC with a fixed purpose key to derive
+        // a stable, installation-unique salt without requiring external persistence.
+        var derived = HMACSHA256.HashData(SaltDerivationKey, Encoding.UTF8.GetBytes(apiSecret));
 
-        return combinedSalt;
-    }
-
-    private static byte[] GenerateNewSalt()
-    {
-        var salt = new byte[SaltSize];
-        RandomNumberGenerator.Fill(salt);
-        return salt;
+        _logger.LogDebug("Using deterministic encryption salt derived from api-secret");
+        return derived;
     }
 
     /// <inheritdoc />
@@ -121,7 +113,9 @@ public class SecretEncryptionService : ISecretEncryptionService
     {
         if (!IsConfigured)
         {
-            throw new InvalidOperationException("Secret encryption is not configured. Ensure api-secret is set.");
+            throw new InvalidOperationException(
+                "Secret encryption is not configured. Ensure api-secret is set."
+            );
         }
 
         if (string.IsNullOrEmpty(plaintext))
@@ -153,7 +147,9 @@ public class SecretEncryptionService : ISecretEncryptionService
     {
         if (!IsConfigured)
         {
-            throw new InvalidOperationException("Secret encryption is not configured. Ensure api-secret is set.");
+            throw new InvalidOperationException(
+                "Secret encryption is not configured. Ensure api-secret is set."
+            );
         }
 
         if (string.IsNullOrEmpty(ciphertext))

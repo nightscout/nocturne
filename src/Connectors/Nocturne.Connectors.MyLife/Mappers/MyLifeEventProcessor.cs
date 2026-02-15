@@ -1,4 +1,3 @@
-using Nocturne.Connectors.MyLife.Mappers.Mappers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
 
@@ -29,8 +28,8 @@ public class MyLifeEventProcessor
     }
 
     /// <summary>
-    /// Maps MyLife events to StateSpans, primarily BasalDelivery StateSpans.
-    /// These provide pump-confirmed basal delivery tracking with implicit duration model.
+    ///     Maps MyLife events to StateSpans, primarily BasalDelivery StateSpans.
+    ///     These provide pump-confirmed basal delivery tracking with implicit duration model.
     /// </summary>
     /// <param name="events">The MyLife events to process</param>
     /// <param name="enableTempBasalConsolidation">Whether to enable temp basal consolidation</param>

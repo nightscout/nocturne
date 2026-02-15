@@ -9207,6 +9207,49 @@
         }
       }
     },
+    "/api/v4/services/connectors/{id}/capabilities": {
+      "get": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Get capabilities for a specific connector.",
+        "operationId": "Services_GetConnectorCapabilities",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The connector ID (e.g., \"dexcom\", \"libre\")",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connector capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorCapabilities"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/services/uploaders": {
       "get": {
         "tags": [
@@ -9406,14 +9449,14 @@
         "tags": [
           "Services"
         ],
-        "summary": "Trigger a manual sync for a specific connector with granular control.",
+        "summary": "Trigger a manual sync for a specific connector.",
         "operationId": "Services_TriggerConnectorSync",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Connector ID",
+            "description": "Connector ID (e.g., \"dexcom\", \"tidepool\")",
             "schema": {
               "type": "string"
             },
@@ -9422,7 +9465,7 @@
         ],
         "requestBody": {
           "x-name": "request",
-          "description": "Sync request parameters",
+          "description": "Sync request parameters (date range and data types)",
           "content": {
             "application/json": {
               "schema": {
@@ -9435,7 +9478,7 @@
         },
         "responses": {
           "200": {
-            "description": "Result of the manual sync operation",
+            "description": "Sync result with success status and details",
             "content": {
               "application/json": {
                 "schema": {
@@ -9453,68 +9496,6 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": ""
-          }
-        }
-      }
-    },
-    "/api/v4/services/connectors/{id}/capabilities": {
-      "get": {
-        "tags": [
-          "Services"
-        ],
-        "summary": "Get the supported sync capabilities for a specific connector.",
-        "operationId": "Services_GetConnectorCapabilities",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "Connector ID",
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of supported data types",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SyncDataType"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": ""
           }
         }
       }
@@ -28643,6 +28624,29 @@
           },
           "deviceStatusEndpoint": {
             "type": "string"
+          }
+        }
+      },
+      "ConnectorCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "supportedDataTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supportsHistoricalSync": {
+            "type": "boolean"
+          },
+          "maxHistoricalDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "supportsManualSync": {
+            "type": "boolean"
           }
         }
       },

@@ -160,10 +160,8 @@ public class TestCommand : AsyncCommand<TestSettings>
         return config.ConnectSource?.ToLowerInvariant() switch
         {
             "glooko" => await TestGlookoConnection(config, cancellationToken),
-            "minimedcarelink" => await TestCarelinkConnection(config, cancellationToken),
             "dexcomshare" => await TestDexcomConnection(config, cancellationToken),
             "linkup" => await TestLibreConnection(config, cancellationToken),
-            "nightscout" => await TestNightscoutSourceConnection(config, cancellationToken),
             _ => new ConnectionTestResult(
                 false,
                 $"Unknown data source: {config.ConnectSource}",
@@ -191,27 +189,6 @@ public class TestCommand : AsyncCommand<TestSettings>
 
         // Use actual Glooko connector service for authentication test
         return await _connectorTestService.TestGlookoConnectionAsync(config, cancellationToken);
-    }
-
-    private async Task<ConnectionTestResult> TestCarelinkConnection(
-        ConnectConfiguration config,
-        CancellationToken cancellationToken
-    )
-    {
-        if (
-            string.IsNullOrWhiteSpace(config.CarelinkUsername)
-            || string.IsNullOrWhiteSpace(config.CarelinkPassword)
-        )
-        {
-            return new ConnectionTestResult(
-                false,
-                "CareLink credentials not configured",
-                TimeSpan.Zero
-            );
-        }
-
-        // Use actual CareLink connector service for authentication test
-        return await _connectorTestService.TestCareLinkConnectionAsync(config, cancellationToken);
     }
 
     private async Task<ConnectionTestResult> TestDexcomConnection(
@@ -259,24 +236,4 @@ public class TestCommand : AsyncCommand<TestSettings>
         );
     }
 
-    private async Task<ConnectionTestResult> TestNightscoutSourceConnection(
-        ConnectConfiguration config,
-        CancellationToken cancellationToken
-    )
-    {
-        if (string.IsNullOrWhiteSpace(config.SourceEndpoint))
-        {
-            return new ConnectionTestResult(
-                false,
-                "Nightscout source endpoint not configured",
-                TimeSpan.Zero
-            );
-        }
-
-        return await _connectionTestService.TestHttpEndpointAsync(
-            config.SourceEndpoint,
-            config.SourceApiSecret,
-            cancellationToken
-        );
-    }
 }

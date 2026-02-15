@@ -1,45 +1,35 @@
 <Project Sdk="Aspire.AppHost.Sdk/13.1.0">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsAspireHost>true</IsAspireHost>
-    <UserSecretsId>fc8953f8-4895-4099-877b-2727f26f4a3f</UserSecretsId>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.JavaScript" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
-    <PackageReference Include="Aspire.Hosting.Docker" />
-    <PackageReference Include="Aspire.Hosting.Python" />
-    <PackageReference Include="CommunityToolkit.Aspire.Hosting.NodeJS.Extensions" />
-    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Rust" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-    <PackageReference Include="Scalar.Aspire" />
-    <PackageReference Include="Spectre.Console" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\API\Nocturne.API\Nocturne.API.csproj" />
-    <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" IsAspireProjectResource="false" />
-    <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj" IsAspireProjectResource="false" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Configurations\Nocturne.Connectors.Configurations.csproj" IsAspireProjectResource="false" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Dexcom\Nocturne.Connectors.Dexcom.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Glooko\Nocturne.Connectors.Glooko.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MiniMed\Nocturne.Connectors.MiniMed.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.FreeStyle\Nocturne.Connectors.FreeStyle.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tidepool\Nocturne.Connectors.Tidepool.csproj" />
-    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyLife\Nocturne.Connectors.MyLife.csproj" />
-    <ProjectReference Include="..\Nocturne.Aspire.Hosting\Nocturne.Aspire.Hosting.csproj" IsAspireProjectResource="false" />
-    <ProjectReference Include="..\..\Services\Nocturne.Services.Demo\Nocturne.Services.Demo.csproj" />
-    <!-- Source generator for automatic connector extension generation -->
-    <ProjectReference Include="..\Nocturne.Aspire.SourceGenerators\Nocturne.Aspire.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" IsAspireProjectResource="false" />
-  </ItemGroup>
-  <!-- Enable viewing generated files for debugging -->
-  <PropertyGroup>
-    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsAspireHost>true</IsAspireHost>
+        <UserSecretsId>fc8953f8-4895-4099-877b-2727f26f4a3f</UserSecretsId>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.JavaScript"/>
+        <PackageReference Include="Aspire.Hosting.PostgreSQL"/>
+        <PackageReference Include="Aspire.Hosting.Docker"/>
+        <PackageReference Include="Aspire.Hosting.Python"/>
+        <PackageReference Include="CommunityToolkit.Aspire.Hosting.NodeJS.Extensions"/>
+        <PackageReference Include="CommunityToolkit.Aspire.Hosting.Rust"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions"/>
+        <PackageReference Include="Scalar.Aspire"/>
+        <PackageReference Include="Spectre.Console"/>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\API\Nocturne.API\Nocturne.API.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" IsAspireProjectResource="false"/>
+        <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false"/>
+        <ProjectReference Include="..\Nocturne.Aspire.Hosting\Nocturne.Aspire.Hosting.csproj" IsAspireProjectResource="false"/>
+        <ProjectReference Include="..\..\Services\Nocturne.Services.Demo\Nocturne.Services.Demo.csproj"/>
+        <!-- Source generator for automatic connector extension generation -->
+        <ProjectReference Include="..\Nocturne.Aspire.SourceGenerators\Nocturne.Aspire.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" IsAspireProjectResource="false"/>
+    </ItemGroup>
+    <!-- Enable viewing generated files for debugging -->
+    <PropertyGroup>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
+    </PropertyGroup>
 </Project>
