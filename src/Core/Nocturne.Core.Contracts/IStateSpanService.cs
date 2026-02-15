@@ -84,6 +84,7 @@ public interface IStateSpanService
     /// <param name="treatment">Treatment to convert to a basal delivery state span</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created state span</returns>
+    /// <exception cref="ArgumentException">Thrown when the treatment is not a valid temp basal treatment.</exception>
     Task<StateSpan> CreateBasalDeliveryFromTreatmentAsync(
         Treatment treatment,
         CancellationToken cancellationToken = default);

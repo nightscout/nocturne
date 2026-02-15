@@ -51,13 +51,14 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             var parameters = ParseV3QueryParameters();
 
             // Convert V3 filter criteria (field$op=value) to MongoDB-style JSON query
-            var findQuery = ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
+            var findQuery =
+                ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
             // Determine sort direction from sort$desc query parameter
             // Nightscout V3: sort$desc=field means descending (newest first)
             // reverseResults=false means descending, reverseResults=true means ascending
-            var query = HttpContext.Request.Query;
+            var query = HttpContext!.Request.Query;
             var hasSortDesc = query.ContainsKey("sort$desc");
             var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
 
@@ -74,11 +75,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             var deviceStatusList = deviceStatusListRaw.ToList();
 
             // Get total count for pagination
-            var totalCount = await GetTotalCountAsync(
-                null,
-                findQuery,
-                cancellationToken
-            );
+            var totalCount = await GetTotalCountAsync(null, findQuery, cancellationToken);
 
             var mappedData = deviceStatusList.Select(MapToV3Dto);
 
@@ -137,10 +134,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         try
         {
-            var result = await _deviceStatusService.GetDeviceStatusByIdAsync(
-                id,
-                cancellationToken
-            );
+            var result = await _deviceStatusService.GetDeviceStatusByIdAsync(id, cancellationToken);
 
             if (result == null)
             {
@@ -178,12 +172,18 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         );
         try
         {
-            if (deviceStatusData.ValueKind == JsonValueKind.Object && !deviceStatusData.EnumerateObject().Any())
+            if (
+                deviceStatusData.ValueKind == JsonValueKind.Object
+                && !deviceStatusData.EnumerateObject().Any()
+            )
             {
-                 return CreateV3ErrorResponse(400, "Bad or missing request body");
+                return CreateV3ErrorResponse(400, "Bad or missing request body");
             }
 
-            var deviceStatusRecords = ParseCreateRequestFromJsonElement(deviceStatusData, out var validationError);
+            var deviceStatusRecords = ParseCreateRequestFromJsonElement(
+                deviceStatusData,
+                out var validationError
+            );
 
             if (validationError != null)
             {
@@ -205,7 +205,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 // Nightscout V3 Strict Validation: device field is required
                 if (string.IsNullOrWhiteSpace(deviceStatus.Device))
                 {
-                     return CreateV3ErrorResponse(
+                    return CreateV3ErrorResponse(
                         400,
                         "Bad or missing app field", // Exact Nightscout error message
                         "Device name is required"
@@ -214,9 +214,35 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 ProcessDeviceStatusForCreation(deviceStatus);
             }
 
+            // For single record POSTs, check for deduplication (AAPS expects isDeduplication response)
+            var recordsList = deviceStatusRecords.ToList();
+            if (recordsList.Count == 1)
+            {
+                var single = recordsList[0];
+                if (!string.IsNullOrEmpty(single.Id))
+                {
+                    var existing = await _postgreSqlService.GetDeviceStatusByIdAsync(
+                        single.Id,
+                        cancellationToken
+                    );
+                    if (existing != null)
+                    {
+                        return Ok(
+                            new
+                            {
+                                status = 200,
+                                identifier = existing.Id,
+                                isDeduplication = true,
+                                deduplicatedIdentifier = existing.Id,
+                            }
+                        );
+                    }
+                }
+            }
+
             // Create device status records with deduplication support
             var created = await _deviceStatusService.CreateDeviceStatusAsync(
-                deviceStatusRecords,
+                recordsList,
                 cancellationToken
             );
 
@@ -261,20 +287,20 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Nightscout V3 Strict Validation: app field is required for PUT
         if (!request.TryGetProperty("app", out _))
         {
-             return CreateV3ErrorResponse(400, "Bad or missing app field");
+            return CreateV3ErrorResponse(400, "Bad or missing app field");
         }
 
         DeviceStatus? deviceStatus;
         try
         {
-             deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
+            deviceStatus = JsonSerializer.Deserialize<DeviceStatus>(
                 request.GetRawText(),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-             );
+            );
         }
         catch (JsonException)
         {
-             return CreateV3ErrorResponse(400, "Invalid JSON format");
+            return CreateV3ErrorResponse(400, "Invalid JSON format");
         }
 
         if (deviceStatus == null)
@@ -295,9 +321,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Ensure Device maps correctly (from app or device alias)
         if (string.IsNullOrWhiteSpace(deviceStatus.Device))
         {
-             // If app was present but deserialization failed to map to Device?
-             // Should not happen if DeviceStatus model maps it.
-             // But if specific mapping needed, handle here.
+            // If app was present but deserialization failed to map to Device?
+            // Should not happen if DeviceStatus model maps it.
+            // But if specific mapping needed, handle here.
         }
 
         deviceStatus.Id = id;
@@ -316,11 +342,13 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 return CreateV3ErrorResponse(404, "Device status not found");
             }
 
-            return Ok(new Dictionary<string, object>
-            {
-               ["status"] = 200,
-               ["result"] = MapToV3Dto(updated)
-            });
+            return Ok(
+                new Dictionary<string, object>
+                {
+                    ["status"] = 200,
+                    ["result"] = MapToV3Dto(updated),
+                }
+            );
         }
         catch (Exception ex)
         {
@@ -371,6 +399,44 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting device status with ID {Id}", id);
+            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Get device status records modified since a given timestamp (for AAPS incremental sync)
+    /// </summary>
+    [HttpGet("history/{lastModified:long}")]
+    [NightscoutEndpoint("/api/v3/devicestatus/history/{lastModified}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> GetDeviceStatusHistory(
+        long lastModified,
+        [FromQuery] int limit = 1000,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "V3 devicestatus history requested since {LastModified} with limit {Limit}",
+            lastModified,
+            limit
+        );
+
+        try
+        {
+            limit = Math.Min(Math.Max(limit, 1), 1000);
+
+            var deviceStatuses = await _postgreSqlService.GetDeviceStatusModifiedSinceAsync(
+                lastModified,
+                limit,
+                cancellationToken
+            );
+            var mappedData = deviceStatuses.Select(MapToV3Dto);
+            return CreateV3SuccessResponse(mappedData);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving devicestatus history");
             return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
     }
@@ -434,8 +500,12 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// Parse create request from JsonElement for DeviceStatus objects
     /// </summary>
     /// <param name="jsonElement">JsonElement containing device status data (single object or array)</param>
+    /// <param name="validationError">When validation fails, contains the error result to return</param>
     /// <returns>Collection of DeviceStatus objects</returns>
-    private IEnumerable<DeviceStatus> ParseCreateRequestFromJsonElement(JsonElement jsonElement, out ActionResult? validationError)
+    private IEnumerable<DeviceStatus> ParseCreateRequestFromJsonElement(
+        JsonElement jsonElement,
+        out ActionResult? validationError
+    )
     {
         var deviceStatusRecords = new List<DeviceStatus>();
         validationError = null;
@@ -491,7 +561,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         return deviceStatusRecords;
     }
 
-
     /// <summary>
     /// Convert V3 filter criteria (field$op=value format) to MongoDB-style JSON query
     /// </summary>
@@ -517,7 +586,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 "in" => "$in",
                 "nin" => "$nin",
                 "re" => "$regex",
-                _ => null
+                _ => null,
             };
 
             if (mongoOp == null && criteria.Operator == "eq")
@@ -530,7 +599,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 // Operator form: { "field": { "$op": "value" } }
                 conditions[criteria.Field] = new Dictionary<string, object?>
                 {
-                    [mongoOp] = criteria.Value
+                    [mongoOp] = criteria.Value,
                 };
             }
         }
@@ -565,6 +634,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             return 0; // Return 0 for count errors to maintain API functionality
         }
     }
+
     private object MapToV3Dto(DeviceStatus status)
     {
         // Build dictionary with only non-null optional fields to match Nightscout behavior
@@ -576,7 +646,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             ["utcOffset"] = status.UtcOffset,
             ["identifier"] = status.Id,
             ["srvModified"] = status.Mills,
-            ["srvCreated"] = status.Mills
+            ["srvCreated"] = status.Mills,
         };
 
         // Only include optional complex fields if they have values (Nightscout omits nulls)

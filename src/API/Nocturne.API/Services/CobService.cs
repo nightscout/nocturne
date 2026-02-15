@@ -448,45 +448,27 @@ public class CobService : ICobService
         }
 
         // Check OpenAPS enacted for COB
-        if (deviceStatusEntry.OpenAps?.Enacted != null)
+        if (deviceStatusEntry.OpenAps?.Enacted?.COB is { } enactedCob)
         {
-            // OpenAPS COB extraction - handle dynamic object
-            var enacted = deviceStatusEntry.OpenAps.Enacted;
-            if (HasCobProperty(enacted))
+            return new CobResult
             {
-                var cobValue = GetCobValue(enacted);
-                if (cobValue.HasValue)
-                {
-                    return new CobResult
-                    {
-                        Cob = cobValue.Value,
-                        Source = "OpenAPS",
-                        Device = deviceStatusEntry.Device,
-                        Mills = deviceStatusEntry.Mills,
-                    };
-                }
-            }
+                Cob = enactedCob,
+                Source = "OpenAPS",
+                Device = deviceStatusEntry.Device,
+                Mills = deviceStatusEntry.Mills,
+            };
         }
 
         // Check OpenAPS suggested for COB
-        if (deviceStatusEntry.OpenAps?.Suggested != null)
+        if (deviceStatusEntry.OpenAps?.Suggested?.COB is { } suggestedCob)
         {
-            // OpenAPS COB extraction from suggested
-            var suggested = deviceStatusEntry.OpenAps.Suggested;
-            if (HasCobProperty(suggested))
+            return new CobResult
             {
-                var cobValue = GetCobValue(suggested);
-                if (cobValue.HasValue)
-                {
-                    return new CobResult
-                    {
-                        Cob = cobValue.Value,
-                        Source = "OpenAPS",
-                        Device = deviceStatusEntry.Device,
-                        Mills = deviceStatusEntry.Mills,
-                    };
-                }
-            }
+                Cob = suggestedCob,
+                Source = "OpenAPS",
+                Device = deviceStatusEntry.Device,
+                Mills = deviceStatusEntry.Mills,
+            };
         }
 
         return new CobResult();

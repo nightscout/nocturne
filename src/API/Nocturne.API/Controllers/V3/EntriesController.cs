@@ -189,6 +189,31 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
             }
 
+            // Check for duplicate entry (AAPS expects isDeduplication response)
+            if (entry.Mills > 0)
+            {
+                var existingEntry = await _entryService.CheckForDuplicateEntryAsync(
+                    entry.Device,
+                    entry.Type ?? "sgv",
+                    entry.Sgv,
+                    entry.Mills,
+                    windowMinutes: 1,
+                    cancellationToken: cancellationToken
+                );
+                if (existingEntry != null)
+                {
+                    return Ok(
+                        new
+                        {
+                            status = 200,
+                            identifier = existingEntry.Id,
+                            isDeduplication = true,
+                            deduplicatedIdentifier = existingEntry.Id,
+                        }
+                    );
+                }
+            }
+
             // Process the entry
             var processedEntry = _documentProcessingService.ProcessEntry(entry); // Save to database
             var createdEntries = await _entryService.CreateEntriesAsync(
@@ -441,6 +466,44 @@ public class EntriesController : BaseV3Controller<Entry>
         }
     }
 
+    /// <summary>
+    /// Get entries modified since a given timestamp (for AAPS incremental sync)
+    /// </summary>
+    [HttpGet("history/{lastModified:long}")]
+    [NightscoutEndpoint("/api/v3/entries/history/{lastModified}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> GetEntryHistory(
+        long lastModified,
+        [FromQuery] int limit = 1000,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "V3 entry history requested since {LastModified} with limit {Limit}",
+            lastModified,
+            limit
+        );
+
+        try
+        {
+            limit = Math.Min(Math.Max(limit, 1), 1000);
+
+            var entries = await _postgreSqlService.GetEntriesModifiedSinceAsync(
+                lastModified,
+                limit,
+                cancellationToken
+            );
+            var v3Entries = entries.ToV3Responses().ToList();
+            return CreateV3SuccessResponse(v3Entries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving entry history");
+            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+        }
+    }
+
     #region Helper Methods
 
     private new string? ExtractTypeFromFilter(JsonElement? filter)
@@ -585,8 +648,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
     private string GetUserId()
     {
-        return HttpContext.GetSubjectIdString()
-            ?? "00000000-0000-0000-0000-000000000001";
+        return HttpContext.GetSubjectIdString() ?? "00000000-0000-0000-0000-000000000001";
     }
 
     #endregion

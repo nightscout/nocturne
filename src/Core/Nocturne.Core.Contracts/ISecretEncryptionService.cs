@@ -11,6 +11,7 @@ public interface ISecretEncryptionService
     /// </summary>
     /// <param name="plaintext">The secret value to encrypt</param>
     /// <returns>Base64-encoded ciphertext (nonce || ciphertext || tag)</returns>
+    /// <exception cref="InvalidOperationException">Thrown when encryption is not configured (api-secret not set).</exception>
     string Encrypt(string plaintext);
 
     /// <summary>
@@ -18,6 +19,8 @@ public interface ISecretEncryptionService
     /// </summary>
     /// <param name="ciphertext">Base64-encoded ciphertext from Encrypt()</param>
     /// <returns>The original plaintext secret</returns>
+    /// <exception cref="InvalidOperationException">Thrown when encryption is not configured (api-secret not set).</exception>
+    /// <exception cref="ArgumentException">Thrown when the ciphertext has an invalid format.</exception>
     string Decrypt(string ciphertext);
 
     /// <summary>

@@ -45,6 +45,10 @@ public static class EntryMapper
             ModifiedAt = entry.ModifiedAt,
             DataSource = entry.DataSource,
             MetaJson = entry.Meta != null ? JsonSerializer.Serialize(entry.Meta) : null,
+            App = entry.App,
+            Units = entry.Units,
+            IsValid = entry.IsValid,
+            IsReadOnly = entry.IsReadOnly,
         };
     }
 
@@ -83,6 +87,24 @@ public static class EntryMapper
             ModifiedAt = entity.ModifiedAt,
             DataSource = entity.DataSource,
             Meta = DeserializeJsonProperty<Dictionary<string, object>>(entity.MetaJson),
+            App = entity.App,
+            Units = entity.Units,
+            IsValid = entity.IsValid,
+            IsReadOnly = entity.IsReadOnly,
+            SrvModified =
+                entity.SysUpdatedAt != default
+                    ? new DateTimeOffset(
+                        entity.SysUpdatedAt,
+                        TimeSpan.Zero
+                    ).ToUnixTimeMilliseconds()
+                    : null,
+            SrvCreated =
+                entity.SysCreatedAt != default
+                    ? new DateTimeOffset(
+                        entity.SysCreatedAt,
+                        TimeSpan.Zero
+                    ).ToUnixTimeMilliseconds()
+                    : null,
         };
     }
 
@@ -118,6 +140,10 @@ public static class EntryMapper
         entity.ModifiedAt = entry.ModifiedAt;
         entity.DataSource = entry.DataSource;
         entity.MetaJson = entry.Meta != null ? JsonSerializer.Serialize(entry.Meta) : null;
+        entity.App = entry.App;
+        entity.Units = entry.Units;
+        entity.IsValid = entry.IsValid;
+        entity.IsReadOnly = entry.IsReadOnly;
     }
 
     /// <summary>

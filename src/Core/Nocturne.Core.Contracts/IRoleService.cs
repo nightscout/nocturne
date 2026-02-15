@@ -32,6 +32,7 @@ public interface IRoleService
     /// </summary>
     /// <param name="role">Role to create</param>
     /// <returns>Created role</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a role with the same name already exists.</exception>
     Task<Role> CreateRoleAsync(Role role);
 
     /// <summary>
@@ -39,6 +40,7 @@ public interface IRoleService
     /// </summary>
     /// <param name="role">Role to update</param>
     /// <returns>Updated role or null if not found</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a role with the same name already exists, or when attempting to rename a system role.</exception>
     Task<Role?> UpdateRoleAsync(Role role);
 
     /// <summary>

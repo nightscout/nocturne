@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Xml;
 using Microsoft.Extensions.Logging;
@@ -473,7 +474,8 @@ public class XmlDocumentationServiceTests
         var xmlDoc = new XmlDocument();
         xmlDoc.LoadXml(xmlContent);
 
-        var xmlDocuments = new Dictionary<string, XmlDocument> { [assemblyName!] = xmlDoc };
+        var xmlDocuments = new ConcurrentDictionary<string, Lazy<XmlDocument?>>();
+        xmlDocuments[assemblyName!] = new Lazy<XmlDocument?>(() => xmlDoc);
         xmlDocumentsField!.SetValue(service.Object, xmlDocuments);
 
         return service.Object;
@@ -491,14 +493,14 @@ public class XmlDocumentationServiceTests
             BindingFlags.NonPublic | BindingFlags.Instance
         );
 
-        var xmlDocuments = new Dictionary<string, XmlDocument>();
+        var xmlDocuments = new ConcurrentDictionary<string, Lazy<XmlDocument?>>();
 
         // Create a document that will cause XPath query failures
         try
         {
             var xmlDoc = new XmlDocument();
             xmlDoc.LoadXml("<invalid><xml>content</invalid>"); // Malformed XML
-            xmlDocuments[assemblyName!] = xmlDoc;
+            xmlDocuments[assemblyName!] = new Lazy<XmlDocument?>(() => xmlDoc);
         }
         catch
         {

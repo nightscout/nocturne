@@ -15,13 +15,19 @@ namespace Nocturne.API.Controllers.V3;
 [Route("api/v3/[controller]")]
 public class TreatmentsController : BaseV3Controller<Treatment>
 {
+    private readonly ITreatmentService _treatmentService;
+
     public TreatmentsController(
         IPostgreSqlService postgreSqlService,
         IDataFormatService dataFormatService,
         IDocumentProcessingService documentProcessingService,
+        ITreatmentService treatmentService,
         ILogger<TreatmentsController> logger
     )
-        : base(postgreSqlService, dataFormatService, documentProcessingService, logger) { }
+        : base(postgreSqlService, dataFormatService, documentProcessingService, logger)
+    {
+        _treatmentService = treatmentService;
+    }
 
     /// <summary>
     /// Get treatments with V3 API features including pagination, field selection, and advanced filtering
@@ -45,7 +51,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             var parameters = ParseV3QueryParameters();
 
             // Convert V3 filter criteria (field$op=value) to MongoDB-style JSON query
-            var findQuery = ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
+            var findQuery =
+                ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
             // Determine sort direction from sort$desc query parameter
@@ -55,7 +62,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
 
             // Get treatments using existing backend with V3 parameters
-            var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
+            var treatments = await _treatmentService.GetTreatmentsWithAdvancedFilterAsync(
                 count: parameters.Limit,
                 skip: parameters.Offset,
                 findQuery: findQuery,
@@ -117,7 +124,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
         try
         {
-            var treatment = await _postgreSqlService.GetTreatmentByIdAsync(id, cancellationToken);
+            var treatment = await _treatmentService.GetTreatmentByIdAsync(id, cancellationToken);
 
             if (treatment == null)
             {
@@ -171,15 +178,38 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
             }
 
+            // Check for duplicate treatment (AAPS expects isDeduplication response)
+            // Route through TreatmentService to check both treatments table and StateSpans
+            if (!string.IsNullOrEmpty(treatment.Id))
+            {
+                var existingTreatment = await _treatmentService.GetTreatmentByIdAsync(
+                    treatment.Id,
+                    cancellationToken
+                );
+                if (existingTreatment != null)
+                {
+                    return Ok(
+                        new
+                        {
+                            status = 200,
+                            identifier = existingTreatment.Id,
+                            isDeduplication = true,
+                            deduplicatedIdentifier = existingTreatment.Id,
+                        }
+                    );
+                }
+            }
+
             // Process the treatment
             var processedTreatment = _documentProcessingService.ProcessTreatment(treatment);
 
-            // Save to database
-            var createdTreatment = await _postgreSqlService.CreateTreatmentAsync(
-                processedTreatment,
+            // Route through TreatmentService which handles StateSpan creation for temp basals
+            var created = await _treatmentService.CreateTreatmentsAsync(
+                [processedTreatment],
                 cancellationToken
             );
 
+            var createdTreatment = created.FirstOrDefault();
             if (createdTreatment == null)
             {
                 return CreateV3ErrorResponse(
@@ -260,7 +290,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 .ToList();
 
             // Save to database
-            var createdTreatments = await _postgreSqlService.CreateTreatmentsAsync(
+            var createdTreatments = await _treatmentService.CreateTreatmentsAsync(
                 processedTreatments,
                 cancellationToken
             );
@@ -324,7 +354,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             var processedTreatment = _documentProcessingService.ProcessTreatment(treatment);
 
             // Update in database
-            var updatedTreatment = await _postgreSqlService.UpdateTreatmentAsync(
+            var updatedTreatment = await _treatmentService.UpdateTreatmentAsync(
                 id,
                 processedTreatment,
                 cancellationToken
@@ -375,7 +405,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
         try
         {
-            var deleted = await _postgreSqlService.DeleteTreatmentAsync(id, cancellationToken);
+            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
 
             if (!deleted)
             {
@@ -393,6 +423,95 @@ public class TreatmentsController : BaseV3Controller<Treatment>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting V3 treatment {Id}", id);
+            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Get treatments modified since a given timestamp (for AAPS incremental sync)
+    /// </summary>
+    [HttpGet("history/{lastModified:long}")]
+    [NightscoutEndpoint("/api/v3/treatments/history/{lastModified}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> GetTreatmentHistory(
+        long lastModified,
+        [FromQuery] int limit = 1000,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "V3 treatment history requested since {LastModified} with limit {Limit}",
+            lastModified,
+            limit
+        );
+
+        try
+        {
+            limit = Math.Min(Math.Max(limit, 1), 1000);
+
+            var treatments = await _treatmentService.GetTreatmentsModifiedSinceAsync(
+                lastModified,
+                limit,
+                cancellationToken
+            );
+            return CreateV3SuccessResponse(treatments);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving treatment history");
+            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Partially update a treatment via V3 API (JSON merge-patch)
+    /// Used by AAPS to update Temp Basal duration, endId, etc.
+    /// </summary>
+    [HttpPatch("{id}")]
+    [NightscoutEndpoint("/api/v3/treatments/:id")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(typeof(V3ErrorResponse), 404)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> PatchTreatment(
+        string id,
+        [FromBody] JsonElement patchData,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug("V3 treatment PATCH requested for {Id}", id);
+
+        try
+        {
+            var result = await _treatmentService.PatchTreatmentAsync(
+                id,
+                patchData,
+                cancellationToken
+            );
+
+            if (result == null)
+            {
+                return CreateV3ErrorResponse(
+                    404,
+                    "Treatment not found",
+                    $"No treatment found with ID: {id}"
+                );
+            }
+
+            _logger.LogDebug("Successfully patched V3 treatment {Id}", id);
+
+            return Ok(
+                new
+                {
+                    status = 200,
+                    result,
+                    identifier = result.Id,
+                }
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error patching V3 treatment {Id}", id);
             return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
     }
@@ -462,7 +581,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 "in" => "$in",
                 "nin" => "$nin",
                 "re" => "$regex",
-                _ => null
+                _ => null,
             };
 
             if (mongoOp == null && criteria.Operator == "eq")
@@ -475,7 +594,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 // Operator form: { "field": { "$op": "value" } }
                 conditions[criteria.Field] = new Dictionary<string, object?>
                 {
-                    [mongoOp] = criteria.Value
+                    [mongoOp] = criteria.Value,
                 };
             }
         }
@@ -517,7 +636,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             .Max();
 
         // Ensure DateTime is treated as UTC to avoid ArgumentException when creating DateTimeOffset
-        return new DateTimeOffset(DateTime.SpecifyKind(latestCreatedAt, DateTimeKind.Utc), TimeSpan.Zero);
+        return new DateTimeOffset(
+            DateTime.SpecifyKind(latestCreatedAt, DateTimeKind.Utc),
+            TimeSpan.Zero
+        );
     }
 
     #endregion

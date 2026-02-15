@@ -19,6 +19,7 @@ public interface ITimeQueryService
     /// <param name="queryParameters">Additional query parameters from request</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the time patterns</returns>
+    /// <exception cref="ArgumentException">Thrown when the storage type is not supported.</exception>
     Task<IEnumerable<Entry>> ExecuteTimeQueryAsync(
         string? prefix,
         string? regex,
@@ -40,6 +41,7 @@ public interface ITimeQueryService
     /// <param name="queryParameters">Additional query parameters from request</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
+    /// <exception cref="ArgumentException">Thrown when the storage type is not supported.</exception>
     Task<IEnumerable<Entry>> ExecuteSliceQueryAsync(
         string storage,
         string field,

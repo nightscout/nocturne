@@ -1093,6 +1093,9 @@ public class NocturneDbContext : DbContext
 
     private static void ConfigureEntities(ModelBuilder modelBuilder)
     {
+        // Configure TreatmentEntity owned types (column mappings for grouped fields)
+        TreatmentEntityConfiguration.ConfigureOwnedTypes(modelBuilder);
+
         // Configure UUID Version 7 value generators for all entity primary keys
         modelBuilder
             .Entity<EntryEntity>()
@@ -1312,9 +1315,8 @@ public class NocturneDbContext : DbContext
 
         modelBuilder.Entity<EntryEntity>().Property(e => e.MetaJson).HasDefaultValue("{}");
 
-        modelBuilder.Entity<TreatmentEntity>().Property(t => t.BolusCalcJson).HasDefaultValue("{}");
-
-        modelBuilder.Entity<TreatmentEntity>().Property(t => t.ProfileJson).HasDefaultValue("null");
+        // TreatmentEntity BolusCalcJson and ProfileJson defaults are now configured
+        // in TreatmentEntityConfiguration.ConfigureOwnedTypes()
 
         // Configure required fields and defaults
         modelBuilder.Entity<EntryEntity>().Property(e => e.Type).HasDefaultValue("sgv");

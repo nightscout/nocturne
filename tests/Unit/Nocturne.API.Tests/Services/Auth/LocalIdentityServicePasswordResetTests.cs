@@ -32,7 +32,14 @@ public class LocalIdentityServicePasswordResetTests
         var options = Options.Create(
             new LocalIdentityOptions
             {
-                Password = new PasswordSettings { MinLength = 4, MaxLength = 128 },
+                Password = new PasswordSettings
+                {
+                    MinLength = 4,
+                    MaxLength = 128,
+                    RequireUppercase = false,
+                    RequireLowercase = false,
+                    RequireDigit = false,
+                },
             }
         );
         var emailOptions = Options.Create(new EmailOptions());

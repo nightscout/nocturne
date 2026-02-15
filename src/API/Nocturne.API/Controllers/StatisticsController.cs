@@ -589,28 +589,66 @@ public class StatisticsController : ControllerBase
                         filteredTreatments
                     );
 
-                    // Calculate treatment summary with scheduled basal from profile
+                    // Calculate treatment summary from treatments
                     treatmentSummary = _statisticsService.CalculateTreatmentSummary(
                         filteredTreatments
                     );
 
-                    // Add scheduled basal from profile if we have profile data
-                    if (_profileService.HasData())
+                    // Use StateSpan basal data (actual pump delivery) when available,
+                    // falling back to profile-based or treatment-based calculation.
+                    // StateSpans represent real delivered insulin and match the
+                    // daily-basal-bolus-ratios endpoint so TDD values are consistent.
+                    var basalSpans = await _stateSpanService.GetStateSpansAsync(
+                        category: StateSpanCategory.BasalDelivery,
+                        from: startTimestamp,
+                        to: endTimestamp,
+                        count: 10000
+                    );
+                    var basalSpansList = basalSpans.ToList();
+
+                    if (basalSpansList.Count > 0)
                     {
-                        var scheduledBasal = CalculateScheduledBasalForPeriod(
+                        insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
+                            filteredTreatments,
+                            basalSpansList,
+                            startDate,
+                            endDate
+                        );
+                    }
+                    else if (_profileService.HasData())
+                    {
+                        insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
+                            filteredTreatments,
+                            startDate,
+                            endDate
+                        );
+                        var profileBasal = CalculateScheduledBasalForPeriod(
                             startTimestamp,
                             endTimestamp,
                             filteredTreatments
                         );
-                        treatmentSummary.Totals.Insulin.Basal += scheduledBasal;
+                        var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
+                        insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
+                        insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
+                        insulinDelivery.Tdd = Math.Round(totalWithProfile / Math.Max(1, insulinDelivery.DayCount) * 10) / 10;
+                        insulinDelivery.BasalPercent = totalWithProfile > 0
+                            ? Math.Round(profileBasal / totalWithProfile * 100 * 10) / 10
+                            : 0;
+                        insulinDelivery.BolusPercent = totalWithProfile > 0
+                            ? Math.Round(insulinDelivery.TotalBolus / totalWithProfile * 100 * 10) / 10
+                            : 0;
+                    }
+                    else
+                    {
+                        insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
+                            filteredTreatments,
+                            startDate,
+                            endDate
+                        );
                     }
 
-                    // Calculate comprehensive insulin delivery statistics
-                    insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
-                        filteredTreatments,
-                        startDate,
-                        endDate
-                    );
+                    // Keep treatment summary basal consistent
+                    treatmentSummary.Totals.Insulin.Basal = insulinDelivery.TotalBasal;
                 }
 
                 periodResults.Add(
@@ -840,7 +878,7 @@ public class StatisticsController : ControllerBase
             var startMills = new DateTimeOffset(startDate).ToUnixTimeMilliseconds();
             var endMills = new DateTimeOffset(endDate).ToUnixTimeMilliseconds();
 
-            // Fetch treatments from database
+            // Fetch treatments and basal StateSpans
             var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
                 count: 10000,
                 skip: 0,
@@ -848,13 +886,19 @@ public class StatisticsController : ControllerBase
                 reverseResults: false
             );
 
-            // Note: This still uses the treatment-based calculation
-            // For full StateSpan support, would need to update CalculateInsulinDeliveryStatistics
-            var result = _statisticsService.CalculateInsulinDeliveryStatistics(
-                treatments,
-                startDate,
-                endDate
+            var basalSpans = await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.BasalDelivery,
+                from: startMills,
+                to: endMills,
+                count: 10000
             );
+            var basalSpansList = basalSpans.ToList();
+
+            var result = basalSpansList.Count > 0
+                ? _statisticsService.CalculateInsulinDeliveryStatistics(
+                    treatments, basalSpansList, startDate, endDate)
+                : _statisticsService.CalculateInsulinDeliveryStatistics(
+                    treatments, startDate, endDate);
             return Ok(result);
         }
         catch (Exception ex)

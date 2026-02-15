@@ -15,7 +15,7 @@ public class AlertRulesEngine : IAlertRulesEngine
     private readonly AlertRuleRepository _alertRuleRepository;
     private readonly AlertHistoryRepository _alertHistoryRepository;
     private readonly NotificationPreferencesRepository _notificationPreferencesRepository;
-    private readonly IPredictionService _predictionService;
+    private readonly IPredictionService? _predictionService;
     private readonly AlertMonitoringOptions _options;
     private readonly ILogger<AlertRulesEngine> _logger;
 
@@ -23,9 +23,9 @@ public class AlertRulesEngine : IAlertRulesEngine
         AlertRuleRepository alertRuleRepository,
         AlertHistoryRepository alertHistoryRepository,
         NotificationPreferencesRepository notificationPreferencesRepository,
-        IPredictionService predictionService,
         IOptions<AlertMonitoringOptions> options,
-        ILogger<AlertRulesEngine> logger
+        ILogger<AlertRulesEngine> logger,
+        IPredictionService? predictionService = null
     )
     {
         _alertRuleRepository = alertRuleRepository;
@@ -86,10 +86,11 @@ public class AlertRulesEngine : IAlertRulesEngine
                 return alertEvents;
             }
 
-            // Get predictions if potentially needed
+            // Get predictions if potentially needed and prediction service is available
             GlucosePredictionResponse? predictions = null;
             if (
-                activeRules.Any(r =>
+                _predictionService != null
+                && activeRules.Any(r =>
                     r.ForecastLeadTimeMinutes.HasValue && r.ForecastLeadTimeMinutes > 0
                 )
             )

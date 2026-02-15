@@ -2,6 +2,7 @@ using System.Text.Json;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Common;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.OwnedTypes;
 
 namespace Nocturne.Infrastructure.Data.Mappers;
 
@@ -23,71 +24,114 @@ public static class TreatmentMapper
             OriginalId = IsValidMongoObjectId(treatment.Id) ? treatment.Id : null,
             EventType = treatment.EventType,
             Reason = treatment.Reason,
-            Glucose = treatment.Glucose,
-            GlucoseType = treatment.GlucoseType,
             Carbs = treatment.Carbs,
             Insulin = treatment.Insulin,
-            Protein = treatment.Protein,
-            Fat = treatment.Fat,
-            FoodType = treatment.FoodType,
-            Units = treatment.Units,
+            Duration = treatment.Duration,
             Mills = treatment.Mills,
             Created_at = treatment.Created_at,
-            Duration = treatment.Duration,
-            Percent = treatment.Percent,
-            Absolute = treatment.Absolute,
+            Date = treatment.Date,
+            Timestamp = ParseTimestampToLong(treatment.Timestamp),
+            UtcOffset = treatment.UtcOffset,
             Notes = treatment.Notes,
             EnteredBy = treatment.EnteredBy,
+            Status = treatment.Status,
             TargetTop = treatment.TargetTop,
             TargetBottom = treatment.TargetBottom,
-            Profile = treatment.Profile,
             Split = treatment.Split,
-            Date = treatment.Date,
-            CarbTime = treatment.CarbTime,
-            BolusCalcJson =
-                treatment.BolusCalc != null ? JsonSerializer.Serialize(treatment.BolusCalc) : null,
-            UtcOffset = treatment.UtcOffset,
-            Timestamp = ParseTimestampToLong(treatment.Timestamp),
             CuttedBy = treatment.CuttedBy,
             Cutting = treatment.Cutting,
-            EventTime = treatment.EventTime,
-            PreBolus = treatment.PreBolus,
-            Rate = treatment.Rate,
-            Mgdl = treatment.Mgdl,
-            Mmol = treatment.Mmol,
-            EndMills = treatment.EndMills,
-            DurationType = treatment.DurationType,
-            IsAnnouncement = treatment.IsAnnouncement,
-            ProfileJson = treatment.ProfileJson,
-            EndProfile = treatment.EndProfile,
-            InsulinNeedsScaleFactor = treatment.InsulinNeedsScaleFactor,
-            AbsorptionTime = treatment.AbsorptionTime,
-            EnteredInsulin = treatment.EnteredInsulin,
-            SplitNow = treatment.SplitNow,
-            SplitExt = treatment.SplitExt,
-            Status = treatment.Status,
-            Relative = treatment.Relative,
-            CR = treatment.CR,
             NsClientId = treatment.NsClientId,
             First = treatment.First,
             End = treatment.End,
-            CircadianPercentageProfile = treatment.CircadianPercentageProfile,
-            Percentage = treatment.Percentage,
-            Timeshift = treatment.Timeshift,
             TransmitterId = treatment.TransmitterId,
+            EventTime = treatment.EventTime,
+            IsAnnouncement = treatment.IsAnnouncement,
             DataSource = treatment.DataSource,
-            InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs,
-            InsulinRecommendationForCorrection = treatment.InsulinRecommendationForCorrection,
-            InsulinProgrammed = treatment.InsulinProgrammed,
-            InsulinDelivered = treatment.InsulinDelivered,
-            InsulinOnBoard = treatment.InsulinOnBoard,
-            BloodGlucoseInput = treatment.BloodGlucoseInput,
-            BloodGlucoseInputSource = treatment.BloodGlucoseInputSource,
-            CalculationType = treatment.CalculationType?.ToString(),
             AdditionalPropertiesJson =
                 treatment.AdditionalProperties != null
                     ? JsonSerializer.Serialize(treatment.AdditionalProperties)
                     : null,
+
+            GlucoseData = new TreatmentGlucoseData
+            {
+                Glucose = treatment.Glucose,
+                GlucoseType = treatment.GlucoseType,
+                Mgdl = treatment.Mgdl,
+                Mmol = treatment.Mmol,
+                Units = treatment.Units,
+            },
+            Nutritional = new TreatmentNutritionalData
+            {
+                Protein = treatment.Protein,
+                Fat = treatment.Fat,
+                FoodType = treatment.FoodType,
+                CarbTime = treatment.CarbTime,
+                AbsorptionTime = treatment.AbsorptionTime,
+            },
+            Basal = new TreatmentBasalData
+            {
+                Rate = treatment.Rate,
+                Percent = treatment.Percent,
+                Absolute = treatment.Absolute,
+                Relative = treatment.Relative,
+                DurationType = treatment.DurationType,
+                EndMills = treatment.EndMills,
+                DurationInMilliseconds = treatment.DurationInMilliseconds,
+            },
+            BolusCalc = new TreatmentBolusCalcData
+            {
+                InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs,
+                InsulinRecommendationForCorrection = treatment.InsulinRecommendationForCorrection,
+                InsulinProgrammed = treatment.InsulinProgrammed,
+                InsulinDelivered = treatment.InsulinDelivered,
+                InsulinOnBoard = treatment.InsulinOnBoard,
+                BloodGlucoseInput = treatment.BloodGlucoseInput,
+                BloodGlucoseInputSource = treatment.BloodGlucoseInputSource,
+                CalculationType = treatment.CalculationType?.ToString(),
+                BolusCalcJson = treatment.BolusCalc != null
+                    ? JsonSerializer.Serialize(treatment.BolusCalc)
+                    : null,
+                BolusCalculatorResult = treatment.BolusCalculatorResult,
+                EnteredInsulin = treatment.EnteredInsulin,
+                SplitNow = treatment.SplitNow,
+                SplitExt = treatment.SplitExt,
+                CR = treatment.CR,
+                PreBolus = treatment.PreBolus,
+            },
+            ProfileData = new TreatmentProfileData
+            {
+                Profile = treatment.Profile,
+                ProfileJson = treatment.ProfileJson,
+                EndProfile = treatment.EndProfile,
+                CircadianPercentageProfile = treatment.CircadianPercentageProfile,
+                Percentage = treatment.Percentage,
+                Timeshift = treatment.Timeshift,
+                InsulinNeedsScaleFactor = treatment.InsulinNeedsScaleFactor,
+            },
+            Aaps = new TreatmentAapsData
+            {
+                PumpId = treatment.PumpId,
+                PumpSerial = treatment.PumpSerial,
+                PumpType = treatment.PumpType,
+                EndId = treatment.EndId,
+                IsValid = treatment.IsValid,
+                IsReadOnly = treatment.IsReadOnly,
+                IsBasalInsulin = treatment.IsBasalInsulin,
+                OriginalDuration = treatment.OriginalDuration,
+                OriginalProfileName = treatment.OriginalProfileName,
+                OriginalPercentage = treatment.OriginalPercentage,
+                OriginalTimeshift = treatment.OriginalTimeshift,
+                OriginalCustomizedName = treatment.OriginalCustomizedName,
+                OriginalEnd = treatment.OriginalEnd,
+            },
+            Loop = new TreatmentLoopData
+            {
+                RemoteCarbs = treatment.RemoteCarbs,
+                RemoteAbsorption = treatment.RemoteAbsorption,
+                RemoteBolus = treatment.RemoteBolus,
+                Otp = treatment.Otp,
+                ReasonDisplay = treatment.ReasonDisplay,
+            },
         };
     }
 
@@ -102,69 +146,109 @@ public static class TreatmentMapper
             DbId = entity.Id,
             EventType = entity.EventType,
             Reason = entity.Reason,
-            Glucose = entity.Glucose,
-            GlucoseType = entity.GlucoseType,
             Carbs = entity.Carbs,
             Insulin = entity.Insulin,
-            Protein = entity.Protein,
-            Fat = entity.Fat,
-            FoodType = entity.FoodType,
-            Units = entity.Units,
+            Duration = entity.Duration,
             Mills = entity.Mills,
             Created_at = entity.Created_at,
-            Duration = entity.Duration,
-            Percent = entity.Percent,
-            Absolute = entity.Absolute,
+            Date = entity.Date,
+            Timestamp = FormatTimestampToString(entity.Timestamp),
+            UtcOffset = entity.UtcOffset,
             Notes = entity.Notes,
             EnteredBy = entity.EnteredBy,
+            Status = entity.Status,
             TargetTop = entity.TargetTop,
             TargetBottom = entity.TargetBottom,
-            Profile = entity.Profile,
             Split = entity.Split,
-            Date = entity.Date,
-            CarbTime = entity.CarbTime,
-            BolusCalc = DeserializeJsonProperty<Dictionary<string, object>>(entity.BolusCalcJson),
-            UtcOffset = entity.UtcOffset,
-            Timestamp = FormatTimestampToString(entity.Timestamp),
             CuttedBy = entity.CuttedBy,
             Cutting = entity.Cutting,
-            EventTime = entity.EventTime,
-            PreBolus = entity.PreBolus,
-            Rate = entity.Rate,
-            Mgdl = entity.Mgdl,
-            Mmol = entity.Mmol,
-            EndMills = entity.EndMills,
-            DurationType = entity.DurationType,
-            IsAnnouncement = entity.IsAnnouncement,
-            ProfileJson = entity.ProfileJson,
-            EndProfile = entity.EndProfile,
-            InsulinNeedsScaleFactor = entity.InsulinNeedsScaleFactor,
-            AbsorptionTime = entity.AbsorptionTime,
-            EnteredInsulin = entity.EnteredInsulin,
-            SplitNow = entity.SplitNow,
-            SplitExt = entity.SplitExt,
-            Status = entity.Status,
-            Relative = entity.Relative,
-            CR = entity.CR,
             NsClientId = entity.NsClientId,
             First = entity.First,
             End = entity.End,
-            CircadianPercentageProfile = entity.CircadianPercentageProfile,
-            Percentage = entity.Percentage,
-            Timeshift = entity.Timeshift,
             TransmitterId = entity.TransmitterId,
+            EventTime = entity.EventTime,
+            IsAnnouncement = entity.IsAnnouncement,
             DataSource = entity.DataSource,
-            InsulinRecommendationForCarbs = entity.InsulinRecommendationForCarbs,
-            InsulinRecommendationForCorrection = entity.InsulinRecommendationForCorrection,
-            InsulinProgrammed = entity.InsulinProgrammed,
-            InsulinDelivered = entity.InsulinDelivered,
-            InsulinOnBoard = entity.InsulinOnBoard,
-            BloodGlucoseInput = entity.BloodGlucoseInput,
-            BloodGlucoseInputSource = entity.BloodGlucoseInputSource,
-            CalculationType = Enum.TryParse<CalculationType>(entity.CalculationType, out var calcType) ? calcType : null,
             AdditionalProperties = DeserializeJsonProperty<Dictionary<string, object>>(
                 entity.AdditionalPropertiesJson
             ),
+            SrvModified = entity.SysUpdatedAt != default
+                ? new DateTimeOffset(entity.SysUpdatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                : null,
+            SrvCreated = entity.SysCreatedAt != default
+                ? new DateTimeOffset(entity.SysCreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                : null,
+
+            // GlucoseData
+            Glucose = entity.GlucoseData.Glucose,
+            GlucoseType = entity.GlucoseData.GlucoseType,
+            Mgdl = entity.GlucoseData.Mgdl,
+            Mmol = entity.GlucoseData.Mmol,
+            Units = entity.GlucoseData.Units,
+
+            // Nutritional
+            Protein = entity.Nutritional.Protein,
+            Fat = entity.Nutritional.Fat,
+            FoodType = entity.Nutritional.FoodType,
+            CarbTime = entity.Nutritional.CarbTime,
+            AbsorptionTime = entity.Nutritional.AbsorptionTime,
+
+            // Basal
+            Rate = entity.Basal.Rate,
+            Percent = entity.Basal.Percent,
+            Absolute = entity.Basal.Absolute,
+            Relative = entity.Basal.Relative,
+            DurationType = entity.Basal.DurationType,
+            EndMills = entity.Basal.EndMills,
+            DurationInMilliseconds = entity.Basal.DurationInMilliseconds,
+
+            // BolusCalc
+            InsulinRecommendationForCarbs = entity.BolusCalc.InsulinRecommendationForCarbs,
+            InsulinRecommendationForCorrection = entity.BolusCalc.InsulinRecommendationForCorrection,
+            InsulinProgrammed = entity.BolusCalc.InsulinProgrammed,
+            InsulinDelivered = entity.BolusCalc.InsulinDelivered,
+            InsulinOnBoard = entity.BolusCalc.InsulinOnBoard,
+            BloodGlucoseInput = entity.BolusCalc.BloodGlucoseInput,
+            BloodGlucoseInputSource = entity.BolusCalc.BloodGlucoseInputSource,
+            CalculationType = Enum.TryParse<CalculationType>(entity.BolusCalc.CalculationType, out var calcType) ? calcType : null,
+            BolusCalc = DeserializeJsonProperty<Dictionary<string, object>>(entity.BolusCalc.BolusCalcJson),
+            BolusCalculatorResult = entity.BolusCalc.BolusCalculatorResult,
+            EnteredInsulin = entity.BolusCalc.EnteredInsulin,
+            SplitNow = entity.BolusCalc.SplitNow,
+            SplitExt = entity.BolusCalc.SplitExt,
+            CR = entity.BolusCalc.CR,
+            PreBolus = entity.BolusCalc.PreBolus,
+
+            // ProfileData
+            Profile = entity.ProfileData.Profile,
+            ProfileJson = entity.ProfileData.ProfileJson,
+            EndProfile = entity.ProfileData.EndProfile,
+            CircadianPercentageProfile = entity.ProfileData.CircadianPercentageProfile,
+            Percentage = entity.ProfileData.Percentage,
+            Timeshift = entity.ProfileData.Timeshift,
+            InsulinNeedsScaleFactor = entity.ProfileData.InsulinNeedsScaleFactor,
+
+            // Aaps
+            PumpId = entity.Aaps.PumpId,
+            PumpSerial = entity.Aaps.PumpSerial,
+            PumpType = entity.Aaps.PumpType,
+            EndId = entity.Aaps.EndId,
+            IsValid = entity.Aaps.IsValid,
+            IsReadOnly = entity.Aaps.IsReadOnly,
+            IsBasalInsulin = entity.Aaps.IsBasalInsulin,
+            OriginalDuration = entity.Aaps.OriginalDuration,
+            OriginalProfileName = entity.Aaps.OriginalProfileName,
+            OriginalPercentage = entity.Aaps.OriginalPercentage,
+            OriginalTimeshift = entity.Aaps.OriginalTimeshift,
+            OriginalCustomizedName = entity.Aaps.OriginalCustomizedName,
+            OriginalEnd = entity.Aaps.OriginalEnd,
+
+            // Loop
+            RemoteCarbs = entity.Loop.RemoteCarbs,
+            RemoteAbsorption = entity.Loop.RemoteAbsorption,
+            RemoteBolus = entity.Loop.RemoteBolus,
+            Otp = entity.Loop.Otp,
+            ReasonDisplay = entity.Loop.ReasonDisplay,
         };
     }
 
@@ -173,73 +257,108 @@ public static class TreatmentMapper
     /// </summary>
     public static void UpdateEntity(TreatmentEntity entity, Treatment treatment)
     {
+        // Root fields
         entity.EventType = treatment.EventType;
         entity.Reason = treatment.Reason;
-        entity.Glucose = treatment.Glucose;
-        entity.GlucoseType = treatment.GlucoseType;
         entity.Carbs = treatment.Carbs;
         entity.Insulin = treatment.Insulin;
-        entity.Protein = treatment.Protein;
-        entity.Fat = treatment.Fat;
-        entity.FoodType = treatment.FoodType;
-        entity.Units = treatment.Units;
+        entity.Duration = treatment.Duration;
         entity.Mills = treatment.Mills;
         entity.Created_at = treatment.Created_at;
-        entity.Duration = treatment.Duration;
-        entity.Percent = treatment.Percent;
-        entity.Absolute = treatment.Absolute;
+        entity.Date = treatment.Date;
+        entity.Timestamp = ParseTimestampToLong(treatment.Timestamp);
+        entity.UtcOffset = treatment.UtcOffset;
         entity.Notes = treatment.Notes;
         entity.EnteredBy = treatment.EnteredBy;
+        entity.Status = treatment.Status;
         entity.TargetTop = treatment.TargetTop;
         entity.TargetBottom = treatment.TargetBottom;
-        entity.Profile = treatment.Profile;
         entity.Split = treatment.Split;
-        entity.Date = treatment.Date;
-        entity.CarbTime = treatment.CarbTime;
-        entity.BolusCalcJson =
-            treatment.BolusCalc != null ? JsonSerializer.Serialize(treatment.BolusCalc) : null;
-        entity.UtcOffset = treatment.UtcOffset;
-        entity.Timestamp = ParseTimestampToLong(treatment.Timestamp);
         entity.CuttedBy = treatment.CuttedBy;
         entity.Cutting = treatment.Cutting;
-        entity.EventTime = treatment.EventTime;
-        entity.PreBolus = treatment.PreBolus;
-        entity.Rate = treatment.Rate;
-        entity.Mgdl = treatment.Mgdl;
-        entity.Mmol = treatment.Mmol;
-        entity.EndMills = treatment.EndMills;
-        entity.DurationType = treatment.DurationType;
-        entity.IsAnnouncement = treatment.IsAnnouncement;
-        entity.ProfileJson = treatment.ProfileJson;
-        entity.EndProfile = treatment.EndProfile;
-        entity.InsulinNeedsScaleFactor = treatment.InsulinNeedsScaleFactor;
-        entity.AbsorptionTime = treatment.AbsorptionTime;
-        entity.EnteredInsulin = treatment.EnteredInsulin;
-        entity.SplitNow = treatment.SplitNow;
-        entity.SplitExt = treatment.SplitExt;
-        entity.Status = treatment.Status;
-        entity.Relative = treatment.Relative;
-        entity.CR = treatment.CR;
         entity.NsClientId = treatment.NsClientId;
         entity.First = treatment.First;
         entity.End = treatment.End;
-        entity.CircadianPercentageProfile = treatment.CircadianPercentageProfile;
-        entity.Percentage = treatment.Percentage;
-        entity.Timeshift = treatment.Timeshift;
         entity.TransmitterId = treatment.TransmitterId;
+        entity.EventTime = treatment.EventTime;
+        entity.IsAnnouncement = treatment.IsAnnouncement;
         entity.DataSource = treatment.DataSource;
-        entity.InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs;
-        entity.InsulinRecommendationForCorrection = treatment.InsulinRecommendationForCorrection;
-        entity.InsulinProgrammed = treatment.InsulinProgrammed;
-        entity.InsulinDelivered = treatment.InsulinDelivered;
-        entity.InsulinOnBoard = treatment.InsulinOnBoard;
-        entity.BloodGlucoseInput = treatment.BloodGlucoseInput;
-        entity.BloodGlucoseInputSource = treatment.BloodGlucoseInputSource;
-        entity.CalculationType = treatment.CalculationType?.ToString();
         entity.AdditionalPropertiesJson =
             treatment.AdditionalProperties != null
                 ? JsonSerializer.Serialize(treatment.AdditionalProperties)
                 : null;
+
+        // GlucoseData
+        entity.GlucoseData.Glucose = treatment.Glucose;
+        entity.GlucoseData.GlucoseType = treatment.GlucoseType;
+        entity.GlucoseData.Mgdl = treatment.Mgdl;
+        entity.GlucoseData.Mmol = treatment.Mmol;
+        entity.GlucoseData.Units = treatment.Units;
+
+        // Nutritional
+        entity.Nutritional.Protein = treatment.Protein;
+        entity.Nutritional.Fat = treatment.Fat;
+        entity.Nutritional.FoodType = treatment.FoodType;
+        entity.Nutritional.CarbTime = treatment.CarbTime;
+        entity.Nutritional.AbsorptionTime = treatment.AbsorptionTime;
+
+        // Basal
+        entity.Basal.Rate = treatment.Rate;
+        entity.Basal.Percent = treatment.Percent;
+        entity.Basal.Absolute = treatment.Absolute;
+        entity.Basal.Relative = treatment.Relative;
+        entity.Basal.DurationType = treatment.DurationType;
+        entity.Basal.EndMills = treatment.EndMills;
+        entity.Basal.DurationInMilliseconds = treatment.DurationInMilliseconds;
+
+        // BolusCalc
+        entity.BolusCalc.InsulinRecommendationForCarbs = treatment.InsulinRecommendationForCarbs;
+        entity.BolusCalc.InsulinRecommendationForCorrection = treatment.InsulinRecommendationForCorrection;
+        entity.BolusCalc.InsulinProgrammed = treatment.InsulinProgrammed;
+        entity.BolusCalc.InsulinDelivered = treatment.InsulinDelivered;
+        entity.BolusCalc.InsulinOnBoard = treatment.InsulinOnBoard;
+        entity.BolusCalc.BloodGlucoseInput = treatment.BloodGlucoseInput;
+        entity.BolusCalc.BloodGlucoseInputSource = treatment.BloodGlucoseInputSource;
+        entity.BolusCalc.CalculationType = treatment.CalculationType?.ToString();
+        entity.BolusCalc.BolusCalcJson =
+            treatment.BolusCalc != null ? JsonSerializer.Serialize(treatment.BolusCalc) : null;
+        entity.BolusCalc.BolusCalculatorResult = treatment.BolusCalculatorResult;
+        entity.BolusCalc.EnteredInsulin = treatment.EnteredInsulin;
+        entity.BolusCalc.SplitNow = treatment.SplitNow;
+        entity.BolusCalc.SplitExt = treatment.SplitExt;
+        entity.BolusCalc.CR = treatment.CR;
+        entity.BolusCalc.PreBolus = treatment.PreBolus;
+
+        // ProfileData
+        entity.ProfileData.Profile = treatment.Profile;
+        entity.ProfileData.ProfileJson = treatment.ProfileJson;
+        entity.ProfileData.EndProfile = treatment.EndProfile;
+        entity.ProfileData.CircadianPercentageProfile = treatment.CircadianPercentageProfile;
+        entity.ProfileData.Percentage = treatment.Percentage;
+        entity.ProfileData.Timeshift = treatment.Timeshift;
+        entity.ProfileData.InsulinNeedsScaleFactor = treatment.InsulinNeedsScaleFactor;
+
+        // Aaps
+        entity.Aaps.PumpId = treatment.PumpId;
+        entity.Aaps.PumpSerial = treatment.PumpSerial;
+        entity.Aaps.PumpType = treatment.PumpType;
+        entity.Aaps.EndId = treatment.EndId;
+        entity.Aaps.IsValid = treatment.IsValid;
+        entity.Aaps.IsReadOnly = treatment.IsReadOnly;
+        entity.Aaps.IsBasalInsulin = treatment.IsBasalInsulin;
+        entity.Aaps.OriginalDuration = treatment.OriginalDuration;
+        entity.Aaps.OriginalProfileName = treatment.OriginalProfileName;
+        entity.Aaps.OriginalPercentage = treatment.OriginalPercentage;
+        entity.Aaps.OriginalTimeshift = treatment.OriginalTimeshift;
+        entity.Aaps.OriginalCustomizedName = treatment.OriginalCustomizedName;
+        entity.Aaps.OriginalEnd = treatment.OriginalEnd;
+
+        // Loop
+        entity.Loop.RemoteCarbs = treatment.RemoteCarbs;
+        entity.Loop.RemoteAbsorption = treatment.RemoteAbsorption;
+        entity.Loop.RemoteBolus = treatment.RemoteBolus;
+        entity.Loop.Otp = treatment.Otp;
+        entity.Loop.ReasonDisplay = treatment.ReasonDisplay;
     }
 
     /// <summary>

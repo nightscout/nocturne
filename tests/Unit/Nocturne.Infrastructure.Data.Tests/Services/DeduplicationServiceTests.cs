@@ -77,8 +77,8 @@ public class DeduplicationServiceTests : IDisposable
         var tempBasalEntity = TreatmentMapper.ToEntity(tempBasalTreatment);
 
         // Verify Rate is being set correctly
-        basalEntity.Rate.Should().Be(0.8);
-        tempBasalEntity.Rate.Should().Be(0.8);
+        basalEntity.Basal.Rate.Should().Be(0.8);
+        tempBasalEntity.Basal.Rate.Should().Be(0.8);
 
         context.Treatments.AddRange(basalEntity, tempBasalEntity);
         await context.SaveChangesAsync();
@@ -86,7 +86,7 @@ public class DeduplicationServiceTests : IDisposable
         // Verify data in database
         var savedTreatments = await context.Treatments.ToListAsync();
         savedTreatments.Should().HaveCount(2);
-        savedTreatments.All(t => t.Rate == 0.8).Should().BeTrue("All treatments should have rate 0.8");
+        savedTreatments.All(t => t.Basal.Rate == 0.8).Should().BeTrue("All treatments should have rate 0.8");
 
         // Act
         var result = await service.DeduplicateAllAsync();

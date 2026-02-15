@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services;
-using Nocturne.Core.Oref;
 
 namespace Nocturne.API.Controllers.V4;
 
 /// <summary>
-/// Predictions controller for glucose forecast predictions using oref algorithms.
-/// Provides Trio-style glucose predictions based on current glucose, IOB, COB, and profile settings.
+/// Predictions controller for glucose forecast predictions.
+/// Supports multiple prediction sources: DeviceStatus (AAPS/Trio/Loop) or OrefWasm.
 /// </summary>
 [ApiController]
 [Route("api/v4/predictions")]
@@ -15,14 +15,17 @@ namespace Nocturne.API.Controllers.V4;
 [ClientPropertyName("predictions")]
 public class PredictionController : ControllerBase
 {
-    private readonly IPredictionService _predictionService;
+    private readonly IPredictionService? _predictionService;
+    private readonly PredictionSource _source;
     private readonly ILogger<PredictionController> _logger;
 
     public PredictionController(
-        IPredictionService predictionService,
-        ILogger<PredictionController> logger)
+        ILogger<PredictionController> logger,
+        IConfiguration configuration,
+        IPredictionService? predictionService = null)
     {
         _predictionService = predictionService;
+        _source = configuration.GetValue<PredictionSource>("Predictions:Source", PredictionSource.None);
         _logger = logger;
     }
 
@@ -36,12 +39,22 @@ public class PredictionController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 400)]
+    [ProducesResponseType(typeof(PredictionErrorResponse), 404)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 500)]
     public async Task<ActionResult<GlucosePredictionResponse>> GetPredictions(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Getting glucose predictions for profile: {ProfileId}", profileId ?? "default");
+        if (_predictionService == null || _source == PredictionSource.None)
+        {
+            return NotFound(new PredictionErrorResponse
+            {
+                Error = "Predictions are not configured. Set Predictions:Source to DeviceStatus or OrefWasm."
+            });
+        }
+
+        _logger.LogDebug("Getting glucose predictions (source: {Source}) for profile: {ProfileId}",
+            _source, profileId ?? "default");
 
         try
         {
@@ -61,21 +74,17 @@ public class PredictionController : ControllerBase
     }
 
     /// <summary>
-    /// Check if the oref prediction library is available.
+    /// Check the status of the prediction service.
     /// </summary>
-    /// <returns>Status of the oref library</returns>
+    /// <returns>Status of the prediction service including configured source</returns>
     [HttpGet("status")]
     [ProducesResponseType(typeof(PredictionStatusResponse), 200)]
     public ActionResult<PredictionStatusResponse> GetStatus()
     {
-        var isAvailable = OrefService.IsAvailable();
-        var version = isAvailable ? OrefService.GetVersion() : null;
-
         return Ok(new PredictionStatusResponse
         {
-            Available = isAvailable,
-            Version = version,
-            HealthCheck = isAvailable ? OrefService.HealthCheck() : null
+            Available = _predictionService != null && _source != PredictionSource.None,
+            Source = _source.ToString(),
         });
     }
 }
@@ -139,14 +148,11 @@ public class PredictionCurves
 /// </summary>
 public class PredictionStatusResponse
 {
-    /// <summary>Whether the oref library is available</summary>
+    /// <summary>Whether a prediction service is available</summary>
     public bool Available { get; set; }
 
-    /// <summary>Version of the oref library</summary>
-    public string? Version { get; set; }
-
-    /// <summary>Health check result (JSON)</summary>
-    public string? HealthCheck { get; set; }
+    /// <summary>Configured prediction source (None, DeviceStatus, OrefWasm)</summary>
+    public string Source { get; set; } = "None";
 }
 
 /// <summary>

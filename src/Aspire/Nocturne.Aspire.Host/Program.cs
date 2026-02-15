@@ -145,39 +145,6 @@ class Program
             remoteDatabase = builder.AddConnectionString(ServiceNames.PostgreSql);
         }
 
-        // Build the oref Rust library to WebAssembly (optional - pre-built WASM is downloaded by default)
-        // Set Parameters:Oref:CompileFromSource to true to compile from source (requires Rust toolchain)
-        var compileOrefFromSource = builder.Configuration.GetValue<bool>(
-            "Parameters:Oref:CompileFromSource",
-            false
-        );
-
-        IResourceBuilder<ExecutableResource>? oref = null;
-        if (compileOrefFromSource)
-        {
-            var orefPath = Path.Combine(solutionRoot, "src", "Core", "oref");
-            Console.WriteLine("[Aspire] Compiling oref Rust/WASM from source...");
-
-            oref = builder
-                .AddExecutable(
-                    "oref-wasm-build",
-                    "cargo",
-                    orefPath,
-                    "build",
-                    "--lib",
-                    "--release",
-                    "--features",
-                    "wasm",
-                    "--target",
-                    "wasm32-unknown-unknown"
-                )
-                .ExcludeFromManifest();
-        }
-        else
-        {
-            Console.WriteLine("[Aspire] Using pre-built oref WASM (downloaded during build)");
-        }
-
         // Add the Nocturne API service (without embedded connectors)
         // Aspire will auto-generate a Dockerfile during publish
         // Note: API runs on port 1613 internally, accessed via Vite proxy on port 1612
@@ -196,12 +163,6 @@ class Program
             .WithRemoteImageTag("latest");
 #pragma warning restore ASPIRECERTIFICATES001
 
-        // If compiling oref from source, wait for it and set parent relationship
-        if (oref != null)
-        {
-            api.WaitFor(oref);
-            oref.WithParentRelationship(api);
-        }
         // Configure database connection based on mode
         if (managedDatabase != null)
         {

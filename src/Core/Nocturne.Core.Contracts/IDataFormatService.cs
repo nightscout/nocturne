@@ -13,6 +13,7 @@ public interface IDataFormatService
     /// <param name="entries">Entries to format</param>
     /// <param name="format">Format type (csv, tsv, txt)</param>
     /// <returns>Formatted data as string</returns>
+    /// <exception cref="ArgumentException">Thrown when the format is not supported.</exception>
     string FormatEntries(Entry[] entries, string format);
 
     /// <summary>
@@ -21,6 +22,7 @@ public interface IDataFormatService
     /// <param name="treatments">Treatments to format</param>
     /// <param name="format">Format type (csv, tsv, txt)</param>
     /// <returns>Formatted data as string</returns>
+    /// <exception cref="ArgumentException">Thrown when the format is not supported.</exception>
     string FormatTreatments(Treatment[] treatments, string format);
 
     /// <summary>
@@ -29,6 +31,7 @@ public interface IDataFormatService
     /// <param name="deviceStatus">Device status to format</param>
     /// <param name="format">Format type (csv, tsv, txt)</param>
     /// <returns>Formatted data as string</returns>
+    /// <exception cref="ArgumentException">Thrown when the format is not supported.</exception>
     string FormatDeviceStatus(DeviceStatus[] deviceStatus, string format);
 
     /// <summary>

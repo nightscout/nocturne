@@ -223,9 +223,9 @@ public class ActivityControllerTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Result.Should().BeOfType<CreatedAtActionResult>();
-        var createdResult = result.Result as CreatedAtActionResult;
-        var returnedActivities = createdResult!.Value as List<Activity>;
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        var returnedActivities = okResult!.Value as List<Activity>;
         returnedActivities.Should().ContainSingle();
         returnedActivities![0].Should().BeEquivalentTo(createdActivity);
     }
@@ -286,9 +286,9 @@ public class ActivityControllerTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Result.Should().BeOfType<CreatedAtActionResult>();
-        var createdResult = result.Result as CreatedAtActionResult;
-        var returnedActivities = createdResult!.Value as List<Activity>;
+        result.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = result.Result as OkObjectResult;
+        var returnedActivities = okResult!.Value as List<Activity>;
         returnedActivities.Should().HaveCount(2);
         returnedActivities.Should().BeEquivalentTo(createdActivities);
     }

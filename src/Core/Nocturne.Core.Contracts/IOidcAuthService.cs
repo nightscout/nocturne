@@ -14,6 +14,7 @@ public interface IOidcAuthService
     /// <param name="returnUrl">URL to return to after login</param>
     /// <param name="state">State parameter for CSRF protection (generated if null)</param>
     /// <returns>Authorization request containing URL and state</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the provider is not found, not configured, or not enabled.</exception>
     Task<OidcAuthorizationRequest> GenerateAuthorizationUrlAsync(
         Guid? providerId,
         string? returnUrl = null,

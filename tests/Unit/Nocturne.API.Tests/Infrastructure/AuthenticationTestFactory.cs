@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,6 +78,8 @@ public class AuthenticationTestFactory : WebApplicationFactory<Nocturne.API.Prog
 
             services.AddDbContext<NocturneDbContext>(options =>
                 options.UseSqlite(sqliteConnection)
+                    .ConfigureWarnings(w =>
+                        w.Ignore(RelationalEventId.PendingModelChangesWarning))
             );
 
             // Add mock cache service

@@ -16,64 +16,7 @@ env:
   PNPM_VERSION: "9"
 
 jobs:
-  # Build oref WASM first - used by other jobs and published as release asset
-  build-oref:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      oref-version: ${{ steps.oref-version.outputs.version }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Get oref version from Cargo.toml
-        id: oref-version
-        working-directory: src/Core/oref
-        run: |
-          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Build oref.wasm
-        working-directory: src/Core/oref
-        run: cargo build --release --target wasm32-unknown-unknown
-
-      - name: Prepare oref artifact
-        run: |
-          mkdir -p oref-release
-          cp src/Core/oref/target/wasm32-unknown-unknown/release/oref.wasm oref-release/
-
-      - name: Upload oref WASM artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: oref-wasm
-          path: oref-release/oref.wasm
-          retention-days: 90
-
-      # Create/update the oref release for the MSBuild download target
-      - name: Create oref release
-        if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: oref-v${{ steps.oref-version.outputs.version }}
-          name: oref WASM v${{ steps.oref-version.outputs.version }}
-          body: |
-            Pre-built oref WASM binary for Nocturne.
-
-            This release is automatically updated when the oref library changes.
-            Download `oref.wasm` and place it in `src/Core/oref/target/wasm32-unknown-unknown/release/`.
-          files: oref-release/oref.wasm
-          prerelease: false
-          make_latest: false
-
   build-and-push:
-    needs: build-oref
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -133,12 +76,6 @@ jobs:
             VERSION=${GITHUB_REF#refs/heads/}
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Download oref WASM artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: oref-wasm
-          path: src/Core/oref/target/wasm32-unknown-unknown/release/
 
       - name: Restore .NET dependencies
         run: dotnet restore
@@ -281,7 +218,7 @@ jobs:
             .
 
   publish-aspire-manifest:
-    needs: [build-oref, build-and-push]
+    needs: [build-and-push]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     permissions:
@@ -305,12 +242,6 @@ jobs:
       # Copy appsettings.example.json to appsettings.json for NSwag client generation
       - name: Setup appsettings.json for NSwag
         run: cp appsettings.example.json appsettings.json
-
-      - name: Download oref WASM artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: oref-wasm
-          path: src/Core/oref/target/wasm32-unknown-unknown/release/
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

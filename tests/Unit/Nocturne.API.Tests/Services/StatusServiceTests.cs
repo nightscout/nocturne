@@ -497,7 +497,12 @@ public class StatusServiceTests
         Assert.NotNull(result.Settings);
         result.Settings.Should().NotBeNull();
         result.Settings!.Should().ContainKey("enable");
-        result.Settings["enable"].Should().Be("careportal basal dbsize custom");
+        var enableArray = result.Settings["enable"] as string[];
+        enableArray.Should().NotBeNull();
+        enableArray.Should().Contain("careportal");
+        enableArray.Should().Contain("basal");
+        enableArray.Should().Contain("dbsize");
+        enableArray.Should().Contain("custom");
     }
 
     [Fact]
@@ -524,7 +529,8 @@ public class StatusServiceTests
         result.Settings.Should().NotBeNull();
         Assert.NotNull(result.Settings);
         result.Settings!.Should().ContainKey("enable");
-        var enabledFeatures = result.Settings["enable"]?.ToString();
+        var enabledFeatures = result.Settings["enable"] as string[];
+        enabledFeatures.Should().NotBeNull();
         enabledFeatures.Should().Contain("careportal");
         enabledFeatures.Should().Contain("basal");
         enabledFeatures.Should().Contain("dbsize");
@@ -571,7 +577,7 @@ public class StatusServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Name.Should().Be("Nocturne"); // Default value
+        result.Name.Should().Be("nightscout"); // Default value matching Nightscout compat
         result.CareportalEnabled.Should().BeTrue(); // Default value
     }
 

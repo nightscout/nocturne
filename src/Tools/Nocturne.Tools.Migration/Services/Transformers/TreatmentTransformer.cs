@@ -33,9 +33,9 @@ public class TreatmentTransformer : BaseDocumentTransformer
             entity.Reason = ToString(document.GetValue("reason", BsonNull.Value));
 
             // Transform glucose information
-            entity.Glucose = ToNullableDouble(document.GetValue("glucose", BsonNull.Value));
-            entity.GlucoseType = ToString(document.GetValue("glucoseType", BsonNull.Value), 50);
-            entity.Units = ToString(document.GetValue("units", BsonNull.Value), 10);
+            entity.GlucoseData.Glucose = ToNullableDouble(document.GetValue("glucose", BsonNull.Value));
+            entity.GlucoseData.GlucoseType = ToString(document.GetValue("glucoseType", BsonNull.Value), 50);
+            entity.GlucoseData.Units = ToString(document.GetValue("units", BsonNull.Value), 10);
 
             // Transform medication data
             entity.Insulin = ToNullableDouble(document.GetValue("insulin", BsonNull.Value));
@@ -43,8 +43,8 @@ public class TreatmentTransformer : BaseDocumentTransformer
 
             // Transform basal information
             entity.Duration = ToNullableInt32(document.GetValue("duration", BsonNull.Value));
-            entity.Percent = ToNullableDouble(document.GetValue("percent", BsonNull.Value));
-            entity.Absolute = ToNullableDouble(document.GetValue("absolute", BsonNull.Value));
+            entity.Basal.Percent = ToNullableDouble(document.GetValue("percent", BsonNull.Value));
+            entity.Basal.Absolute = ToNullableDouble(document.GetValue("absolute", BsonNull.Value));
 
             // Transform text fields
             entity.Notes = ToString(document.GetValue("notes", BsonNull.Value));
@@ -197,7 +197,7 @@ public class TreatmentTransformer : BaseDocumentTransformer
                 ExtractBolusCalcField(bolusCalcDoc, bolusCalcData, "iob");
                 ExtractBolusCalcField(bolusCalcDoc, bolusCalcData, "activity");
 
-                entity.BolusCalcJson = ToJsonB(BsonDocument.Create(bolusCalcData));
+                entity.BolusCalc.BolusCalcJson = ToJsonB(BsonDocument.Create(bolusCalcData));
                 UpdateFieldStatistics("boluscalc", bolusCalc, true);
             }
             catch (Exception ex)

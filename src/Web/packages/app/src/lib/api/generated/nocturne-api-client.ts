@@ -8079,6 +8079,12 @@ export class PredictionClient {
             result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PredictionErrorResponse;
             return throwException("A server side error occurred.", status, _responseText, _headers, result400);
             });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PredictionErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
         } else if (status === 500) {
             return response.text().then((_responseText) => {
             let result500: any = null;
@@ -8094,8 +8100,8 @@ export class PredictionClient {
     }
 
     /**
-     * Check if the oref prediction library is available.
-     * @return Status of the oref library
+     * Check the status of the prediction service.
+     * @return Status of the prediction service including configured source
      */
     getStatus(signal?: AbortSignal): Promise<PredictionStatusResponse> {
         let url_ = this.baseUrl + "/api/v4/predictions/status";
@@ -11740,6 +11746,61 @@ export class TreatmentsClient {
     }
 
     /**
+     * Partially update a treatment via V3 API (JSON merge-patch)
+    Used by AAPS to update Temp Basal duration, endId, etc.
+     */
+    patchTreatment(id: string, patchData: any, signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v3/Treatments/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(patchData);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PATCH",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processPatchTreatment(_response);
+        });
+    }
+
+    protected processPatchTreatment(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as V3ErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
      * Create multiple treatments via V3 API (bulk operation)
      * @param treatments Treatments to create
      * @return Created treatments
@@ -11790,6 +11851,55 @@ export class TreatmentsClient {
             });
         }
         return Promise.resolve<Treatment[]>(null as any);
+    }
+
+    /**
+     * Get treatments modified since a given timestamp (for AAPS incremental sync)
+     * @param limit (optional) 
+     */
+    getTreatmentHistory(lastModified: number, limit?: number | undefined, signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v3/Treatments/history/{lastModified}?";
+        if (lastModified === undefined || lastModified === null)
+            throw new globalThis.Error("The parameter 'lastModified' must be defined.");
+        url_ = url_.replace("{lastModified}", encodeURIComponent("" + lastModified));
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTreatmentHistory(_response);
+        });
+    }
+
+    protected processGetTreatmentHistory(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
     }
 
     /**
@@ -13074,6 +13184,55 @@ export class DeviceStatusClient {
     }
 
     /**
+     * Get device status records modified since a given timestamp (for AAPS incremental sync)
+     * @param limit (optional) 
+     */
+    getDeviceStatusHistory(lastModified: number, limit?: number | undefined, signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v3/DeviceStatus/history/{lastModified}?";
+        if (lastModified === undefined || lastModified === null)
+            throw new globalThis.Error("The parameter 'lastModified' must be defined.");
+        url_ = url_.replace("{lastModified}", encodeURIComponent("" + lastModified));
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetDeviceStatusHistory(_response);
+        });
+    }
+
+    protected processGetDeviceStatusHistory(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
+    }
+
+    /**
      * Get device status entries with optional filtering and pagination
      * @param count (optional) Maximum number of device status entries to return (default: 10)
      * @param skip (optional) Number of device status entries to skip for pagination (default: 0)
@@ -13675,6 +13834,55 @@ export class EntriesClient {
             });
         }
         return Promise.resolve<Entry[]>(null as any);
+    }
+
+    /**
+     * Get entries modified since a given timestamp (for AAPS incremental sync)
+     * @param limit (optional) 
+     */
+    getEntryHistory(lastModified: number, limit?: number | undefined, signal?: AbortSignal): Promise<any> {
+        let url_ = this.baseUrl + "/api/v3/Entries/history/{lastModified}?";
+        if (lastModified === undefined || lastModified === null)
+            throw new globalThis.Error("The parameter 'lastModified' must be defined.");
+        url_ = url_.replace("{lastModified}", encodeURIComponent("" + lastModified));
+        if (limit === null)
+            throw new globalThis.Error("The parameter 'limit' cannot be null.");
+        else if (limit !== undefined)
+            url_ += "limit=" + encodeURIComponent("" + limit) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetEntryHistory(_response);
+        });
+    }
+
+    protected processGetEntryHistory(response: Response): Promise<any> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as any;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<any>(null as any);
     }
 
     /**
@@ -18359,6 +18567,7 @@ export enum TreatmentEventType {
     Calibration = "Calibration",
     TransmitterSensorInsert = "Transmitter Sensor Insert",
     PodChange = "Pod Change",
+    TemporaryTarget = "Temporary Target",
 }
 
 export interface EventTypeConfiguration {
@@ -18788,6 +18997,14 @@ export interface Entry extends ProcessableDocumentBase {
     meta?: { [key: string]: any; } | undefined;
     canonicalId?: string | undefined;
     sources?: string[] | undefined;
+    app?: string | undefined;
+    units?: string | undefined;
+    isValid?: boolean | undefined;
+    isReadOnly?: boolean | undefined;
+    identifier?: string | undefined;
+    srvModified?: number | undefined;
+    srvCreated?: number | undefined;
+    subject?: string | undefined;
 }
 
 export function isEntry(object: any): object is Entry {
@@ -19013,6 +19230,21 @@ export interface Treatment extends ProcessableDocumentBase {
     bloodGlucoseInput?: number | undefined;
     bloodGlucoseInputSource?: string | undefined;
     calculationType?: CalculationType | undefined;
+    durationInMilliseconds?: number | undefined;
+    pumpId?: number | undefined;
+    pumpSerial?: string | undefined;
+    pumpType?: string | undefined;
+    endId?: number | undefined;
+    isValid?: boolean | undefined;
+    isReadOnly?: boolean | undefined;
+    isBasalInsulin?: boolean | undefined;
+    bolusCalculatorResult?: string | undefined;
+    originalDuration?: number | undefined;
+    originalProfileName?: string | undefined;
+    originalPercentage?: number | undefined;
+    originalTimeshift?: number | undefined;
+    originalCustomizedName?: string | undefined;
+    originalEnd?: number | undefined;
     additional_properties?: { [key: string]: any; } | undefined;
     canonicalId?: string | undefined;
     dbId?: string | undefined;
@@ -20705,12 +20937,10 @@ export interface PredictionErrorResponse {
 
 /** Status of the prediction service. */
 export interface PredictionStatusResponse {
-    /** Whether the oref library is available */
+    /** Whether a prediction service is available */
     available?: boolean;
-    /** Version of the oref library */
-    version?: string | undefined;
-    /** Health check result (JSON) */
-    healthCheck?: string | undefined;
+    /** Configured prediction source (None, DeviceStatus, OrefWasm) */
+    source?: string;
 }
 
 export interface ProcessingStatus {
@@ -21782,10 +22012,73 @@ export enum PumpAlertLevel {
 }
 
 export interface OpenApsStatus {
-    suggested?: any | undefined;
-    enacted?: any | undefined;
-    iob?: any | undefined;
+    suggested?: OpenApsSuggested | undefined;
+    enacted?: OpenApsEnacted | undefined;
+    iob?: OpenApsIobData | undefined;
     cob?: number | undefined;
+}
+
+export interface OpenApsSuggested {
+    algorithm?: string | undefined;
+    runningDynamicIsf?: boolean | undefined;
+    timestamp?: string | undefined;
+    mills?: number | undefined;
+    bg?: number | undefined;
+    tick?: string | undefined;
+    eventualBG?: number | undefined;
+    targetBG?: number | undefined;
+    insulinReq?: number | undefined;
+    units?: number | undefined;
+    deliverAt?: string | undefined;
+    sensitivityRatio?: number | undefined;
+    reason?: string | undefined;
+    duration?: number | undefined;
+    rate?: number | undefined;
+    predBGs?: OpenApsPredBGs | undefined;
+    COB?: number | undefined;
+    IOB?: number | undefined;
+    variable_sens?: number | undefined;
+    isfMgdlForCarbs?: number | undefined;
+    carbsReq?: number | undefined;
+    carbsReqWithin?: number | undefined;
+    mealAssist?: string | undefined;
+    consoleLog?: string[] | undefined;
+    consoleError?: string[] | undefined;
+}
+
+export interface OpenApsPredBGs {
+    IOB?: number[] | undefined;
+    ZT?: number[] | undefined;
+    COB?: number[] | undefined;
+    UAM?: number[] | undefined;
+}
+
+export interface OpenApsEnacted extends OpenApsSuggested {
+    received?: boolean | undefined;
+    recieved?: boolean | undefined;
+    requested?: OpenApsRequested | undefined;
+    smb?: number | undefined;
+}
+
+export function isOpenApsEnacted(object: any): object is OpenApsEnacted {
+    return object && object[''] === 'OpenApsEnacted';
+}
+
+export interface OpenApsRequested {
+    duration?: number | undefined;
+    rate?: number | undefined;
+    temp?: string | undefined;
+    smb?: number | undefined;
+}
+
+export interface OpenApsIobData {
+    iob?: number | undefined;
+    basaliob?: number | undefined;
+    activity?: number | undefined;
+    time?: string | undefined;
+    timestamp?: string | undefined;
+    mills?: number | undefined;
+    bolusiob?: number | undefined;
 }
 
 export interface LoopStatus {

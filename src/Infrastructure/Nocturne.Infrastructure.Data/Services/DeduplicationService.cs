@@ -47,6 +47,7 @@ public class DeduplicationService : IDeduplicationService
         { "Basal", 0 }       // Lower priority - generic
     };
 
+    /// <inheritdoc cref="IDeduplicationService" />
     public DeduplicationService(
         NocturneDbContext context,
         IServiceScopeFactory scopeFactory,
@@ -692,7 +693,7 @@ public class DeduplicationService : IDeduplicationService
 
         var treatments = await _context.Treatments
             .OrderBy(t => t.Mills)
-            .Select(t => new { t.Id, t.Mills, t.EventType, t.Insulin, t.Carbs, t.Rate, t.DataSource })
+            .Select(t => new { t.Id, t.Mills, t.EventType, t.Insulin, t.Carbs, Rate = t.Basal.Rate, t.DataSource })
             .ToListAsync(cancellationToken);
 
         var groupedByTime = new Dictionary<long, List<(Guid Id, string? EventType, double? Insulin, double? Carbs, double? Rate, string? DataSource)>>();
@@ -965,6 +966,15 @@ public class DeduplicationService : IDeduplicationService
         var primary = treatments[0];
         var preferredEventType = GetPreferredEventType(treatments);
 
+        // When the preferred event type differs from the primary (e.g., Temp Basal preferred but
+        // Basal is first by timestamp), use basal-related fields from the preferred-type treatment
+        // so Duration/Percent/Rate come from the correct source.
+        var basalSource = primary;
+        if (preferredEventType != null && preferredEventType != primary.EventType)
+        {
+            basalSource = treatments.FirstOrDefault(t => t.EventType == preferredEventType) ?? primary;
+        }
+
         var merged = new Treatment
         {
             Id = primary.Id,
@@ -975,15 +985,15 @@ public class DeduplicationService : IDeduplicationService
             Carbs = primary.Carbs,
             Protein = primary.Protein,
             Fat = primary.Fat,
-            Duration = primary.Duration,
+            Duration = basalSource.Duration,
             EnteredBy = primary.EnteredBy,
             Notes = primary.Notes,
             Reason = primary.Reason,
             Glucose = primary.Glucose,
             GlucoseType = primary.GlucoseType,
             Profile = primary.Profile,
-            Percent = primary.Percent,
-            Rate = primary.Rate,
+            Percent = basalSource.Percent,
+            Rate = basalSource.Rate,
             DataSource = primary.DataSource,
             AdditionalProperties = primary.AdditionalProperties != null
                 ? new Dictionary<string, object>(primary.AdditionalProperties)

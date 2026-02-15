@@ -13,6 +13,7 @@ public interface IPredictionService
     /// <param name="profileId">Optional profile ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Glucose prediction response</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no glucose readings or device status data are available.</exception>
     Task<GlucosePredictionResponse> GetPredictionsAsync(
         string? profileId = null,
         CancellationToken cancellationToken = default);

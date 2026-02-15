@@ -12,6 +12,7 @@ public class CompressionLowRepository : ICompressionLowRepository
 {
     private readonly NocturneDbContext _context;
 
+    /// <inheritdoc cref="ICompressionLowRepository" />
     public CompressionLowRepository(NocturneDbContext context)
     {
         _context = context;

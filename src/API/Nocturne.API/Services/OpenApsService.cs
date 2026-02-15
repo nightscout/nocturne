@@ -588,24 +588,10 @@ public class OpenApsService : IOpenApsService
 
     /// <summary>
     /// Process device status IOB data (legacy array handling)
-    /// Normalizes array format to single object for consistent downstream processing
+    /// Array normalization is now handled by OpenApsIobDataConverter during deserialization.
     /// </summary>
     private static DeviceStatus ProcessDeviceStatusIob(DeviceStatus status)
     {
-        // Handle legacy array format for IOB - convert array to single object if needed
-        // Legacy JS: if (status.openaps && Array.isArray(status.openaps.iob) && status.openaps.iob.length > 0)
-        //            status.openaps.iob = status.openaps.iob[0];
-        if (status.OpenAps?.Iob is JsonElement element && element.ValueKind == JsonValueKind.Array)
-        {
-            if (element.GetArrayLength() > 0)
-            {
-                status.OpenAps.Iob = element[0];
-            }
-            else
-            {
-                status.OpenAps.Iob = null;
-            }
-        }
         return status;
     }
 
@@ -1195,77 +1181,70 @@ public class OpenApsService : IOpenApsService
     /// Parse OpenAPS predBGs object from dynamic data
     /// Implements legacy predBGs parsing: can be array or object
     /// </summary>
-    private static OpenApsPredBg? ParsePredBGs(object? predBGsObj, DateTime? moment)
+    private static OpenApsPredBg? ParsePredBGs(OpenApsPredBGs? predBGs, DateTime? moment)
     {
-        if (predBGsObj == null || !moment.HasValue)
+        if (predBGs == null || !moment.HasValue)
             return null;
 
-        try
+        return new OpenApsPredBg
         {
-            // Parse the object properties using JsonSerializer
-            var json = JsonSerializer.Serialize(predBGsObj);
-
-            // Check if it's an array (legacy: { values: predBGs })
-            if (predBGsObj is JsonElement element && element.ValueKind == JsonValueKind.Array)
-            {
-                var values = JsonSerializer.Deserialize<List<double>>(json);
-                return new OpenApsPredBg { Values = values, Moment = moment };
-            }
-
-            // Try to parse as full predBGs object
-            var predBGs = JsonSerializer.Deserialize<OpenApsPredBg>(json);
-            if (predBGs != null)
-            {
-                predBGs.Moment = moment;
-            }
-            return predBGs;
-        }
-        catch
-        {
-            return null;
-        }
+            Iob = predBGs.IOB,
+            Zt = predBGs.ZT,
+            Cob = predBGs.COB,
+            Uam = predBGs.UAM,
+            Moment = moment,
+        };
     }
 
     /// <summary>
     /// Parse OpenAPS command object from dynamic data
     /// </summary>
-    private static ParsedOpenApsCommand? ParseOpenApsCommand(object? commandObj)
+    private static ParsedOpenApsCommand? ParseOpenApsCommand(OpenApsSuggested? command)
     {
-        if (commandObj == null)
+        if (command == null)
             return null;
 
-        try
+        var parsed = new ParsedOpenApsCommand
         {
-            // Parse the object properties using JsonSerializer
-            var json = JsonSerializer.Serialize(commandObj);
-            var parsedCommand = JsonSerializer.Deserialize<ParsedOpenApsCommand>(json);
-            return parsedCommand;
-        }
-        catch
+            Timestamp = command.Timestamp,
+            Mills = command.Mills,
+            Bg = command.Bg,
+            Reason = command.Reason,
+            EventualBg = command.EventualBG,
+            Rate = command.Rate,
+            Duration = command.Duration,
+            PredBGs = command.PredBGs,
+            MealAssist = command.MealAssist,
+            SensitivityRatio = command.SensitivityRatio,
+        };
+
+        if (command is OpenApsEnacted enacted)
         {
-            return null;
+            parsed.Received = enacted.Received;
+            parsed.Recieved = enacted.Recieved;
         }
+
+        return parsed;
     }
 
     /// <summary>
-    /// Parse OpenAPS IOB object from dynamic data
+    /// Map typed OpenApsIobData to ParsedOpenApsIob
     /// </summary>
-    private static ParsedOpenApsIob? ParseOpenApsIob(object? iobObj)
+    private static ParsedOpenApsIob? ParseOpenApsIob(OpenApsIobData? iobData)
     {
-        if (iobObj == null)
+        if (iobData == null)
             return null;
 
-        try
+        return new ParsedOpenApsIob
         {
-            // Parse the object properties using JsonSerializer
-            var json = JsonSerializer.Serialize(iobObj);
-            var parsedIob = JsonSerializer.Deserialize<ParsedOpenApsIob>(json);
-            return parsedIob;
-        }
-        catch
-        {
-            return null;
-        }
+            Timestamp = iobData.Timestamp,
+            Mills = iobData.Mills,
+            Iob = iobData.Iob,
+            BolusIob = iobData.BolusIob,
+            BasalIob = iobData.BasalIob,
+            Activity = iobData.Activity,
+            Time = iobData.Time,
+        };
     }
 
     #endregion
@@ -1305,7 +1284,7 @@ public class OpenApsService : IOpenApsService
         public int? Duration { get; set; }
 
         [JsonPropertyName("predBGs")]
-        public object? PredBGs { get; set; }
+        public OpenApsPredBGs? PredBGs { get; set; }
 
         [JsonPropertyName("mealAssist")]
         public string? MealAssist { get; set; }

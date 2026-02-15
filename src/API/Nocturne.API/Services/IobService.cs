@@ -1,4 +1,3 @@
-using System.Reflection;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -140,27 +139,12 @@ public class IobService : IIobService
         {
             var openApsIob = deviceStatusEntry.OpenAps!.Iob!;
 
-            // Handle both single IOB object and IOB array (post-AMA)
-            var iobData = openApsIob;
-            if (openApsIob is List<object> iobArray && iobArray.Any())
-            {
-                // Use first IOB entry from array
-                iobData = iobArray.First();
-            }
-
-            if (IsEmpty(iobData))
-            {
-                return new IobResult();
-            }
-
-            // Extract values using reflection for dynamic object
-            var iobValue = GetIobValue(iobData, "iob") ?? 0.0;
-            var basalIobValue = GetIobValue(iobData, "basaliob");
-            var activityValue = GetIobValue(iobData, "activity");
+            var iobValue = openApsIob.Iob ?? 0.0;
+            var basalIobValue = openApsIob.BasalIob;
+            var activityValue = openApsIob.Activity;
 
             // Handle timestamp field variations (time vs timestamp)
-            var timestampStr =
-                GetStringValue(iobData, "timestamp") ?? GetStringValue(iobData, "time");
+            var timestampStr = openApsIob.Timestamp ?? openApsIob.Time;
             var timestamp = deviceStatusEntry.Mills; // fallback
 
             if (
@@ -186,7 +170,7 @@ public class IobService : IIobService
         if (HasPumpIob(deviceStatusEntry))
         {
             var pumpIob = deviceStatusEntry.Pump!.Iob!;
-            var iobValue = GetIobValue(pumpIob, "iob") ?? GetIobValue(pumpIob, "bolusiob") ?? 0.0;
+            var iobValue = pumpIob.Iob ?? pumpIob.BolusIob ?? 0.0;
 
             var source = deviceStatusEntry.Connect != null ? "MM Connect" : "Pump";
 
@@ -424,14 +408,6 @@ public class IobService : IIobService
     }
 
     /// <summary>
-    /// Check if object is empty (for device status parsing)
-    /// </summary>
-    private static bool IsEmpty(object? obj)
-    {
-        return obj == null;
-    }
-
-    /// <summary>
     /// Round to three decimal places with exact legacy precision
     /// </summary>
     private static double RoundToThreeDecimals(double num)
@@ -461,120 +437,6 @@ public class IobService : IIobService
     private static bool HasPumpIob(DeviceStatus deviceStatus)
     {
         return deviceStatus.Pump?.Iob != null;
-    }
-
-    /// <summary>
-    /// Extract double value from dynamic IOB data object
-    /// Handles anonymous objects, regular objects, and various property name formats
-    /// </summary>
-    private static double? GetIobValue(object? obj, string propertyName)
-    {
-        if (obj == null)
-            return null;
-
-        try
-        {
-            var type = obj.GetType();
-
-            // Try exact case match first
-            var property = type.GetProperty(
-                propertyName,
-                BindingFlags.Public | BindingFlags.Instance
-            );
-            if (property != null)
-            {
-                var value = property.GetValue(obj);
-                if (value != null && double.TryParse(value.ToString(), out var doubleValue))
-                {
-                    return doubleValue;
-                }
-            }
-
-            // Try case-insensitive match
-            property = type.GetProperty(
-                propertyName,
-                BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance
-            );
-            if (property != null)
-            {
-                var value = property.GetValue(obj);
-                if (value != null && double.TryParse(value.ToString(), out var doubleValue))
-                {
-                    return doubleValue;
-                }
-            }
-
-            // Try all properties with case-insensitive name matching
-            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-            foreach (var prop in properties)
-            {
-                if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-                {
-                    var value = prop.GetValue(obj);
-                    if (value != null && double.TryParse(value.ToString(), out var doubleValue))
-                    {
-                        return doubleValue;
-                    }
-                }
-            }
-        }
-        catch (Exception)
-        {
-            // Ignore reflection errors and return null
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Extract string value from dynamic IOB data object
-    /// Handles anonymous objects, regular objects, and various property name formats
-    /// </summary>
-    private static string? GetStringValue(object? obj, string propertyName)
-    {
-        if (obj == null)
-            return null;
-
-        try
-        {
-            var type = obj.GetType();
-
-            // Try exact case match first
-            var property = type.GetProperty(
-                propertyName,
-                BindingFlags.Public | BindingFlags.Instance
-            );
-            if (property != null)
-            {
-                return property.GetValue(obj)?.ToString();
-            }
-
-            // Try case-insensitive match
-            property = type.GetProperty(
-                propertyName,
-                BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance
-            );
-            if (property != null)
-            {
-                return property.GetValue(obj)?.ToString();
-            }
-
-            // Try all properties with case-insensitive name matching
-            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-            foreach (var prop in properties)
-            {
-                if (string.Equals(prop.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return prop.GetValue(obj)?.ToString();
-                }
-            }
-        }
-        catch (Exception)
-        {
-            // Ignore reflection errors and return null
-        }
-
-        return null;
     }
 
     #endregion

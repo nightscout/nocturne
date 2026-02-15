@@ -25,6 +25,7 @@ public interface ICompressionLowService
     /// <summary>
     /// Accept a suggestion with adjusted bounds, creating a DataExclusion StateSpan
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the suggestion is not found or is not pending.</exception>
     Task<StateSpan> AcceptSuggestionAsync(
         Guid id,
         long startMills,
@@ -34,6 +35,7 @@ public interface ICompressionLowService
     /// <summary>
     /// Dismiss a suggestion
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the suggestion is not found or is not pending.</exception>
     Task DismissSuggestionAsync(
         Guid id,
         CancellationToken cancellationToken = default);
@@ -41,6 +43,7 @@ public interface ICompressionLowService
     /// <summary>
     /// Delete a suggestion and its associated state span if accepted
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the suggestion is not found.</exception>
     Task DeleteSuggestionAsync(
         Guid id,
         CancellationToken cancellationToken = default);

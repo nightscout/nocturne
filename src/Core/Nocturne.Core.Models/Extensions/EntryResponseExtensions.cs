@@ -170,6 +170,22 @@ public class EntryV1Response
     [JsonPropertyName("created_at")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CreatedAt => _entry.CreatedAt;
+
+    [JsonPropertyName("app")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? App => _entry.App;
+
+    [JsonPropertyName("units")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Units => _entry.Units;
+
+    [JsonPropertyName("isValid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsValid => _entry.IsValid;
+
+    [JsonPropertyName("isReadOnly")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsReadOnly => _entry.IsReadOnly;
 }
 
 /// <summary>
@@ -187,15 +203,19 @@ public class EntryV3Response
 
     // V3-specific computed fields
     [JsonPropertyName("identifier")]
-    public string? Identifier => _entry.Id;
+    public string? Identifier => _entry.Identifier;
 
     [JsonPropertyName("srvModified")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? SrvModified => _entry.Mills > 0 ? _entry.Mills : null;
+    public long? SrvModified => _entry.SrvModified ?? (_entry.Mills > 0 ? _entry.Mills : null);
 
     [JsonPropertyName("srvCreated")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? SrvCreated => _entry.Mills > 0 ? _entry.Mills : null;
+    public long? SrvCreated => _entry.SrvCreated ?? (_entry.Mills > 0 ? _entry.Mills : null);
+
+    [JsonPropertyName("subject")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Subject => _entry.Subject;
 
     // Core fields (same as V1)
     [JsonPropertyName("_id")]
@@ -301,4 +321,20 @@ public class EntryV3Response
     [JsonPropertyName("created_at")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CreatedAt => _entry.CreatedAt;
+
+    [JsonPropertyName("app")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? App => _entry.App;
+
+    [JsonPropertyName("units")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Units => _entry.Units;
+
+    [JsonPropertyName("isValid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsValid => _entry.IsValid;
+
+    [JsonPropertyName("isReadOnly")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsReadOnly => _entry.IsReadOnly;
 }

@@ -15,9 +15,6 @@ namespace Nocturne.API.Tests.Integration;
 [Trait("Category", "Integration")]
 public class LoopServiceParityTests
 {
-    private MockApnsClientFactory _mockFactory = null!;
-    private LoopService _loopService = null!;
-
     private (LoopService service, MockApnsClientFactory factory) CreateLoopService()
     {
         var logger = new Mock<ILogger<LoopService>>();

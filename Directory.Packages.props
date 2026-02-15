@@ -96,7 +96,7 @@
     <PackageVersion Include="HtmlAgilityPack" Version="1.11.72" />
     <PackageVersion Include="RestSharp" Version="111.4.1" />
     <PackageVersion Include="QRCoder" Version="1.6.0" />
-    <PackageVersion Include="HtmlSanitizer" Version="9.0.886" />
+    <PackageVersion Include="HtmlSanitizer" Version="9.0.892" />
     <PackageVersion Include="DotNetEnv" Version="3.1.1" />
     <PackageVersion Include="Alexa.NET" Version="1.22.0" />
     <PackageVersion Include="dotAPNS" Version="4.6.0" />

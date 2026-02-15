@@ -32,21 +32,19 @@
       <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
     </div>
   {:then stats}
-    {@const todaySummary = stats?.lastDay?.treatmentSummary}
-    {@const ninetyDaySummary = stats?.last90Days?.treatmentSummary}
-    {@const periodDays = stats?.last90Days?.periodDays ?? 90}
+    {@const todayDelivery = stats?.lastDay?.insulinDelivery}
+    {@const avgDelivery = stats?.last90Days?.insulinDelivery}
+    {@const todayCarbs = stats?.lastDay?.treatmentSummary?.totals?.food?.carbs ?? 0}
+    {@const avgCarbs = (stats?.last90Days?.treatmentSummary?.totals?.food?.carbs ?? 0) / (stats?.last90Days?.periodDays ?? 90)}
 
-    <!-- Calculate today's values -->
-    {@const todayBolus = todaySummary?.totals?.insulin?.bolus ?? 0}
-    {@const todayBasal = todaySummary?.totals?.insulin?.basal ?? 0}
-    {@const todayTotal = todayBolus + todayBasal}
-    {@const todayCarbs = todaySummary?.totals?.food?.carbs ?? 0}
+    <!-- Use insulinDelivery for insulin values (single source of truth) -->
+    {@const todayBolus = todayDelivery?.totalBolus ?? 0}
+    {@const todayBasal = todayDelivery?.totalBasal ?? 0}
+    {@const todayTotal = todayDelivery?.tdd ?? (todayBolus + todayBasal)}
 
-    <!-- Calculate 90-day average values -->
-    {@const avgBolus = periodDays > 0 ? (ninetyDaySummary?.totals?.insulin?.bolus ?? 0) / periodDays : 0}
-    {@const avgBasal = periodDays > 0 ? (ninetyDaySummary?.totals?.insulin?.basal ?? 0) / periodDays : 0}
-    {@const avgTotal = avgBolus + avgBasal}
-    {@const avgCarbs = periodDays > 0 ? (ninetyDaySummary?.totals?.food?.carbs ?? 0) / periodDays : 0}
+    {@const avgBolus = avgDelivery?.tdd ? (avgDelivery.tdd * (avgDelivery.bolusPercent ?? 0) / 100) : 0}
+    {@const avgBasal = avgDelivery?.tdd ? (avgDelivery.tdd * (avgDelivery.basalPercent ?? 0) / 100) : 0}
+    {@const avgTotal = avgDelivery?.tdd ?? 0}
 
     <!-- Select which values to display based on toggle -->
     {@const bolus = showAverage ? avgBolus : todayBolus}

@@ -14,6 +14,8 @@ public interface IDeviceRegistryService
     /// <param name="request">Device registration request</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Registered device health entity</returns>
+    /// <exception cref="ArgumentException">Thrown when userId or deviceId is null or empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the user has reached the maximum device limit or the device is already registered.</exception>
     Task<DeviceHealth> RegisterDeviceAsync(
         string userId,
         DeviceRegistrationRequest request,
@@ -26,6 +28,7 @@ public interface IDeviceRegistryService
     /// <param name="userId">User identifier</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of user's devices</returns>
+    /// <exception cref="ArgumentException">Thrown when userId is null or empty.</exception>
     Task<List<DeviceHealth>> GetUserDevicesAsync(
         string userId,
         CancellationToken cancellationToken
@@ -38,6 +41,8 @@ public interface IDeviceRegistryService
     /// <param name="update">Device health update data</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
+    /// <exception cref="ArgumentException">Thrown when deviceId is null or empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the device is not found.</exception>
     Task UpdateDeviceHealthAsync(
         string deviceId,
         DeviceHealthUpdate update,
@@ -50,6 +55,7 @@ public interface IDeviceRegistryService
     /// <param name="deviceId">Device identifier</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Device health entity or null if not found</returns>
+    /// <exception cref="ArgumentException">Thrown when deviceId is null or empty.</exception>
     Task<DeviceHealth?> GetDeviceAsync(string deviceId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -58,6 +64,8 @@ public interface IDeviceRegistryService
     /// <param name="deviceId">Device identifier</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
+    /// <exception cref="ArgumentException">Thrown when deviceId is null or empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the device is not found.</exception>
     Task RemoveDeviceAsync(string deviceId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -67,6 +75,8 @@ public interface IDeviceRegistryService
     /// <param name="settings">Device settings update</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
+    /// <exception cref="ArgumentException">Thrown when deviceId is null or empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the device is not found.</exception>
     Task UpdateDeviceSettingsAsync(
         string deviceId,
         DeviceSettingsUpdate settings,
@@ -87,6 +97,7 @@ public interface IDeviceAlertEngine
     /// <param name="device">Device health entity</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of generated device alerts</returns>
+    /// <exception cref="ArgumentNullException">Thrown when device is null.</exception>
     Task<List<DeviceAlert>> ProcessDeviceAlertsAsync(
         DeviceHealth device,
         CancellationToken cancellationToken
@@ -99,6 +110,7 @@ public interface IDeviceAlertEngine
     /// <param name="alertType">Type of alert</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if alert should be sent</returns>
+    /// <exception cref="ArgumentException">Thrown when deviceId is null or empty.</exception>
     Task<bool> ShouldSendAlertAsync(
         string deviceId,
         DeviceAlertType alertType,
@@ -111,6 +123,7 @@ public interface IDeviceAlertEngine
     /// <param name="deviceAlert">Device alert to send</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Task completion</returns>
+    /// <exception cref="ArgumentNullException">Thrown when deviceAlert is null.</exception>
     Task SendDeviceAlertAsync(DeviceAlert deviceAlert, CancellationToken cancellationToken);
 
     /// <summary>

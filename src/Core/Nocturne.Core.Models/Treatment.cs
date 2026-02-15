@@ -27,15 +27,27 @@ public class Treatment : ProcessableDocumentBase
     /// Gets the server-modified timestamp for V3 compatibility.
     /// Returns Mills as Nightscout V3 uses this to track server-side modifications.
     /// </summary>
+    private long? _srvModified;
+
     [JsonPropertyName("srvModified")]
-    public long? SrvModified => Mills > 0 ? Mills : null;
+    public long? SrvModified
+    {
+        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        set => _srvModified = value;
+    }
 
     /// <summary>
     /// Gets the server-created timestamp for V3 compatibility.
     /// Returns Mills as Nightscout V3 uses this to track server-side creation time.
     /// </summary>
+    private long? _srvCreated;
+
     [JsonPropertyName("srvCreated")]
-    public long? SrvCreated => Mills > 0 ? Mills : null;
+    public long? SrvCreated
+    {
+        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        set => _srvCreated = value;
+    }
 
     /// <summary>
     /// Gets or sets the event type (e.g., "Meal Bolus", "Correction Bolus", "BG Check")
@@ -82,8 +94,10 @@ public class Treatment : ProcessableDocumentBase
     {
         get
         {
-            if (_insulin.HasValue) return _insulin;
-            if (_amount.HasValue) return _amount;
+            if (_insulin.HasValue)
+                return _insulin;
+            if (_amount.HasValue)
+                return _amount;
 
             // Try to calculate from Rate * Duration
             // resolving synonyms for Rate
@@ -185,7 +199,8 @@ public class Treatment : ProcessableDocumentBase
     {
         get
         {
-            if (_duration.HasValue) return _duration;
+            if (_duration.HasValue)
+                return _duration;
 
             // Try to calculate from Insulin / Rate
             // resolving synonyms
@@ -360,8 +375,10 @@ public class Treatment : ProcessableDocumentBase
     {
         get
         {
-            if (_rate.HasValue) return _rate;
-            if (_absolute.HasValue) return _absolute;
+            if (_rate.HasValue)
+                return _rate;
+            if (_absolute.HasValue)
+                return _absolute;
 
             // Try to calculate from Insulin / Duration
             // resolving synonyms for Insulin
@@ -688,6 +705,51 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     [JsonPropertyName("calculationType")]
     public CalculationType? CalculationType { get; set; }
+
+    [JsonPropertyName("durationInMilliseconds")]
+    public long? DurationInMilliseconds { get; set; }
+
+    [JsonPropertyName("pumpId")]
+    public long? PumpId { get; set; }
+
+    [JsonPropertyName("pumpSerial")]
+    public string? PumpSerial { get; set; }
+
+    [JsonPropertyName("pumpType")]
+    public string? PumpType { get; set; }
+
+    [JsonPropertyName("endId")]
+    public long? EndId { get; set; }
+
+    [JsonPropertyName("isValid")]
+    public bool? IsValid { get; set; }
+
+    [JsonPropertyName("isReadOnly")]
+    public bool? IsReadOnly { get; set; }
+
+    [JsonPropertyName("isBasalInsulin")]
+    public bool? IsBasalInsulin { get; set; }
+
+    [JsonPropertyName("bolusCalculatorResult")]
+    public string? BolusCalculatorResult { get; set; }
+
+    [JsonPropertyName("originalDuration")]
+    public int? OriginalDuration { get; set; }
+
+    [JsonPropertyName("originalProfileName")]
+    public string? OriginalProfileName { get; set; }
+
+    [JsonPropertyName("originalPercentage")]
+    public int? OriginalPercentage { get; set; }
+
+    [JsonPropertyName("originalTimeshift")]
+    public int? OriginalTimeshift { get; set; }
+
+    [JsonPropertyName("originalCustomizedName")]
+    public string? OriginalCustomizedName { get; set; }
+
+    [JsonPropertyName("originalEnd")]
+    public long? OriginalEnd { get; set; }
 
     /// <summary>
     /// Gets or sets additional properties for the treatment

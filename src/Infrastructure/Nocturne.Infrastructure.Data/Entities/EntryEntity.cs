@@ -202,6 +202,34 @@ public class EntryEntity
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
 
+    // === AAPS (AndroidAPS) Fields ===
+
+    /// <summary>
+    /// Application identifier that created this entry (e.g., "AAPS", "xdrip")
+    /// </summary>
+    [Column("app")]
+    [MaxLength(255)]
+    public string? App { get; set; }
+
+    /// <summary>
+    /// Glucose measurement units (e.g., "mg/dl", "mmol/L")
+    /// </summary>
+    [Column("units")]
+    [MaxLength(20)]
+    public string? Units { get; set; }
+
+    /// <summary>
+    /// Whether the entry is valid. AAPS sets this to false for soft-deleted records.
+    /// </summary>
+    [Column("is_valid")]
+    public bool? IsValid { get; set; }
+
+    /// <summary>
+    /// Whether the entry is read-only and should not be modified by the client
+    /// </summary>
+    [Column("is_read_only")]
+    public bool? IsReadOnly { get; set; }
+
     /// <summary>
     /// System tracking: when record was inserted
     /// </summary>

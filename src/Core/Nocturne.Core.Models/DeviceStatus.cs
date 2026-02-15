@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
@@ -319,28 +320,230 @@ public class PumpIob
 public class OpenApsStatus
 {
     /// <summary>
-    /// Gets or sets the suggested action
+    /// Gets or sets the suggested action from the APS algorithm
     /// </summary>
     [JsonPropertyName("suggested")]
-    public object? Suggested { get; set; }
+    public OpenApsSuggested? Suggested { get; set; }
 
     /// <summary>
-    /// Gets or sets the enacted action
+    /// Gets or sets the enacted action (confirmed delivered to pump)
     /// </summary>
     [JsonPropertyName("enacted")]
-    public object? Enacted { get; set; }
+    public OpenApsEnacted? Enacted { get; set; }
 
     /// <summary>
-    /// Gets or sets the IOB information
+    /// Gets or sets the IOB information.
+    /// Uses a custom converter to handle legacy array format (takes first element).
     /// </summary>
     [JsonPropertyName("iob")]
-    public object? Iob { get; set; }
+    [JsonConverter(typeof(OpenApsIobDataConverter))]
+    public OpenApsIobData? Iob { get; set; }
 
     /// <summary>
     /// Gets or sets the COB (Carbs on Board) value
     /// </summary>
     [JsonPropertyName("cob")]
     public double? Cob { get; set; }
+}
+
+/// <summary>
+/// Represents an OpenAPS/AAPS suggested action with prediction data
+/// </summary>
+public class OpenApsSuggested
+{
+    [JsonPropertyName("algorithm")]
+    public string? Algorithm { get; set; }
+
+    [JsonPropertyName("runningDynamicIsf")]
+    public bool? RunningDynamicIsf { get; set; }
+
+    [JsonPropertyName("timestamp")]
+    public string? Timestamp { get; set; }
+
+    [JsonPropertyName("mills")]
+    public long? Mills { get; set; }
+
+    [JsonPropertyName("bg")]
+    public double? Bg { get; set; }
+
+    [JsonPropertyName("tick")]
+    public string? Tick { get; set; }
+
+    [JsonPropertyName("eventualBG")]
+    public double? EventualBG { get; set; }
+
+    [JsonPropertyName("targetBG")]
+    public double? TargetBG { get; set; }
+
+    [JsonPropertyName("insulinReq")]
+    public double? InsulinReq { get; set; }
+
+    [JsonPropertyName("units")]
+    public double? Units { get; set; }
+
+    [JsonPropertyName("deliverAt")]
+    public string? DeliverAt { get; set; }
+
+    [JsonPropertyName("sensitivityRatio")]
+    public double? SensitivityRatio { get; set; }
+
+    [JsonPropertyName("reason")]
+    public string? Reason { get; set; }
+
+    [JsonPropertyName("duration")]
+    public int? Duration { get; set; }
+
+    [JsonPropertyName("rate")]
+    public double? Rate { get; set; }
+
+    [JsonPropertyName("predBGs")]
+    public OpenApsPredBGs? PredBGs { get; set; }
+
+    [JsonPropertyName("COB")]
+    public double? COB { get; set; }
+
+    [JsonPropertyName("IOB")]
+    public double? IOB { get; set; }
+
+    [JsonPropertyName("variable_sens")]
+    public double? VariableSens { get; set; }
+
+    [JsonPropertyName("isfMgdlForCarbs")]
+    public double? IsfMgdlForCarbs { get; set; }
+
+    [JsonPropertyName("carbsReq")]
+    public int? CarbsReq { get; set; }
+
+    [JsonPropertyName("carbsReqWithin")]
+    public int? CarbsReqWithin { get; set; }
+
+    [JsonPropertyName("mealAssist")]
+    public string? MealAssist { get; set; }
+
+    [JsonPropertyName("consoleLog")]
+    public List<string>? ConsoleLog { get; set; }
+
+    [JsonPropertyName("consoleError")]
+    public List<string>? ConsoleError { get; set; }
+}
+
+/// <summary>
+/// Represents an OpenAPS/AAPS enacted action (extends suggested with delivery confirmation)
+/// </summary>
+public class OpenApsEnacted : OpenApsSuggested
+{
+    [JsonPropertyName("received")]
+    public bool? Received { get; set; }
+
+    [JsonPropertyName("recieved")]
+    public bool? Recieved { get; set; }
+
+    [JsonPropertyName("requested")]
+    public OpenApsRequested? Requested { get; set; }
+
+    [JsonPropertyName("smb")]
+    public double? Smb { get; set; }
+}
+
+/// <summary>
+/// Represents an OpenAPS requested temp basal / SMB
+/// </summary>
+public class OpenApsRequested
+{
+    [JsonPropertyName("duration")]
+    public int? Duration { get; set; }
+
+    [JsonPropertyName("rate")]
+    public double? Rate { get; set; }
+
+    [JsonPropertyName("temp")]
+    public string? Temp { get; set; }
+
+    [JsonPropertyName("smb")]
+    public double? Smb { get; set; }
+}
+
+/// <summary>
+/// Prediction curves from OpenAPS/AAPS determine-basal algorithm
+/// </summary>
+public class OpenApsPredBGs
+{
+    [JsonPropertyName("IOB")]
+    public List<double>? IOB { get; set; }
+
+    [JsonPropertyName("ZT")]
+    public List<double>? ZT { get; set; }
+
+    [JsonPropertyName("COB")]
+    public List<double>? COB { get; set; }
+
+    [JsonPropertyName("UAM")]
+    public List<double>? UAM { get; set; }
+}
+
+/// <summary>
+/// Represents OpenAPS IOB data from device status
+/// </summary>
+public class OpenApsIobData
+{
+    [JsonPropertyName("iob")]
+    public double? Iob { get; set; }
+
+    [JsonPropertyName("basaliob")]
+    public double? BasalIob { get; set; }
+
+    [JsonPropertyName("activity")]
+    public double? Activity { get; set; }
+
+    [JsonPropertyName("time")]
+    public string? Time { get; set; }
+
+    [JsonPropertyName("timestamp")]
+    public string? Timestamp { get; set; }
+
+    [JsonPropertyName("mills")]
+    public long? Mills { get; set; }
+
+    [JsonPropertyName("bolusiob")]
+    public double? BolusIob { get; set; }
+}
+
+/// <summary>
+/// Handles legacy OpenAPS IOB format where IOB can be either an object or an array (takes first element).
+/// </summary>
+public class OpenApsIobDataConverter : JsonConverter<OpenApsIobData?>
+{
+    public override OpenApsIobData? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+            return null;
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            using var doc = JsonDocument.ParseValue(ref reader);
+            var arr = doc.RootElement;
+            if (arr.GetArrayLength() > 0)
+                return JsonSerializer.Deserialize<OpenApsIobData>(arr[0].GetRawText(), options);
+            return null;
+        }
+
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            using var doc = JsonDocument.ParseValue(ref reader);
+            return JsonSerializer.Deserialize<OpenApsIobData>(doc.RootElement.GetRawText(), options);
+        }
+
+        reader.Skip();
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, OpenApsIobData? value, JsonSerializerOptions options)
+    {
+        if (value == null)
+            writer.WriteNullValue();
+        else
+            JsonSerializer.Serialize(writer, value, options);
+    }
 }
 
 /// <summary>

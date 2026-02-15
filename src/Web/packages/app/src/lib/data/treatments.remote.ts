@@ -118,82 +118,10 @@ export const getAllTreatments = query(
   }
 );
 
-/**
- * Get treatment statistics by category
- */
-export const getTreatmentStats = query(
-  z.object({
-    dateRange: z.object({
-      from: z.date(),
-      to: z.date(),
-    }),
-  }),
-  async (props) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    const { from, to } = props.dateRange;
-    const treatmentsQuery = JSON.stringify({
-      created_at: {
-        $gte: from.toISOString(),
-        $lte: to.toISOString(),
-      },
-    });
-
-    // Get all treatments for stats using v4 endpoint
-    const treatments = await apiClient.treatments.getTreatments(undefined, 10000, 0, treatmentsQuery);
-
-    // Calculate category counts
-    const categoryCounts: Record<string, number> = {};
-    const eventTypeCounts: Record<string, number> = {};
-    let totalInsulin = 0;
-    let totalCarbs = 0;
-    let bolusCount = 0;
-    let carbEntryCount = 0;
-
-    for (const treatment of treatments) {
-      const eventType = treatment.eventType || "<none>";
-      eventTypeCounts[eventType] = (eventTypeCounts[eventType] || 0) + 1;
-
-      // Count by category
-      for (const [categoryId, category] of Object.entries(TREATMENT_CATEGORIES)) {
-        if ((category.eventTypes as readonly string[]).includes(eventType)) {
-          categoryCounts[categoryId] = (categoryCounts[categoryId] || 0) + 1;
-          break;
-        }
-      }
-
-      // Aggregate insulin and carbs
-      if (treatment.insulin && treatment.insulin > 0) {
-        totalInsulin += treatment.insulin;
-        bolusCount++;
-      }
-      if (treatment.carbs && treatment.carbs > 0) {
-        totalCarbs += treatment.carbs;
-        carbEntryCount++;
-      }
-    }
-
-    return {
-      total: treatments.length,
-      categoryCounts,
-      eventTypeCounts,
-      totals: {
-        insulin: totalInsulin,
-        carbs: totalCarbs,
-        bolusCount,
-        carbEntryCount,
-      },
-      averages: {
-        insulinPerBolus: bolusCount > 0 ? totalInsulin / bolusCount : 0,
-        carbsPerEntry: carbEntryCount > 0 ? totalCarbs / carbEntryCount : 0,
-      },
-    };
-  }
-);
-
 // Note: Mutations (update, delete) are handled via SvelteKit form actions in +page.server.ts
 // This file only contains query functions for fetching data
+// Treatment statistics (TDD, basal/bolus split) come from the backend statistics endpoints
+// (getMultiPeriodStatistics, getInsulinDeliveryStatistics) — never computed client-side.
 
 /**
  * Create a new treatment

@@ -338,4 +338,28 @@ public class Entry : ProcessableDocumentBase
     [JsonPropertyName("sources")]
     [NocturneOnly]
     public string[]? Sources { get; set; }
+
+    [JsonPropertyName("app")]
+    public string? App { get; set; }
+
+    [JsonPropertyName("units")]
+    public string? Units { get; set; }
+
+    [JsonPropertyName("isValid")]
+    public bool? IsValid { get; set; }
+
+    [JsonPropertyName("isReadOnly")]
+    public bool? IsReadOnly { get; set; }
+
+    [JsonPropertyName("identifier")]
+    public string? Identifier => Id;
+
+    [JsonPropertyName("srvModified")]
+    public long? SrvModified { get; set; }
+
+    [JsonPropertyName("srvCreated")]
+    public long? SrvCreated { get; set; }
+
+    [JsonPropertyName("subject")]
+    public string? Subject { get; set; }
 }

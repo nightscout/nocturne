@@ -135,7 +135,7 @@ public class NightscoutContainer : IAsyncDisposable
                 return;
 
             // Step 2: Get the created subject to retrieve the access token
-            var getSubjectsResponse = await _httpClient.GetAsync(
+            var getSubjectsResponse = await _httpClient!.GetAsync(
                 "/api/v2/authorization/subjects",
                 cancellationToken);
 

@@ -6190,6 +6190,16 @@
               }
             }
           },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "",
             "content": {
@@ -6209,11 +6219,11 @@
         "tags": [
           "Prediction"
         ],
-        "summary": "Check if the oref prediction library is available.",
+        "summary": "Check the status of the prediction service.",
         "operationId": "Prediction_GetStatus",
         "responses": {
           "200": {
-            "description": "Status of the oref library",
+            "description": "Status of the prediction service including configured source",
             "content": {
               "application/json": {
                 "schema": {
@@ -9891,6 +9901,50 @@
         }
       }
     },
+    "/api/v3/DeviceStatus/history/{lastModified}": {
+      "get": {
+        "tags": [
+          "DeviceStatus"
+        ],
+        "summary": "Get device status records modified since a given timestamp (for AAPS incremental sync)",
+        "operationId": "DeviceStatus_GetDeviceStatusHistory",
+        "parameters": [
+          {
+            "name": "lastModified",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1000
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v3/Entries": {
       "get": {
         "tags": [
@@ -10167,6 +10221,50 @@
                 "schema": {
                   "$ref": "#/components/schemas/V3ErrorResponse"
                 }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v3/Entries/history/{lastModified}": {
+      "get": {
+        "tags": [
+          "Entries"
+        ],
+        "summary": "Get entries modified since a given timestamp (for AAPS incremental sync)",
+        "operationId": "Entries_GetEntryHistory",
+        "parameters": [
+          {
+            "name": "lastModified",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1000
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -11195,6 +11293,57 @@
             "description": ""
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Treatments"
+        ],
+        "summary": "Partially update a treatment via V3 API (JSON merge-patch)\nUsed by AAPS to update Temp Basal duration, endId, etc.",
+        "operationId": "Treatments_PatchTreatment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "patchData",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V3ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/v3/Treatments/bulk": {
@@ -11241,6 +11390,50 @@
                 "schema": {
                   "$ref": "#/components/schemas/V3ErrorResponse"
                 }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v3/Treatments/history/{lastModified}": {
+      "get": {
+        "tags": [
+          "Treatments"
+        ],
+        "summary": "Get treatments modified since a given timestamp (for AAPS incremental sync)",
+        "operationId": "Treatments_GetTreatmentHistory",
+        "parameters": [
+          {
+            "name": "lastModified",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1000
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -16390,7 +16583,8 @@
           "BolusWizard",
           "Calibration",
           "TransmitterSensorInsert",
-          "PodChange"
+          "PodChange",
+          "TemporaryTarget"
         ],
         "enum": [
           "<none>",
@@ -16421,7 +16615,8 @@
           "Bolus Wizard",
           "Calibration",
           "Transmitter Sensor Insert",
-          "Pod Change"
+          "Pod Change",
+          "Temporary Target"
         ]
       },
       "EventTypeConfiguration": {
@@ -17674,6 +17869,40 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "app": {
+                "type": "string",
+                "nullable": true
+              },
+              "units": {
+                "type": "string",
+                "nullable": true
+              },
+              "isValid": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "isReadOnly": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "identifier": {
+                "type": "string",
+                "nullable": true
+              },
+              "srvModified": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "srvCreated": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "subject": {
+                "type": "string",
+                "nullable": true
               }
             }
           }
@@ -18497,6 +18726,73 @@
                     "$ref": "#/components/schemas/CalculationType"
                   }
                 ]
+              },
+              "durationInMilliseconds": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "pumpId": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "pumpSerial": {
+                "type": "string",
+                "nullable": true
+              },
+              "pumpType": {
+                "type": "string",
+                "nullable": true
+              },
+              "endId": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "isValid": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "isReadOnly": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "isBasalInsulin": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "bolusCalculatorResult": {
+                "type": "string",
+                "nullable": true
+              },
+              "originalDuration": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "originalProfileName": {
+                "type": "string",
+                "nullable": true
+              },
+              "originalPercentage": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "originalTimeshift": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "originalCustomizedName": {
+                "type": "string",
+                "nullable": true
+              },
+              "originalEnd": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
               },
               "additional_properties": {
                 "type": "object",
@@ -23787,17 +24083,11 @@
         "properties": {
           "available": {
             "type": "boolean",
-            "description": "Whether the oref library is available"
+            "description": "Whether a prediction service is available"
           },
-          "version": {
+          "source": {
             "type": "string",
-            "description": "Version of the oref library",
-            "nullable": true
-          },
-          "healthCheck": {
-            "type": "string",
-            "description": "Health check result (JSON)",
-            "nullable": true
+            "description": "Configured prediction source (None, DeviceStatus, OrefWasm)"
           }
         }
       },
@@ -27229,15 +27519,297 @@
         "additionalProperties": false,
         "properties": {
           "suggested": {
-            "nullable": true
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OpenApsSuggested"
+              }
+            ]
           },
           "enacted": {
-            "nullable": true
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OpenApsEnacted"
+              }
+            ]
           },
           "iob": {
-            "nullable": true
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OpenApsIobData"
+              }
+            ]
           },
           "cob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "OpenApsSuggested": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "nullable": true
+          },
+          "runningDynamicIsf": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "nullable": true
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "bg": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "tick": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventualBG": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "targetBG": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "insulinReq": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "units": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "deliverAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "sensitivityRatio": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "duration": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "rate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "predBGs": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OpenApsPredBGs"
+              }
+            ]
+          },
+          "COB": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "IOB": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "variable_sens": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isfMgdlForCarbs": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "carbsReq": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "carbsReqWithin": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "mealAssist": {
+            "type": "string",
+            "nullable": true
+          },
+          "consoleLog": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "consoleError": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "OpenApsPredBGs": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "IOB": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "ZT": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "COB": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "UAM": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        }
+      },
+      "OpenApsEnacted": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OpenApsSuggested"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "received": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "recieved": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "requested": {
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OpenApsRequested"
+                  }
+                ]
+              },
+              "smb": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "OpenApsRequested": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "duration": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "rate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "temp": {
+            "type": "string",
+            "nullable": true
+          },
+          "smb": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "OpenApsIobData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "iob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "basaliob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "activity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "time": {
+            "type": "string",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "nullable": true
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "bolusiob": {
             "type": "number",
             "format": "double",
             "nullable": true

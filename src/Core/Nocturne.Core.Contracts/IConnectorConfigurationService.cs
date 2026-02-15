@@ -108,6 +108,7 @@ public interface IConnectorConfigurationService
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="modifiedBy">Who is making the change</param>
     /// <param name="ct">Cancellation token</param>
+    /// <exception cref="InvalidOperationException">Thrown when secret encryption is not configured.</exception>
     Task SaveSecretsAsync(string connectorName, Dictionary<string, string> secrets, string? modifiedBy = null, CancellationToken ct = default);
 
     /// <summary>

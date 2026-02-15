@@ -1,8 +1,11 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.Infrastructure.Data.Services;
@@ -564,6 +567,54 @@ public class PostgreSqlService : IPostgreSqlService
     {
         _logger.LogDebug("Updating treatment with ID: {Id}", id);
         return await _treatmentRepository.UpdateTreatmentAsync(id, treatment, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Treatment?> PatchTreatmentAsync(
+        string id,
+        JsonElement patchData,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug("Patching treatment with ID: {Id}", id);
+
+        // Look up entity using same pattern as repository: OriginalId first, then GUID
+        var entity = await _context.Treatments.FirstOrDefaultAsync(
+            t => t.OriginalId == id,
+            cancellationToken
+        );
+
+        if (entity == null && Guid.TryParse(id, out var guidId))
+        {
+            entity = await _context.Treatments.FirstOrDefaultAsync(
+                t => t.Id == guidId,
+                cancellationToken
+            );
+        }
+
+        if (entity == null)
+            return null;
+
+        // Convert entity to domain model, serialize to JSON, merge patch on top
+        var existing = TreatmentMapper.ToDomainModel(entity);
+        var existingJson = JsonSerializer.SerializeToNode(existing);
+
+        if (existingJson is JsonObject existingObj)
+        {
+            foreach (var property in patchData.EnumerateObject())
+            {
+                existingObj[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+            }
+        }
+
+        var patched = existingJson!.Deserialize<Treatment>();
+        if (patched == null)
+            return null;
+
+        TreatmentMapper.UpdateEntity(entity, patched);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return TreatmentMapper.ToDomainModel(entity);
     }
 
     /// <inheritdoc />
@@ -1462,6 +1513,61 @@ public class PostgreSqlService : IPostgreSqlService
             timestamp
         );
         return timestamp;
+    }
+
+    #endregion
+
+    #region History Operations (Incremental Sync)
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var threshold = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
+        var entities = await _context
+            .Treatments.Where(t => t.SysUpdatedAt >= threshold)
+            .OrderBy(t => t.SysUpdatedAt)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        return entities.Select(TreatmentMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<DeviceStatus>> GetDeviceStatusModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var threshold = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
+        var entities = await _context
+            .DeviceStatuses.Where(d => d.SysUpdatedAt >= threshold)
+            .OrderBy(d => d.SysUpdatedAt)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        return entities.Select(DeviceStatusMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Entry>> GetEntriesModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var threshold = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
+        var entities = await _context
+            .Entries.Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        return entities.Select(EntryMapper.ToDomainModel);
     }
 
     #endregion

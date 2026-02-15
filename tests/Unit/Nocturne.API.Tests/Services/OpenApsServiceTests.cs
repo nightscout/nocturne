@@ -98,14 +98,14 @@ public class OpenApsServiceTests
                 Mills = ((DateTimeOffset)currentTime.AddMinutes(-2)).ToUnixTimeMilliseconds(),
                 OpenAps = new OpenApsStatus
                 {
-                    Enacted = new
+                    Enacted = new OpenApsEnacted
                     {
-                        timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        received = true,
-                        bg = 147,
-                        rate = 0.75,
-                        duration = 30,
-                        reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
+                        Timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                        Received = true,
+                        Bg = 147,
+                        Rate = 0.75,
+                        Duration = 30,
+                        Reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
                     },
                 },
             },
@@ -137,14 +137,14 @@ public class OpenApsServiceTests
                 Mills = ((DateTimeOffset)currentTime.AddMinutes(-2)).ToUnixTimeMilliseconds(),
                 OpenAps = new OpenApsStatus
                 {
-                    Enacted = new
+                    Enacted = new OpenApsEnacted
                     {
-                        timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        received = false, // Not received
-                        bg = 147,
-                        rate = 0.75,
-                        duration = 30,
-                        reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
+                        Timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                        Received = false, // Not received
+                        Bg = 147,
+                        Rate = 0.75,
+                        Duration = 30,
+                        Reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
                     },
                 },
             },

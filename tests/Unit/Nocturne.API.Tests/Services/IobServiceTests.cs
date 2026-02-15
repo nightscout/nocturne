@@ -356,12 +356,12 @@ public class IobServiceTests
             case "OpenAPS":
                 deviceStatus.OpenAps = new OpenApsStatus
                 {
-                    Iob = new
+                    Iob = new OpenApsIobData
                     {
-                        iob = iob,
-                        basaliob = -0.298,
-                        activity = 0.0147,
-                        timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                        Iob = iob,
+                        BasalIob = -0.298,
+                        Activity = 0.0147,
+                        Timestamp = DateTimeOffset.UtcNow.ToString("O"),
                     },
                 };
                 break;

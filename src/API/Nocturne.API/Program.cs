@@ -197,19 +197,31 @@ builder.Services.AddScoped<IDDataService, DDataService>();
 builder.Services.AddScoped<IPropertiesService, PropertiesService>();
 builder.Services.AddScoped<ISummaryService, SummaryService>();
 builder.Services.AddScoped<IIobService, IobService>();
-builder.Services.AddScoped<IPredictionService, PredictionService>();
+// Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
+var predictionSource = builder.Configuration.GetValue<PredictionSource>("Predictions:Source", PredictionSource.None);
+switch (predictionSource)
+{
+    case PredictionSource.DeviceStatus:
+        builder.Services.AddScoped<IPredictionService, DeviceStatusPredictionService>();
+        break;
+    case PredictionSource.OrefWasm:
+        builder.Services.AddScoped<IPredictionService, PredictionService>();
+        builder.Services.AddOrefService(options =>
+        {
+            options.WasmPath = "oref.wasm";
+            options.Enabled = true;
+        });
+        break;
+    case PredictionSource.None:
+    default:
+        // No prediction service registered — controller will check and return 404
+        break;
+}
+
 builder.Services.AddScoped<ICobService, CobService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IAr2Service, Ar2Service>();
 builder.Services.AddScoped<IBolusWizardService, BolusWizardService>();
-
-// oref Rust WASM service - provides high-performance IOB/COB/determine-basal calculations
-builder.Services.AddOrefService(options =>
-{
-    // Look for WASM file in standard locations
-    options.WasmPath = "oref.wasm";
-    options.Enabled = true;
-});
 
 builder.Services.AddScoped<IDirectionService, DirectionService>();
 builder.Services.AddScoped<INotificationV2Service, NotificationV2Service>();

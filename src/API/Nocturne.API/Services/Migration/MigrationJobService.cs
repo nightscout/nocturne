@@ -16,7 +16,9 @@ namespace Nocturne.API.Services.Migration;
 public interface IMigrationJobService
 {
     Task<MigrationJobInfo> StartMigrationAsync(StartMigrationRequest request, CancellationToken ct = default);
+    /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found.</exception>
     Task<MigrationJobStatus> GetStatusAsync(Guid jobId);
+    /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found.</exception>
     Task CancelAsync(Guid jobId);
     Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync();
     Task<TestMigrationConnectionResult> TestConnectionAsync(TestMigrationConnectionRequest request, CancellationToken ct = default);

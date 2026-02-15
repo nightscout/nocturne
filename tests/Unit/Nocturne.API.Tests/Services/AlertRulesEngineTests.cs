@@ -55,9 +55,9 @@ public class AlertRulesEngineTests
             _mockAlertRuleRepository.Object,
             _mockAlertHistoryRepository.Object,
             _mockNotificationPreferencesRepository.Object,
-            _mockPredictionService.Object,
             _mockOptions.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            _mockPredictionService.Object
         );
     }
 

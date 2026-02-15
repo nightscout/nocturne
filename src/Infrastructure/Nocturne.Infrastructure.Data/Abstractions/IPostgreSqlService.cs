@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data.Abstractions;
@@ -73,7 +74,10 @@ public interface IPostgreSqlService
     /// <param name="dataSource">The data source name</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The latest timestamp, or null if no entries exist</returns>
-    Task<DateTime?> GetLatestEntryTimestampBySourceAsync(string dataSource, CancellationToken cancellationToken = default);
+    Task<DateTime?> GetLatestEntryTimestampBySourceAsync(
+        string dataSource,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Get the oldest entry timestamp for a specific data source
@@ -924,5 +928,39 @@ public interface IPostgreSqlService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// Get treatments modified since a given timestamp (for incremental sync)
+    /// </summary>
+    Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    );
 
+    /// <summary>
+    /// Get device status records modified since a given timestamp (for incremental sync)
+    /// </summary>
+    Task<IEnumerable<DeviceStatus>> GetDeviceStatusModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Get entries modified since a given timestamp (for incremental sync)
+    /// </summary>
+    Task<IEnumerable<Entry>> GetEntriesModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Patch a treatment by ID using JSON merge-patch semantics
+    /// </summary>
+    Task<Treatment?> PatchTreatmentAsync(
+        string id,
+        JsonElement patchData,
+        CancellationToken cancellationToken = default
+    );
 }

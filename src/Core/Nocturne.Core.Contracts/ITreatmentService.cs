@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts;
@@ -47,6 +48,26 @@ public interface ITreatmentService
     );
 
     /// <summary>
+    /// Get treatments with advanced V3-style filtering, including StateSpan-derived temp basals
+    /// </summary>
+    Task<IEnumerable<Treatment>> GetTreatmentsWithAdvancedFilterAsync(
+        int count,
+        int skip,
+        string? findQuery,
+        bool reverseResults,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Get treatments modified since a given timestamp, including StateSpan-derived temp basals
+    /// </summary>
+    Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit = 500,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Create new treatments with WebSocket broadcasting
     /// </summary>
     /// <param name="treatments">Treatments to create</param>
@@ -67,6 +88,20 @@ public interface ITreatmentService
     Task<Treatment?> UpdateTreatmentAsync(
         string id,
         Treatment treatment,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Partially update a treatment via JSON merge-patch with StateSpan awareness.
+    /// If the treatment is a temp basal backed by a StateSpan, the StateSpan is also updated.
+    /// </summary>
+    /// <param name="id">Treatment ID to patch</param>
+    /// <param name="patchData">JSON merge-patch data</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Patched treatment if successful, null otherwise</returns>
+    Task<Treatment?> PatchTreatmentAsync(
+        string id,
+        JsonElement patchData,
         CancellationToken cancellationToken = default
     );
 

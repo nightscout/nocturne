@@ -182,5 +182,11 @@ public enum TreatmentEventType
     /// Pod change
     /// </summary>
     [EnumMember(Value = "Pod Change")]
-    PodChange
+    PodChange,
+
+    /// <summary>
+    /// Temporary target (AAPS)
+    /// </summary>
+    [EnumMember(Value = "Temporary Target")]
+    TemporaryTarget
 }

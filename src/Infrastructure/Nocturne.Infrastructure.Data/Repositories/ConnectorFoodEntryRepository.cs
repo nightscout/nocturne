@@ -13,11 +13,13 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
 {
     private readonly NocturneDbContext _context;
 
+    /// <inheritdoc cref="IConnectorFoodEntryRepository" />
     public ConnectorFoodEntryRepository(NocturneDbContext context)
     {
         _context = context;
     }
 
+    /// <inheritdoc />
     public async Task<ConnectorFoodEntry?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var entity = await _context.ConnectorFoodEntries
@@ -27,6 +29,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         return entity != null ? MapToDomain(entity) : null;
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ConnectorFoodEntry>> GetPendingInTimeRangeAsync(
         DateTimeOffset from,
         DateTimeOffset to,
@@ -42,6 +45,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         return entities.Select(MapToDomain).ToList();
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ConnectorFoodEntry>> GetByIdsAsync(
         IEnumerable<Guid> ids,
         CancellationToken ct = default)
@@ -55,6 +59,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         return entities.Select(MapToDomain).ToList();
     }
 
+    /// <inheritdoc />
     public async Task UpdateStatusAsync(
         Guid id,
         ConnectorFoodEntryStatus status,

@@ -284,8 +284,8 @@ public class FoodControllerTests
 
         // Assert
         result.Should().NotBeNull();
-        var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
-        var food = createdResult.Value.Should().BeOfType<Food[]>().Subject;
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var food = okResult.Value.Should().BeOfType<Food[]>().Subject;
         food.Should().HaveCount(1);
         food[0].Name.Should().Be("New Food");
         food[0].Id.Should().NotBeNullOrEmpty();
@@ -329,8 +329,8 @@ public class FoodControllerTests
 
         // Assert
         result.Should().NotBeNull();
-        var createdResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
-        var foods = createdResult.Value.Should().BeOfType<Food[]>().Subject;
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var foods = okResult.Value.Should().BeOfType<Food[]>().Subject;
         foods.Should().HaveCount(2);
         foods[0].Name.Should().Be("Food 1");
         foods[1].Name.Should().Be("Food 2");
