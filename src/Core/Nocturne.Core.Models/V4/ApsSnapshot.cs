@@ -5,12 +5,15 @@ namespace Nocturne.Core.Models.V4;
 /// Captures the common fields across OpenAPS/AAPS/Trio and Loop systems.
 /// System-specific algorithm details are preserved in JSON blobs.
 /// </summary>
-public class ApsSnapshot
+public class ApsSnapshot : IV4Record
 {
     public Guid Id { get; set; }
     public long Mills { get; set; }
     public int? UtcOffset { get; set; }
     public string? Device { get; set; }
+    public string? App { get; set; }
+    public string? DataSource { get; set; }
+    public Guid? CorrelationId { get; set; }
     public string? LegacyId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }

@@ -838,9 +838,15 @@ public class TreatmentService : ITreatmentService
         CancellationToken cancellationToken = default
     )
     {
-        // TODO: Delete corresponding v4 records by LegacyId when DeleteByLegacyIdAsync
-        // is added to v4 repositories (BolusRepository, CarbIntakeRepository, BGCheckRepository,
-        // NoteRepository, BolusCalculationRepository)
+        // Delete corresponding v4 records by LegacyId
+        try
+        {
+            await _treatmentDecomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete v4 records for legacy treatment {TreatmentId}", id);
+        }
 
         // Check if this is a basal delivery in StateSpans
         var existingStateSpan = await _stateSpanService.GetStateSpanByIdAsync(

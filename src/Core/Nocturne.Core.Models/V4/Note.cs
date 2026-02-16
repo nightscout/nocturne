@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// User note or annotation record
 /// </summary>
-public class Note
+public class Note : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Blood glucose check record (finger stick or sensor check)
 /// </summary>
-public class BGCheck
+public class BGCheck : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

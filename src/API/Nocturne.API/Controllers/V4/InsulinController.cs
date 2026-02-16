@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -15,12 +15,10 @@ namespace Nocturne.API.Controllers.V4;
 [Tags("V4 Insulin")]
 public class InsulinController : ControllerBase
 {
-    private readonly BolusRepository _bolusRepo;
-    private readonly BolusCalculationRepository _bolusCalcRepo;
+    private readonly IBolusRepository _bolusRepo;
+    private readonly IBolusCalculationRepository _bolusCalcRepo;
 
-    public InsulinController(
-        BolusRepository bolusRepo,
-        BolusCalculationRepository bolusCalcRepo)
+    public InsulinController(IBolusRepository bolusRepo, IBolusCalculationRepository bolusCalcRepo)
     {
         _bolusRepo = bolusRepo;
         _bolusCalcRepo = bolusCalcRepo;
@@ -33,17 +31,37 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpGet("boluses")]
     [ProducesResponseType(typeof(PaginatedResponse<Bolus>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<Bolus>>> GetBoluses(
-        [FromQuery] long? from, [FromQuery] long? to,
-        [FromQuery] int limit = 100, [FromQuery] int offset = 0,
+        [FromQuery] long? from,
+        [FromQuery] long? to,
+        [FromQuery] int limit = 100,
+        [FromQuery] int offset = 0,
         [FromQuery] string sort = "mills_desc",
-        [FromQuery] string? device = null, [FromQuery] string? source = null,
-        CancellationToken ct = default)
+        [FromQuery] string? device = null,
+        [FromQuery] string? source = null,
+        CancellationToken ct = default
+    )
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(
+                new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." }
+            );
         var descending = sort == "mills_desc";
-        var data = await _bolusRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
+        var data = await _bolusRepo.GetAsync(
+            from,
+            to,
+            device,
+            source,
+            limit,
+            offset,
+            descending,
+            ct
+        );
         var total = await _bolusRepo.CountAsync(from, to, ct);
-        return Ok(new PaginatedResponse<Bolus> { Data = data, Pagination = new(limit, offset, total) });
+        return Ok(
+            new PaginatedResponse<Bolus> { Data = data, Pagination = new(limit, offset, total) }
+        );
     }
 
     /// <summary>
@@ -63,8 +81,14 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpPost("boluses")]
     [ProducesResponseType(typeof(Bolus), StatusCodes.Status201Created)]
-    public async Task<ActionResult<Bolus>> CreateBolus([FromBody] Bolus model, CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Bolus>> CreateBolus(
+        [FromBody] Bolus model,
+        CancellationToken ct = default
+    )
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _bolusRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetBolusById), new { id = created.Id }, created);
     }
@@ -74,10 +98,25 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpPut("boluses/{id:guid}")]
     [ProducesResponseType(typeof(Bolus), StatusCodes.Status200OK)]
-    public async Task<ActionResult<Bolus>> UpdateBolus(Guid id, [FromBody] Bolus model, CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<Bolus>> UpdateBolus(
+        Guid id,
+        [FromBody] Bolus model,
+        CancellationToken ct = default
+    )
     {
-        var updated = await _bolusRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _bolusRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -85,10 +124,18 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpDelete("boluses/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBolus(Guid id, CancellationToken ct = default)
     {
-        await _bolusRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _bolusRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -100,17 +147,41 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpGet("calculations")]
     [ProducesResponseType(typeof(PaginatedResponse<BolusCalculation>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<BolusCalculation>>> GetBolusCalculations(
-        [FromQuery] long? from, [FromQuery] long? to,
-        [FromQuery] int limit = 100, [FromQuery] int offset = 0,
+        [FromQuery] long? from,
+        [FromQuery] long? to,
+        [FromQuery] int limit = 100,
+        [FromQuery] int offset = 0,
         [FromQuery] string sort = "mills_desc",
-        [FromQuery] string? device = null, [FromQuery] string? source = null,
-        CancellationToken ct = default)
+        [FromQuery] string? device = null,
+        [FromQuery] string? source = null,
+        CancellationToken ct = default
+    )
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(
+                new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." }
+            );
         var descending = sort == "mills_desc";
-        var data = await _bolusCalcRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
+        var data = await _bolusCalcRepo.GetAsync(
+            from,
+            to,
+            device,
+            source,
+            limit,
+            offset,
+            descending,
+            ct
+        );
         var total = await _bolusCalcRepo.CountAsync(from, to, ct);
-        return Ok(new PaginatedResponse<BolusCalculation> { Data = data, Pagination = new(limit, offset, total) });
+        return Ok(
+            new PaginatedResponse<BolusCalculation>
+            {
+                Data = data,
+                Pagination = new(limit, offset, total),
+            }
+        );
     }
 
     /// <summary>
@@ -119,7 +190,10 @@ public class InsulinController : ControllerBase
     [HttpGet("calculations/{id:guid}")]
     [ProducesResponseType(typeof(BolusCalculation), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<BolusCalculation>> GetBolusCalculationById(Guid id, CancellationToken ct = default)
+    public async Task<ActionResult<BolusCalculation>> GetBolusCalculationById(
+        Guid id,
+        CancellationToken ct = default
+    )
     {
         var result = await _bolusCalcRepo.GetByIdAsync(id, ct);
         return result is null ? NotFound() : Ok(result);
@@ -130,8 +204,14 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpPost("calculations")]
     [ProducesResponseType(typeof(BolusCalculation), StatusCodes.Status201Created)]
-    public async Task<ActionResult<BolusCalculation>> CreateBolusCalculation([FromBody] BolusCalculation model, CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BolusCalculation>> CreateBolusCalculation(
+        [FromBody] BolusCalculation model,
+        CancellationToken ct = default
+    )
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _bolusCalcRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetBolusCalculationById), new { id = created.Id }, created);
     }
@@ -141,10 +221,25 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpPut("calculations/{id:guid}")]
     [ProducesResponseType(typeof(BolusCalculation), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BolusCalculation>> UpdateBolusCalculation(Guid id, [FromBody] BolusCalculation model, CancellationToken ct = default)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BolusCalculation>> UpdateBolusCalculation(
+        Guid id,
+        [FromBody] BolusCalculation model,
+        CancellationToken ct = default
+    )
     {
-        var updated = await _bolusCalcRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _bolusCalcRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -152,10 +247,18 @@ public class InsulinController : ControllerBase
     /// </summary>
     [HttpDelete("calculations/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBolusCalculation(Guid id, CancellationToken ct = default)
     {
-        await _bolusCalcRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _bolusCalcRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion

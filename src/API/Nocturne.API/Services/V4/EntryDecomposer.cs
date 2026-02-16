@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Services.V4;
 
@@ -13,15 +13,15 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 public class EntryDecomposer : IEntryDecomposer
 {
-    private readonly SensorGlucoseRepository _sensorGlucoseRepository;
-    private readonly MeterGlucoseRepository _meterGlucoseRepository;
-    private readonly CalibrationRepository _calibrationRepository;
+    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
+    private readonly IMeterGlucoseRepository _meterGlucoseRepository;
+    private readonly ICalibrationRepository _calibrationRepository;
     private readonly ILogger<EntryDecomposer> _logger;
 
     public EntryDecomposer(
-        SensorGlucoseRepository sensorGlucoseRepository,
-        MeterGlucoseRepository meterGlucoseRepository,
-        CalibrationRepository calibrationRepository,
+        ISensorGlucoseRepository sensorGlucoseRepository,
+        IMeterGlucoseRepository meterGlucoseRepository,
+        ICalibrationRepository calibrationRepository,
         ILogger<EntryDecomposer> logger)
     {
         _sensorGlucoseRepository = sensorGlucoseRepository;
@@ -126,6 +126,20 @@ public class EntryDecomposer : IEntryDecomposer
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created Calibration from legacy entry {LegacyId}", entry.Id);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        var deleted = 0;
+        deleted += await _sensorGlucoseRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _meterGlucoseRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _calibrationRepository.DeleteByLegacyIdAsync(legacyId, ct);
+
+        if (deleted > 0)
+            _logger.LogDebug("Deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
+
+        return deleted;
     }
 
     internal static SensorGlucose MapToSensorGlucose(Entry entry, Guid? correlationId)

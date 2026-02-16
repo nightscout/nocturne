@@ -34,6 +34,7 @@ using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
@@ -444,20 +445,20 @@ builder.Services.AddScoped<IClockFaceService, ClockFaceService>();
 builder.Services.AddScoped<IChartDataService, ChartDataService>();
 
 // V4 Repositories
-builder.Services.AddScoped<SensorGlucoseRepository>();
-builder.Services.AddScoped<MeterGlucoseRepository>();
-builder.Services.AddScoped<CalibrationRepository>();
-builder.Services.AddScoped<BolusRepository>();
-builder.Services.AddScoped<CarbIntakeRepository>();
-builder.Services.AddScoped<BGCheckRepository>();
-builder.Services.AddScoped<NoteRepository>();
-builder.Services.AddScoped<DeviceEventRepository>();
-builder.Services.AddScoped<BolusCalculationRepository>();
+builder.Services.AddScoped<ISensorGlucoseRepository, SensorGlucoseRepository>();
+builder.Services.AddScoped<IMeterGlucoseRepository, MeterGlucoseRepository>();
+builder.Services.AddScoped<ICalibrationRepository, CalibrationRepository>();
+builder.Services.AddScoped<IBolusRepository, BolusRepository>();
+builder.Services.AddScoped<ICarbIntakeRepository, CarbIntakeRepository>();
+builder.Services.AddScoped<IBGCheckRepository, BGCheckRepository>();
+builder.Services.AddScoped<INoteRepository, NoteRepository>();
+builder.Services.AddScoped<IDeviceEventRepository, DeviceEventRepository>();
+builder.Services.AddScoped<IBolusCalculationRepository, BolusCalculationRepository>();
 
 // V4 Snapshot Repositories
-builder.Services.AddScoped<ApsSnapshotRepository>();
-builder.Services.AddScoped<PumpSnapshotRepository>();
-builder.Services.AddScoped<UploaderSnapshotRepository>();
+builder.Services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
+builder.Services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
+builder.Services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
 
 // V4 Decomposers
 builder.Services.AddScoped<IEntryDecomposer, EntryDecomposer>();

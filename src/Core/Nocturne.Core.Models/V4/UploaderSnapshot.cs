@@ -4,12 +4,15 @@ namespace Nocturne.Core.Models.V4;
 /// Normalized uploader/phone status snapshot extracted from DeviceStatus.
 /// Fully typed - no JSONB blobs needed.
 /// </summary>
-public class UploaderSnapshot
+public class UploaderSnapshot : IV4Record
 {
     public Guid Id { get; set; }
     public long Mills { get; set; }
     public int? UtcOffset { get; set; }
     public string? Device { get; set; }
+    public string? App { get; set; }
+    public string? DataSource { get; set; }
+    public Guid? CorrelationId { get; set; }
     public string? LegacyId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }

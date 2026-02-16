@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Insulin bolus delivery record
 /// </summary>
-public class Bolus
+public class Bolus : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

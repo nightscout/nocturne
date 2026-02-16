@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Device event record (site change, sensor start, pump battery change, etc.)
 /// </summary>
-public class DeviceEvent
+public class DeviceEvent : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

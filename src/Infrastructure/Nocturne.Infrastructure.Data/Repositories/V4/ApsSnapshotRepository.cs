@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
-public class ApsSnapshotRepository
+public class ApsSnapshotRepository : IApsSnapshotRepository
 {
     private readonly NocturneDbContext _context;
     private readonly ILogger<ApsSnapshotRepository> _logger;
@@ -21,7 +22,7 @@ public class ApsSnapshotRepository
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
     {
-        var query = _context.ApsSnapshots.AsQueryable();
+        var query = _context.ApsSnapshots.AsNoTracking().AsQueryable();
         if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
         if (device != null) query = query.Where(e => e.Device == device);
@@ -69,9 +70,16 @@ public class ApsSnapshotRepository
 
     public async Task<int> CountAsync(long? from, long? to, CancellationToken ct = default)
     {
-        var query = _context.ApsSnapshots.AsQueryable();
+        var query = _context.ApsSnapshots.AsNoTracking().AsQueryable();
         if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
         return await query.CountAsync(ct);
+    }
+
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        return await _context.ApsSnapshots
+            .Where(e => e.LegacyId == legacyId)
+            .ExecuteDeleteAsync(ct);
     }
 }

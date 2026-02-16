@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Carbohydrate intake record
 /// </summary>
-public class CarbIntake
+public class CarbIntake : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

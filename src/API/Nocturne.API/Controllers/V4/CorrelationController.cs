@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -14,24 +14,24 @@ namespace Nocturne.API.Controllers.V4;
 [Tags("V4 Correlation")]
 public class CorrelationController : ControllerBase
 {
-    private readonly SensorGlucoseRepository _sensorRepo;
-    private readonly MeterGlucoseRepository _meterRepo;
-    private readonly CalibrationRepository _calibrationRepo;
-    private readonly BolusRepository _bolusRepo;
-    private readonly BolusCalculationRepository _bolusCalcRepo;
-    private readonly CarbIntakeRepository _carbIntakeRepo;
-    private readonly BGCheckRepository _bgCheckRepo;
-    private readonly NoteRepository _noteRepo;
+    private readonly ISensorGlucoseRepository _sensorRepo;
+    private readonly IMeterGlucoseRepository _meterRepo;
+    private readonly ICalibrationRepository _calibrationRepo;
+    private readonly IBolusRepository _bolusRepo;
+    private readonly IBolusCalculationRepository _bolusCalcRepo;
+    private readonly ICarbIntakeRepository _carbIntakeRepo;
+    private readonly IBGCheckRepository _bgCheckRepo;
+    private readonly INoteRepository _noteRepo;
 
     public CorrelationController(
-        SensorGlucoseRepository sensorRepo,
-        MeterGlucoseRepository meterRepo,
-        CalibrationRepository calibrationRepo,
-        BolusRepository bolusRepo,
-        BolusCalculationRepository bolusCalcRepo,
-        CarbIntakeRepository carbIntakeRepo,
-        BGCheckRepository bgCheckRepo,
-        NoteRepository noteRepo)
+        ISensorGlucoseRepository sensorRepo,
+        IMeterGlucoseRepository meterRepo,
+        ICalibrationRepository calibrationRepo,
+        IBolusRepository bolusRepo,
+        IBolusCalculationRepository bolusCalcRepo,
+        ICarbIntakeRepository carbIntakeRepo,
+        IBGCheckRepository bgCheckRepo,
+        INoteRepository noteRepo)
     {
         _sensorRepo = sensorRepo;
         _meterRepo = meterRepo;

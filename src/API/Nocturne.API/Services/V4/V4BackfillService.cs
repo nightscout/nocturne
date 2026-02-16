@@ -29,14 +29,15 @@ public class V4BackfillService
         "Temp Basal",
         "Temp Basal Start",
         "TempBasal",
-        "Profile Switch"
+        "Profile Switch",
     ];
 
     public V4BackfillService(
         IEntryDecomposer entryDecomposer,
         ITreatmentDecomposer treatmentDecomposer,
         NocturneDbContext context,
-        ILogger<V4BackfillService> logger)
+        ILogger<V4BackfillService> logger
+    )
     {
         _entryDecomposer = entryDecomposer;
         _treatmentDecomposer = treatmentDecomposer;
@@ -59,8 +60,12 @@ public class V4BackfillService
 
         _logger.LogInformation(
             "V4 backfill completed. Entries: {EntriesProcessed} processed, {EntriesFailed} failed. Treatments: {TreatmentsProcessed} processed, {TreatmentsFailed} failed, {TreatmentsSkipped} skipped",
-            result.EntriesProcessed, result.EntriesFailed,
-            result.TreatmentsProcessed, result.TreatmentsFailed, result.TreatmentsSkipped);
+            result.EntriesProcessed,
+            result.EntriesFailed,
+            result.TreatmentsProcessed,
+            result.TreatmentsFailed,
+            result.TreatmentsSkipped
+        );
 
         return result;
     }
@@ -74,14 +79,19 @@ public class V4BackfillService
             return;
 
         long lastMills = long.MinValue;
+        Guid lastId = Guid.Empty;
         var processed = 0;
 
         while (!ct.IsCancellationRequested)
         {
-            var batch = await _context.Entries
-                .AsNoTracking()
-                .Where(e => e.Mills > lastMills)
+            // Use composite cursor (Mills, Id) to handle records with identical Mills values
+            var batch = await _context
+                .Entries.AsNoTracking()
+                .Where(e =>
+                    e.Mills > lastMills || (e.Mills == lastMills && e.Id.CompareTo(lastId) > 0)
+                )
                 .OrderBy(e => e.Mills)
+                .ThenBy(e => e.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
 
@@ -99,16 +109,24 @@ public class V4BackfillService
                 catch (Exception ex)
                 {
                     result.EntriesFailed++;
-                    _logger.LogWarning(ex, "Failed to decompose entry {EntryId} (Mills={Mills})",
-                        entity.Id, entity.Mills);
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to decompose entry {EntryId} (Mills={Mills})",
+                        entity.Id,
+                        entity.Mills
+                    );
                 }
             }
 
             lastMills = batch[^1].Mills;
+            lastId = batch[^1].Id;
             processed += batch.Count;
 
-            _logger.LogInformation("Backfill entries: processed {Count}/{Total}",
-                processed, totalEntries);
+            _logger.LogInformation(
+                "Backfill entries: processed {Count}/{Total}",
+                processed,
+                totalEntries
+            );
 
             if (batch.Count < BatchSize)
                 break;
@@ -118,20 +136,28 @@ public class V4BackfillService
     private async Task BackfillTreatmentsAsync(BackfillResult result, CancellationToken ct)
     {
         var totalTreatments = await _context.Treatments.CountAsync(ct);
-        _logger.LogInformation("Backfill treatments: {Total} total treatments to process", totalTreatments);
+        _logger.LogInformation(
+            "Backfill treatments: {Total} total treatments to process",
+            totalTreatments
+        );
 
         if (totalTreatments == 0)
             return;
 
         long lastMills = long.MinValue;
+        Guid lastId = Guid.Empty;
         var processed = 0;
 
         while (!ct.IsCancellationRequested)
         {
-            var batch = await _context.Treatments
-                .AsNoTracking()
-                .Where(t => t.Mills > lastMills)
+            // Use composite cursor (Mills, Id) to handle records with identical Mills values
+            var batch = await _context
+                .Treatments.AsNoTracking()
+                .Where(t =>
+                    t.Mills > lastMills || (t.Mills == lastMills && t.Id.CompareTo(lastId) > 0)
+                )
                 .OrderBy(t => t.Mills)
+                .ThenBy(t => t.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
 
@@ -158,16 +184,25 @@ public class V4BackfillService
                 catch (Exception ex)
                 {
                     result.TreatmentsFailed++;
-                    _logger.LogWarning(ex, "Failed to decompose treatment {TreatmentId} (Mills={Mills}, EventType={EventType})",
-                        entity.Id, entity.Mills, entity.EventType);
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to decompose treatment {TreatmentId} (Mills={Mills}, EventType={EventType})",
+                        entity.Id,
+                        entity.Mills,
+                        entity.EventType
+                    );
                 }
             }
 
             lastMills = batch[^1].Mills;
+            lastId = batch[^1].Id;
             processed += batch.Count;
 
-            _logger.LogInformation("Backfill treatments: processed {Count}/{Total}",
-                processed, totalTreatments);
+            _logger.LogInformation(
+                "Backfill treatments: processed {Count}/{Total}",
+                processed,
+                totalTreatments
+            );
 
             if (batch.Count < BatchSize)
                 break;
@@ -183,8 +218,9 @@ public class V4BackfillService
         if (string.IsNullOrEmpty(treatment.EventType))
             return false;
 
-        return SkippedEventTypes.Any(
-            eventType => string.Equals(treatment.EventType, eventType, StringComparison.OrdinalIgnoreCase));
+        return SkippedEventTypes.Any(eventType =>
+            string.Equals(treatment.EventType, eventType, StringComparison.OrdinalIgnoreCase)
+        );
     }
 }
 

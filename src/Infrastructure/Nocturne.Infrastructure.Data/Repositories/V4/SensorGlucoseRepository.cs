@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
-public class SensorGlucoseRepository
+public class SensorGlucoseRepository : ISensorGlucoseRepository
 {
     private readonly NocturneDbContext _context;
     private readonly ILogger<SensorGlucoseRepository> _logger;
@@ -21,7 +22,7 @@ public class SensorGlucoseRepository
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
     {
-        var query = _context.SensorGlucose.AsQueryable();
+        var query = _context.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
         if (device != null) query = query.Where(e => e.Device == device);
@@ -70,7 +71,7 @@ public class SensorGlucoseRepository
 
     public async Task<int> CountAsync(long? from, long? to, CancellationToken ct = default)
     {
-        var query = _context.SensorGlucose.AsQueryable();
+        var query = _context.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
         return await query.CountAsync(ct);
@@ -79,8 +80,16 @@ public class SensorGlucoseRepository
     public async Task<IEnumerable<SensorGlucose>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
     {
         var entities = await _context.SensorGlucose
+            .AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        return await _context.SensorGlucose
+            .Where(e => e.LegacyId == legacyId)
+            .ExecuteDeleteAsync(ct);
     }
 }

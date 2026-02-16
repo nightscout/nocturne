@@ -8,7 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Services;
 
@@ -26,11 +26,11 @@ public class ChartDataService : IChartDataService
     private readonly IDeviceStatusService _deviceStatusService;
     private readonly IProfileService _profileService;
     private readonly IProfileDataService _profileDataService;
-    private readonly SensorGlucoseRepository _sensorGlucoseRepository;
-    private readonly BolusRepository _bolusRepository;
-    private readonly CarbIntakeRepository _carbIntakeRepository;
-    private readonly BGCheckRepository _bgCheckRepository;
-    private readonly DeviceEventRepository _deviceEventRepository;
+    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
+    private readonly IBolusRepository _bolusRepository;
+    private readonly ICarbIntakeRepository _carbIntakeRepository;
+    private readonly IBGCheckRepository _bgCheckRepository;
+    private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly StateSpanRepository _stateSpanRepository;
     private readonly SystemEventRepository _systemEventRepository;
     private readonly TrackerRepository _trackerRepository;
@@ -51,11 +51,11 @@ public class ChartDataService : IChartDataService
         IDeviceStatusService deviceStatusService,
         IProfileService profileService,
         IProfileDataService profileDataService,
-        SensorGlucoseRepository sensorGlucoseRepository,
-        BolusRepository bolusRepository,
-        CarbIntakeRepository carbIntakeRepository,
-        BGCheckRepository bgCheckRepository,
-        DeviceEventRepository deviceEventRepository,
+        ISensorGlucoseRepository sensorGlucoseRepository,
+        IBolusRepository bolusRepository,
+        ICarbIntakeRepository carbIntakeRepository,
+        IBGCheckRepository bgCheckRepository,
+        IDeviceEventRepository deviceEventRepository,
         StateSpanRepository stateSpanRepository,
         SystemEventRepository systemEventRepository,
         TrackerRepository trackerRepository,

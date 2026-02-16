@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -15,14 +15,14 @@ namespace Nocturne.API.Controllers.V4;
 [Tags("V4 Device Status")]
 public class DeviceStatusController : ControllerBase
 {
-    private readonly ApsSnapshotRepository _apsRepo;
-    private readonly PumpSnapshotRepository _pumpRepo;
-    private readonly UploaderSnapshotRepository _uploaderRepo;
+    private readonly IApsSnapshotRepository _apsRepo;
+    private readonly IPumpSnapshotRepository _pumpRepo;
+    private readonly IUploaderSnapshotRepository _uploaderRepo;
 
     public DeviceStatusController(
-        ApsSnapshotRepository apsRepo,
-        PumpSnapshotRepository pumpRepo,
-        UploaderSnapshotRepository uploaderRepo)
+        IApsSnapshotRepository apsRepo,
+        IPumpSnapshotRepository pumpRepo,
+        IUploaderSnapshotRepository uploaderRepo)
     {
         _apsRepo = apsRepo;
         _pumpRepo = pumpRepo;
@@ -36,6 +36,7 @@ public class DeviceStatusController : ControllerBase
     /// </summary>
     [HttpGet("aps")]
     [ProducesResponseType(typeof(PaginatedResponse<ApsSnapshot>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<ApsSnapshot>>> GetApsSnapshots(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -43,6 +44,8 @@ public class DeviceStatusController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _apsRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _apsRepo.CountAsync(from, to, ct);
@@ -70,6 +73,7 @@ public class DeviceStatusController : ControllerBase
     /// </summary>
     [HttpGet("pump")]
     [ProducesResponseType(typeof(PaginatedResponse<PumpSnapshot>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<PumpSnapshot>>> GetPumpSnapshots(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -77,6 +81,8 @@ public class DeviceStatusController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _pumpRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _pumpRepo.CountAsync(from, to, ct);
@@ -104,6 +110,7 @@ public class DeviceStatusController : ControllerBase
     /// </summary>
     [HttpGet("uploader")]
     [ProducesResponseType(typeof(PaginatedResponse<UploaderSnapshot>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<UploaderSnapshot>>> GetUploaderSnapshots(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -111,6 +118,8 @@ public class DeviceStatusController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _uploaderRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _uploaderRepo.CountAsync(from, to, ct);

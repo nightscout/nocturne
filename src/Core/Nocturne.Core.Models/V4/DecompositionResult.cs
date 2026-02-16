@@ -17,7 +17,8 @@ public class DecompositionResult
     public List<object> CreatedRecords { get; } = [];
 
     /// <summary>
-    /// Records that already existed and were updated during decomposition
+    /// Records that already existed and were updated during decomposition.
+    /// Most records implement IV4Record, but StateSpan records are also included.
     /// </summary>
     public List<object> UpdatedRecords { get; } = [];
 }

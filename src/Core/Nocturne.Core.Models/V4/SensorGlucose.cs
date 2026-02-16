@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Continuous glucose monitor (CGM) reading
 /// </summary>
-public class SensorGlucose
+public class SensorGlucose : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

@@ -3,7 +3,7 @@ using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -17,12 +17,12 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 public class TreatmentDecomposer : ITreatmentDecomposer
 {
-    private readonly BolusRepository _bolusRepository;
-    private readonly CarbIntakeRepository _carbIntakeRepository;
-    private readonly BGCheckRepository _bgCheckRepository;
-    private readonly NoteRepository _noteRepository;
-    private readonly DeviceEventRepository _deviceEventRepository;
-    private readonly BolusCalculationRepository _bolusCalculationRepository;
+    private readonly IBolusRepository _bolusRepository;
+    private readonly ICarbIntakeRepository _carbIntakeRepository;
+    private readonly IBGCheckRepository _bgCheckRepository;
+    private readonly INoteRepository _noteRepository;
+    private readonly IDeviceEventRepository _deviceEventRepository;
+    private readonly IBolusCalculationRepository _bolusCalculationRepository;
     private readonly IStateSpanService _stateSpanService;
     private readonly ILogger<TreatmentDecomposer> _logger;
 
@@ -37,12 +37,12 @@ public class TreatmentDecomposer : ITreatmentDecomposer
     ];
 
     public TreatmentDecomposer(
-        BolusRepository bolusRepository,
-        CarbIntakeRepository carbIntakeRepository,
-        BGCheckRepository bgCheckRepository,
-        NoteRepository noteRepository,
-        DeviceEventRepository deviceEventRepository,
-        BolusCalculationRepository bolusCalculationRepository,
+        IBolusRepository bolusRepository,
+        ICarbIntakeRepository carbIntakeRepository,
+        IBGCheckRepository bgCheckRepository,
+        INoteRepository noteRepository,
+        IDeviceEventRepository deviceEventRepository,
+        IBolusCalculationRepository bolusCalculationRepository,
         IStateSpanService stateSpanService,
         ILogger<TreatmentDecomposer> logger)
     {
@@ -645,4 +645,21 @@ public class TreatmentDecomposer : ITreatmentDecomposer
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        var deleted = 0;
+        deleted += await _bolusRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _carbIntakeRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _bgCheckRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _noteRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _deviceEventRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _bolusCalculationRepository.DeleteByLegacyIdAsync(legacyId, ct);
+
+        if (deleted > 0)
+            _logger.LogDebug("Deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
+
+        return deleted;
+    }
 }

@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Blood glucose meter reading
 /// </summary>
-public class MeterGlucose
+public class MeterGlucose : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

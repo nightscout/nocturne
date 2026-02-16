@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -15,14 +15,14 @@ namespace Nocturne.API.Controllers.V4;
 [Tags("V4 Glucose")]
 public class GlucoseController : ControllerBase
 {
-    private readonly SensorGlucoseRepository _sensorRepo;
-    private readonly MeterGlucoseRepository _meterRepo;
-    private readonly CalibrationRepository _calibrationRepo;
+    private readonly ISensorGlucoseRepository _sensorRepo;
+    private readonly IMeterGlucoseRepository _meterRepo;
+    private readonly ICalibrationRepository _calibrationRepo;
 
     public GlucoseController(
-        SensorGlucoseRepository sensorRepo,
-        MeterGlucoseRepository meterRepo,
-        CalibrationRepository calibrationRepo)
+        ISensorGlucoseRepository sensorRepo,
+        IMeterGlucoseRepository meterRepo,
+        ICalibrationRepository calibrationRepo)
     {
         _sensorRepo = sensorRepo;
         _meterRepo = meterRepo;
@@ -36,6 +36,7 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpGet("sensor")]
     [ProducesResponseType(typeof(PaginatedResponse<SensorGlucose>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<SensorGlucose>>> GetSensorGlucose(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -43,6 +44,8 @@ public class GlucoseController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _sensorRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _sensorRepo.CountAsync(from, to, ct);
@@ -66,8 +69,11 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpPost("sensor")]
     [ProducesResponseType(typeof(SensorGlucose), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<SensorGlucose>> CreateSensorGlucose([FromBody] SensorGlucose model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _sensorRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetSensorGlucoseById), new { id = created.Id }, created);
     }
@@ -77,10 +83,21 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpPut("sensor/{id:guid}")]
     [ProducesResponseType(typeof(SensorGlucose), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SensorGlucose>> UpdateSensorGlucose(Guid id, [FromBody] SensorGlucose model, CancellationToken ct = default)
     {
-        var updated = await _sensorRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _sensorRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -88,10 +105,18 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpDelete("sensor/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteSensorGlucose(Guid id, CancellationToken ct = default)
     {
-        await _sensorRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _sensorRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -103,6 +128,7 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpGet("meter")]
     [ProducesResponseType(typeof(PaginatedResponse<MeterGlucose>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<MeterGlucose>>> GetMeterGlucose(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -110,6 +136,8 @@ public class GlucoseController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _meterRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _meterRepo.CountAsync(from, to, ct);
@@ -133,8 +161,11 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpPost("meter")]
     [ProducesResponseType(typeof(MeterGlucose), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MeterGlucose>> CreateMeterGlucose([FromBody] MeterGlucose model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _meterRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetMeterGlucoseById), new { id = created.Id }, created);
     }
@@ -144,10 +175,21 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpPut("meter/{id:guid}")]
     [ProducesResponseType(typeof(MeterGlucose), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<MeterGlucose>> UpdateMeterGlucose(Guid id, [FromBody] MeterGlucose model, CancellationToken ct = default)
     {
-        var updated = await _meterRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _meterRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -155,10 +197,18 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpDelete("meter/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteMeterGlucose(Guid id, CancellationToken ct = default)
     {
-        await _meterRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _meterRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -170,6 +220,7 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpGet("calibrations")]
     [ProducesResponseType(typeof(PaginatedResponse<Calibration>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<Calibration>>> GetCalibrations(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -177,6 +228,8 @@ public class GlucoseController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _calibrationRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _calibrationRepo.CountAsync(from, to, ct);
@@ -200,8 +253,11 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpPost("calibrations")]
     [ProducesResponseType(typeof(Calibration), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Calibration>> CreateCalibration([FromBody] Calibration model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _calibrationRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetCalibrationById), new { id = created.Id }, created);
     }
@@ -211,10 +267,21 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpPut("calibrations/{id:guid}")]
     [ProducesResponseType(typeof(Calibration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Calibration>> UpdateCalibration(Guid id, [FromBody] Calibration model, CancellationToken ct = default)
     {
-        var updated = await _calibrationRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _calibrationRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -222,10 +289,18 @@ public class GlucoseController : ControllerBase
     /// </summary>
     [HttpDelete("calibrations/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteCalibration(Guid id, CancellationToken ct = default)
     {
-        await _calibrationRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _calibrationRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion

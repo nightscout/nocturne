@@ -20,4 +20,12 @@ public interface IEntryDecomposer
     /// Returns an empty result if the entry type is unrecognized.
     /// </returns>
     Task<DecompositionResult> DecomposeAsync(Entry entry, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes all v4 records that were decomposed from a legacy Entry with the given ID.
+    /// </summary>
+    /// <param name="legacyId">The legacy Entry ID</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Total number of v4 records deleted across all tables</returns>
+    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 }

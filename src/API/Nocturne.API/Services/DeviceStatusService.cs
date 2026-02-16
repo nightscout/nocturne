@@ -214,6 +214,20 @@ public class DeviceStatusService : IDeviceStatusService
                     updatedDeviceStatus.Id
                 );
             }
+
+            // Re-decompose updated device status into v4 snapshot tables
+            try
+            {
+                await _deviceStatusDecomposer.DecomposeAsync(updatedDeviceStatus, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to re-decompose updated device status {DeviceStatusId} into v4 tables",
+                    updatedDeviceStatus.Id
+                );
+            }
         }
 
         return updatedDeviceStatus;
@@ -225,6 +239,16 @@ public class DeviceStatusService : IDeviceStatusService
         CancellationToken cancellationToken = default
     )
     {
+        // Delete corresponding v4 snapshot records by LegacyId
+        try
+        {
+            await _deviceStatusDecomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete v4 snapshot records for legacy device status {DeviceStatusId}", id);
+        }
+
         // Get the device status before deleting for broadcasting
         var deviceStatusToDelete = await _postgreSqlService.GetDeviceStatusByIdAsync(
             id,

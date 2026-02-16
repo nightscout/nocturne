@@ -467,8 +467,15 @@ public class EntryService : IEntryService
         CancellationToken cancellationToken = default
     )
     {
-        // TODO: Delete corresponding v4 records by LegacyId when DeleteByLegacyIdAsync
-        // is added to v4 repositories (SensorGlucoseRepository, MeterGlucoseRepository, CalibrationRepository)
+        // Delete corresponding v4 records by LegacyId
+        try
+        {
+            await _entryDecomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete v4 records for legacy entry {EntryId}", id);
+        }
 
         // Get the entry before deleting for broadcasting
         var entryToDelete = await _postgreSqlService.GetEntryByIdAsync(id, cancellationToken);

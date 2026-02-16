@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -16,9 +16,9 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 public class DeviceStatusDecomposer : IDeviceStatusDecomposer
 {
-    private readonly ApsSnapshotRepository _apsRepo;
-    private readonly PumpSnapshotRepository _pumpRepo;
-    private readonly UploaderSnapshotRepository _uploaderRepo;
+    private readonly IApsSnapshotRepository _apsRepo;
+    private readonly IPumpSnapshotRepository _pumpRepo;
+    private readonly IUploaderSnapshotRepository _uploaderRepo;
     private readonly IStateSpanService _stateSpanService;
     private readonly ILogger<DeviceStatusDecomposer> _logger;
 
@@ -28,9 +28,9 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer
     };
 
     public DeviceStatusDecomposer(
-        ApsSnapshotRepository apsRepo,
-        PumpSnapshotRepository pumpRepo,
-        UploaderSnapshotRepository uploaderRepo,
+        IApsSnapshotRepository apsRepo,
+        IPumpSnapshotRepository pumpRepo,
+        IUploaderSnapshotRepository uploaderRepo,
         IStateSpanService stateSpanService,
         ILogger<DeviceStatusDecomposer> logger)
     {
@@ -109,6 +109,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer
             EnactedBolusVolume = ds.OpenAps.Enacted?.Smb,
             SuggestedJson = SerializeOrNull(ds.OpenAps.Suggested),
             EnactedJson = SerializeOrNull(ds.OpenAps.Enacted),
+            // For OpenAPS, the default prediction IS the IOB curve (they are intentionally the same)
             PredictedDefaultJson = SerializeOrNull(predBGs?.IOB),
             PredictedIobJson = SerializeOrNull(predBGs?.IOB),
             PredictedZtJson = SerializeOrNull(predBGs?.ZT),
@@ -327,4 +328,18 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        var deleted = 0;
+        deleted += await _apsRepo.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _pumpRepo.DeleteByLegacyIdAsync(legacyId, ct);
+        deleted += await _uploaderRepo.DeleteByLegacyIdAsync(legacyId, ct);
+
+        if (deleted > 0)
+            _logger.LogDebug("Deleted {Count} v4 snapshot records for legacy device status {LegacyId}", deleted, legacyId);
+
+        return deleted;
+    }
 }

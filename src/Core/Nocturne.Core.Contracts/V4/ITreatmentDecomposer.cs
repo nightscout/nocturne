@@ -22,4 +22,12 @@ public interface ITreatmentDecomposer
     /// Returns an empty result if the event type is unrecognized and no insulin/carbs are present.
     /// </returns>
     Task<DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID.
+    /// </summary>
+    /// <param name="legacyId">The legacy Treatment ID</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>Total number of v4 records deleted across all tables</returns>
+    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 }

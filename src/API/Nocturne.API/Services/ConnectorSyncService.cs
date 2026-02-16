@@ -10,10 +10,10 @@ using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Services;
-using Nocturne.Connectors.Nightscout.Configurations;
-using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.MyLife.Configurations;
 using Nocturne.Connectors.MyLife.Services;
+using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Tidepool.Configurations;
 using Nocturne.Connectors.Tidepool.Services;
 using Nocturne.Core.Contracts;
@@ -155,7 +155,8 @@ public class ConnectorSyncService : IConnectorSyncService
         IServiceProvider scopedProvider,
         string connectorName,
         TConfig config,
-        CancellationToken ct)
+        CancellationToken ct
+    )
         where TConfig : class, IConnectorConfiguration
     {
         try
@@ -176,35 +177,55 @@ public class ConnectorSyncService : IConnectorSyncService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
+            _logger.LogWarning(
+                ex,
                 "Failed to load database configuration for {ConnectorName} during manual sync",
-                connectorName);
+                connectorName
+            );
         }
     }
 
     private static void ApplyJsonToConfig<TConfig>(JsonDocument configuration, TConfig config)
         where TConfig : class
     {
-        var properties = config.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var properties = config
+            .GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var root = configuration.RootElement;
 
         foreach (var property in properties)
         {
-            if (!property.CanWrite) continue;
+            if (!property.CanWrite)
+                continue;
 
             var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
-            if (!root.TryGetProperty(camelName, out var element)) continue;
+            if (!root.TryGetProperty(camelName, out var element))
+                continue;
 
             try
             {
-                if (property.PropertyType == typeof(string) && element.ValueKind == JsonValueKind.String)
+                if (
+                    property.PropertyType == typeof(string)
+                    && element.ValueKind == JsonValueKind.String
+                )
                     property.SetValue(config, element.GetString());
-                else if (property.PropertyType == typeof(int) && element.ValueKind == JsonValueKind.Number)
+                else if (
+                    property.PropertyType == typeof(int)
+                    && element.ValueKind == JsonValueKind.Number
+                )
                     property.SetValue(config, element.GetInt32());
-                else if (property.PropertyType == typeof(double) && element.ValueKind == JsonValueKind.Number)
+                else if (
+                    property.PropertyType == typeof(double)
+                    && element.ValueKind == JsonValueKind.Number
+                )
                     property.SetValue(config, element.GetDouble());
-                else if (property.PropertyType == typeof(bool) &&
-                         (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
+                else if (
+                    property.PropertyType == typeof(bool)
+                    && (
+                        element.ValueKind == JsonValueKind.True
+                        || element.ValueKind == JsonValueKind.False
+                    )
+                )
                     property.SetValue(config, element.GetBoolean());
             }
             catch (Exception)
@@ -214,14 +235,20 @@ public class ConnectorSyncService : IConnectorSyncService
         }
     }
 
-    private static void ApplySecretsToConfig<TConfig>(Dictionary<string, string> secrets, TConfig config)
+    private static void ApplySecretsToConfig<TConfig>(
+        Dictionary<string, string> secrets,
+        TConfig config
+    )
         where TConfig : class
     {
-        var properties = config.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var properties = config
+            .GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
         foreach (var property in properties)
         {
-            if (!property.CanWrite || property.PropertyType != typeof(string)) continue;
+            if (!property.CanWrite || property.PropertyType != typeof(string))
+                continue;
 
             var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
             if (secrets.TryGetValue(camelName, out var value))

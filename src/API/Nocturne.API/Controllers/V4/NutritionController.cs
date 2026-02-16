@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -15,9 +15,9 @@ namespace Nocturne.API.Controllers.V4;
 [Tags("V4 Nutrition")]
 public class NutritionController : ControllerBase
 {
-    private readonly CarbIntakeRepository _carbIntakeRepo;
+    private readonly ICarbIntakeRepository _carbIntakeRepo;
 
-    public NutritionController(CarbIntakeRepository carbIntakeRepo)
+    public NutritionController(ICarbIntakeRepository carbIntakeRepo)
     {
         _carbIntakeRepo = carbIntakeRepo;
     }
@@ -29,6 +29,7 @@ public class NutritionController : ControllerBase
     /// </summary>
     [HttpGet("carbs")]
     [ProducesResponseType(typeof(PaginatedResponse<CarbIntake>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<CarbIntake>>> GetCarbIntakes(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -36,6 +37,8 @@ public class NutritionController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _carbIntakeRepo.CountAsync(from, to, ct);
@@ -59,8 +62,11 @@ public class NutritionController : ControllerBase
     /// </summary>
     [HttpPost("carbs")]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CarbIntake>> CreateCarbIntake([FromBody] CarbIntake model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _carbIntakeRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetCarbIntakeById), new { id = created.Id }, created);
     }
@@ -70,10 +76,21 @@ public class NutritionController : ControllerBase
     /// </summary>
     [HttpPut("carbs/{id:guid}")]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CarbIntake>> UpdateCarbIntake(Guid id, [FromBody] CarbIntake model, CancellationToken ct = default)
     {
-        var updated = await _carbIntakeRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _carbIntakeRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -81,10 +98,18 @@ public class NutritionController : ControllerBase
     /// </summary>
     [HttpDelete("carbs/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteCarbIntake(Guid id, CancellationToken ct = default)
     {
-        await _carbIntakeRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _carbIntakeRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion

@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// Bolus calculator/wizard record capturing the inputs and recommendations
 /// </summary>
-public class BolusCalculation
+public class BolusCalculation : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

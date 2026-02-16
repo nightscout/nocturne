@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.V4;
 /// <summary>
 /// CGM sensor calibration record
 /// </summary>
-public class Calibration
+public class Calibration : IV4Record
 {
     /// <summary>
     /// UUID v7 primary key

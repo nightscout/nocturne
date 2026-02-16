@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -15,14 +15,14 @@ namespace Nocturne.API.Controllers.V4;
 [Tags("V4 Observations")]
 public class ObservationsController : ControllerBase
 {
-    private readonly BGCheckRepository _bgCheckRepo;
-    private readonly NoteRepository _noteRepo;
-    private readonly DeviceEventRepository _deviceEventRepo;
+    private readonly IBGCheckRepository _bgCheckRepo;
+    private readonly INoteRepository _noteRepo;
+    private readonly IDeviceEventRepository _deviceEventRepo;
 
     public ObservationsController(
-        BGCheckRepository bgCheckRepo,
-        NoteRepository noteRepo,
-        DeviceEventRepository deviceEventRepo)
+        IBGCheckRepository bgCheckRepo,
+        INoteRepository noteRepo,
+        IDeviceEventRepository deviceEventRepo)
     {
         _bgCheckRepo = bgCheckRepo;
         _noteRepo = noteRepo;
@@ -36,6 +36,7 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpGet("bg-checks")]
     [ProducesResponseType(typeof(PaginatedResponse<BGCheck>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<BGCheck>>> GetBGChecks(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -43,6 +44,8 @@ public class ObservationsController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _bgCheckRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _bgCheckRepo.CountAsync(from, to, ct);
@@ -66,8 +69,11 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpPost("bg-checks")]
     [ProducesResponseType(typeof(BGCheck), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BGCheck>> CreateBGCheck([FromBody] BGCheck model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _bgCheckRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetBGCheckById), new { id = created.Id }, created);
     }
@@ -77,10 +83,21 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpPut("bg-checks/{id:guid}")]
     [ProducesResponseType(typeof(BGCheck), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BGCheck>> UpdateBGCheck(Guid id, [FromBody] BGCheck model, CancellationToken ct = default)
     {
-        var updated = await _bgCheckRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _bgCheckRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -88,10 +105,18 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpDelete("bg-checks/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBGCheck(Guid id, CancellationToken ct = default)
     {
-        await _bgCheckRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _bgCheckRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -103,6 +128,7 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpGet("notes")]
     [ProducesResponseType(typeof(PaginatedResponse<Note>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<Note>>> GetNotes(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -110,6 +136,8 @@ public class ObservationsController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _noteRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _noteRepo.CountAsync(from, to, ct);
@@ -133,8 +161,11 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpPost("notes")]
     [ProducesResponseType(typeof(Note), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Note>> CreateNote([FromBody] Note model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _noteRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetNoteById), new { id = created.Id }, created);
     }
@@ -144,10 +175,21 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpPut("notes/{id:guid}")]
     [ProducesResponseType(typeof(Note), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Note>> UpdateNote(Guid id, [FromBody] Note model, CancellationToken ct = default)
     {
-        var updated = await _noteRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _noteRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -155,10 +197,18 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpDelete("notes/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteNote(Guid id, CancellationToken ct = default)
     {
-        await _noteRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _noteRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -170,6 +220,7 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpGet("device-events")]
     [ProducesResponseType(typeof(PaginatedResponse<DeviceEvent>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<DeviceEvent>>> GetDeviceEvents(
         [FromQuery] long? from, [FromQuery] long? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
@@ -177,6 +228,8 @@ public class ObservationsController : ControllerBase
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
+        if (sort is not "mills_desc" and not "mills_asc")
+            return BadRequest(new { error = $"Invalid sort value '{sort}'. Must be 'mills_asc' or 'mills_desc'." });
         var descending = sort == "mills_desc";
         var data = await _deviceEventRepo.GetAsync(from, to, device, source, limit, offset, descending, ct);
         var total = await _deviceEventRepo.CountAsync(from, to, ct);
@@ -200,8 +253,11 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpPost("device-events")]
     [ProducesResponseType(typeof(DeviceEvent), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<DeviceEvent>> CreateDeviceEvent([FromBody] DeviceEvent model, CancellationToken ct = default)
     {
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
         var created = await _deviceEventRepo.CreateAsync(model, ct);
         return CreatedAtAction(nameof(GetDeviceEventById), new { id = created.Id }, created);
     }
@@ -211,10 +267,21 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpPut("device-events/{id:guid}")]
     [ProducesResponseType(typeof(DeviceEvent), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DeviceEvent>> UpdateDeviceEvent(Guid id, [FromBody] DeviceEvent model, CancellationToken ct = default)
     {
-        var updated = await _deviceEventRepo.UpdateAsync(id, model, ct);
-        return Ok(updated);
+        if (model.Mills <= 0)
+            return BadRequest(new { error = "Mills must be a positive value" });
+        try
+        {
+            var updated = await _deviceEventRepo.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     /// <summary>
@@ -222,10 +289,18 @@ public class ObservationsController : ControllerBase
     /// </summary>
     [HttpDelete("device-events/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteDeviceEvent(Guid id, CancellationToken ct = default)
     {
-        await _deviceEventRepo.DeleteAsync(id, ct);
-        return NoContent();
+        try
+        {
+            await _deviceEventRepo.DeleteAsync(id, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
