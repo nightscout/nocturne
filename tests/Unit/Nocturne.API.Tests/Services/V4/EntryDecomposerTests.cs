@@ -445,6 +445,223 @@ public class EntryDecomposerTests : IDisposable
 
     #endregion
 
+    // Note: DeleteByLegacyIdAsync tests require PostgreSQL (ExecuteDeleteAsync is not
+    // supported by the EF Core in-memory provider) and belong in integration tests.
+
+    #region Zero and Boundary Values
+
+    [Fact]
+    public async Task DecomposeAsync_SgvWithZeroValue_CreatesRecordWithZeroMgdl()
+    {
+        // Arrange - glucose of 0 is technically invalid but shouldn't crash
+        var entry = new Entry { Id = "zero-sgv", Type = "sgv", Mills = 1700000000000, Sgv = 0.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
+        sg.Mgdl.Should().Be(0.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvWithNegativeValue_CreatesRecordPreservingValue()
+    {
+        // Arrange - negative values are invalid but decomposer shouldn't filter
+        var entry = new Entry { Id = "negative-sgv", Type = "sgv", Mills = 1700000000000, Sgv = -5.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
+        sg.Mgdl.Should().Be(-5.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvBothNullSgvAndNullMgdl_DefaultsToZero()
+    {
+        // Arrange - Entry.Mgdl is a non-nullable double that defaults to 0
+        var entry = new Entry { Id = "both-null-sgv", Type = "sgv", Mills = 1700000000000 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
+        sg.Mgdl.Should().Be(0.0, "Sgv is null and Mgdl defaults to 0");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_MbgBothNullMbgAndZeroMgdl_DefaultsToZero()
+    {
+        // Arrange
+        var entry = new Entry { Id = "both-null-mbg", Type = "mbg", Mills = 1700000000000 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var mg = result.CreatedRecords[0].Should().BeOfType<MeterGlucose>().Subject;
+        mg.Mgdl.Should().Be(0.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CalWithAllNullOptionalFields_CreatesMinimalCalibration()
+    {
+        // Arrange - calibration with no slope/intercept/scale
+        var entry = new Entry { Id = "minimal-cal", Type = "cal", Mills = 1700000000000 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var cal = result.CreatedRecords[0].Should().BeOfType<Calibration>().Subject;
+        cal.Slope.Should().BeNull();
+        cal.Intercept.Should().BeNull();
+        cal.Scale.Should().BeNull();
+        cal.Device.Should().BeNull();
+        cal.App.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvWithVeryHighGlucose_PreservesValue()
+    {
+        // Arrange - HI reading on Dexcom is often 400+
+        var entry = new Entry { Id = "hi-sgv", Type = "sgv", Mills = 1700000000000, Sgv = 400.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
+        sg.Mgdl.Should().Be(400.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvWithZeroMills_PreservesTimestamp()
+    {
+        // Arrange
+        var entry = new Entry { Id = "zero-mills", Type = "sgv", Mills = 0, Sgv = 100.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
+        sg.Mills.Should().Be(0);
+    }
+
+    #endregion
+
+    #region Type Matching Edge Cases
+
+    [Fact]
+    public async Task DecomposeAsync_TypeWithLeadingTrailingSpaces_DoesNotMatch()
+    {
+        // Arrange - code does ToLowerInvariant but no Trim()
+        var entry = new Entry { Id = "padded-type", Type = " sgv ", Mills = 1700000000000, Sgv = 100.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert - " sgv " != "sgv" so it's treated as unknown
+        result.CreatedRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_TypeMixedCase_MBG_HandlesCaseInsensitively()
+    {
+        // Arrange
+        var entry = new Entry { Id = "mixedcase-mbg", Type = "MBG", Mills = 1700000000000, Mbg = 140.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        result.CreatedRecords[0].Should().BeOfType<MeterGlucose>();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_TypeMixedCase_CAL_HandlesCaseInsensitively()
+    {
+        // Arrange
+        var entry = new Entry { Id = "mixedcase-cal", Type = "Cal", Mills = 1700000000000, Slope = 800.0 };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        result.CreatedRecords[0].Should().BeOfType<Calibration>();
+    }
+
+    #endregion
+
+    #region Idempotency Preserves ID
+
+    [Fact]
+    public async Task DecomposeAsync_IdempotentUpdate_PreservesOriginalV4Id()
+    {
+        // Arrange
+        var entry = new Entry { Id = "preserve-id-test", Type = "sgv", Mills = 1700000000000, Sgv = 100.0 };
+
+        // Act
+        var firstResult = await _decomposer.DecomposeAsync(entry);
+        var originalId = firstResult.CreatedRecords.OfType<SensorGlucose>().Single().Id;
+
+        entry.Sgv = 110.0;
+        var secondResult = await _decomposer.DecomposeAsync(entry);
+        var updatedId = secondResult.UpdatedRecords.OfType<SensorGlucose>().Single().Id;
+
+        // Assert - the V4 ID should be preserved across updates
+        updatedId.Should().Be(originalId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_MultipleNullIdEntries_CreatesDistinctRecords()
+    {
+        // Arrange - two entries with null IDs cannot be deduplicated
+        var entry1 = new Entry { Id = null, Type = "sgv", Mills = 1700000000000, Sgv = 100.0 };
+        var entry2 = new Entry { Id = null, Type = "sgv", Mills = 1700000001000, Sgv = 110.0 };
+
+        // Act
+        var result1 = await _decomposer.DecomposeAsync(entry1);
+        var result2 = await _decomposer.DecomposeAsync(entry2);
+
+        // Assert - both should create, neither should update
+        result1.CreatedRecords.Should().HaveCount(1);
+        result2.CreatedRecords.Should().HaveCount(1);
+        result1.UpdatedRecords.Should().BeEmpty();
+        result2.UpdatedRecords.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region Direction Fallback via TryParse
+
+    [Theory]
+    [InlineData("flat", GlucoseDirection.Flat)]
+    [InlineData("FLAT", GlucoseDirection.Flat)]
+    [InlineData("singleup", GlucoseDirection.SingleUp)]
+    [InlineData("SINGLEDOWN", GlucoseDirection.SingleDown)]
+    public void MapDirection_CaseInsensitiveFallback_MapsCorrectly(string input, GlucoseDirection expected)
+    {
+        // The switch cases are exact-match; non-matching falls to Enum.TryParse with ignoreCase
+        EntryDecomposer.MapDirection(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public void MapDirection_WhitespaceOnly_ReturnsNull()
+    {
+        // String.IsNullOrEmpty returns false for whitespace, so it goes to switch
+        EntryDecomposer.MapDirection("   ").Should().BeNull();
+    }
+
+    #endregion
+
     #region Static Mapping Methods
 
     [Theory]

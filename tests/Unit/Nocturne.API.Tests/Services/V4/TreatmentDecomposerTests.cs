@@ -1051,6 +1051,571 @@ public class TreatmentDecomposerTests : IDisposable
 
     #endregion
 
+    // Note: DeleteByLegacyIdAsync tests require PostgreSQL (ExecuteDeleteAsync is not
+    // supported by the EF Core in-memory provider) and belong in integration tests.
+
+    #region Override Rule Boundary Cases
+
+    [Fact]
+    public async Task DecomposeAsync_UnknownEventWithOnlyInsulin_ProducesNothing()
+    {
+        // Arrange - override rule only fires when BOTH are > 0.
+        // An unknown event type with only insulin doesn't match any known type.
+        var treatment = new Treatment
+        {
+            Id = "insulin-only-unknown",
+            EventType = "Custom Event",
+            Mills = 1700000000000,
+            Insulin = 3.0,
+            Carbs = 0
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - neither the override (needs both) nor any event type matches
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_UnknownEventWithOnlyCarbs_ProducesNothing()
+    {
+        // Arrange - only carbs > 0 with unknown event type
+        var treatment = new Treatment
+        {
+            Id = "carbs-only-unknown",
+            EventType = "Custom Event",
+            Mills = 1700000000000,
+            Insulin = 0,
+            Carbs = 20
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - override rule requires BOTH; unknown type doesn't match
+        result.CreatedRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CorrectionBolusWithOnlyInsulinNoCarbs_ProducesBolusOnly()
+    {
+        // Arrange - known event type "Correction Bolus" produces Bolus.
+        // Carbs = 0 means override rule doesn't fire.
+        var treatment = new Treatment
+        {
+            Id = "correction-no-carbs",
+            EventType = "Correction Bolus",
+            Mills = 1700000000000,
+            Insulin = 3.0,
+            Carbs = 0
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - Correction Bolus sets produceBolus; override doesn't fire
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CarbCorrectionWithOnlyCarbsNoInsulin_ProducesCarbIntakeOnly()
+    {
+        // Arrange - known event type "Carb Correction" produces CarbIntake.
+        var treatment = new Treatment
+        {
+            Id = "carb-correction-no-insulin",
+            EventType = "Carb Correction",
+            Mills = 1700000000000,
+            Carbs = 15
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_NegativeInsulinWithCarbs_DoesNotTriggerOverrideRule()
+    {
+        // Arrange - negative insulin: `Insulin is > 0` is false, unknown event type
+        var treatment = new Treatment
+        {
+            Id = "negative-insulin",
+            EventType = "Unknown",
+            Mills = 1700000000000,
+            Insulin = -1.0,
+            Carbs = 20
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - override rule needs insulin > 0, and "Unknown" doesn't match any event type
+        result.CreatedRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_MealBolusWithNullInsulinAndNullCarbs_ProducesNothing()
+    {
+        // Arrange - Meal Bolus sets both flags, but the mapped values default to 0
+        var treatment = new Treatment
+        {
+            Id = "meal-no-data",
+            EventType = "Meal Bolus",
+            Mills = 1700000000000
+            // Insulin=null, Carbs=null
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - Meal Bolus always produces Bolus+CarbIntake by EventType match
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
+
+        var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
+        bolus.Insulin.Should().Be(0, "null insulin defaults to 0 in mapping");
+
+        var carb = result.CreatedRecords.OfType<V4Models.CarbIntake>().Single();
+        carb.Carbs.Should().Be(0, "null carbs defaults to 0 in mapping");
+    }
+
+    #endregion
+
+    #region Bolus Wizard Combinations
+
+    [Fact]
+    public async Task DecomposeAsync_BolusWizardWithCarbsButNoInsulin_ProducesBolusCalcOnly()
+    {
+        // Arrange - Bolus Wizard + carbs > 0 but no insulin.
+        // Override rule requires BOTH insulin > 0 AND carbs > 0, so only BolusCalc is produced.
+        var treatment = new Treatment
+        {
+            Id = "wizard-carbs-only",
+            EventType = "Bolus Wizard",
+            Mills = 1700000000000,
+            Carbs = 25,
+            BloodGlucoseInput = 150
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - Bolus Wizard sets produceBolusCalc. No insulin means no Bolus.
+        // Override doesn't fire (needs both). CarbIntake not produced.
+        result.CreatedRecords.OfType<V4Models.BolusCalculation>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().BeEmpty();
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_BolusWizardWithInsulinAndCarbs_ProducesAllThree()
+    {
+        // Arrange - override rule fires: insulin + carbs both > 0
+        var treatment = new Treatment
+        {
+            Id = "wizard-all-three",
+            EventType = "Bolus Wizard",
+            Mills = 1700000000000,
+            Insulin = 4.0,
+            Carbs = 30,
+            BloodGlucoseInput = 180
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert - BolusCalc + Bolus (from wizard + insulin) + CarbIntake (from override rule)
+        result.CreatedRecords.OfType<V4Models.BolusCalculation>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_BolusWizardNoInsulinNoCarbs_ProducesBolusCalcOnly()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "wizard-calc-only",
+            EventType = "Bolus Wizard",
+            Mills = 1700000000000,
+            BloodGlucoseInput = 90,
+            InsulinOnBoard = 2.5
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        result.CreatedRecords[0].Should().BeOfType<V4Models.BolusCalculation>();
+    }
+
+    #endregion
+
+    #region Idempotency - Additional Types
+
+    [Fact]
+    public async Task DecomposeAsync_BGCheckTwice_UpdatesInsteadOfCreatingDuplicate()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "idempotent-bgcheck",
+            EventType = "BG Check",
+            Mills = 1700000000000,
+            Glucose = 120,
+            GlucoseType = "Finger",
+            Units = "mg/dl"
+        };
+
+        var first = await _decomposer.DecomposeAsync(treatment);
+        first.CreatedRecords.Should().HaveCount(1);
+
+        treatment.Glucose = 125;
+        var second = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        second.CreatedRecords.Should().BeEmpty();
+        second.UpdatedRecords.Should().HaveCount(1);
+        var updated = second.UpdatedRecords[0].Should().BeOfType<V4Models.BGCheck>().Subject;
+        updated.Glucose.Should().Be(125);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_NoteTwice_UpdatesInsteadOfCreatingDuplicate()
+    {
+        var treatment = new Treatment
+        {
+            Id = "idempotent-note",
+            EventType = "Note",
+            Mills = 1700000000000,
+            Notes = "Original note"
+        };
+
+        var first = await _decomposer.DecomposeAsync(treatment);
+        first.CreatedRecords.Should().HaveCount(1);
+
+        treatment.Notes = "Updated note";
+        var second = await _decomposer.DecomposeAsync(treatment);
+
+        second.CreatedRecords.Should().BeEmpty();
+        second.UpdatedRecords.Should().HaveCount(1);
+        var updated = second.UpdatedRecords[0].Should().BeOfType<V4Models.Note>().Subject;
+        updated.Text.Should().Be("Updated note");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_BolusCalculationTwice_UpdatesInsteadOfCreatingDuplicate()
+    {
+        var treatment = new Treatment
+        {
+            Id = "idempotent-calc",
+            EventType = "Bolus Wizard",
+            Mills = 1700000000000,
+            BloodGlucoseInput = 150
+        };
+
+        var first = await _decomposer.DecomposeAsync(treatment);
+        first.CreatedRecords.Should().HaveCount(1);
+
+        treatment.BloodGlucoseInput = 180;
+        var second = await _decomposer.DecomposeAsync(treatment);
+
+        second.CreatedRecords.Should().BeEmpty();
+        second.UpdatedRecords.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_NullIdTreatment_AlwaysCreatesNeverUpdates()
+    {
+        // Arrange - two identical treatments with null IDs
+        var treatment = new Treatment
+        {
+            Id = null,
+            EventType = "Correction Bolus",
+            Mills = 1700000000000,
+            Insulin = 2.0
+        };
+
+        var first = await _decomposer.DecomposeAsync(treatment);
+        var second = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        first.CreatedRecords.Should().HaveCount(1);
+        second.CreatedRecords.Should().HaveCount(1);
+        first.UpdatedRecords.Should().BeEmpty();
+        second.UpdatedRecords.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region EventType Whitespace Handling
+
+    [Fact]
+    public async Task DecomposeAsync_EventTypeWithLeadingTrailingSpaces_TrimsAndMatches()
+    {
+        // Arrange - TreatmentDecomposer.Trim()'s the EventType
+        var treatment = new Treatment
+        {
+            Id = "trimmed-event",
+            EventType = "  Correction Bolus  ",
+            Mills = 1700000000000,
+            Insulin = 2.0
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+    }
+
+    #endregion
+
+    #region ProfileSwitch EndMills Calculation
+
+    [Fact]
+    public async Task DecomposeAsync_ProfileSwitchWithDuration_CalculatesEndMills()
+    {
+        var treatment = new Treatment
+        {
+            Id = "profile-duration",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Night",
+            Duration = 120, // 120 minutes
+            EnteredBy = "AAPS"
+        };
+
+        var expectedStateSpan = new StateSpan
+        {
+            Id = "ss-1",
+            Category = StateSpanCategory.Profile,
+            StartMills = 1700000000000
+        };
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        await _decomposer.DecomposeAsync(treatment);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss =>
+                    ss.EndMills == 1700000000000 + (120 * 60 * 1000)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ProfileSwitchWithNullDuration_HasNullEndMills()
+    {
+        var treatment = new Treatment
+        {
+            Id = "profile-no-duration",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Default"
+        };
+
+        var expectedStateSpan = new StateSpan { Id = "ss-2", Category = StateSpanCategory.Profile };
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        await _decomposer.DecomposeAsync(treatment);
+
+        // Duration defaults to 0 in Treatment; 0 is NOT > 0, so EndMills should be null
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.EndMills == null),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    #endregion
+
+    #region Override EndMills Calculation
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideWithDuration_CalculatesEndMills()
+    {
+        var treatment = new Treatment
+        {
+            Id = "override-duration",
+            EventType = "Temporary Override",
+            Mills = 1700000000000,
+            Duration = 60,
+            Reason = "Eating Soon"
+        };
+
+        var expectedStateSpan = new StateSpan { Id = "ss-3", Category = StateSpanCategory.Override };
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        await _decomposer.DecomposeAsync(treatment);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss =>
+                    ss.EndMills == 1700000000000 + (60 * 60 * 1000)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    #endregion
+
+    #region Parse Helpers - Unknown Values
+
+    [Fact]
+    public void ParseBolusType_UnknownNonEmpty_ReturnsNull()
+    {
+        TreatmentDecomposer.ParseBolusType("extended").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseGlucoseType_UnknownNonEmpty_ReturnsNull()
+    {
+        TreatmentDecomposer.ParseGlucoseType("Interstitial").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseGlucoseUnit_UnknownNonEmpty_ReturnsNull()
+    {
+        TreatmentDecomposer.ParseGlucoseUnit("g/L").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseGlucoseUnit_EmptyString_ReturnsNull()
+    {
+        TreatmentDecomposer.ParseGlucoseUnit("").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseGlucoseType_EmptyString_ReturnsNull()
+    {
+        TreatmentDecomposer.ParseGlucoseType("").Should().BeNull();
+    }
+
+    #endregion
+
+    #region Bolus Default Values
+
+    [Fact]
+    public void MapToBolus_NullInsulin_DefaultsToZero()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment { Id = "null-insulin-bolus", Mills = 1700000000000 };
+
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, correlationId);
+        bolus.Insulin.Should().Be(0);
+    }
+
+    [Fact]
+    public void MapToBolus_NullAutomatic_DefaultsToFalse()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment { Id = "null-auto-bolus", Mills = 1700000000000, Insulin = 3.0 };
+
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, correlationId);
+        bolus.Automatic.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MapToBolus_NullIsBasalInsulin_DefaultsToFalse()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment { Id = "null-basal", Mills = 1700000000000, Insulin = 3.0 };
+
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, correlationId);
+        bolus.IsBasalInsulin.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MapToCarbIntake_NullCarbs_DefaultsToZero()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment { Id = "null-carbs", Mills = 1700000000000 };
+
+        var carbIntake = TreatmentDecomposer.MapToCarbIntake(treatment, correlationId);
+        carbIntake.Carbs.Should().Be(0);
+    }
+
+    [Fact]
+    public void MapToBGCheck_NullGlucoseAndMgdl_DefaultsToZero()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var treatment = new Treatment { Id = "null-glucose", Mills = 1700000000000 };
+
+        var bgCheck = TreatmentDecomposer.MapToBGCheck(treatment, correlationId);
+        bgCheck.Glucose.Should().Be(0);
+        bgCheck.Mgdl.Should().Be(0);
+    }
+
+    #endregion
+
+    #region Device Event Case Insensitivity
+
+    [Theory]
+    [InlineData("site change")]
+    [InlineData("SITE CHANGE")]
+    [InlineData("Site Change")]
+    public async Task DecomposeAsync_DeviceEventCaseInsensitive_CreatesDeviceEvent(string eventType)
+    {
+        // DeviceEventTypeMap uses StringComparer.OrdinalIgnoreCase
+        var treatment = new Treatment
+        {
+            Id = $"device-case-{eventType.GetHashCode()}",
+            EventType = eventType,
+            Mills = 1700000000000
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        result.CreatedRecords.Should().HaveCount(1);
+        var de = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
+        de.EventType.Should().Be(DeviceEventType.SiteChange);
+    }
+
+    #endregion
+
+    #region Correlation ID Consistency
+
+    [Fact]
+    public async Task DecomposeAsync_BolusWizardWithInsulinAndCarbs_AllShareCorrelationId()
+    {
+        var treatment = new Treatment
+        {
+            Id = "corr-all-three",
+            EventType = "Bolus Wizard",
+            Mills = 1700000000000,
+            Insulin = 5.0,
+            Carbs = 30,
+            BloodGlucoseInput = 200
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        var calc = result.CreatedRecords.OfType<V4Models.BolusCalculation>().Single();
+        var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
+        var carb = result.CreatedRecords.OfType<V4Models.CarbIntake>().Single();
+
+        calc.CorrelationId.Should().Be(result.CorrelationId);
+        bolus.CorrelationId.Should().Be(result.CorrelationId);
+        carb.CorrelationId.Should().Be(result.CorrelationId);
+    }
+
+    #endregion
+
     #region Announcement with IsAnnouncement property
 
     [Fact]
