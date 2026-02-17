@@ -1,5 +1,5 @@
 import { getRequestEvent, query } from "$app/server";
-import type { Entry, Treatment, DeviceStatus } from "$lib/api";
+import type { SensorGlucose, Bolus, CarbIntake, DeviceStatus } from "$lib/api";
 import { z } from "zod";
 
 /**
@@ -36,11 +36,6 @@ export interface PointInTimeData {
     carbs?: number;
     insulin?: number;
     bolus?: number;
-    tempBasal?: {
-      rate: number;
-      duration: number;
-    };
-    notes?: string[];
   };
 
   // Pump/loop status
@@ -68,30 +63,22 @@ export const getPointInTimeData = query(pointInTimeSchema, async ({ timestamp })
 
   // Create a time window around the requested timestamp (±15 minutes)
   const windowMs = 15 * 60 * 1000;
-  const startTime = new Date(timestamp - windowMs);
-  const endTime = new Date(timestamp + windowMs);
+  const fromMs = timestamp - windowMs;
+  const toMs = timestamp + windowMs;
 
-  // Fetch entries, treatments, and device status for the time window
-  const entriesQuery = JSON.stringify({
-    date: {
-      $gte: startTime.toISOString(),
-      $lte: endTime.toISOString(),
-    },
-  });
-  const treatmentsQuery = JSON.stringify({
-    created_at: {
-      $gte: startTime.toISOString(),
-      $lte: endTime.toISOString(),
-    },
-  });
-
-  const [entries, treatments] = await Promise.all([
-    apiClient.entries.getEntries2(entriesQuery).catch(() => [] as Entry[]),
-    apiClient.treatments.getTreatments(undefined, undefined, undefined, treatmentsQuery).catch(() => [] as Treatment[]),
+  // Fetch glucose readings, boluses, and carb intakes for the time window
+  const [glucoseResponse, bolusResponse, carbResponse] = await Promise.all([
+    apiClient.glucose.getSensorGlucose(fromMs, toMs, 10000).catch(() => ({ data: [] as SensorGlucose[] })),
+    apiClient.insulin.getBoluses(fromMs, toMs, 10000).catch(() => ({ data: [] as Bolus[] })),
+    apiClient.nutrition.getCarbIntakes(fromMs, toMs, 10000).catch(() => ({ data: [] as CarbIntake[] })),
   ]);
 
+  const entries = glucoseResponse.data ?? [];
+  const boluses = bolusResponse.data ?? [];
+  const carbIntakes = carbResponse.data ?? [];
+
   // Find the closest entry to the requested timestamp
-  const targetEntry = entries.reduce((closest: Entry | null, entry: Entry) => {
+  const targetEntry = entries.reduce((closest: SensorGlucose | null, entry: SensorGlucose) => {
     const entryTime = entry.mills ?? 0;
     const closestTime = closest?.mills ?? 0;
     const targetDiff = Math.abs(entryTime - timestamp);
@@ -104,42 +91,29 @@ export const getPointInTimeData = query(pointInTimeSchema, async ({ timestamp })
   }
 
   const entryDate = new Date(targetEntry.mills ?? timestamp);
-  const glucoseValue = targetEntry.sgv ?? targetEntry.mgdl ?? 0;
+  const glucoseValue = targetEntry.mgdl ?? 0;
 
   // Calculate delta from previous reading
   const sortedEntries = entries
-    .filter((e: Entry) => (e.mills ?? 0) < (targetEntry.mills ?? 0))
-    .sort((a: Entry, b: Entry) => (b.mills ?? 0) - (a.mills ?? 0));
+    .filter((e: SensorGlucose) => (e.mills ?? 0) < (targetEntry.mills ?? 0))
+    .sort((a: SensorGlucose, b: SensorGlucose) => (b.mills ?? 0) - (a.mills ?? 0));
   const previousEntry = sortedEntries[0];
-  const delta = previousEntry ? glucoseValue - (previousEntry.sgv ?? previousEntry.mgdl ?? 0) : undefined;
+  const delta = previousEntry ? glucoseValue - (previousEntry.mgdl ?? 0) : undefined;
 
-  // Aggregate treatments in the window
+  // Aggregate boluses and carb intakes in the window
   const recentTreatments: PointInTimeData["recentTreatments"] = {};
-  const notes: string[] = [];
 
-  for (const treatment of treatments) {
-    if (treatment.carbs) {
-      recentTreatments.carbs = (recentTreatments.carbs ?? 0) + treatment.carbs;
-    }
-    if (treatment.insulin) {
-      recentTreatments.insulin = (recentTreatments.insulin ?? 0) + treatment.insulin;
-    }
-    if (treatment.eventType === "Bolus" && treatment.insulin) {
-      recentTreatments.bolus = (recentTreatments.bolus ?? 0) + treatment.insulin;
-    }
-    if (treatment.eventType === "Temp Basal" && treatment.rate !== undefined) {
-      recentTreatments.tempBasal = {
-        rate: treatment.rate,
-        duration: treatment.duration ?? 0,
-      };
-    }
-    if (treatment.notes) {
-      notes.push(treatment.notes);
+  for (const bolus of boluses) {
+    if (bolus.insulin && bolus.insulin > 0) {
+      recentTreatments.insulin = (recentTreatments.insulin ?? 0) + bolus.insulin;
+      recentTreatments.bolus = (recentTreatments.bolus ?? 0) + bolus.insulin;
     }
   }
 
-  if (notes.length > 0) {
-    recentTreatments.notes = notes;
+  for (const carb of carbIntakes) {
+    if (carb.carbs && carb.carbs > 0) {
+      recentTreatments.carbs = (recentTreatments.carbs ?? 0) + carb.carbs;
+    }
   }
 
   // Try to get IOB/COB from device status

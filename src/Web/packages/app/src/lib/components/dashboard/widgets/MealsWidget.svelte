@@ -7,27 +7,18 @@
 
   const realtimeStore = getRealtimeStore();
 
-  // Get meal-related treatments from the last 6 hours
+  // Get recent carb intakes from the last 6 hours
   const recentMeals = $derived.by(() => {
     const sixHoursAgo = realtimeStore.now - 6 * 60 * 60 * 1000;
-    return realtimeStore.treatments
-      .filter((t) => {
-        const mills = t.mills || 0;
-        const eventType = (t.eventType || "").toLowerCase();
-        const hasMealType =
-          eventType.includes("meal") ||
-          eventType.includes("snack") ||
-          eventType.includes("carb");
-        const hasCarbs = (t.carbs ?? 0) > 0;
-        return mills > sixHoursAgo && (hasMealType || hasCarbs);
-      })
-      .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+    return realtimeStore.carbIntakes
+      .filter((c) => (c.mills ?? 0) > sixHoursAgo && (c.carbs ?? 0) > 0)
+      .sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))
       .slice(0, 3);
   });
 
   // Total carbs in the period
   const totalCarbs = $derived(
-    recentMeals.reduce((sum, m) => sum + (m.carbs ?? 0), 0)
+    recentMeals.reduce((sum, c) => sum + (c.carbs ?? 0), 0)
   );
 
   // Last meal time
@@ -49,9 +40,9 @@
         {/if}
       </div>
       <div class="flex flex-wrap gap-1 mt-1">
-        {#each recentMeals.slice(0, 3) as meal}
+        {#each recentMeals.slice(0, 3) as carbIntake}
           <Badge variant="outline" class="text-xs">
-            {meal.carbs ?? 0}g
+            {carbIntake.carbs ?? 0}g
           </Badge>
         {/each}
       </div>

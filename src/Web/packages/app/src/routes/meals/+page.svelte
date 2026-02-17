@@ -16,33 +16,26 @@
     Check,
     Loader2,
     Sparkles,
+    Utensils,
   } from "lucide-svelte";
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
   import type {
     MealCarbIntake,
-    Treatment,
     TreatmentFood,
     CarbIntakeFoodRequest,
     SuggestedMealMatch,
   } from "$lib/api";
   import { getMeals } from "$lib/data/treatment-foods.remote";
-  import {
-    updateTreatment,
-    deleteTreatment,
-  } from "$lib/data/treatments.remote";
   import * as mealMatchingRemote from "$lib/data/meal-matching.remote";
   import { toast } from "svelte-sonner";
-  import { invalidateAll } from "$app/navigation";
   import {
-    TreatmentEditDialog,
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
     CarbBreakdownBar,
     FoodEntryDetails,
   } from "$lib/components/treatments";
   import { addCarbIntakeFood } from "$lib/data/treatment-foods.remote";
-  import { TreatmentTypeIcon } from "$lib/components/icons";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { cn } from "$lib/utils";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
@@ -62,9 +55,6 @@
   let foodFilterOpen = $state(false);
   let foodFilterSearch = $state("");
 
-  let showEditDialog = $state(false);
-  let treatmentToEdit = $state<Treatment | null>(null);
-  let isSaving = $state(false);
   let expandedRows = $state<Set<string>>(new Set());
   let collapsedDates = $state<Set<string>>(new Set());
 
@@ -86,8 +76,8 @@
   }
 
   const queryParams = $derived({
-    from: dateRange.from,
-    to: dateRange.to,
+    from: dateRange.from ? new Date(dateRange.from).getTime() : undefined,
+    to: dateRange.to ? new Date(dateRange.to).getTime() : undefined,
     attributed: filterMode === "unattributed" ? false : undefined,
   });
 
@@ -109,8 +99,8 @@
   // Loading state - check if data has arrived yet
   const isLoading = $derived(mealsQuery.current === undefined);
 
-  // Create a map of treatmentId -> suggestions for easy lookup
-  const suggestionsByTreatment = $derived.by(() => {
+  // Create a map of carbIntakeId -> suggestions for easy lookup
+  const suggestionsByCarbIntake = $derived.by(() => {
     const map = new Map<string, SuggestedMealMatch[]>();
     for (const match of suggestedMatches) {
       const treatmentId = match.treatmentId;
@@ -143,10 +133,10 @@
   // Helper to get meal label for sorting
   function getMealSortLabel(meal: MealCarbIntake): string {
     const foods = meal.foods ?? [];
-    if (foods.length === 0) return meal.treatment?.eventType ?? "Meal";
+    if (foods.length === 0) return meal.carbIntake?.foodType ?? "Meal";
     if (foods.length === 1 && foods[0].foodName) return foods[0].foodName;
     return getMealNameForTime(
-      new Date(meal.treatment?.created_at ?? new Date())
+      new Date(meal.carbIntake?.mills ?? Date.now())
     );
   }
 
@@ -159,8 +149,7 @@
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((meal) => {
         const searchable = [
-          meal.treatment?.eventType,
-          meal.treatment?.notes,
+          meal.carbIntake?.foodType,
           ...(meal.foods?.map((f) => f.foodName ?? f.note) ?? []),
         ]
           .filter(Boolean)
@@ -185,18 +174,19 @@
       switch (sortColumn) {
         case "time":
           comparison =
-            new Date(a.treatment?.created_at ?? 0).getTime() -
-            new Date(b.treatment?.created_at ?? 0).getTime();
+            (a.carbIntake?.mills ?? 0) - (b.carbIntake?.mills ?? 0);
           break;
         case "meal":
           comparison = getMealSortLabel(a).localeCompare(getMealSortLabel(b));
           break;
         case "carbs":
-          comparison = (a.treatment?.carbs ?? 0) - (b.treatment?.carbs ?? 0);
+          comparison =
+            (a.carbIntake?.carbs ?? 0) - (b.carbIntake?.carbs ?? 0);
           break;
         case "insulin":
           comparison =
-            (a.treatment?.insulin ?? 0) - (b.treatment?.insulin ?? 0);
+            (a.correlatedBolus?.insulin ?? 0) -
+            (b.correlatedBolus?.insulin ?? 0);
           break;
       }
       return sortDirection === "asc" ? comparison : -comparison;
@@ -216,10 +206,10 @@
     const grouped = new Map<string, MealCarbIntake[]>();
 
     for (const meal of filteredAndSortedMeals) {
-      const dateStr = meal.treatment?.created_at;
-      if (!dateStr) continue;
+      const mills = meal.carbIntake?.mills;
+      if (!mills) continue;
 
-      const date = new Date(dateStr);
+      const date = new Date(mills);
       const dateKey = date.toLocaleDateString();
 
       if (!grouped.has(dateKey)) {
@@ -233,7 +223,7 @@
       result.push({
         date,
         displayDate: new Date(
-          dayMeals[0].treatment?.created_at!
+          dayMeals[0].carbIntake?.mills ?? 0
         ).toLocaleDateString(undefined, {
           weekday: "long",
           year: "numeric",
@@ -298,11 +288,6 @@
     collapsedDates = newSet;
   }
 
-  function openEdit(treatment: Treatment) {
-    treatmentToEdit = treatment;
-    showEditDialog = true;
-  }
-
   function openAddFood(meal: MealCarbIntake) {
     addFoodMeal = meal;
     showAddFoodDialog = true;
@@ -318,7 +303,7 @@
     meal: MealCarbIntake,
     entryId: string | undefined
   ): number {
-    const totalCarbs = meal.treatment?.carbs ?? 0;
+    const totalCarbs = meal.carbIntake?.carbs ?? 0;
     const otherAttributedCarbs =
       meal.foods
         ?.filter((f) => f.id !== entryId)
@@ -331,11 +316,11 @@
   }
 
   async function handleAddFoodSubmit(request: CarbIntakeFoodRequest) {
-    if (!addFoodMeal?.treatment?._id) return;
+    if (!addFoodMeal?.carbIntake?.id) return;
 
     try {
       await addCarbIntakeFood({
-        carbIntakeId: addFoodMeal.carbIntake?.id ?? "",
+        carbIntakeId: addFoodMeal.carbIntake.id,
         request,
       });
       toast.success("Food added");
@@ -348,48 +333,9 @@
     }
   }
 
-  function handleEditClose() {
-    showEditDialog = false;
-    treatmentToEdit = null;
-  }
-
-  async function handleEditSave(updatedTreatment: Treatment) {
-    isSaving = true;
-    try {
-      await updateTreatment({ ...updatedTreatment });
-      toast.success("Treatment updated");
-      showEditDialog = false;
-      treatmentToEdit = null;
-      mealsQuery.refresh();
-      invalidateAll();
-    } catch (err) {
-      console.error("Update error:", err);
-      toast.error("Failed to update treatment");
-    } finally {
-      isSaving = false;
-    }
-  }
-
-  async function handleEditDelete(treatmentId: string) {
-    isSaving = true;
-    try {
-      await deleteTreatment(treatmentId);
-      toast.success("Treatment deleted");
-      showEditDialog = false;
-      treatmentToEdit = null;
-      mealsQuery.refresh();
-      invalidateAll();
-    } catch (err) {
-      console.error("Delete error:", err);
-      toast.error("Failed to delete treatment");
-    } finally {
-      isSaving = false;
-    }
-  }
-
-  function formatTime(dateStr: string | undefined): string {
-    if (!dateStr) return "—";
-    return new Date(dateStr).toLocaleTimeString(undefined, {
+  function formatTime(mills: number | undefined): string {
+    if (!mills) return "—";
+    return new Date(mills).toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -398,13 +344,13 @@
   function getMealLabel(meal: MealCarbIntake): string {
     const foods = meal.foods ?? [];
     if (foods.length === 0) {
-      return meal.treatment?.eventType ?? "Meal";
+      return meal.carbIntake?.foodType ?? "Meal";
     }
     if (foods.length === 1 && foods[0].foodName) {
       return foods[0].foodName;
     }
     // Multiple foods - use meal time-based name
-    const date = new Date(meal.treatment?.created_at ?? new Date());
+    const date = new Date(meal.carbIntake?.mills ?? Date.now());
     return getMealNameForTime(date);
   }
 
@@ -733,11 +679,11 @@
             {#each mealsByDay as day}
               {@const isDateCollapsed = collapsedDates.has(day.date)}
               {@const dayTotalCarbs = day.meals.reduce(
-                (sum, m) => sum + (m.treatment?.carbs ?? 0),
+                (sum, m) => sum + (m.carbIntake?.carbs ?? 0),
                 0
               )}
               {@const dayTotalInsulin = day.meals.reduce(
-                (sum, m) => sum + (m.treatment?.insulin ?? 0),
+                (sum, m) => sum + (m.correlatedBolus?.insulin ?? 0),
                 0
               )}
               <!-- Day separator row -->
@@ -780,13 +726,13 @@
               </Table.Row>
 
               {#if !isDateCollapsed}
-                {#each day.meals as meal, mealIndex (`${day.date}-${mealIndex}-${meal.treatment?._id}`)}
+                {#each day.meals as meal, mealIndex (`${day.date}-${mealIndex}-${meal.carbIntake?.id}`)}
                   {@const isExpanded = expandedRows.has(
-                    meal.treatment?._id ?? ""
+                    meal.carbIntake?.id ?? ""
                   )}
                   {@const hasFoods = (meal.foods?.length ?? 0) > 0}
-                  {@const totalCarbs = meal.treatment?.carbs ?? 0}
-                  {@const mealSuggestions = suggestionsByTreatment.get(meal.treatment?.dbId ?? "") ?? []}
+                  {@const totalCarbs = meal.carbIntake?.carbs ?? 0}
+                  {@const mealSuggestions = suggestionsByCarbIntake.get(meal.carbIntake?.id ?? "") ?? []}
 
                   <!-- Main meal row -->
                   <Table.Row
@@ -796,7 +742,7 @@
                       isExpanded && "bg-accent/30"
                     )}
                     onclick={() =>
-                      hasFoods && toggleRow(meal.treatment?._id ?? "")}
+                      hasFoods && toggleRow(meal.carbIntake?.id ?? "")}
                   >
                     <Table.Cell class="py-3">
                       {#if hasFoods}
@@ -806,7 +752,7 @@
                           class="h-6 w-6"
                           onclick={(e) => {
                             e.stopPropagation();
-                            toggleRow(meal.treatment?._id ?? "");
+                            toggleRow(meal.carbIntake?.id ?? "");
                           }}
                         >
                           {#if isExpanded}
@@ -819,15 +765,12 @@
                     </Table.Cell>
                     <Table.Cell class="py-3">
                       <div class="text-lg font-semibold tabular-nums">
-                        {formatTime(meal.treatment?.created_at)}
+                        {formatTime(meal.carbIntake?.mills)}
                       </div>
                     </Table.Cell>
                     <Table.Cell class="py-3">
                       <div class="flex items-center gap-2">
-                        <TreatmentTypeIcon
-                          eventType={meal.treatment?.eventType}
-                          class="h-4 w-4"
-                        />
+                        <Utensils class="h-4 w-4 text-muted-foreground" />
                         <div>
                           <div class="font-medium">{getMealLabel(meal)}</div>
                           {#if hasFoods}
@@ -861,9 +804,9 @@
                       </div>
                     </Table.Cell>
                     <Table.Cell class="py-3 text-right">
-                      {#if meal.treatment?.insulin}
+                      {#if meal.correlatedBolus?.insulin}
                         <span class="font-medium tabular-nums">
-                          {meal.treatment.insulin.toFixed(1)}U
+                          {meal.correlatedBolus.insulin.toFixed(1)}U
                         </span>
                       {:else}
                         <span class="text-muted-foreground">—</span>
@@ -877,17 +820,6 @@
                       </Badge>
                     </Table.Cell>
                     <Table.Cell class="py-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onclick={(e) => {
-                          e.stopPropagation();
-                          meal.treatment && openEdit(meal.treatment);
-                        }}
-                      >
-                        Edit
-                      </Button>
                     </Table.Cell>
                   </Table.Row>
 
@@ -992,9 +924,6 @@
                             <span>
                               Unspecified: {meal.unspecifiedCarbs ?? 0}g
                             </span>
-                            {#if meal.treatment?.notes}
-                              <span>Notes: {meal.treatment.notes}</span>
-                            {/if}
                           </div>
                         </div>
                       </Table.Cell>
@@ -1010,16 +939,6 @@
   </Card.Root>
 </div>
 
-<TreatmentEditDialog
-  bind:open={showEditDialog}
-  treatment={treatmentToEdit}
-  availableEventTypes={[]}
-  isLoading={isSaving}
-  onClose={handleEditClose}
-  onSave={handleEditSave}
-  onDelete={handleEditDelete}
-/>
-
 <TreatmentFoodSelectorDialog
   bind:open={showAddFoodDialog}
   onOpenChange={(value) => {
@@ -1027,9 +946,9 @@
     if (!value) addFoodMeal = null;
   }}
   onSubmit={handleAddFoodSubmit}
-  totalCarbs={addFoodMeal?.treatment?.carbs ?? 0}
+  totalCarbs={addFoodMeal?.carbIntake?.carbs ?? 0}
   unspecifiedCarbs={addFoodMeal?.unspecifiedCarbs ??
-    addFoodMeal?.treatment?.carbs ??
+    addFoodMeal?.carbIntake?.carbs ??
     0}
 />
 
@@ -1043,8 +962,8 @@
     }
   }}
   entry={editFoodEntry}
-  treatmentId={editFoodEntryMeal?.treatment?._id}
-  totalCarbs={editFoodEntryMeal?.treatment?.carbs ?? 0}
+  treatmentId={editFoodEntryMeal?.carbIntake?.id}
+  totalCarbs={editFoodEntryMeal?.carbIntake?.carbs ?? 0}
   remainingCarbs={editFoodEntryMeal
     ? getRemainingCarbsForEntry(editFoodEntryMeal, editFoodEntry?.id)
     : 0}

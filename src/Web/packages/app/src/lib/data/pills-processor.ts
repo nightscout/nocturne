@@ -1,11 +1,12 @@
 /**
  * Pills Data Processor
  *
- * Processes device status, treatments, and profile data into the format
+ * Processes device status, v4 records, and profile data into the format
  * expected by the status pill components. This mirrors the logic from
  * Nightscout's plugins (cob.js, iob.js, cage.js, sage.js, loop.js, basal.js).
  *
- * Uses backend types (DeviceStatus, Treatment, Profile) from the generated API client.
+ * Uses backend types (DeviceStatus, Bolus, CarbIntake, DeviceEvent, Profile)
+ * from the generated API client.
  */
 
 import type {
@@ -18,7 +19,8 @@ import type {
 	AlertLevel,
 	StatusPillsConfig
 } from '$lib/types/status-pills';
-import type { Treatment, DeviceStatus, Profile } from '$lib/api';
+import type { Bolus, CarbIntake, DeviceEvent, DeviceStatus, Profile } from '$lib/api';
+import { DeviceEventType } from '$lib/api';
 
 // Re-export the default config
 export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
@@ -98,11 +100,13 @@ export interface ProcessedPillsData {
 }
 
 /**
- * Process device status and treatments into pill data
+ * Process device status and v4 records into pill data
  */
 export function processPillsData(
 	deviceStatuses: DeviceStatus[],
-	treatments: Treatment[],
+	boluses: Bolus[],
+	carbIntakes: CarbIntake[],
+	deviceEvents: DeviceEvent[],
 	profile: Profile | null,
 	config: Partial<PillsProcessorConfig> = {}
 ): ProcessedPillsData {
@@ -110,21 +114,21 @@ export function processPillsData(
 	const units = config.units ?? 'mmol/L';
 
 	return {
-		iob: processIOB(deviceStatuses, treatments, now, config),
-		cob: processCOB(deviceStatuses, treatments, now, config),
-		cage: processCAGE(treatments, now, config),
-		sage: processSAGE(treatments, now, config),
+		iob: processIOB(deviceStatuses, boluses, now, config),
+		cob: processCOB(deviceStatuses, carbIntakes, now, config),
+		cage: processCAGE(deviceEvents, now, config),
+		sage: processSAGE(deviceEvents, now, config),
 		basal: processBasal(deviceStatuses, profile, now, units, config),
 		loop: processLoop(deviceStatuses, now, units, config)
 	};
 }
 
 /**
- * Process IOB data from device status and treatments
+ * Process IOB data from device status and boluses
  */
 export function processIOB(
 	deviceStatuses: DeviceStatus[],
-	treatments: Treatment[],
+	boluses: Bolus[],
 	now: number,
 	config: Partial<PillsProcessorConfig> = {}
 ): IOBPillData | null {
@@ -211,10 +215,10 @@ export function processIOB(
 		}
 	}
 
-	// Find last bolus from treatments
-	const lastBolus = treatments
+	// Find last bolus from v4 boluses
+	const lastBolus = boluses
 		.filter(
-			(t) => t.insulin && t.insulin > 0 && (t.mills ?? 0) <= now && (t.mills ?? 0) > now - HOURS(24)
+			(b) => b.insulin && b.insulin > 0 && (b.mills ?? 0) <= now && (b.mills ?? 0) > now - HOURS(24)
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
 
@@ -223,23 +227,22 @@ export function processIOB(
 			iobFromDevice.lastBolus = {
 				mills: lastBolus.mills ?? 0,
 				insulin: lastBolus.insulin ?? 0,
-				notes: lastBolus.notes
 			};
 		}
 		return iobFromDevice;
 	}
 
-	// If no device status, we could calculate IOB from treatments
+	// If no device status, we could calculate IOB from boluses
 	// For now, return null if no device data
 	return null;
 }
 
 /**
- * Process COB data from device status and treatments
+ * Process COB data from device status and carb intakes
  */
 export function processCOB(
 	deviceStatuses: DeviceStatus[],
-	treatments: Treatment[],
+	carbIntakes: CarbIntake[],
 	now: number,
 	config: Partial<PillsProcessorConfig> = {}
 ): COBPillData | null {
@@ -321,10 +324,10 @@ export function processCOB(
 		}
 	}
 
-	// Find last carbs from treatments
-	const lastCarbs = treatments
+	// Find last carbs from v4 carb intakes
+	const lastCarbs = carbIntakes
 		.filter(
-			(t) => t.carbs && t.carbs > 0 && (t.mills ?? 0) <= now && (t.mills ?? 0) > now - HOURS(24)
+			(c) => c.carbs && c.carbs > 0 && (c.mills ?? 0) <= now && (c.mills ?? 0) > now - HOURS(24)
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
 
@@ -334,7 +337,6 @@ export function processCOB(
 				mills: lastCarbs.mills ?? 0,
 				carbs: lastCarbs.carbs ?? 0,
 				food: lastCarbs.foodType,
-				notes: lastCarbs.notes
 			};
 		}
 		return cobFromDevice;
@@ -359,7 +361,6 @@ export function processCOB(
 				mills: lastCarbs.mills ?? 0,
 				carbs: lastCarbs.carbs ?? 0,
 				food: lastCarbs.foodType,
-				notes: lastCarbs.notes
 			},
 			isDecaying: estimatedCOB > 0,
 			lastUpdated: now
@@ -370,10 +371,10 @@ export function processCOB(
 }
 
 /**
- * Process CAGE data from treatments
+ * Process CAGE data from device events
  */
 export function processCAGE(
-	treatments: Treatment[],
+	deviceEvents: DeviceEvent[],
 	now: number,
 	config: Partial<PillsProcessorConfig> = {}
 ): CAGEPillData | null {
@@ -383,11 +384,11 @@ export function processCAGE(
 	const displayFormat = config.cage?.displayFormat ?? 'hours';
 
 	// Find most recent site change
-	const siteChanges = treatments
+	const siteChanges = deviceEvents
 		.filter(
-			(t) =>
-				(t.eventType === 'Site Change' || t.eventType === 'Cannula Change') &&
-				(t.mills ?? 0) <= now
+			(d) =>
+				(d.eventType === DeviceEventType.SiteChange || d.eventType === DeviceEventType.CannulaChange) &&
+				(d.mills ?? 0) <= now
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0));
 
@@ -437,10 +438,10 @@ export function processCAGE(
 }
 
 /**
- * Process SAGE data from treatments
+ * Process SAGE data from device events
  */
 export function processSAGE(
-	treatments: Treatment[],
+	deviceEvents: DeviceEvent[],
 	now: number,
 	config: Partial<PillsProcessorConfig> = {}
 ): SAGEPillData | null {
@@ -449,11 +450,11 @@ export function processSAGE(
 	const urgentThreshold = config.sage?.urgentThreshold ?? 166; // 7 days - 2 hours
 
 	// Find most recent sensor change or start
-	const sensorEvents = treatments
+	const sensorEvents = deviceEvents
 		.filter(
-			(t) =>
-				(t.eventType === 'Sensor Start' || t.eventType === 'Sensor Change') &&
-				(t.mills ?? 0) <= now
+			(d) =>
+				(d.eventType === DeviceEventType.SensorStart || d.eventType === DeviceEventType.SensorChange) &&
+				(d.mills ?? 0) <= now
 		)
 		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0));
 
@@ -494,7 +495,6 @@ export function processSAGE(
 		timeRemaining: urgentThreshold - ageHours,
 		treatmentDate,
 		notes: lastEvent.notes,
-		transmitterId: lastEvent.transmitterId,
 		eventType: lastEvent.eventType,
 		display,
 		label: 'SAGE',

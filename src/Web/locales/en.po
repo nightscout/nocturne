@@ -53,6 +53,7 @@ msgid "Carb Correction"
 msgstr "Carb Correction"
 
 #: src/lib/components/TreatmentEditModal.svelte
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 msgid "Note"
@@ -501,6 +502,7 @@ msgstr "Failed to create socket connection"
 msgid "Connection error"
 msgstr "Connection error"
 
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/stores/realtime-store.svelte.ts
 #: src/lib/websocket/websocket-client.svelte.ts
@@ -810,7 +812,7 @@ msgstr "Insulin:"
 #. placeholder {0}: day.totalInsulin.toFixed(1)
 #. placeholder {0}: monthSummary.avgInsulin.toFixed(1)
 #. placeholder {0}: dayTotalInsulin.toFixed(1)
-#. placeholder {0}: meal.treatment.insulin.toFixed(1)
+#. placeholder {0}: meal.correlatedBolus.insulin.toFixed(1)
 #. placeholder {0}: treatment.insulin.toFixed(2)
 #. placeholder {0}: formatInsulinDisplay(row.insulin)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
@@ -1015,8 +1017,6 @@ msgstr "Comparison Error"
 
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
@@ -1676,6 +1676,7 @@ msgstr "Your database"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/treatments/TreatmentCategoryTabs.svelte
@@ -1839,26 +1840,18 @@ msgid "Failed to add food"
 msgstr "Failed to add food"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/routes/meals/+page.svelte
 msgid "Treatment updated"
 msgstr "Treatment updated"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
-#: src/routes/meals/+page.svelte
 msgid "Failed to update treatment"
 msgstr "Failed to update treatment"
 
-#: src/routes/meals/+page.svelte
-msgid "Treatment deleted"
-msgstr "Treatment deleted"
+#~ msgid "Treatment deleted"
+#~ msgstr "Treatment deleted"
 
-#: src/routes/meals/+page.svelte
-msgid "Failed to delete treatment"
-msgstr "Failed to delete treatment"
+#~ msgid "Failed to delete treatment"
+#~ msgstr "Failed to delete treatment"
 
 #: src/routes/meals/+page.svelte
 msgid "No foods attributed"
@@ -2043,7 +2036,6 @@ msgid "Unattributed"
 msgstr "Unattributed"
 
 #: src/routes/clock/+page.svelte
-#: src/routes/meals/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 msgid "Edit"
 msgstr "Edit"
@@ -2063,10 +2055,8 @@ msgstr "Attributed: {0}g"
 msgid "Unspecified: {0}g"
 msgstr "Unspecified: {0}g"
 
-#. placeholder {0}: meal.treatment.notes
-#: src/routes/meals/+page.svelte
-msgid "Notes: {0}"
-msgstr "Notes: {0}"
+#~ msgid "Notes: {0}"
+#~ msgstr "Notes: {0}"
 
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
@@ -2778,33 +2768,30 @@ msgid "Prediction unavailable"
 msgstr "Prediction unavailable"
 
 #: src/lib/components/dashboard/RecentEntriesCard.svelte
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 msgid "Recent Entries"
 msgstr "Recent Entries"
 
 #: src/lib/components/dashboard/RecentEntriesCard.svelte
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 msgid "No recent entries"
 msgstr "No recent entries"
 
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-msgid "Recent Treatments"
-msgstr "Recent Treatments"
+#~ msgid "Recent Treatments"
+#~ msgstr "Recent Treatments"
 
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-msgid "Last 6 hours"
-msgstr "Last 6 hours"
+#~ msgid "Last 6 hours"
+#~ msgstr "Last 6 hours"
 
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-msgid "Error loading recent treatments."
-msgstr "Error loading recent treatments."
+#~ msgid "Error loading recent treatments."
+#~ msgstr "Error loading recent treatments."
 
-#. placeholder {0}: treatment.carbs
 #. placeholder {0}: foodEntry.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: foodCarbs
 #. placeholder {0}: (insulinStats.totalCarbs ?? 0).toFixed(0)
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -2814,14 +2801,11 @@ msgstr "Error loading recent treatments."
 msgid "{0}g carbs"
 msgstr "{0}g carbs"
 
-#. placeholder {0}: treatment.insulin
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-msgid "{0}u insulin"
-msgstr "{0}u insulin"
+#~ msgid "{0}u insulin"
+#~ msgstr "{0}u insulin"
 
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-msgid "No recent treatments"
-msgstr "No recent treatments"
+#~ msgid "No recent treatments"
+#~ msgstr "No recent treatments"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
@@ -2835,6 +2819,7 @@ msgstr "Temp Basal"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
@@ -2931,7 +2916,6 @@ msgid "Tracker"
 msgstr "Tracker"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Treatment"
 msgstr "Treatment"
 
@@ -3065,12 +3049,10 @@ msgid "Activity"
 msgstr "Activity"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Multiple Treatments"
 msgstr "Multiple Treatments"
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
-#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Several treatments occurred around this time. Select one to edit."
 msgstr "Several treatments occurred around this time. Select one to edit."
 
@@ -3238,6 +3220,7 @@ msgstr "Profile Switch"
 msgid "Question"
 msgstr "Question"
 
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "BG Check"
 msgstr "BG Check"
@@ -13542,3 +13525,23 @@ msgstr "Create a new entry. Add multiple record types to correlate them."
 #: src/lib/components/entries/EntryEditDialog.svelte
 msgid "<0/> Add Section"
 msgstr "<0/> Add Section"
+
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+msgid "Last 24 hours"
+msgstr "Last 24 hours"
+
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+msgid "Device Event"
+msgstr "Device Event"
+
+#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+msgid "Error loading recent entries."
+msgstr "Error loading recent entries."
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
+msgid "Multiple Entries"
+msgstr "Multiple Entries"
+
+#: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
+msgid "Several entries occurred around this time. Select one to edit."
+msgstr "Several entries occurred around this time. Select one to edit."

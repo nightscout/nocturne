@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Treatment } from "$lib/api";
+  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import {
     Card,
     CardContent,
@@ -9,58 +10,65 @@
   import { Badge } from "$lib/components/ui/badge";
   import { formatTime } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { TreatmentEditDialog } from "$lib/components/treatments";
-  import { updateTreatment } from "$lib/data/treatments.remote";
-  import { toast } from "svelte-sonner";
+  import { EntryEditDialog } from "$lib/components/entries";
 
   interface ComponentProps {
-    treatments?: Treatment[];
-    maxTreatments?: number;
+    entries?: EntryRecord[];
+    maxEntries?: number;
     title?: string;
     subtitle?: string;
   }
 
   let {
-    treatments,
-    maxTreatments = 5,
-    title = "Recent Treatments",
-    subtitle = "Last 6 hours",
+    entries,
+    maxEntries = 5,
+    title = "Recent Entries",
+    subtitle = "Last 24 hours",
   }: ComponentProps = $props();
 
   const realtimeStore = getRealtimeStore();
 
-  // Use realtime store treatments as fallback when treatments prop not provided
-  // Filter and limit treatments (commented out time filtering from original, keeping limit only)
-  const displayTreatments = $derived(
-    (treatments ?? realtimeStore.treatments)
-      // .filter((t) => {
-      //   const treatmentTime = t.mills || new Date().getTime();
-      //   return treatmentTime > Date.now() - 6 * 60 * 60 * 1000;
-      // })
-      .slice(0, maxTreatments)
+  const displayEntries = $derived(
+    (entries ?? realtimeStore.recentEntries).slice(0, maxEntries),
   );
 
-  let selectedTreatment = $state<Treatment | null>(null);
+  let selectedEntry = $state<EntryRecord | null>(null);
+  let correlatedRecords = $state<EntryRecord[]>([]);
   let isDialogOpen = $state(false);
-  let isUpdating = $state(false);
 
-  function handleTreatmentClick(treatment: Treatment) {
-    selectedTreatment = treatment;
+  function handleEntryClick(entry: EntryRecord) {
+    selectedEntry = entry;
+    correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
     isDialogOpen = true;
   }
 
-  async function handleSave(updatedTreatment: Treatment) {
-    isUpdating = true;
-    try {
-      await updateTreatment({ ...updatedTreatment });
-      toast.success("Treatment updated");
-      isDialogOpen = false;
-      selectedTreatment = null;
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to update treatment");
-    } finally {
-      isUpdating = false;
+  function getEntryLabel(entry: EntryRecord): string {
+    switch (entry.kind) {
+      case "bolus":
+        return entry.data.insulin ? `${entry.data.insulin}u insulin` : "Bolus";
+      case "carbs":
+        return entry.data.carbs ? `${entry.data.carbs}g carbs` : "Carbs";
+      case "bgCheck":
+        return entry.data.mgdl ? `${entry.data.mgdl} mg/dL` : "BG Check";
+      case "note":
+        return entry.data.text ?? "Note";
+      case "deviceEvent":
+        return entry.data.eventType ?? "Device Event";
+    }
+  }
+
+  function getEntryDetails(entry: EntryRecord): string {
+    switch (entry.kind) {
+      case "bolus":
+        return entry.data.bolusType ?? "";
+      case "carbs":
+        return entry.data.foodType ?? "";
+      case "bgCheck":
+        return entry.data.glucoseType ?? "";
+      case "note":
+        return entry.data.isAnnouncement ? "Announcement" : "";
+      case "deviceEvent":
+        return entry.data.notes ?? "";
     }
   }
 </script>
@@ -75,69 +83,67 @@
       </div>
     {/snippet}
     {#snippet failed(_error)}
-      <p class="text-red-500 text-center">Error loading recent treatments.</p>
+      <p class="text-red-500 text-center">Error loading recent entries.</p>
     {/snippet}
     <CardHeader class="px-3 @md:px-6">
       <CardTitle>{title}</CardTitle>
       <p class="text-sm text-muted-foreground">{subtitle}</p>
     </CardHeader>
     <CardContent class="px-3 @md:px-6">
-      {#if displayTreatments.length > 0}
+      {#if displayEntries.length > 0}
         <div class="space-y-2 @md:space-y-3">
-          {#each displayTreatments as treatment (treatment._id || treatment.mills)}
+          {#each displayEntries as entry (entry.data.id ?? entry.data.mills)}
+            {@const category = ENTRY_CATEGORIES[entry.kind]}
             <div
               class="flex items-center justify-between p-2 @md:p-3 bg-muted rounded-lg cursor-pointer hover:bg-muted/80 transition-colors"
-              onclick={() => handleTreatmentClick(treatment)}
+              onclick={() => handleEntryClick(entry)}
               role="button"
               tabindex="0"
               onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  handleTreatmentClick(treatment);
+                  handleEntryClick(entry);
                 }
               }}
             >
               <div class="flex items-center gap-2 @md:gap-3">
-                <Badge variant="outline" class="text-xs @md:text-sm">{treatment.eventType}</Badge>
+                <Badge variant="outline" class="text-xs @md:text-sm {category.colorClass}">
+                  {category.name}
+                </Badge>
                 <div>
                   <div class="font-medium">
-                    {#if treatment.carbs}
-                      {treatment.carbs}g carbs
-                    {/if}
-                    {#if treatment.insulin}
-                      {treatment.insulin}u insulin
-                    {/if}
-                    {#if treatment.notes}
-                      - {treatment.notes}
+                    {getEntryLabel(entry)}
+                    {#if getEntryDetails(entry)}
+                      <span class="text-muted-foreground"> - {getEntryDetails(entry)}</span>
                     {/if}
                   </div>
                   <div class="text-sm text-muted-foreground">
-                    {formatTime(treatment.mills!)}
+                    {formatTime(entry.data.mills!)}
                   </div>
                 </div>
               </div>
               <div class="text-sm text-muted-foreground">
-                {treatment.enteredBy || "Unknown"}
+                {entry.data.dataSource || ""}
               </div>
             </div>
           {/each}
         </div>
       {:else}
         <p class="text-muted-foreground text-center py-8">
-          No recent treatments
+          No recent entries
         </p>
       {/if}
     </CardContent>
   </svelte:boundary>
 </Card>
 
-<TreatmentEditDialog
+<EntryEditDialog
   bind:open={isDialogOpen}
-  treatment={selectedTreatment}
-  isLoading={isUpdating}
+  entry={selectedEntry}
+  {correlatedRecords}
   onClose={() => {
     isDialogOpen = false;
-    selectedTreatment = null;
+    selectedEntry = null;
+    correlatedRecords = [];
   }}
-  onSave={handleSave}
 />

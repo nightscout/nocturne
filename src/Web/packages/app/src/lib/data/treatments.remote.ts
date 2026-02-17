@@ -118,11 +118,6 @@ export const getAllTreatments = query(
   }
 );
 
-// Note: Mutations (update, delete) are handled via SvelteKit form actions in +page.server.ts
-// This file only contains query functions for fetching data
-// Treatment statistics (TDD, basal/bolus split) come from the backend statistics endpoints
-// (getMultiPeriodStatistics, getInsulinDeliveryStatistics) — never computed client-side.
-
 /**
  * Create a new treatment
  */

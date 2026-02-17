@@ -15,7 +15,8 @@
     CompletionReason,
   } from "$api";
   import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
-  import * as treatmentsRemote from "$lib/data/treatments.remote";
+  import { createDeviceEvent } from "$lib/data/generated/observations.generated.remote";
+  import { DeviceEventType } from "$api";
 
   interface TrackerStartDialogProps {
     open: boolean;
@@ -190,13 +191,14 @@
         scheduledAt: isEventMode ? (scheduledAt ? scheduledAt.toISOString() : undefined) : undefined,
       });
 
-      // Create treatment event if configured on the definition
+      // Create device event if configured on the definition
       if (definition.startEventType) {
-        await treatmentsRemote.createTreatment({
-          eventType: definition.startEventType,
-          created_at: (startedAt ?? new Date()).toISOString(),
+        const mills = (startedAt ?? new Date()).getTime();
+        await createDeviceEvent({
+          eventType: definition.startEventType as DeviceEventType,
+          mills,
           notes: startNotes || undefined,
-          enteredBy: "Nocturne Tracker",
+          app: "Nocturne Tracker",
         });
       }
 

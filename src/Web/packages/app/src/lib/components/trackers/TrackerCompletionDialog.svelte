@@ -8,9 +8,9 @@
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Check } from "lucide-svelte";
-  import { CompletionReason, TrackerCategory } from "$api";
+  import { CompletionReason, TrackerCategory, DeviceEventType } from "$api";
   import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
-  import * as treatmentsRemote from "$lib/data/treatments.remote";
+  import { createDeviceEvent } from "$lib/data/generated/observations.generated.remote";
 
   interface TrackerCompletionDialogProps {
     open: boolean;
@@ -177,15 +177,14 @@
         });
       }
 
-      // Create treatment event if configured
+      // Create device event if configured
       if (completionEventType) {
-        await treatmentsRemote.createTreatment({
-          eventType: completionEventType,
-          created_at: completedAt
-            ? new Date(completedAt).toISOString()
-            : new Date().toISOString(),
+        const mills = completedAt ? new Date(completedAt).getTime() : Date.now();
+        await createDeviceEvent({
+          eventType: completionEventType as DeviceEventType,
+          mills,
           notes: completionNotes || undefined,
-          enteredBy: "Nocturne Tracker",
+          app: "Nocturne Tracker",
         });
       }
 

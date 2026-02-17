@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { getRequestEvent, query, command } from "$app/server";
-import type { Entry, UserAlarmConfiguration } from "$lib/api";
+import type { Entry, SensorGlucose, UserAlarmConfiguration } from "$lib/api";
 
 const DebugSnapshotSchema = z
   .object({
@@ -18,10 +18,10 @@ export const getAlertsDebugSnapshot = query(
     try {
       const [alarmConfiguration, entries] = await Promise.all([
         apiClient.uiSettings.getAlarmConfiguration(),
-        apiClient.entries.getEntries2(undefined, 1, undefined, "sgv", 1),
+        apiClient.glucose.getSensorGlucose(undefined, undefined, 1),
       ]);
 
-      const latestEntry: Entry | null = entries?.[0] ?? null;
+      const latestEntry: SensorGlucose | null = entries?.data?.[0] ?? null;
 
       return {
         alarmConfiguration: alarmConfiguration as UserAlarmConfiguration,

@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { type Treatment, type BasalPoint } from "$lib/api";
-  import { TreatmentEditDialog } from "$lib/components/treatments";
-  import { updateTreatment } from "$lib/data/treatments.remote";
-  import { toast } from "svelte-sonner";
+  import type { BasalPoint } from "$lib/api";
+  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import { EntryEditDialog } from "$lib/components/entries";
   import {
     Card,
     CardContent,
@@ -176,11 +175,11 @@
     }
   }
 
-  // Treatment edit dialog state
-  let selectedTreatment = $state<Treatment | null>(null);
-  let isTreatmentDialogOpen = $state(false);
-  let isUpdatingTreatment = $state(false);
-  let nearbyTreatments = $state<Treatment[]>([]);
+  // Entry edit dialog state
+  let selectedEntry = $state<EntryRecord | null>(null);
+  let correlatedRecords = $state<EntryRecord[]>([]);
+  let isEntryDialogOpen = $state(false);
+  let nearbyEntries = $state<EntryRecord[]>([]);
   let isDisambiguationOpen = $state(false);
 
   // ===== DERIVED VALUES =====
@@ -703,25 +702,23 @@
     return series[i - 1];
   }
 
-  // Treatment handling — look up treatment by ID from realtime store
+  // Entry handling — look up v4 records by marker treatmentId from realtime store
   const TREATMENT_PROXIMITY_MS = 5 * 60 * 1000;
 
-  function findTreatmentById(treatmentId: string): Treatment | undefined {
-    return (realtimeStore.treatments as Treatment[]).find(
-      (t) => t._id === treatmentId
-    );
-  }
-
-  function findAllNearbyTreatments(time: Date): Treatment[] {
-    const nearby: Treatment[] = [];
+  function findAllNearbyEntries(time: Date): EntryRecord[] {
+    const nearby: EntryRecord[] = [];
+    const seen = new Set<string>();
 
     for (const marker of bolusMarkers) {
       if (
         Math.abs(marker.time.getTime() - time.getTime()) <
         TREATMENT_PROXIMITY_MS
       ) {
-        const t = findTreatmentById(marker.treatmentId ?? "");
-        if (t && !nearby.some((n) => n._id === t._id)) nearby.push(t);
+        const entry = realtimeStore.findEntryByTreatmentId(marker.treatmentId ?? "");
+        if (entry && entry.data.id && !seen.has(entry.data.id)) {
+          seen.add(entry.data.id);
+          nearby.push(entry);
+        }
       }
     }
 
@@ -730,8 +727,11 @@
         Math.abs(marker.time.getTime() - time.getTime()) <
         TREATMENT_PROXIMITY_MS
       ) {
-        const t = findTreatmentById(marker.treatmentId ?? "");
-        if (t && !nearby.some((n) => n._id === t._id)) nearby.push(t);
+        const entry = realtimeStore.findEntryByTreatmentId(marker.treatmentId ?? "");
+        if (entry && entry.data.id && !seen.has(entry.data.id)) {
+          seen.add(entry.data.id);
+          nearby.push(entry);
+        }
       }
     }
 
@@ -739,44 +739,28 @@
   }
 
   function handleMarkerClick(treatmentId: string) {
-    const treatment = findTreatmentById(treatmentId);
-    if (!treatment) return;
+    const entry = realtimeStore.findEntryByTreatmentId(treatmentId);
+    if (!entry) return;
 
-    const time = new Date(
-      treatment.mills ??
-        (treatment.created_at ? new Date(treatment.created_at).getTime() : 0)
-    );
-    const nearby = findAllNearbyTreatments(time);
+    const time = new Date(entry.data.mills ?? 0);
+    const nearby = findAllNearbyEntries(time);
 
     if (nearby.length <= 1) {
-      selectedTreatment = treatment;
-      isTreatmentDialogOpen = true;
+      selectedEntry = entry;
+      correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
+      isEntryDialogOpen = true;
     } else {
-      nearbyTreatments = nearby;
+      nearbyEntries = nearby;
       isDisambiguationOpen = true;
     }
   }
 
-  function selectTreatmentFromList(treatment: Treatment) {
+  function selectEntryFromList(entry: EntryRecord) {
     isDisambiguationOpen = false;
-    nearbyTreatments = [];
-    selectedTreatment = treatment;
-    isTreatmentDialogOpen = true;
-  }
-
-  async function handleTreatmentSave(updatedTreatment: Treatment) {
-    isUpdatingTreatment = true;
-    try {
-      await updateTreatment({ ...updatedTreatment });
-      toast.success("Treatment updated");
-      isTreatmentDialogOpen = false;
-      selectedTreatment = null;
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to update treatment");
-    } finally {
-      isUpdatingTreatment = false;
-    }
+    nearbyEntries = [];
+    selectedEntry = entry;
+    correlatedRecords = realtimeStore.findCorrelatedEntries(entry);
+    isEntryDialogOpen = true;
   }
 
   // Tooltip finders
@@ -1222,25 +1206,25 @@
   </Card>
 {/if}
 
-<!-- Treatment Edit Dialog -->
-<TreatmentEditDialog
-  bind:open={isTreatmentDialogOpen}
-  treatment={selectedTreatment}
-  isLoading={isUpdatingTreatment}
+<!-- Entry Edit Dialog -->
+<EntryEditDialog
+  bind:open={isEntryDialogOpen}
+  entry={selectedEntry}
+  {correlatedRecords}
   onClose={() => {
-    isTreatmentDialogOpen = false;
-    selectedTreatment = null;
+    isEntryDialogOpen = false;
+    selectedEntry = null;
+    correlatedRecords = [];
   }}
-  onSave={handleTreatmentSave}
 />
 
 <!-- Disambiguation Dialog -->
 <TreatmentDisambiguationDialog
   bind:open={isDisambiguationOpen}
-  treatments={nearbyTreatments}
-  onSelect={selectTreatmentFromList}
+  entries={nearbyEntries}
+  onSelect={selectEntryFromList}
   onClose={() => {
     isDisambiguationOpen = false;
-    nearbyTreatments = [];
+    nearbyEntries = [];
   }}
 />

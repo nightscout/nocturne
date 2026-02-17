@@ -2,7 +2,6 @@
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
 import type {
   Entry,
-  Treatment,
   WebSocketConfig,
   DataUpdateEvent,
   StorageEvent,
@@ -10,8 +9,23 @@ import type {
   AlarmEvent,
   TrackerUpdateEvent,
 } from "$lib/websocket/types";
-import type { DeviceStatus, Profile, TrackerInstanceDto, TrackerDefinitionDto, InAppNotificationDto } from "$lib/api";
+import type {
+  DeviceStatus,
+  Profile,
+  TrackerInstanceDto,
+  TrackerDefinitionDto,
+  InAppNotificationDto,
+  Bolus,
+  CarbIntake,
+  BGCheck,
+  Note,
+  DeviceEvent,
+} from "$lib/api";
 import { NotificationUrgency } from "$lib/api";
+import {
+  mergeEntryRecords,
+  type EntryRecord,
+} from "$lib/constants/entry-categories";
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
@@ -44,12 +58,18 @@ export class RealtimeStore {
 
   /** Reactive state using Svelte 5 runes - using $state.raw for arrays to avoid deep proxy issues */
   entries = $state.raw<Entry[]>([]);
-  treatments = $state.raw<Treatment[]>([]);
   deviceStatuses = $state.raw<DeviceStatus[]>([]);
   profile = $state<Profile | null>(null);
   trackerInstances = $state.raw<TrackerInstanceDto[]>([]);
   trackerDefinitions = $state.raw<TrackerDefinitionDto[]>([]);
   inAppNotifications = $state.raw<InAppNotificationDto[]>([]);
+
+  /** V4 record types — used by dashboard and entry components */
+  boluses = $state.raw<Bolus[]>([]);
+  carbIntakes = $state.raw<CarbIntake[]>([]);
+  bgChecks = $state.raw<BGCheck[]>([]);
+  notes = $state.raw<Note[]>([]);
+  deviceEvents = $state.raw<DeviceEvent[]>([]);
 
   /** Password reset request counter - increments on each request to trigger refreshes */
   passwordResetRequestCount = $state(0);
@@ -118,12 +138,16 @@ export class RealtimeStore {
     return `${mins} min ago`;
   });
 
-  /** Recent treatments */
-  recentTreatments = $derived.by(() => {
+  /** Recent v4 entries — merged boluses + carb intakes + bg checks + notes + device events */
+  recentEntries = $derived.by((): EntryRecord[] => {
     const oneDayAgo = this.now - 24 * 60 * 60 * 1000;
-    return this.treatments
-      .filter((t) => (t.mills || 0) > oneDayAgo)
-      .sort((a, b) => (b.mills || 0) - (a.mills || 0));
+    return mergeEntryRecords({
+      boluses: this.boluses.filter((b) => (b.mills ?? 0) > oneDayAgo),
+      carbIntakes: this.carbIntakes.filter((c) => (c.mills ?? 0) > oneDayAgo),
+      bgChecks: this.bgChecks.filter((b) => (b.mills ?? 0) > oneDayAgo),
+      notes: this.notes.filter((n) => (n.mills ?? 0) > oneDayAgo),
+      deviceEvents: this.deviceEvents.filter((d) => (d.mills ?? 0) > oneDayAgo),
+    });
   });
 
   /** Processed pills data (COB, IOB, CAGE, SAGE, Loop, Basal) */
@@ -131,7 +155,9 @@ export class RealtimeStore {
     // Use hardcoded mg/dL - components handle display formatting themselves
     return processPillsData(
       this.deviceStatuses,
-      this.treatments,
+      this.boluses,
+      this.carbIntakes,
+      this.deviceEvents,
       this.profile,
       { units: "mg/dL" }
     );
@@ -213,14 +239,32 @@ export class RealtimeStore {
     try {
       // Fetch historical data using the properly configured API client
       const apiClient = getApiClient();
-      const [historicalEntries, historicalTreatments, deviceStatusData, profileData, trackerDefs, trackerActive, notifications] = await Promise.all([
+      const oneDayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      const [
+        historicalEntries,
+        deviceStatusData,
+        profileData,
+        trackerDefs,
+        trackerActive,
+        notifications,
+        historicalBoluses,
+        historicalCarbIntakes,
+        historicalBgChecks,
+        historicalNotes,
+        historicalDeviceEvents,
+      ] = await Promise.all([
         apiClient.entries.getEntries2(undefined, 1000),
-        apiClient.treatments.getTreatments(undefined, 500),
         apiClient.deviceStatus.getDeviceStatus2(undefined, 100).catch(() => []),
         apiClient.profile.getProfiles2(1).catch(() => []),
         apiClient.trackers.getDefinitions().catch(() => []),
         apiClient.trackers.getActiveInstances().catch(() => []),
         apiClient.v2Notifications.getNotifications().catch(() => []),
+        apiClient.insulin.getBoluses(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.nutrition.getCarbIntakes(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.observations.getBGChecks(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.observations.getNotes(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.observations.getDeviceEvents(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
       ]);
 
       // Defer all state updates to a microtask to completely break out of the
@@ -230,12 +274,6 @@ export class RealtimeStore {
         if (historicalEntries && historicalEntries.length > 0) {
           this.entries = historicalEntries.sort(
             (a: Entry, b: Entry) => (b.mills || 0) - (a.mills || 0)
-          );
-        }
-
-        if (historicalTreatments && historicalTreatments.length > 0) {
-          this.treatments = historicalTreatments.sort(
-            (a: Treatment, b: Treatment) => (b.mills || 0) - (a.mills || 0)
           );
         }
 
@@ -259,6 +297,33 @@ export class RealtimeStore {
 
         if (notifications && notifications.length > 0) {
           this.inAppNotifications = notifications;
+        }
+
+        // Populate v4 record arrays
+        if (historicalBoluses && historicalBoluses.length > 0) {
+          this.boluses = historicalBoluses.sort(
+            (a: Bolus, b: Bolus) => (b.mills || 0) - (a.mills || 0)
+          );
+        }
+        if (historicalCarbIntakes && historicalCarbIntakes.length > 0) {
+          this.carbIntakes = historicalCarbIntakes.sort(
+            (a: CarbIntake, b: CarbIntake) => (b.mills || 0) - (a.mills || 0)
+          );
+        }
+        if (historicalBgChecks && historicalBgChecks.length > 0) {
+          this.bgChecks = historicalBgChecks.sort(
+            (a: BGCheck, b: BGCheck) => (b.mills || 0) - (a.mills || 0)
+          );
+        }
+        if (historicalNotes && historicalNotes.length > 0) {
+          this.notes = historicalNotes.sort(
+            (a: Note, b: Note) => (b.mills || 0) - (a.mills || 0)
+          );
+        }
+        if (historicalDeviceEvents && historicalDeviceEvents.length > 0) {
+          this.deviceEvents = historicalDeviceEvents.sort(
+            (a: DeviceEvent, b: DeviceEvent) => (b.mills || 0) - (a.mills || 0)
+          );
         }
 
         this.isReady = true;
@@ -382,19 +447,6 @@ export class RealtimeStore {
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
           .slice(0, 1000);
       }
-    } else if (colName === "treatments" && this.isTreatment(doc)) {
-      const exists = this.treatments.some(
-        (treatment) =>
-          treatment._id === doc._id ||
-          (treatment.mills === doc.mills &&
-            treatment.eventType === doc.eventType)
-      );
-
-      if (!exists) {
-        this.treatments = [doc, ...this.treatments]
-          .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-          .slice(0, 500);
-      }
     } else if (colName === "devicestatus" && this.isDeviceStatus(doc)) {
       const exists = this.deviceStatuses.some(
         (ds) => ds._id === doc._id
@@ -424,19 +476,6 @@ export class RealtimeStore {
         // If not found, treat as create
         this.handleCreate(event);
       }
-    } else if (colName === "treatments" && this.isTreatment(doc)) {
-      const index = this.treatments.findIndex(
-        (treatment) => treatment._id === doc._id
-      );
-      if (index !== -1) {
-        this.treatments = [
-          ...this.treatments.slice(0, index),
-          doc,
-          ...this.treatments.slice(index + 1),
-        ];
-      } else {
-        this.handleCreate(event);
-      }
     }
   }
 
@@ -446,10 +485,6 @@ export class RealtimeStore {
 
     if (colName === "entries") {
       this.entries = this.entries.filter((entry) => entry._id !== doc._id);
-    } else if (colName === "treatments") {
-      this.treatments = this.treatments.filter(
-        (treatment) => treatment._id !== doc._id
-      );
     }
   }
 
@@ -561,16 +596,78 @@ export class RealtimeStore {
     );
   }
 
-  private isTreatment(obj: any): obj is Treatment {
-    return obj && typeof obj === "object" && "eventType" in obj;
-  }
-
   private isDeviceStatus(obj: any): obj is DeviceStatus {
     return (
       obj &&
       typeof obj === "object" &&
       ("device" in obj || "loop" in obj || "openaps" in obj || "pump" in obj)
     );
+  }
+
+  /**
+   * Find a v4 entry record by the treatmentId used in chart markers.
+   * Chart markers use `LegacyId ?? Id.ToString()` as treatmentId,
+   * so we match against both `legacyId` and `id` on v4 records.
+   */
+  findEntryByTreatmentId(treatmentId: string): EntryRecord | undefined {
+    const bolus = this.boluses.find(
+      (b) => b.id === treatmentId || b.legacyId === treatmentId,
+    );
+    if (bolus) return { kind: "bolus", data: bolus };
+
+    const carb = this.carbIntakes.find(
+      (c) => c.id === treatmentId || c.legacyId === treatmentId,
+    );
+    if (carb) return { kind: "carbs", data: carb };
+
+    const bg = this.bgChecks.find(
+      (b) => b.id === treatmentId || b.legacyId === treatmentId,
+    );
+    if (bg) return { kind: "bgCheck", data: bg };
+
+    const note = this.notes.find(
+      (n) => n.id === treatmentId || n.legacyId === treatmentId,
+    );
+    if (note) return { kind: "note", data: note };
+
+    const de = this.deviceEvents.find(
+      (d) => d.id === treatmentId || d.legacyId === treatmentId,
+    );
+    if (de) return { kind: "deviceEvent", data: de };
+
+    return undefined;
+  }
+
+  /**
+   * Find all v4 entry records correlated with a given record via correlationId.
+   * Excludes the record itself.
+   */
+  findCorrelatedEntries(record: EntryRecord): EntryRecord[] {
+    const corrId = record.data.correlationId;
+    if (!corrId) return [];
+
+    const results: EntryRecord[] = [];
+    for (const b of this.boluses) {
+      if (b.correlationId === corrId && b.id !== record.data.id)
+        results.push({ kind: "bolus", data: b });
+    }
+    for (const c of this.carbIntakes) {
+      if (c.correlationId === corrId && c.id !== record.data.id)
+        results.push({ kind: "carbs", data: c });
+    }
+    for (const bg of this.bgChecks) {
+      if (bg.correlationId === corrId && bg.id !== record.data.id)
+        results.push({ kind: "bgCheck", data: bg });
+    }
+    for (const n of this.notes) {
+      if (n.correlationId === corrId && n.id !== record.data.id)
+        results.push({ kind: "note", data: n });
+    }
+    for (const de of this.deviceEvents) {
+      if (de.correlationId === corrId && de.id !== record.data.id)
+        results.push({ kind: "deviceEvent", data: de });
+    }
+    return results;
   }
 
   /** Authenticate with API secret */
@@ -656,10 +753,15 @@ export class RealtimeStore {
 
       // Fetch all data types since last received using existing API methods
       // Note: getDeviceStatus2 doesn't support find queries, so we fetch recent and filter client-side
-      const [entries, treatments, deviceStatuses] = await Promise.all([
+      const nowMs = Date.now();
+      const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents] = await Promise.all([
         apiClient.entries.getEntries2(findQuery, 1000).catch(() => []),
-        apiClient.treatments.getTreatments(undefined, 500, undefined, findQuery).catch(() => []),
         apiClient.deviceStatus.getDeviceStatus2(100).catch(() => []),
+        apiClient.insulin.getBoluses(backfillFrom, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.nutrition.getCarbIntakes(backfillFrom, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.observations.getBGChecks(backfillFrom, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.observations.getNotes(backfillFrom, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.observations.getDeviceEvents(backfillFrom, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
       ]);
 
       let backfilledCount = 0;
@@ -680,22 +782,6 @@ export class RealtimeStore {
         }
       }
 
-      // Merge treatments
-      if (treatments && treatments.length > 0) {
-        const newTreatments = treatments.filter(
-          (newTreatment: Treatment) => !this.treatments.some(
-            (existing) => existing._id === newTreatment._id ||
-              (existing.mills === newTreatment.mills && existing.eventType === newTreatment.eventType)
-          )
-        );
-        if (newTreatments.length > 0) {
-          this.treatments = [...this.treatments, ...newTreatments]
-            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-            .slice(0, 500);
-          backfilledCount += newTreatments.length;
-        }
-      }
-
       // Merge device statuses (filter by timestamp since API doesn't support find query)
       if (deviceStatuses && deviceStatuses.length > 0) {
         const newStatuses = deviceStatuses.filter(
@@ -708,6 +794,63 @@ export class RealtimeStore {
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
             .slice(0, 100);
           backfilledCount += newStatuses.length;
+        }
+      }
+
+      // Merge v4 records
+      if (boluses && boluses.length > 0) {
+        const newBoluses = boluses.filter(
+          (b: Bolus) => !this.boluses.some((existing) => existing.id === b.id)
+        );
+        if (newBoluses.length > 0) {
+          this.boluses = [...this.boluses, ...newBoluses]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 500);
+          backfilledCount += newBoluses.length;
+        }
+      }
+      if (carbIntakes && carbIntakes.length > 0) {
+        const newCarbs = carbIntakes.filter(
+          (c: CarbIntake) => !this.carbIntakes.some((existing) => existing.id === c.id)
+        );
+        if (newCarbs.length > 0) {
+          this.carbIntakes = [...this.carbIntakes, ...newCarbs]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 500);
+          backfilledCount += newCarbs.length;
+        }
+      }
+      if (bgChecks && bgChecks.length > 0) {
+        const newBg = bgChecks.filter(
+          (b: BGCheck) => !this.bgChecks.some((existing) => existing.id === b.id)
+        );
+        if (newBg.length > 0) {
+          this.bgChecks = [...this.bgChecks, ...newBg]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 500);
+          backfilledCount += newBg.length;
+        }
+      }
+      if (notes && notes.length > 0) {
+        const newNotes = notes.filter(
+          (n: Note) => !this.notes.some((existing) => existing.id === n.id)
+        );
+        if (newNotes.length > 0) {
+          this.notes = [...this.notes, ...newNotes]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 500);
+          backfilledCount += newNotes.length;
+        }
+      }
+      if (devEvents && devEvents.length > 0) {
+        const newDevEvents = devEvents.filter(
+          (d: DeviceEvent) => !this.deviceEvents.some((existing) => existing.id === d.id)
+        );
+        if (newDevEvents.length > 0) {
+          this.deviceEvents = [...this.deviceEvents, ...newDevEvents]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 500);
+          backfilledCount += newDevEvents.length;
         }
       }
 
