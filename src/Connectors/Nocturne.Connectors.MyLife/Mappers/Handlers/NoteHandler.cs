@@ -11,7 +11,7 @@ internal sealed class NoteHandler : IMyLifeHandler
 {
     public bool CanHandle(MyLifeEvent ev)
     {
-        return ev.EventTypeId == MyLifeEventTypeIds.Alert;
+        return ev.EventTypeId == MyLifeEventType.Alert;
     }
 
     public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)

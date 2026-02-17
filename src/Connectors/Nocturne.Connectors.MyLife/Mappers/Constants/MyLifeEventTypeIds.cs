@@ -1,31 +1,33 @@
 namespace Nocturne.Connectors.MyLife.Mappers.Constants;
 
-internal static class MyLifeEventTypeIds
+public enum MyLifeEventType
 {
-    internal const int Glucose = 1;
-    internal const int ManualGlucose = 2;
-    internal const int TotalDailyDose = 3;
-    internal const int TempBasal = 4;
-    internal const int BolusNormal = 5;
-    internal const int BolusSquare = 6;
-    internal const int BolusDual = 7;
-    internal const int CarbCorrection = 8;
-    internal const int PodActivated = 10;
-    internal const int PodDeactivated = 11;
-    internal const int PumpSuspend = 12;
-    internal const int PumpResume = 13;
-    internal const int Alert = 14;
-    internal const int DateChanged = 15;
-    internal const int TimeChanged = 16;
-    internal const int BasalRate = 17;
-    internal const int Indication = 18;
-    internal const int SiteChange = 19;
-    internal const int Priming = 20;
-    internal const int Rewind = 21;
-    internal const int Basal = 22;
-    internal const int TubePriming = 23;
-    internal const int NeedlePriming = 24;
-    internal const int BolusMaxChanged = 25;
-    internal const int BasalMaxChanged = 26;
-    internal const int ManualGlucoseAlt = 27;
+    Glucose = 1,
+    ManualGlucose = 2,
+    TotalDailyDose = 3,
+    TempBasal = 4,
+    BolusNormal = 5,
+    BolusSquare = 6,
+    BolusDual = 7,
+    CarbCorrection = 8,
+    PodActivated = 10,
+    PodDeactivated = 11,
+    PumpSuspend = 12,
+    PumpResume = 13,
+    Alert = 14,
+    DateChanged = 15,
+    TimeChanged = 16,
+    BasalRate = 17,
+    Indication = 18,
+    SiteChange = 19,
+    Priming = 20,
+    Rewind = 21,
+    Basal = 22,
+    TubePriming = 23,
+    NeedlePriming = 24,
+    BolusMaxChanged = 25,
+    BasalMaxChanged = 26,
+    ManualGlucoseAlt = 27,
+    CgmGap = 28,
+    CgmSession = 30,
 }

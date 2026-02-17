@@ -15,7 +15,7 @@ internal sealed class IndicationHandler : IMyLifeHandler
     public bool CanHandle(MyLifeEvent ev)
     {
         // Indication events that are handled by ProfileSwitchHandler should not be handled here
-        if (ev.EventTypeId != MyLifeEventTypeIds.Indication)
+        if (ev.EventTypeId != MyLifeEventType.Indication)
             return false;
 
         // Check if this is a profile switch indication (handled separately)

@@ -15,7 +15,7 @@ internal sealed class BasalRateHandler : IMyLifeStateSpanHandler
 {
     public bool CanHandleStateSpan(MyLifeEvent ev)
     {
-        return ev.EventTypeId == MyLifeEventTypeIds.BasalRate;
+        return ev.EventTypeId == MyLifeEventType.BasalRate;
     }
 
     public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeContext context)

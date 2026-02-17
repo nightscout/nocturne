@@ -14,7 +14,7 @@ internal sealed class ProfileSwitchHandler : IMyLifeHandler
 {
     public bool CanHandle(MyLifeEvent ev)
     {
-        if (ev.EventTypeId != MyLifeEventTypeIds.Indication)
+        if (ev.EventTypeId != MyLifeEventType.Indication)
             return false;
 
         var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);

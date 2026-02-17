@@ -9,8 +9,6 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// </summary>
 public class MyLifeEventProcessor
 {
-    private readonly MyLifeSensorGlucoseMapper _sensorGlucoseMapper = new();
-
     private static readonly IReadOnlyList<IMyLifeHandler> Handlers =
     [
         new BGCheckHandler(),
@@ -30,7 +28,7 @@ public class MyLifeEventProcessor
         IEnumerable<MyLifeEvent> events,
         bool enableGlucoseSync)
     {
-        return _sensorGlucoseMapper.Map(events, enableGlucoseSync);
+        return MyLifeSensorGlucoseMapper.Map(events, enableGlucoseSync);
     }
 
     /// <summary>

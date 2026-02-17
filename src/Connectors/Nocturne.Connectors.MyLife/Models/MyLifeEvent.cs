@@ -1,3 +1,5 @@
+using Nocturne.Connectors.MyLife.Mappers.Constants;
+
 namespace Nocturne.Connectors.MyLife.Models;
 
 public class MyLifeEvent
@@ -14,7 +16,7 @@ public class MyLifeEvent
     public long EventDateTime { get; set; }
     public long LastEditTimeStamp { get; set; }
     public bool EventSourceIsManualEntry { get; set; }
-    public int EventTypeId { get; set; }
+    public MyLifeEventType EventTypeId { get; set; }
     public string? InformationFromDevice { get; set; }
     public string? PatientId { get; set; }
     public string? UserComment { get; set; }

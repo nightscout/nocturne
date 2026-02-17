@@ -10,7 +10,7 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// </summary>
 internal sealed class MyLifeSensorGlucoseMapper
 {
-    internal IEnumerable<SensorGlucose> Map(IEnumerable<MyLifeEvent> events, bool enableGlucoseSync)
+    internal static IEnumerable<SensorGlucose> Map(IEnumerable<MyLifeEvent> events, bool enableGlucoseSync)
     {
         if (!enableGlucoseSync)
             return [];
@@ -23,8 +23,8 @@ internal sealed class MyLifeSensorGlucoseMapper
 
             if (
                 ev.EventTypeId
-                is not MyLifeEventTypeIds.Glucose
-                    and not MyLifeEventTypeIds.ManualGlucoseAlt
+                is not MyLifeEventType.Glucose
+                    and not MyLifeEventType.ManualGlucoseAlt
             )
                 continue;
 

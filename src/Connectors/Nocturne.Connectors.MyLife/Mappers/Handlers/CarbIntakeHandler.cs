@@ -13,7 +13,7 @@ internal sealed class CarbIntakeHandler : IMyLifeHandler
 {
     public bool CanHandle(MyLifeEvent ev)
     {
-        return ev.EventTypeId == MyLifeEventTypeIds.CarbCorrection;
+        return ev.EventTypeId == MyLifeEventType.CarbCorrection;
     }
 
     public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)

@@ -61,8 +61,10 @@ internal sealed class MyLifeContext
         {
             foreach (var ev in events)
             {
-                if (ev.Deleted) continue;
-                if (ev.EventTypeId != MyLifeEventTypeIds.TempBasal) continue;
+                if (ev.Deleted)
+                    continue;
+                if (ev.EventTypeId != MyLifeEventType.TempBasal)
+                    continue;
 
                 var time = MyLifeMapperHelpers.ToUnixMilliseconds(ev.EventDateTime);
                 tempBasalProgramTimes.Add(time);
@@ -71,22 +73,35 @@ internal sealed class MyLifeContext
             var bestRateDistances = new Dictionary<long, long>();
             foreach (var ev in events)
             {
-                if (ev.Deleted) continue;
-                if (ev.EventTypeId != MyLifeEventTypeIds.BasalRate) continue;
+                if (ev.Deleted)
+                    continue;
+                if (ev.EventTypeId != MyLifeEventType.BasalRate)
+                    continue;
 
                 var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
-                if (!MyLifeMapperHelpers.TryGetInfoBool(info, MyLifeJsonKeys.IsTempBasalRate)) continue;
+                if (!MyLifeMapperHelpers.TryGetInfoBool(info, MyLifeJsonKeys.IsTempBasalRate))
+                    continue;
 
-                if (!MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.BasalRate, out var rate))
+                if (
+                    !MyLifeMapperHelpers.TryGetInfoDouble(
+                        info,
+                        MyLifeJsonKeys.BasalRate,
+                        out var rate
+                    )
+                )
                     continue;
 
                 var rateTime = MyLifeMapperHelpers.ToUnixMilliseconds(ev.EventDateTime);
                 foreach (var programTime in tempBasalProgramTimes)
                 {
                     var delta = Math.Abs(programTime - rateTime);
-                    if (delta > tempBasalWindowMs) continue;
+                    if (delta > tempBasalWindowMs)
+                        continue;
 
-                    if (bestRateDistances.TryGetValue(programTime, out var bestDelta) && delta >= bestDelta)
+                    if (
+                        bestRateDistances.TryGetValue(programTime, out var bestDelta)
+                        && delta >= bestDelta
+                    )
                         continue;
 
                     bestRateDistances[programTime] = delta;
@@ -111,9 +126,12 @@ internal sealed class MyLifeContext
         var carbEvents = new List<CarbEvent>();
         foreach (var ev in events)
         {
-            if (ev.Deleted) continue;
-            if (ev.EventTypeId != MyLifeEventTypeIds.CarbCorrection) continue;
-            if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var carbValue)) continue;
+            if (ev.Deleted)
+                continue;
+            if (ev.EventTypeId != MyLifeEventType.CarbCorrection)
+                continue;
+            if (!MyLifeMapperHelpers.TryParseDouble(ev.Value, out var carbValue))
+                continue;
 
             var time = MyLifeMapperHelpers.ToUnixMilliseconds(ev.EventDateTime);
             carbEvents.Add(new CarbEvent(time, carbValue));
@@ -121,11 +139,14 @@ internal sealed class MyLifeContext
 
         foreach (var ev in events)
         {
-            if (ev.Deleted) continue;
+            if (ev.Deleted)
+                continue;
 
-            if (ev.EventTypeId != MyLifeEventTypeIds.BolusNormal
-                && ev.EventTypeId != MyLifeEventTypeIds.BolusSquare
-                && ev.EventTypeId != MyLifeEventTypeIds.BolusDual)
+            if (
+                ev.EventTypeId != MyLifeEventType.BolusNormal
+                && ev.EventTypeId != MyLifeEventType.BolusSquare
+                && ev.EventTypeId != MyLifeEventType.BolusDual
+            )
                 continue;
 
             var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
@@ -137,7 +158,9 @@ internal sealed class MyLifeContext
             if (embeddedCarbs is > 0)
             {
                 bolusCarbMatches[key] = embeddedCarbs.Value;
-                foreach (var carbEvent in carbEvents.Where(c => Math.Abs(c.Time - eventTime) <= window))
+                foreach (
+                    var carbEvent in carbEvents.Where(c => Math.Abs(c.Time - eventTime) <= window)
+                )
                 {
                     suppressedCarbTimes.Add(carbEvent.Time);
                     carbEvent.Matched = true;
@@ -174,7 +197,8 @@ internal sealed class MyLifeContext
 
     internal bool ShouldSuppressTempBasalRate(long mills)
     {
-        if (!EnableTempBasalConsolidation) return false;
+        if (!EnableTempBasalConsolidation)
+            return false;
 
         var window = TempBasalConsolidationWindowMs;
         return TempBasalProgramTimes

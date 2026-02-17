@@ -11,18 +11,18 @@ namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
 /// </summary>
 internal sealed class DeviceEventHandler : IMyLifeHandler
 {
-    private static readonly Dictionary<int, DeviceEventType> EventTypeMapping = new()
+    private static readonly Dictionary<MyLifeEventType, DeviceEventType> EventTypeMapping = new()
     {
-        { MyLifeEventTypeIds.PodActivated, DeviceEventType.PodActivated },
-        { MyLifeEventTypeIds.PodDeactivated, DeviceEventType.PodDeactivated },
-        { MyLifeEventTypeIds.PumpSuspend, DeviceEventType.PumpSuspend },
-        { MyLifeEventTypeIds.PumpResume, DeviceEventType.PumpResume },
-        { MyLifeEventTypeIds.SiteChange, DeviceEventType.SiteChange },
-        { MyLifeEventTypeIds.Rewind, DeviceEventType.Rewind },
-        { MyLifeEventTypeIds.DateChanged, DeviceEventType.DateChanged },
-        { MyLifeEventTypeIds.TimeChanged, DeviceEventType.TimeChanged },
-        { MyLifeEventTypeIds.BolusMaxChanged, DeviceEventType.BolusMaxChanged },
-        { MyLifeEventTypeIds.BasalMaxChanged, DeviceEventType.BasalMaxChanged },
+        { MyLifeEventType.PodActivated, DeviceEventType.PodActivated },
+        { MyLifeEventType.PodDeactivated, DeviceEventType.PodDeactivated },
+        { MyLifeEventType.PumpSuspend, DeviceEventType.PumpSuspend },
+        { MyLifeEventType.PumpResume, DeviceEventType.PumpResume },
+        { MyLifeEventType.SiteChange, DeviceEventType.SiteChange },
+        { MyLifeEventType.Rewind, DeviceEventType.Rewind },
+        { MyLifeEventType.DateChanged, DeviceEventType.DateChanged },
+        { MyLifeEventType.TimeChanged, DeviceEventType.TimeChanged },
+        { MyLifeEventType.BolusMaxChanged, DeviceEventType.BolusMaxChanged },
+        { MyLifeEventType.BasalMaxChanged, DeviceEventType.BasalMaxChanged },
     };
 
     public bool CanHandle(MyLifeEvent ev)

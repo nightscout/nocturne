@@ -12,7 +12,7 @@ internal sealed class BGCheckHandler : IMyLifeHandler
 {
     public bool CanHandle(MyLifeEvent ev)
     {
-        return ev.EventTypeId == MyLifeEventTypeIds.ManualGlucose;
+        return ev.EventTypeId == MyLifeEventType.ManualGlucose;
     }
 
     public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)

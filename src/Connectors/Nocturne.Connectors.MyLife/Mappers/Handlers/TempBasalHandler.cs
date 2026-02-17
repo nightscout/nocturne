@@ -14,7 +14,7 @@ internal sealed class TempBasalHandler : IMyLifeStateSpanHandler
 {
     public bool CanHandleStateSpan(MyLifeEvent ev)
     {
-        return ev.EventTypeId == MyLifeEventTypeIds.TempBasal;
+        return ev.EventTypeId == MyLifeEventType.TempBasal;
     }
 
     public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeContext context)

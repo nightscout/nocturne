@@ -14,7 +14,7 @@ internal sealed class BasalAmountHandler : IMyLifeStateSpanHandler
 {
     public bool CanHandleStateSpan(MyLifeEvent ev)
     {
-        return ev.EventTypeId == MyLifeEventTypeIds.Basal;
+        return ev.EventTypeId == MyLifeEventType.Basal;
     }
 
     public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeContext context)

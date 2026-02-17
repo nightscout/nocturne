@@ -15,17 +15,17 @@ internal sealed class PrimingHandler : IMyLifeHandler
     public bool CanHandle(MyLifeEvent ev)
     {
         return ev.EventTypeId
-            is MyLifeEventTypeIds.Priming
-                or MyLifeEventTypeIds.TubePriming
-                or MyLifeEventTypeIds.NeedlePriming;
+            is MyLifeEventType.Priming
+                or MyLifeEventType.TubePriming
+                or MyLifeEventType.NeedlePriming;
     }
 
     public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)
     {
         var eventType = ev.EventTypeId switch
         {
-            MyLifeEventTypeIds.TubePriming => DeviceEventType.TubePriming,
-            MyLifeEventTypeIds.NeedlePriming => DeviceEventType.NeedlePriming,
+            MyLifeEventType.TubePriming => DeviceEventType.TubePriming,
+            MyLifeEventType.NeedlePriming => DeviceEventType.NeedlePriming,
             _ => DeviceEventType.Priming,
         };
 
@@ -43,7 +43,7 @@ internal sealed class PrimingHandler : IMyLifeHandler
         var results = new List<IV4Record> { MyLifeFactory.CreateDeviceEvent(ev, eventType, notes) };
 
         // Needle priming implies a site change
-        if (ev.EventTypeId == MyLifeEventTypeIds.NeedlePriming)
+        if (ev.EventTypeId == MyLifeEventType.NeedlePriming)
         {
             var siteChange = MyLifeFactory.CreateDeviceEvent(
                 ev,

@@ -15,9 +15,9 @@ internal sealed class BolusHandler : IMyLifeHandler
     public bool CanHandle(MyLifeEvent ev)
     {
         return ev.EventTypeId
-            is MyLifeEventTypeIds.BolusNormal
-                or MyLifeEventTypeIds.BolusSquare
-                or MyLifeEventTypeIds.BolusDual;
+            is MyLifeEventType.BolusNormal
+                or MyLifeEventType.BolusSquare
+                or MyLifeEventType.BolusDual;
     }
 
     public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)
@@ -54,8 +54,8 @@ internal sealed class BolusHandler : IMyLifeHandler
 
         var bolusType = ev.EventTypeId switch
         {
-            MyLifeEventTypeIds.BolusSquare => BolusType.Square,
-            MyLifeEventTypeIds.BolusDual => BolusType.Dual,
+            MyLifeEventType.BolusSquare => BolusType.Square,
+            MyLifeEventType.BolusDual => BolusType.Dual,
             _ => BolusType.Normal,
         };
 
