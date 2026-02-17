@@ -16,5 +16,5 @@ internal interface IMyLifeStateSpanHandler
     /// <summary>
     ///     Converts the event to StateSpans
     /// </summary>
-    IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeTreatmentContext context);
+    IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeContext context);
 }

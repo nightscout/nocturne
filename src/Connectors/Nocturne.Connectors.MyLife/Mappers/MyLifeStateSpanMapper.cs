@@ -12,9 +12,9 @@ internal sealed class MyLifeStateSpanMapper
 {
     private static readonly IReadOnlyList<IMyLifeStateSpanHandler> Handlers =
     [
-        new BasalRateTreatmentHandler(),
-        new BasalAmountTreatmentHandler(),
-        new TempBasalTreatmentHandler()
+        new BasalRateHandler(),
+        new BasalAmountHandler(),
+        new TempBasalHandler(),
     ];
 
     /// <summary>
@@ -27,25 +27,29 @@ internal sealed class MyLifeStateSpanMapper
     internal static IEnumerable<StateSpan> MapStateSpans(
         IEnumerable<MyLifeEvent> events,
         bool enableTempBasalConsolidation,
-        int tempBasalConsolidationWindowMinutes)
+        int tempBasalConsolidationWindowMinutes
+    )
     {
         // Create a context - we reuse the treatment context for consistency
         // with the temp basal consolidation logic
-        var context = MyLifeTreatmentContext.Create(
+        var context = MyLifeContext.Create(
             events,
             false,
             false,
             enableTempBasalConsolidation,
-            tempBasalConsolidationWindowMinutes);
+            tempBasalConsolidationWindowMinutes
+        );
 
         var stateSpans = new List<StateSpan>();
         foreach (var ev in events)
         {
-            if (ev.Deleted) continue;
+            if (ev.Deleted)
+                continue;
 
             foreach (var handler in Handlers)
             {
-                if (!handler.CanHandleStateSpan(ev)) continue;
+                if (!handler.CanHandleStateSpan(ev))
+                    continue;
 
                 stateSpans.AddRange(handler.HandleStateSpan(ev, context));
                 break;
@@ -70,11 +74,13 @@ internal sealed class MyLifeStateSpanMapper
             .Where(s =>
                 s.Category == StateSpanCategory.BasalDelivery
                 && !s.EndMills.HasValue
-                && s.StartMills > 0)
+                && s.StartMills > 0
+            )
             .OrderBy(s => s.StartMills)
             .ToList();
 
-        if (basalSpans.Count == 0) return;
+        if (basalSpans.Count == 0)
+            return;
 
         // Set each span's end time to the start of the next span
         for (var i = 0; i < basalSpans.Count - 1; i++)

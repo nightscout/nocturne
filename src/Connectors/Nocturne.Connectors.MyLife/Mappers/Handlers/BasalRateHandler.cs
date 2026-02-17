@@ -1,4 +1,3 @@
-using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
@@ -10,16 +9,16 @@ namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
 ///     Handler for MyLife BasalRate events (event ID 17) - Pump program basal rate changes.
 ///     These events report the current basal rate being delivered by the pump.
 ///     The IsTempBasalRate flag indicates if this is an algorithm-adjusted rate (CamAPS).
-///     Produces BasalDelivery StateSpans only - basal treatments are synthesized on-demand from v1-v3 endpoints.
+///     Produces BasalDelivery StateSpans.
 /// </summary>
-internal sealed class BasalRateTreatmentHandler : IMyLifeStateSpanHandler
+internal sealed class BasalRateHandler : IMyLifeStateSpanHandler
 {
     public bool CanHandleStateSpan(MyLifeEvent ev)
     {
         return ev.EventTypeId == MyLifeEventTypeIds.BasalRate;
     }
 
-    public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeTreatmentContext context)
+    public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeContext context)
     {
         var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
         if (!MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.BasalRate, out var rate)) return [];

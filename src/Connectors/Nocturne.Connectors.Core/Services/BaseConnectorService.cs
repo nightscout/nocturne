@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -83,9 +84,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         try
         {
-            var timestamp = await _publisher.GetLatestEntryTimestampAsync(
-                ConnectorSource
-            );
+            var timestamp = await _publisher.GetLatestEntryTimestampAsync(ConnectorSource);
             if (timestamp.HasValue)
                 _logger.LogInformation(
                     "Latest entry timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
@@ -126,9 +125,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         try
         {
-            var timestamp = await _publisher.GetLatestTreatmentTimestampAsync(
-                ConnectorSource
-            );
+            var timestamp = await _publisher.GetLatestTreatmentTimestampAsync(ConnectorSource);
             if (timestamp.HasValue)
                 _logger.LogInformation(
                     "Latest treatment timestamp from API for {ConnectorSource}: {Timestamp:yyyy-MM-dd HH:mm:ss} UTC",
@@ -162,7 +159,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         DateTime? defaultSince = null
     )
     {
-        if (defaultSince.HasValue) return defaultSince.Value;
+        if (defaultSince.HasValue)
+            return defaultSince.Value;
 
         // Get the most recent entry timestamp from Nocturne API
         var latestEntryTimestamp = await FetchLatestEntryTimestampAsync(config);
@@ -179,7 +177,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         DateTime? defaultSince = null
     )
     {
-        if (defaultSince.HasValue) return defaultSince.Value;
+        if (defaultSince.HasValue)
+            return defaultSince.Value;
 
         // Get the most recent treatment timestamp from Nocturne API
         var latestTreatmentTimestamp = await FetchLatestTreatmentTimestampAsync(config);
@@ -229,7 +228,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        if (!request.DataTypes.Any()) request.DataTypes = SupportedDataTypes;
+        if (!request.DataTypes.Any())
+            request.DataTypes = SupportedDataTypes;
 
         var tasks = request
             .DataTypes.Where(type => SupportedDataTypes.Contains(type))
@@ -250,7 +250,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                             );
                             var entryList = entries.ToList();
                             count = entryList.Count;
-                            if (count > 0) lastTime = entryList.Max(e => e.Date);
+                            if (count > 0)
+                                lastTime = entryList.Max(e => e.Date);
                             publishSuccess = await PublishGlucoseDataInBatchesAsync(
                                 entryList,
                                 config,
@@ -259,10 +260,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                             break;
 
                         case SyncDataType.Treatments:
-                            var treatments = await FetchTreatmentsAsync(
-                                request.From,
-                                request.To
-                            );
+                            var treatments = await FetchTreatmentsAsync(request.From, request.To);
                             var treatmentList = treatments.ToList();
                             count = treatmentList.Count;
                             if (count > 0)
@@ -283,7 +281,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
                         default:
                             // Other data types (Profiles, DeviceStatus, Activity, Food) not yet supported by connectors
-                            _logger.LogDebug("Data type {DataType} not supported by this connector", type);
+                            _logger.LogDebug(
+                                "Data type {DataType} not supported by this connector",
+                                type
+                            );
                             break;
                     }
 
@@ -388,9 +389,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         if (_publisher == null || !_publisher.IsAvailable)
         {
-            _logger?.LogWarning(
-                "Publisher not available for device status submission"
-            );
+            _logger?.LogWarning("Publisher not available for device status submission");
             return false;
         }
 
@@ -416,11 +415,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.PublishProfilesAsync(
-            profiles,
-            ConnectorSource,
-            cancellationToken
-        );
+        return await _publisher.PublishProfilesAsync(profiles, ConnectorSource, cancellationToken);
     }
 
     /// <summary>
@@ -452,9 +447,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         if (_publisher == null || !_publisher.IsAvailable)
         {
-            _logger?.LogWarning(
-                "Publisher not available for activity data submission"
-            );
+            _logger?.LogWarning("Publisher not available for activity data submission");
             return false;
         }
 
@@ -509,6 +502,152 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
+    #region V4 Publishing Methods
+
+    /// <summary>
+    ///     Submits V4 SensorGlucose data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishSensorGlucoseDataAsync(
+        IEnumerable<SensorGlucose> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for SensorGlucose submission");
+            return false;
+        }
+
+        return await _publisher.PublishSensorGlucoseAsync(
+            records,
+            ConnectorSource,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    ///     Submits V4 Bolus data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishBolusDataAsync(
+        IEnumerable<Bolus> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for Bolus submission");
+            return false;
+        }
+
+        return await _publisher.PublishBolusesAsync(records, ConnectorSource, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Submits V4 CarbIntake data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishCarbIntakeDataAsync(
+        IEnumerable<CarbIntake> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for CarbIntake submission");
+            return false;
+        }
+
+        return await _publisher.PublishCarbIntakesAsync(
+            records,
+            ConnectorSource,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    ///     Submits V4 BGCheck data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishBGCheckDataAsync(
+        IEnumerable<BGCheck> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for BGCheck submission");
+            return false;
+        }
+
+        return await _publisher.PublishBGChecksAsync(records, ConnectorSource, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Submits V4 BolusCalculation data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishBolusCalculationDataAsync(
+        IEnumerable<BolusCalculation> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for BolusCalculation submission");
+            return false;
+        }
+
+        return await _publisher.PublishBolusCalculationsAsync(
+            records,
+            ConnectorSource,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    ///     Submits V4 Note data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishNoteDataAsync(
+        IEnumerable<Note> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for Note submission");
+            return false;
+        }
+
+        return await _publisher.PublishNotesAsync(records, ConnectorSource, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Submits V4 DeviceEvent data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishDeviceEventDataAsync(
+        IEnumerable<DeviceEvent> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for DeviceEvent submission");
+            return false;
+        }
+
+        return await _publisher.PublishDeviceEventsAsync(
+            records,
+            ConnectorSource,
+            cancellationToken
+        );
+    }
+
+    #endregion
+
     /// <summary>
     ///     Publishes messages in batches to optimize throughput
     /// </summary>
@@ -519,7 +658,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         var entriesArray = entries.ToArray();
-        if (entriesArray.Length == 0) return true;
+        if (entriesArray.Length == 0)
+            return true;
 
         var batchSize = Math.Max(1, config.BatchSize);
         var batches = entriesArray
@@ -548,7 +688,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             batchNumber++;
 
             // Small delay between batches to avoid overwhelming the message bus
-            if (batchNumber > 1) await Task.Delay(10, cancellationToken);
+            if (batchNumber > 1)
+                await Task.Delay(10, cancellationToken);
         }
 
         return allSuccessful;
@@ -564,7 +705,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         var treatmentsArray = treatments.ToArray();
-        if (treatmentsArray.Length == 0) return true;
+        if (treatmentsArray.Length == 0)
+            return true;
 
         var batchSize = Math.Max(1, config.BatchSize);
         var batches = treatmentsArray
@@ -587,16 +729,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             if (!success)
             {
                 allSuccessful = false;
-                _logger?.LogWarning(
-                    "Failed to publish treatment batch {BatchNumber}",
-                    batchNumber
-                );
+                _logger?.LogWarning("Failed to publish treatment batch {BatchNumber}", batchNumber);
             }
 
             batchNumber++;
 
             // Small delay between batches to avoid overwhelming the message bus
-            if (batchNumber > 1) await Task.Delay(10, cancellationToken);
+            if (batchNumber > 1)
+                await Task.Delay(10, cancellationToken);
         }
 
         return allSuccessful;
@@ -624,10 +764,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             // Authenticate if needed
             if (!await AuthenticateAsync())
             {
-                _logger.LogError(
-                    "Authentication failed for {ConnectorSource}",
-                    ConnectorSource
-                );
+                _logger.LogError("Authentication failed for {ConnectorSource}", ConnectorSource);
                 return false;
             }
 
@@ -638,7 +775,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             {
                 From = sinceTimestamp,
                 To = null, // Open-ended for background sync
-                DataTypes = SupportedDataTypes
+                DataTypes = SupportedDataTypes,
             };
 
             var result = await PerformSyncInternalAsync(request, config, cancellationToken);
@@ -703,7 +840,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Gets whether the connector is in a healthy state based on recent request failures.
     ///     Returns false if consecutive failures exceed MaxFailedRequestsBeforeUnhealthy.
     /// </summary>
-    public virtual bool IsHealthy => Volatile.Read(ref _failedRequestCount) < MaxFailedRequestsBeforeUnhealthy;
+    public virtual bool IsHealthy =>
+        Volatile.Read(ref _failedRequestCount) < MaxFailedRequestsBeforeUnhealthy;
 
     /// <summary>
     ///     Gets the number of consecutive failed requests.
@@ -716,10 +854,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     public virtual void ResetFailedRequestCount()
     {
         Interlocked.Exchange(ref _failedRequestCount, 0);
-        _logger.LogInformation(
-            "[{ConnectorSource}] Failed request count reset",
-            ConnectorSource
-        );
+        _logger.LogInformation("[{ConnectorSource}] Failed request count reset", ConnectorSource);
     }
 
     /// <summary>
@@ -838,7 +973,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     ex.StatusCode
                 );
 
-                if (attempt < maxRetries - 1) await retryStrategy.ApplyRetryDelayAsync(attempt);
+                if (attempt < maxRetries - 1)
+                    await retryStrategy.ApplyRetryDelayAsync(attempt);
             }
             catch (HttpRequestException ex)
             {
@@ -895,7 +1031,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             maxRetries
         );
 
-        if (lastException != null) throw lastException;
+        if (lastException != null)
+            throw lastException;
 
         return default;
     }
@@ -924,7 +1061,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             foreach (var header in additionalHeaders)
                 request.Headers.TryAddWithoutValidation(header.Key, header.Value);
 
-        if (content != null) request.Content = content;
+        if (content != null)
+            request.Content = content;
 
         return await _httpClient.SendAsync(request, cancellationToken);
     }
@@ -938,7 +1076,13 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken = default
     )
     {
-        return SendWithHeadersAsync(HttpMethod.Get, url, additionalHeaders, null, cancellationToken);
+        return SendWithHeadersAsync(
+            HttpMethod.Get,
+            url,
+            additionalHeaders,
+            null,
+            cancellationToken
+        );
     }
 
     /// <summary>
@@ -967,11 +1111,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         return statusCode
             is HttpStatusCode.TooManyRequests
-            or HttpStatusCode.ServiceUnavailable
-            or HttpStatusCode.InternalServerError
-            or HttpStatusCode.BadGateway
-            or HttpStatusCode.GatewayTimeout
-            or HttpStatusCode.RequestTimeout;
+                or HttpStatusCode.ServiceUnavailable
+                or HttpStatusCode.InternalServerError
+                or HttpStatusCode.BadGateway
+                or HttpStatusCode.GatewayTimeout
+                or HttpStatusCode.RequestTimeout;
     }
 
     /// <summary>

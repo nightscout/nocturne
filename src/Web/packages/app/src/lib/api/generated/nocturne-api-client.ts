@@ -22785,6 +22785,19 @@ export enum DeviceEventType {
     ReservoirChange = "ReservoirChange",
     CannulaChange = "CannulaChange",
     TransmitterSensorInsert = "TransmitterSensorInsert",
+    PodActivated = "PodActivated",
+    PodDeactivated = "PodDeactivated",
+    PumpSuspend = "PumpSuspend",
+    PumpResume = "PumpResume",
+    Priming = "Priming",
+    TubePriming = "TubePriming",
+    NeedlePriming = "NeedlePriming",
+    Rewind = "Rewind",
+    DateChanged = "DateChanged",
+    TimeChanged = "TimeChanged",
+    BolusMaxChanged = "BolusMaxChanged",
+    BasalMaxChanged = "BasalMaxChanged",
+    ProfileSwitch = "ProfileSwitch",
 }
 
 export interface BgCheckMarkerDto {

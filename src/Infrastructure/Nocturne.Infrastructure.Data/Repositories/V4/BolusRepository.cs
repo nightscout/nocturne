@@ -18,15 +18,25 @@ public class BolusRepository : IBolusRepository
     }
 
     public async Task<IEnumerable<Bolus>> GetAsync(
-        long? from, long? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
+        long? from,
+        long? to,
+        string? device,
+        string? source,
+        int limit = 100,
+        int offset = 0,
+        bool descending = true,
+        CancellationToken ct = default
+    )
     {
         var query = _context.Boluses.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
-        if (device != null) query = query.Where(e => e.Device == device);
-        if (source != null) query = query.Where(e => e.DataSource == source);
+        if (from.HasValue)
+            query = query.Where(e => e.Mills >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Mills <= to.Value);
+        if (device != null)
+            query = query.Where(e => e.Device == device);
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
         query = descending ? query.OrderByDescending(e => e.Mills) : query.OrderBy(e => e.Mills);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(BolusMapper.ToDomainModel);
@@ -54,7 +64,8 @@ public class BolusRepository : IBolusRepository
 
     public async Task<Bolus> UpdateAsync(Guid id, Bolus model, CancellationToken ct = default)
     {
-        var entity = await _context.Boluses.FindAsync([id], ct)
+        var entity =
+            await _context.Boluses.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Bolus {id} not found");
         BolusMapper.UpdateEntity(entity, model);
         await _context.SaveChangesAsync(ct);
@@ -63,7 +74,8 @@ public class BolusRepository : IBolusRepository
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        var entity = await _context.Boluses.FindAsync([id], ct)
+        var entity =
+            await _context.Boluses.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Bolus {id} not found");
         _context.Boluses.Remove(entity);
         await _context.SaveChangesAsync(ct);
@@ -72,15 +84,20 @@ public class BolusRepository : IBolusRepository
     public async Task<int> CountAsync(long? from, long? to, CancellationToken ct = default)
     {
         var query = _context.Boluses.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
+        if (from.HasValue)
+            query = query.Where(e => e.Mills >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Mills <= to.Value);
         return await query.CountAsync(ct);
     }
 
-    public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
+    public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
+        Guid correlationId,
+        CancellationToken ct = default
+    )
     {
-        var entities = await _context.Boluses
-            .AsNoTracking()
+        var entities = await _context
+            .Boluses.AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(BolusMapper.ToDomainModel);
@@ -88,8 +105,17 @@ public class BolusRepository : IBolusRepository
 
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
-        return await _context.Boluses
-            .Where(e => e.LegacyId == legacyId)
-            .ExecuteDeleteAsync(ct);
+        return await _context.Boluses.Where(e => e.LegacyId == legacyId).ExecuteDeleteAsync(ct);
+    }
+
+    public async Task<IEnumerable<Bolus>> BulkCreateAsync(
+        IEnumerable<Bolus> records,
+        CancellationToken ct = default
+    )
+    {
+        var entities = records.Select(BolusMapper.ToEntity).ToList();
+        _context.Boluses.AddRange(entities);
+        await _context.SaveChangesAsync(ct);
+        return entities.Select(BolusMapper.ToDomainModel);
     }
 }

@@ -1,4 +1,3 @@
-using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
@@ -9,22 +8,28 @@ namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
 /// <summary>
 ///     Handler for MyLife TempBasal events (event ID 4) - Temporary basal rate program.
 ///     These events represent user-initiated temporary basal programs (not algorithm-adjusted).
-///     Produces both Treatment records (for backward compatibility) and BasalDelivery StateSpans.
+///     Produces BasalDelivery StateSpans.
 /// </summary>
-internal sealed class TempBasalTreatmentHandler : IMyLifeTreatmentHandler, IMyLifeStateSpanHandler
+internal sealed class TempBasalHandler : IMyLifeStateSpanHandler
 {
     public bool CanHandleStateSpan(MyLifeEvent ev)
     {
         return ev.EventTypeId == MyLifeEventTypeIds.TempBasal;
     }
 
-    public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeTreatmentContext context)
+    public IEnumerable<StateSpan> HandleStateSpan(MyLifeEvent ev, MyLifeContext context)
     {
         var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
 
         // Try to get the rate - this event type can have either percentage or absolute rate
         double rate = 0;
-        if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.ValueInUperH, out var absoluteRate))
+        if (
+            MyLifeMapperHelpers.TryGetInfoDouble(
+                info,
+                MyLifeJsonKeys.ValueInUperH,
+                out var absoluteRate
+            )
+        )
             rate = absoluteRate;
 
         // TempBasal events (event ID 4) are user-initiated temporary basal programs.
@@ -35,9 +40,19 @@ internal sealed class TempBasalTreatmentHandler : IMyLifeTreatmentHandler, IMyLi
         {
             // Zero rate or percentage indicates suspended delivery
             // (though percentage-based would be relative to scheduled rate)
-            if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Percentage, out var percent) && percent <= 0)
+            if (
+                MyLifeMapperHelpers.TryGetInfoDouble(
+                    info,
+                    MyLifeJsonKeys.Percentage,
+                    out var percent
+                )
+                && percent <= 0
+            )
                 origin = BasalDeliveryOrigin.Suspended;
-            else if (rate <= 0 && !MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Percentage, out _))
+            else if (
+                rate <= 0
+                && !MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Percentage, out _)
+            )
                 origin = BasalDeliveryOrigin.Suspended;
             else
                 origin = BasalDeliveryOrigin.Manual;
@@ -51,10 +66,22 @@ internal sealed class TempBasalTreatmentHandler : IMyLifeTreatmentHandler, IMyLi
         var stateSpan = MyLifeStateSpanFactory.CreateBasalDelivery(ev, rate, origin);
 
         // Include additional metadata for TempBasal events
-        if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Percentage, out var percentValue))
+        if (
+            MyLifeMapperHelpers.TryGetInfoDouble(
+                info,
+                MyLifeJsonKeys.Percentage,
+                out var percentValue
+            )
+        )
             stateSpan.Metadata!["percent"] = percentValue;
 
-        if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Minutes, out var durationMinutes))
+        if (
+            MyLifeMapperHelpers.TryGetInfoDouble(
+                info,
+                MyLifeJsonKeys.Minutes,
+                out var durationMinutes
+            )
+        )
         {
             stateSpan.Metadata!["durationMinutes"] = durationMinutes;
 
@@ -66,30 +93,5 @@ internal sealed class TempBasalTreatmentHandler : IMyLifeTreatmentHandler, IMyLi
         }
 
         return [stateSpan];
-    }
-
-    public bool CanHandle(MyLifeEvent ev)
-    {
-        return ev.EventTypeId == MyLifeEventTypeIds.TempBasal;
-    }
-
-    public IEnumerable<Treatment> Handle(MyLifeEvent ev, MyLifeTreatmentContext context)
-    {
-        var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
-        var treatment = MyLifeTreatmentFactory.Create(ev, MyLifeTreatmentTypes.TempBasal);
-        if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Percentage, out var percent))
-            treatment.Percent = percent;
-
-        if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.Minutes, out var minutes))
-            treatment.Duration = minutes;
-
-        if (MyLifeMapperHelpers.TryGetInfoDouble(info, MyLifeJsonKeys.ValueInUperH, out var rate))
-            treatment.Rate = rate;
-
-        if (!context.TryRegisterTempBasal(treatment.Mills)) return [];
-
-        if (context.TryGetTempBasalRate(treatment.Mills, out var consolidatedRate)) treatment.Rate = consolidatedRate;
-
-        return [treatment];
     }
 }

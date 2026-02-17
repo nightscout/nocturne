@@ -22,4 +22,6 @@ internal static class MyLifeJsonKeys
     internal const string DurationInMinutes = "DurationInMinutes";
     internal const string BasalRate = "BasalRate";
     internal const string IsTempBasalRate = "IsTempBasalRate";
+    internal const string CalcBg = "CalcBG";
+    internal const string CalcIob = "CalcIOB";
 }

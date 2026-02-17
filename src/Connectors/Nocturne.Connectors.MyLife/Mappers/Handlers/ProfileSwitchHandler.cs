@@ -1,63 +1,61 @@
 using System.Text.Json;
-using Nocturne.Connectors.MyLife.Configurations.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.MyLife.Mappers.Handlers;
 
-internal sealed class ProfileSwitchTreatmentHandler : IMyLifeTreatmentHandler
+/// <summary>
+/// Handles MyLife profile switch indication events, creating DeviceEvent records.
+/// </summary>
+internal sealed class ProfileSwitchHandler : IMyLifeHandler
 {
     public bool CanHandle(MyLifeEvent ev)
     {
-        if (ev.EventTypeId != MyLifeEventTypeIds.Indication) return false;
+        if (ev.EventTypeId != MyLifeEventTypeIds.Indication)
+            return false;
 
         var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
-        if (info == null) return false;
+        if (info == null)
+            return false;
 
-        if (!info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var keyElement)) return false;
+        if (!info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var keyElement))
+            return false;
 
-        if (keyElement.ValueKind != JsonValueKind.String) return false;
+        if (keyElement.ValueKind != JsonValueKind.String)
+            return false;
 
         var key = keyElement.GetString();
-        if (string.IsNullOrWhiteSpace(key)) return false;
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
 
-        if (
-            string.Equals(
+        return string.Equals(
                 key,
                 MyLifeJsonKeys.IndicationBasalProfileXChanged,
                 StringComparison.OrdinalIgnoreCase
             )
-        )
-            return true;
-
-        if (
-            string.Equals(
+            || string.Equals(
                 key,
                 MyLifeJsonKeys.IndicationBasalProfileChanged,
                 StringComparison.OrdinalIgnoreCase
-            )
-        )
-            return true;
-
-        return false;
+            );
     }
 
-    public IEnumerable<Treatment> Handle(MyLifeEvent ev, MyLifeTreatmentContext context)
+    public IEnumerable<IV4Record> Handle(MyLifeEvent ev, MyLifeContext context)
     {
         var info = MyLifeMapperHelpers.ParseInfo(ev.InformationFromDevice);
-        var profileSwitch = MyLifeTreatmentFactory.CreateWithSuffix(
-            ev,
-            MyLifeTreatmentTypes.ProfileSwitch,
-            MyLifeIdSuffixes.ProfileSwitch
-        );
-        profileSwitch.Notes = ev.InformationFromDevice;
+        var profileName = ExtractProfileName(info);
 
-        var profile = ExtractProfileName(info);
-        if (!string.IsNullOrWhiteSpace(profile)) profileSwitch.Profile = profile;
+        var notes = ev.InformationFromDevice;
+        if (!string.IsNullOrWhiteSpace(profileName))
+        {
+            notes = $"Profile: {profileName}";
+        }
 
-        return [profileSwitch];
+        var deviceEvent = MyLifeFactory.CreateDeviceEvent(ev, DeviceEventType.ProfileSwitch, notes);
+        return [deviceEvent];
     }
 
     private static string? ExtractProfileName(JsonElement? info)
@@ -89,7 +87,7 @@ internal sealed class ProfileSwitchTreatmentHandler : IMyLifeTreatmentHandler
                     MyLifeJsonKeys.IndicationBasalProfileChanged,
                     StringComparison.OrdinalIgnoreCase
                 ) => MyLifeJsonKeys.Parameter1,
-            _ => null
+            _ => null,
         };
 
         if (parameterKey == null)

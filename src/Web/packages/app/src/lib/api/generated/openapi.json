@@ -24008,7 +24008,20 @@
           "PodChange",
           "ReservoirChange",
           "CannulaChange",
-          "TransmitterSensorInsert"
+          "TransmitterSensorInsert",
+          "PodActivated",
+          "PodDeactivated",
+          "PumpSuspend",
+          "PumpResume",
+          "Priming",
+          "TubePriming",
+          "NeedlePriming",
+          "Rewind",
+          "DateChanged",
+          "TimeChanged",
+          "BolusMaxChanged",
+          "BasalMaxChanged",
+          "ProfileSwitch"
         ],
         "enum": [
           "SensorStart",
@@ -24020,7 +24033,20 @@
           "PodChange",
           "ReservoirChange",
           "CannulaChange",
-          "TransmitterSensorInsert"
+          "TransmitterSensorInsert",
+          "PodActivated",
+          "PodDeactivated",
+          "PumpSuspend",
+          "PumpResume",
+          "Priming",
+          "TubePriming",
+          "NeedlePriming",
+          "Rewind",
+          "DateChanged",
+          "TimeChanged",
+          "BolusMaxChanged",
+          "BasalMaxChanged",
+          "ProfileSwitch"
         ]
       },
       "BgCheckMarkerDto": {

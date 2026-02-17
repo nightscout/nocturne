@@ -18,15 +18,25 @@ public class NoteRepository : INoteRepository
     }
 
     public async Task<IEnumerable<Note>> GetAsync(
-        long? from, long? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
+        long? from,
+        long? to,
+        string? device,
+        string? source,
+        int limit = 100,
+        int offset = 0,
+        bool descending = true,
+        CancellationToken ct = default
+    )
     {
         var query = _context.Notes.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
-        if (device != null) query = query.Where(e => e.Device == device);
-        if (source != null) query = query.Where(e => e.DataSource == source);
+        if (from.HasValue)
+            query = query.Where(e => e.Mills >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Mills <= to.Value);
+        if (device != null)
+            query = query.Where(e => e.Device == device);
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
         query = descending ? query.OrderByDescending(e => e.Mills) : query.OrderBy(e => e.Mills);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(NoteMapper.ToDomainModel);
@@ -54,7 +64,8 @@ public class NoteRepository : INoteRepository
 
     public async Task<Note> UpdateAsync(Guid id, Note model, CancellationToken ct = default)
     {
-        var entity = await _context.Notes.FindAsync([id], ct)
+        var entity =
+            await _context.Notes.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Note {id} not found");
         NoteMapper.UpdateEntity(entity, model);
         await _context.SaveChangesAsync(ct);
@@ -63,7 +74,8 @@ public class NoteRepository : INoteRepository
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        var entity = await _context.Notes.FindAsync([id], ct)
+        var entity =
+            await _context.Notes.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Note {id} not found");
         _context.Notes.Remove(entity);
         await _context.SaveChangesAsync(ct);
@@ -72,15 +84,20 @@ public class NoteRepository : INoteRepository
     public async Task<int> CountAsync(long? from, long? to, CancellationToken ct = default)
     {
         var query = _context.Notes.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Mills >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Mills <= to.Value);
+        if (from.HasValue)
+            query = query.Where(e => e.Mills >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Mills <= to.Value);
         return await query.CountAsync(ct);
     }
 
-    public async Task<IEnumerable<Note>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
+    public async Task<IEnumerable<Note>> GetByCorrelationIdAsync(
+        Guid correlationId,
+        CancellationToken ct = default
+    )
     {
-        var entities = await _context.Notes
-            .AsNoTracking()
+        var entities = await _context
+            .Notes.AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(NoteMapper.ToDomainModel);
@@ -88,8 +105,17 @@ public class NoteRepository : INoteRepository
 
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
-        return await _context.Notes
-            .Where(e => e.LegacyId == legacyId)
-            .ExecuteDeleteAsync(ct);
+        return await _context.Notes.Where(e => e.LegacyId == legacyId).ExecuteDeleteAsync(ct);
+    }
+
+    public async Task<IEnumerable<Note>> BulkCreateAsync(
+        IEnumerable<Note> records,
+        CancellationToken ct = default
+    )
+    {
+        var entities = records.Select(NoteMapper.ToEntity).ToList();
+        _context.Notes.AddRange(entities);
+        await _context.SaveChangesAsync(ct);
+        return entities.Select(NoteMapper.ToDomainModel);
     }
 }
