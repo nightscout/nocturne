@@ -12,12 +12,7 @@ internal static class MyLifeMapperHelpers
 {
     internal static bool TryParseDouble(string? value, out double result)
     {
-        return double.TryParse(
-            value,
-            NumberStyles.Any,
-            CultureInfo.InvariantCulture,
-            out result
-        );
+        return double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out result);
     }
 
     internal static DateTimeOffset FromInstantTicks(long ticks)
@@ -36,39 +31,47 @@ internal static class MyLifeMapperHelpers
         var builder = new StringBuilder();
         builder.Append(ev.EventTypeId).Append('|');
         builder.Append(ev.EventDateTime).Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.Value)) builder.Append(ev.Value);
+        if (!string.IsNullOrWhiteSpace(ev.Value))
+            builder.Append(ev.Value);
 
         builder.Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.InformationFromDevice)) builder.Append(ev.InformationFromDevice);
+        if (!string.IsNullOrWhiteSpace(ev.InformationFromDevice))
+            builder.Append(ev.InformationFromDevice);
 
         builder.Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.PatientId)) builder.Append(ev.PatientId);
+        if (!string.IsNullOrWhiteSpace(ev.PatientId))
+            builder.Append(ev.PatientId);
 
         builder.Append('|');
-        if (!string.IsNullOrWhiteSpace(ev.DeviceId)) builder.Append(ev.DeviceId);
+        if (!string.IsNullOrWhiteSpace(ev.DeviceId))
+            builder.Append(ev.DeviceId);
 
         builder.Append('|');
-        if (ev.IndexOnDevice.HasValue) builder.Append(ev.IndexOnDevice.Value);
+        if (ev.IndexOnDevice.HasValue)
+            builder.Append(ev.IndexOnDevice.Value);
 
         builder.Append('|');
         builder.Append(ev.CRC32Checksum);
 
-        using var sha = SHA256.Create();
-        var bytes = Encoding.UTF8.GetBytes(builder.ToString());
-        var hash = sha.ComputeHash(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        // 40 chars to fix the length limit
+        return Convert.ToHexString(hash).ToLowerInvariant()[..40];
     }
 
     internal static bool IsBatteryRemovedIndication(JsonElement? info)
     {
-        if (info == null) return false;
+        if (info == null)
+            return false;
 
-        if (!info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var element)) return false;
+        if (!info.Value.TryGetProperty(MyLifeJsonKeys.Key, out var element))
+            return false;
 
-        if (element.ValueKind != JsonValueKind.String) return false;
+        if (element.ValueKind != JsonValueKind.String)
+            return false;
 
         var value = element.GetString();
-        if (string.IsNullOrWhiteSpace(value)) return false;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
 
         return string.Equals(
             value,
@@ -79,7 +82,8 @@ internal static class MyLifeMapperHelpers
 
     internal static JsonElement? ParseInfo(string? info)
     {
-        if (string.IsNullOrWhiteSpace(info)) return null;
+        if (string.IsNullOrWhiteSpace(info))
+            return null;
 
         try
         {
@@ -94,23 +98,27 @@ internal static class MyLifeMapperHelpers
     internal static bool TryGetInfoDouble(JsonElement? info, string name, out double value)
     {
         value = 0;
-        if (info == null) return false;
+        if (info == null)
+            return false;
 
-        if (!info.Value.TryGetProperty(name, out var element)) return false;
+        if (!info.Value.TryGetProperty(name, out var element))
+            return false;
 
         return element.ValueKind switch
         {
             JsonValueKind.String => TryParseDouble(element.GetString(), out value),
             JsonValueKind.Number => element.TryGetDouble(out value),
-            _ => false
+            _ => false,
         };
     }
 
     internal static bool TryGetInfoBool(JsonElement? info, string name)
     {
-        if (info == null) return false;
+        if (info == null)
+            return false;
 
-        if (!info.Value.TryGetProperty(name, out var element)) return false;
+        if (!info.Value.TryGetProperty(name, out var element))
+            return false;
 
         switch (element.ValueKind)
         {
@@ -120,29 +128,37 @@ internal static class MyLifeMapperHelpers
                 return false;
         }
 
-        if (element.ValueKind != JsonValueKind.String) return false;
+        if (element.ValueKind != JsonValueKind.String)
+            return false;
         var value = element.GetString();
         return string.Equals(value, MyLifeBooleanStrings.True, StringComparison.OrdinalIgnoreCase);
     }
 
     internal static bool IsCalculatedBolus(JsonElement? info)
     {
-        if (info == null) return false;
+        if (info == null)
+            return false;
 
-        if (TryGetInfoBool(info, MyLifeJsonKeys.BolusIsCalculated)) return true;
+        if (TryGetInfoBool(info, MyLifeJsonKeys.BolusIsCalculated))
+            return true;
 
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs) && carbs > 0) return true;
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs) && carbs > 0)
+            return true;
 
-        return TryGetInfoDouble(info, MyLifeJsonKeys.SuggestedMealBolus, out var suggested) && suggested > 0;
+        return TryGetInfoDouble(info, MyLifeJsonKeys.SuggestedMealBolus, out var suggested)
+            && suggested > 0;
     }
 
     internal static double? ResolveBolusCarbs(JsonElement? info)
     {
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs)) return carbs;
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarbs, out var carbs))
+            return carbs;
 
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.Carbs, out var carbsAlt)) return carbsAlt;
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.Carbs, out var carbsAlt))
+            return carbsAlt;
 
-        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarb, out var carbsSingle)) return carbsSingle;
+        if (TryGetInfoDouble(info, MyLifeJsonKeys.CalcCarb, out var carbsSingle))
+            return carbsSingle;
 
         return null;
     }
