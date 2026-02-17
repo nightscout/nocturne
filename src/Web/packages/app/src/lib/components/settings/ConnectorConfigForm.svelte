@@ -81,7 +81,8 @@
   const CATEGORY_ORDER: Record<string, number> = {
     General: 0,
     Connection: 1,
-    Sync: 2,
+    Credentials: 2, // Rendered in credentials card, not here
+    Sync: 3,
     Advanced: 100, // Always last
     Other: 99,
   };
@@ -109,6 +110,9 @@
       if (propName.toLowerCase() === "enabled") continue;
 
       const category = propSchema["x-category"] ?? "Other";
+
+      // Skip credential-category fields - they're shown in the credentials card
+      if (category === "Credentials") continue;
 
       if (!groups[category]) {
         groups[category] = {
@@ -144,6 +148,17 @@
         schema: schema.properties[name],
       }))
       .filter((s) => s.schema);
+  });
+
+  // Get non-secret fields in the Credentials category
+  const credentialFields = $derived.by(() => {
+    const secretFieldSet = new Set(schema.secrets ?? []);
+    return Object.entries(schema.properties)
+      .filter(
+        ([name, prop]) =>
+          prop["x-category"] === "Credentials" && !secretFieldSet.has(name)
+      )
+      .map(([name, schema]) => ({ name, schema }));
   });
 
   function getPropertyValue(propName: string): unknown {
@@ -233,18 +248,26 @@
     initialConfiguration = { ...config };
   }
 
-  async function handleSaveSecrets() {
+  async function handleSaveCredentials() {
+    // Snapshot secrets before saving config, because the config save
+    // triggers loadData() which resets secrets to {}
+    const secretsSnapshot: Record<string, string> = {};
     if (onSaveSecrets) {
-      // Only send non-empty secrets
-      const nonEmptySecrets: Record<string, string> = {};
       for (const [key, value] of Object.entries(secrets)) {
         if (value && value.trim()) {
-          nonEmptySecrets[key] = value;
+          secretsSnapshot[key] = value;
         }
       }
-      if (Object.keys(nonEmptySecrets).length > 0) {
-        await onSaveSecrets(nonEmptySecrets);
-      }
+    }
+
+    // Save non-secret credential fields via regular config
+    if (credentialFields.length > 0) {
+      await handleSaveConfiguration(configuration);
+    }
+
+    // Save secret fields via secrets endpoint
+    if (onSaveSecrets && Object.keys(secretsSnapshot).length > 0) {
+      await onSaveSecrets(secretsSnapshot);
     }
   }
 
@@ -519,8 +542,8 @@
     </Button>
   </div>
 
-  <!-- Secrets Section -->
-  {#if secretFields.length > 0}
+  <!-- Credentials Section -->
+  {#if secretFields.length > 0 || credentialFields.length > 0}
     <Separator class="my-6" />
 
     <Card>
@@ -542,6 +565,12 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
+        {#each credentialFields as { name, schema: propSchema }, i (name)}
+          {@render propertyField(name, propSchema)}
+          {#if i < credentialFields.length - 1 || secretFields.length > 0}
+            <Separator />
+          {/if}
+        {/each}
         {#each secretFields as { name, schema: propSchema }, i (name)}
           <div class="space-y-2">
             <Label>{formatLabel(name, propSchema)}</Label>
@@ -585,10 +614,10 @@
       </CardContent>
     </Card>
 
-    <!-- Save Secrets Button -->
+    <!-- Save Credentials Button -->
     <div class="flex justify-end">
       <Button
-        onclick={handleSaveSecrets}
+        onclick={handleSaveCredentials}
         disabled={isSaving}
         variant="secondary"
       >

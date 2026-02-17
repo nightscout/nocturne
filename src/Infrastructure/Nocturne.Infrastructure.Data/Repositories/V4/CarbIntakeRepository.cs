@@ -124,8 +124,46 @@ public class CarbIntakeRepository : ICarbIntakeRepository
     )
     {
         var entities = records.Select(CarbIntakeMapper.ToEntity).ToList();
-        _context.CarbIntakes.AddRange(entities);
-        await _context.SaveChangesAsync(ct);
+        if (entities.Count == 0)
+            return [];
+
+        // Batch-level dedup: keep first occurrence per LegacyId
+        entities = entities
+            .GroupBy(e => e.LegacyId ?? e.Id.ToString())
+            .Select(g => g.First())
+            .ToList();
+
+        // DB-level dedup: filter out records whose LegacyId already exists
+        var legacyIds = entities
+            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
+            .Select(e => e.LegacyId!)
+            .ToHashSet();
+
+        if (legacyIds.Count > 0)
+        {
+            var existingIds = await _context
+                .CarbIntakes.AsNoTracking()
+                .Where(e => legacyIds.Contains(e.LegacyId!))
+                .Select(e => e.LegacyId)
+                .ToListAsync(ct);
+
+            var existingSet = existingIds.ToHashSet();
+            entities = entities
+                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                .ToList();
+        }
+
+        if (entities.Count == 0)
+            return [];
+
+        const int batchSize = 500;
+        foreach (var batch in entities.Chunk(batchSize))
+        {
+            _context.CarbIntakes.AddRange(batch);
+            await _context.SaveChangesAsync(ct);
+            _context.ChangeTracker.Clear();
+        }
+
         return entities.Select(CarbIntakeMapper.ToDomainModel);
     }
 }

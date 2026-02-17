@@ -141,37 +141,46 @@ public class EntryRepository
             return Enumerable.Empty<Entry>();
         }
 
-        _context.Entries.AddRange(newEntities);
-        try
+        const int batchSize = 500;
+        var savedEntities = new List<EntryEntity>();
+
+        foreach (var batch in newEntities.Chunk(batchSize))
         {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-        {
-            // Race condition: another sync inserted the same entries between our check and save.
-            // Detach all added entities and retry with a fresh duplicate check.
-            _logger.LogWarning("Duplicate key conflict during entry insert, retrying with fresh deduplication");
-
-            foreach (var entity in newEntities)
+            var batchList = batch.ToList();
+            _context.Entries.AddRange(batchList);
+            try
             {
-                _context.Entry(entity).State = EntityState.Detached;
+                await _context.SaveChangesAsync(cancellationToken);
+                savedEntities.AddRange(batchList);
             }
-
-            var nowExistingIds = await _context
-                .Entries.Where(e => entityIds.Contains(e.Id))
-                .Select(e => e.Id)
-                .ToHashSetAsync(cancellationToken);
-
-            newEntities = newEntities.Where(e => !nowExistingIds.Contains(e.Id)).ToList();
-
-            if (newEntities.Count == 0)
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             {
-                return Enumerable.Empty<Entry>();
-            }
+                _logger.LogWarning("Duplicate key conflict during entry insert batch, retrying with fresh deduplication");
 
-            _context.Entries.AddRange(newEntities);
-            await _context.SaveChangesAsync(cancellationToken);
+                foreach (var entity in batchList)
+                {
+                    _context.Entry(entity).State = EntityState.Detached;
+                }
+
+                var batchIds = batchList.Select(e => e.Id).ToHashSet();
+                var nowExistingIds = await _context
+                    .Entries.Where(e => batchIds.Contains(e.Id))
+                    .Select(e => e.Id)
+                    .ToHashSetAsync(cancellationToken);
+
+                var retryEntities = batchList.Where(e => !nowExistingIds.Contains(e.Id)).ToList();
+
+                if (retryEntities.Count > 0)
+                {
+                    _context.Entries.AddRange(retryEntities);
+                    await _context.SaveChangesAsync(cancellationToken);
+                    savedEntities.AddRange(retryEntities);
+                }
+            }
+            _context.ChangeTracker.Clear();
         }
+
+        newEntities = savedEntities;
 
         // Link new entries to canonical groups for deduplication
         foreach (var entity in newEntities)

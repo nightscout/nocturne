@@ -13520,8 +13520,10 @@ msgstr ""
 msgid "<0/> Save Configuration"
 msgstr ""
 
-#~ msgid "Credentials"
-#~ msgstr ""
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Credentials"
+msgstr ""
 
 #~ msgid "Sensitive credentials are stored encrypted and never displayed after saving."
 #~ msgstr ""

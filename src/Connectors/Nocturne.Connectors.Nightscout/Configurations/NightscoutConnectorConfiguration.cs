@@ -26,33 +26,41 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
         ConnectSource = ConnectSource.Nightscout;
     }
 
-    [ConnectorProperty("Url",
+    [ConnectorProperty(
+        "Url",
         Required = true,
         RuntimeConfigurable = true,
-        Category = "Connection",
+        Category = "Credentials",
         Description = "Nightscout site URL (e.g., https://my-nightscout.herokuapp.com)",
-        Format = "uri")]
+        Format = "uri"
+    )]
     public string Url { get; set; } = string.Empty;
 
-    [ConnectorProperty("ApiSecret",
+    [ConnectorProperty(
+        "ApiSecret",
         Required = true,
         Secret = true,
-        Description = "Nightscout API_SECRET or access token")]
+        Description = "Nightscout API_SECRET or access token"
+    )]
     public string ApiSecret { get; set; } = string.Empty;
 
-    [ConnectorProperty("SyncTreatments",
+    [ConnectorProperty(
+        "SyncTreatments",
         RuntimeConfigurable = true,
         Category = "Sync",
         Description = "Whether to sync treatments from Nightscout",
-        DefaultValue = "true")]
+        DefaultValue = "true"
+    )]
     public bool SyncTreatments { get; set; } = true;
 
-    [ConnectorProperty("MaxCount",
+    [ConnectorProperty(
+        "MaxCount",
         RuntimeConfigurable = true,
         Category = "Advanced",
         Description = "Maximum number of records to fetch per request",
         DefaultValue = "1000",
         MinValue = 100,
-        MaxValue = 10000)]
+        MaxValue = 10000
+    )]
     public int MaxCount { get; set; } = 1000;
 }

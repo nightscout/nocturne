@@ -1165,7 +1165,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<SensorGlucoseEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_sensor_glucose_legacy_id");
+            .HasDatabaseName("ix_sensor_glucose_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<SensorGlucoseEntity>()
@@ -1216,7 +1218,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<BolusEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_boluses_legacy_id");
+            .HasDatabaseName("ix_boluses_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<BolusEntity>()
@@ -1233,7 +1237,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<CarbIntakeEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_carb_intakes_legacy_id");
+            .HasDatabaseName("ix_carb_intakes_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<CarbIntakeEntity>()
@@ -1250,7 +1256,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<BGCheckEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_bg_checks_legacy_id");
+            .HasDatabaseName("ix_bg_checks_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<BGCheckEntity>()
@@ -1267,7 +1275,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<NoteEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_notes_legacy_id");
+            .HasDatabaseName("ix_notes_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<NoteEntity>()
@@ -1284,7 +1294,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<DeviceEventEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_device_events_legacy_id");
+            .HasDatabaseName("ix_device_events_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<DeviceEventEntity>()
@@ -1301,7 +1313,9 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<BolusCalculationEntity>()
             .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_bolus_calculations_legacy_id");
+            .HasDatabaseName("ix_bolus_calculations_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
 
         modelBuilder
             .Entity<BolusCalculationEntity>()

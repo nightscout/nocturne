@@ -13280,3 +13280,8 @@ msgstr "{0} records in the last 24 hours"
 #: src/routes/settings/connectors/+page.svelte
 msgid "({0} in last 24 hours)"
 msgstr "({0} in last 24 hours)"
+
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/settings/ConnectorConfigForm.svelte
+msgid "Credentials"
+msgstr "Credentials"

@@ -292,18 +292,12 @@ public class InProcessConnectorPublisher : IConnectorPublisher
         CancellationToken cancellationToken = default
     )
     {
-        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
-        var entry = await _entryService.GetCurrentEntryAsync(cancellationToken);
-        if (entry == null)
-            return null;
-
-        if (entry.Date != default)
-            return entry.Date;
-
-        if (entry.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime;
-
-        return null;
+        // Query V4 sensor_glucose table filtered by source.
+        // V4 connectors (e.g. MyLife) write directly to sensor_glucose.
+        // Legacy connectors (e.g. Nightscout) have entries decomposed to sensor_glucose
+        // by EntryDecomposer, which preserves the DataSource field.
+        // Returns null when no source-specific data exists, triggering 6-month initial sync.
+        return await _sensorGlucoseRepository.GetLatestTimestampAsync(source, cancellationToken);
     }
 
     public async Task<DateTime?> GetLatestTreatmentTimestampAsync(

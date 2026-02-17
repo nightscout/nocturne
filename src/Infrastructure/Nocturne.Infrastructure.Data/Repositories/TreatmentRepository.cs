@@ -151,30 +151,35 @@ public class TreatmentRepository
         var resultEntities = new List<TreatmentEntity>();
         var newEntities = new List<TreatmentEntity>();
 
-        foreach (var entity in entities)
+        const int batchSize = 500;
+        foreach (var batchEntities in entities.Chunk(batchSize))
         {
-            // Check if a treatment with this ID already exists
-            var existingEntity = await _context.Treatments.FirstOrDefaultAsync(
-                t => t.Id == entity.Id,
-                cancellationToken
-            );
+            foreach (var entity in batchEntities)
+            {
+                // Check if a treatment with this ID already exists
+                var existingEntity = await _context.Treatments.FirstOrDefaultAsync(
+                    t => t.Id == entity.Id,
+                    cancellationToken
+                );
 
-            if (existingEntity != null)
-            {
-                // Update existing entity instead of inserting a duplicate
-                _context.Entry(existingEntity).CurrentValues.SetValues(entity);
-                resultEntities.Add(existingEntity);
+                if (existingEntity != null)
+                {
+                    // Update existing entity instead of inserting a duplicate
+                    _context.Entry(existingEntity).CurrentValues.SetValues(entity);
+                    resultEntities.Add(existingEntity);
+                }
+                else
+                {
+                    // Add new entity
+                    _context.Treatments.Add(entity);
+                    resultEntities.Add(entity);
+                    newEntities.Add(entity);
+                }
             }
-            else
-            {
-                // Add new entity
-                _context.Treatments.Add(entity);
-                resultEntities.Add(entity);
-                newEntities.Add(entity);
-            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            _context.ChangeTracker.Clear();
         }
-
-        await _context.SaveChangesAsync(cancellationToken);
 
         // Link new treatments to canonical groups for deduplication
         foreach (var entity in newEntities)
