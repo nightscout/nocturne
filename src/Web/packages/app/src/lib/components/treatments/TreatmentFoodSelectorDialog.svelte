@@ -21,9 +21,9 @@
   import { tick } from "svelte";
   import { toast } from "svelte-sonner";
   import {
-    TreatmentFoodInputMode,
+    CarbIntakeFoodInputMode,
     type Food,
-    type TreatmentFoodRequest,
+    type CarbIntakeFoodRequest,
   } from "$lib/api";
   import {
     addFavoriteFood,
@@ -39,7 +39,7 @@
   interface Props {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSubmit: (request: TreatmentFoodRequest) => void;
+    onSubmit: (request: CarbIntakeFoodRequest) => void;
     /** Total carbs from the treatment */
     totalCarbs?: number;
     /** Remaining unspecified carbs */
@@ -410,14 +410,14 @@
   async function handleAddFood() {
     if (!selectedFood?._id) return;
 
-    const request: TreatmentFoodRequest = {
+    const request: CarbIntakeFoodRequest = {
       foodId: selectedFood._id,
       timeOffsetMinutes,
       note: note.trim() || undefined,
       inputMode:
         lastEditedField === "portions"
-          ? TreatmentFoodInputMode.Portions
-          : TreatmentFoodInputMode.Carbs,
+          ? CarbIntakeFoodInputMode.Portions
+          : CarbIntakeFoodInputMode.Carbs,
     };
 
     if (lastEditedField === "portions") {
@@ -485,14 +485,14 @@
         toast.success("Food created successfully");
 
         // Now add the food to treatment
-        const request: TreatmentFoodRequest = {
+        const request: CarbIntakeFoodRequest = {
           foodId: newFood._id!,
           timeOffsetMinutes,
           note: note.trim() || undefined,
           inputMode:
             lastEditedField === "portions"
-              ? TreatmentFoodInputMode.Portions
-              : TreatmentFoodInputMode.Carbs,
+              ? CarbIntakeFoodInputMode.Portions
+              : CarbIntakeFoodInputMode.Carbs,
         };
 
         if (lastEditedField === "portions") {
@@ -520,12 +520,12 @@
       return;
     }
 
-    const request: TreatmentFoodRequest = {
+    const request: CarbIntakeFoodRequest = {
       foodId: undefined,
       carbs: entryCarbs,
       timeOffsetMinutes,
       note: note.trim() || undefined,
-      inputMode: TreatmentFoodInputMode.Carbs,
+      inputMode: CarbIntakeFoodInputMode.Carbs,
     };
 
     isSubmitting = true;

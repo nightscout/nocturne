@@ -1,4 +1,4 @@
-import type { Treatment } from "$lib/api";
+import type { Treatment, Bolus, CarbIntake } from "$lib/api";
 
 /**
  * Treatment category definitions for UI organization
@@ -238,4 +238,60 @@ export function countTreatmentsByCategory(treatments: Treatment[]): TreatmentCou
   }
 
   return counts;
+}
+
+// ─── V4 Decomposed Types ────────────────────────────────────────────────────
+
+export type BolusRow = Bolus & { kind: "bolus" };
+export type CarbIntakeRow = CarbIntake & { kind: "carbIntake" };
+export type TreatmentRow = BolusRow | CarbIntakeRow;
+
+export const V4_CATEGORIES = {
+  bolus: {
+    id: "bolus" as const,
+    name: "Bolus",
+    colorClass: "text-blue-600 dark:text-blue-400",
+    bgClass: "bg-blue-100 dark:bg-blue-900/30",
+    borderClass: "border-blue-200 dark:border-blue-700",
+  },
+  carbs: {
+    id: "carbs" as const,
+    name: "Carbs",
+    colorClass: "text-green-600 dark:text-green-400",
+    bgClass: "bg-green-100 dark:bg-green-900/30",
+    borderClass: "border-green-200 dark:border-green-700",
+  },
+} as const;
+
+export type V4CategoryId = keyof typeof V4_CATEGORIES;
+
+export interface V4TreatmentCounts {
+  total: number;
+  bolus: number;
+  carbs: number;
+}
+
+export function mergeTreatmentRows(boluses: Bolus[], carbIntakes: CarbIntake[]): TreatmentRow[] {
+  const bolusRows: TreatmentRow[] = boluses.map((b) => ({ ...b, kind: "bolus" as const }));
+  const carbRows: TreatmentRow[] = carbIntakes.map((c) => ({ ...c, kind: "carbIntake" as const }));
+  return [...bolusRows, ...carbRows].sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0));
+}
+
+export function countV4Rows(rows: TreatmentRow[]): V4TreatmentCounts {
+  let bolus = 0;
+  let carbs = 0;
+  for (const r of rows) {
+    if (r.kind === "bolus") bolus++;
+    else carbs++;
+  }
+  return { total: rows.length, bolus, carbs };
+}
+
+export function getRowTypeStyle(kind: "bolus" | "carbIntake"): {
+  colorClass: string;
+  bgClass: string;
+  borderClass: string;
+} {
+  if (kind === "bolus") return V4_CATEGORIES.bolus;
+  return V4_CATEGORIES.carbs;
 }

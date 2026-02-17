@@ -5,8 +5,8 @@
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
-import { TimeInRangeRequestSchema, EntrySchema } from '$lib/api/generated/schemas';
-import { type TimeInRangeRequest, type Entry } from '$api';
+import { TimeInRangeRequestSchema, SensorGlucoseSchema } from '$lib/api/generated/schemas';
+import { type TimeInRangeRequest, type SensorGlucose } from '$api';
 
 /** Calculate time in range metrics */
 export const calculateTimeInRange = query(TimeInRangeRequestSchema, async (request) => {
@@ -21,11 +21,11 @@ export const calculateTimeInRange = query(TimeInRangeRequestSchema, async (reque
 });
 
 /** Calculate averaged statistics for each hour of the day (0-23) */
-export const calculateAveragedStats = query(z.array(EntrySchema), async (request) => {
+export const calculateAveragedStats = query(z.array(SensorGlucoseSchema), async (request) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    return await apiClient.statistics.calculateAveragedStats(request as Entry[]);
+    return await apiClient.statistics.calculateAveragedStats(request as SensorGlucose[]);
   } catch (err) {
     console.error('Error in statistics.calculateAveragedStats:', err);
     throw error(500, 'Failed to calculate averaged stats');

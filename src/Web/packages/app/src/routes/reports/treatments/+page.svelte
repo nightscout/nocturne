@@ -1,17 +1,17 @@
 <script lang="ts">
   import { page } from "$app/state";
 
-  import type { Treatment, TreatmentSummary } from "$lib/api";
+  import type { TreatmentSummary } from "$lib/api";
   import {
     TreatmentsDataTable,
     TreatmentCategoryTabs,
     TreatmentStatsCard,
-    TreatmentEditDialog,
   } from "$lib/components/treatments";
   import {
-    TREATMENT_CATEGORIES,
-    type TreatmentCategoryId,
-    countTreatmentsByCategory,
+    mergeTreatmentRows,
+    countV4Rows,
+    type V4CategoryId,
+    type TreatmentRow,
   } from "$lib/constants/treatment-categories";
 
   import { Button } from "$lib/components/ui/button";
@@ -20,41 +20,34 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
-  import * as Popover from "$lib/components/ui/popover";
-  import {
-    Calendar,
-    Filter,
-    X,
-    ChevronDown,
-  } from "lucide-svelte";
+  import { Calendar, X } from "lucide-svelte";
   import {
     formatInsulinDisplay,
     formatCarbDisplay,
+    formatDateTimeCompact,
   } from "$lib/utils/formatting";
-  import { formatDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
-  import { getReportsData } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   // Import remote function forms and commands
   import {
+    getTreatmentsData,
     deleteTreatmentForm,
-    updateTreatment,
     bulkDeleteTreatments,
   } from "./data.remote";
-  
+
   // Get shared date params from context (set by reports layout)
-  // Default: 7 days for treatment log view
   const reportsParams = requireDateParamsContext(7);
 
-  // Create resource with automatic layout registration
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () => getTreatmentsData(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Treatments" }
   );
 
-  const treatments = $derived<Treatment[]>(reportsResource.current?.treatments ?? []);
+  const boluses = $derived(reportsResource.current?.boluses ?? []);
+  const carbIntakes = $derived(reportsResource.current?.carbIntakes ?? []);
+  const allRows = $derived(mergeTreatmentRows(boluses, carbIntakes));
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
@@ -63,69 +56,54 @@
   );
 
   const treatmentSummary = $derived(
-    reportsResource.current?.analysis?.treatmentSummary ??
+    reportsResource.current?.treatmentSummary ??
       ({
         totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
         treatmentCount: 0,
       } as TreatmentSummary)
   );
 
-  // Count treatments by category for UI tabs (no insulin/carb calculations)
-  const counts = $derived(countTreatmentsByCategory(treatments));
+  const counts = $derived(countV4Rows(allRows));
 
-  // Get filter state from URL params (used only for initial values)
+  // State
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
-  const initialEventTypes = page.url.searchParams.get("eventTypes");
-  const initialNoSource = page.url.searchParams.get("noSource") === "true";
 
-  // State - initialized from URL params
-  let activeCategory = $state<TreatmentCategoryId | "all">(
-    (initialCategory as TreatmentCategoryId | "all") || "all"
+  let activeCategory = $state<V4CategoryId | "all">(
+    (initialCategory as V4CategoryId | "all") || "all"
   );
   let searchQuery = $state(initialSearch || "");
-  let selectedEventTypes = $state<string[]>(
-    initialEventTypes ? initialEventTypes.split(",") : []
-  );
-  let filterNoSource = $state(initialNoSource);
 
   // Modal states
   let showDeleteConfirm = $state(false);
   let showBulkDeleteConfirm = $state(false);
-  let showEditDialog = $state(false);
-  let treatmentToEdit = $state<Treatment | null>(null);
-  let treatmentToDelete = $state<Treatment | null>(null);
-  let treatmentsToDelete = $state<Treatment[]>([]);
+  let rowToDelete = $state<TreatmentRow | null>(null);
+  let rowsToDelete = $state<TreatmentRow[]>([]);
 
   // Loading states
   let isLoading = $state(false);
-  let isEditLoading = $state(false);
 
-  // Filtered treatments based on category and search
-  let filteredTreatments = $derived.by(() => {
-    let filtered = treatments;
+  // Filtered rows based on category and search
+  let filteredRows = $derived.by(() => {
+    let filtered = allRows;
 
     // Apply category filter
-    if (activeCategory !== "all") {
-      const categoryConfig = TREATMENT_CATEGORIES[activeCategory];
-      if (categoryConfig) {
-        const eventTypes = categoryConfig.eventTypes as readonly string[];
-        filtered = filtered.filter((t) =>
-          eventTypes.includes(t.eventType || "")
-        );
-      }
+    if (activeCategory === "bolus") {
+      filtered = filtered.filter((r) => r.kind === "bolus");
+    } else if (activeCategory === "carbs") {
+      filtered = filtered.filter((r) => r.kind === "carbIntake");
     }
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((t) => {
+      filtered = filtered.filter((r) => {
         const searchable = [
-          t.eventType,
-          t.notes,
-          t.enteredBy,
-          t.reason,
-          t.profile,
+          r.kind === "bolus" ? "bolus" : "carb intake",
+          r.kind === "bolus" ? r.bolusType : r.foodType,
+          r.dataSource,
+          r.app,
+          r.device,
         ]
           .filter(Boolean)
           .join(" ")
@@ -134,40 +112,14 @@
       });
     }
 
-    // Apply event type filter
-    if (selectedEventTypes.length > 0) {
-      filtered = filtered.filter((t) =>
-        selectedEventTypes.includes(t.eventType || "")
-      );
-    }
-
-    // Apply no source filter
-    if (filterNoSource) {
-      filtered = filtered.filter((t) => !t.enteredBy && !t.data_source);
-    }
-
     return filtered;
   });
 
-  // Filtered stats - just counts for filtered view
-  let filteredCounts = $derived(countTreatmentsByCategory(filteredTreatments));
-
-  // Category counts from original data
-  let categoryCounts = $derived(counts.byCategoryCount);
-
-  // Available event types for filter
-  let availableEventTypes = $derived.by(() => {
-    const types = new Set<string>();
-    for (const t of treatments) {
-      if (t.eventType) types.add(t.eventType);
-    }
-    return Array.from(types).sort();
-  });
+  let filteredCounts = $derived(countV4Rows(filteredRows));
 
   // Handlers
-  function handleCategoryChange(category: TreatmentCategoryId | "all") {
+  function handleCategoryChange(category: V4CategoryId | "all") {
     activeCategory = category;
-    // Update URL without navigation
     const url = new URL(window.location.href);
     if (category === "all") {
       url.searchParams.delete("category");
@@ -182,71 +134,33 @@
     searchQuery = target.value;
   }
 
-  function toggleEventType(eventType: string) {
-    if (selectedEventTypes.includes(eventType)) {
-      selectedEventTypes = selectedEventTypes.filter((t) => t !== eventType);
-    } else {
-      selectedEventTypes = [...selectedEventTypes, eventType];
-    }
-  }
-
   function clearFilters() {
     searchQuery = "";
-    selectedEventTypes = [];
     activeCategory = "all";
-    filterNoSource = false;
   }
 
-  function confirmDelete(treatment: Treatment) {
-    treatmentToDelete = treatment;
+  function confirmDelete(row: TreatmentRow) {
+    rowToDelete = row;
     showDeleteConfirm = true;
   }
 
-  function confirmBulkDelete(treatments: Treatment[]) {
-    treatmentsToDelete = treatments;
+  function confirmBulkDelete(rows: TreatmentRow[]) {
+    rowsToDelete = rows;
     showBulkDeleteConfirm = true;
   }
 
-  function editTreatment(treatment: Treatment) {
-    treatmentToEdit = treatment;
-    showEditDialog = true;
-  }
-
-  function handleEditClose() {
-    showEditDialog = false;
-    treatmentToEdit = null;
-  }
-
-  async function handleEditSave(updatedTreatment: Treatment) {
-    isEditLoading = true;
-    try {
-      // Use the remote function command for programmatic submission
-      const result = await updateTreatment({
-        treatmentId: updatedTreatment._id || "",
-        treatmentData: updatedTreatment,
-      });
-
-      toast.success(result.message);
-      showEditDialog = false;
-      treatmentToEdit = null;
-      // Trigger data reload
-      reportsResource.refresh();
-    } catch (error) {
-      console.error("Update error:", error);
-      toast.error("Failed to update treatment");
-    } finally {
-      isEditLoading = false;
-    }
-  }
-
-  // Check if any filters are active
   let hasActiveFilters = $derived(
-    searchQuery.trim() !== "" ||
-      selectedEventTypes.length > 0 ||
-      activeCategory !== "all" ||
-      filterNoSource
+    searchQuery.trim() !== "" || activeCategory !== "all"
   );
 
+  function getRowLabel(row: TreatmentRow): string {
+    return row.kind === "bolus" ? "bolus" : "carb intake";
+  }
+
+  function formatRowTime(row: TreatmentRow): string {
+    if (!row.mills) return "Unknown";
+    return formatDateTimeCompact(new Date(row.mills).toISOString());
+  }
 </script>
 
 <svelte:head>
@@ -271,7 +185,7 @@
         ).toLocaleDateString()}
       </span>
       <span class="text-muted-foreground/50">•</span>
-      <span>{treatments.length.toLocaleString()} treatments</span>
+      <span>{allRows.length.toLocaleString()} records</span>
     </div>
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
@@ -280,13 +194,13 @@
     </p>
   </div>
 
-  <!-- Summary Stats - uses backend TreatmentSummary for accurate totals -->
+  <!-- Summary Stats -->
   <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} {dateRange} />
 
   <!-- Category Tabs -->
   <TreatmentCategoryTabs
     {activeCategory}
-    {categoryCounts}
+    categoryCounts={counts}
     onChange={handleCategoryChange}
   />
 
@@ -296,67 +210,19 @@
       <div
         class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
       >
-        <!-- Left side: Search and Event Type filter -->
         <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
-          <!-- Search -->
           <div class="flex-1 max-w-sm">
             <Label for="search" class="text-sm font-medium">Search</Label>
             <Input
               id="search"
               type="text"
-              placeholder="Search treatments..."
+              placeholder="Search records..."
               value={searchQuery}
               oninput={handleSearch}
             />
           </div>
-
-          <!-- Event Type Filter -->
-          <Popover.Root>
-            <Popover.Trigger>
-              {#snippet child({ props })}
-                <Button variant="outline" class="gap-2" {...props}>
-                  <Filter class="h-4 w-4" />
-                  Event Types
-                  {#if selectedEventTypes.length > 0}
-                    <Badge variant="secondary" class="ml-1">
-                      {selectedEventTypes.length}
-                    </Badge>
-                  {/if}
-                  <ChevronDown class="h-4 w-4" />
-                </Button>
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content class="w-64 p-3" align="start">
-              <div class="space-y-2 max-h-64 overflow-y-auto">
-                {#each availableEventTypes as eventType}
-                  <label
-                    class="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedEventTypes.includes(eventType)}
-                      onchange={() => toggleEventType(eventType)}
-                      class="rounded"
-                    />
-                    {eventType}
-                  </label>
-                {/each}
-              </div>
-            </Popover.Content>
-          </Popover.Root>
-
-          <!-- No Source Filter -->
-          <Button
-            variant={filterNoSource ? "default" : "outline"}
-            class="gap-2"
-            onclick={() => (filterNoSource = !filterNoSource)}
-          >
-            <Filter class="h-4 w-4" />
-            No Source
-          </Button>
         </div>
 
-        <!-- Right side: Clear filters -->
         <div class="flex items-center gap-2">
           {#if hasActiveFilters}
             <Button variant="ghost" size="sm" onclick={clearFilters}>
@@ -367,19 +233,18 @@
         </div>
       </div>
 
-      <!-- Active filters display -->
       {#if hasActiveFilters}
         <div
           class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm"
         >
           <span class="text-muted-foreground">Showing:</span>
           <span class="font-medium">
-            {filteredTreatments.length} of {treatments.length}
+            {filteredRows.length} of {allRows.length}
           </span>
 
           {#if activeCategory !== "all"}
             <Badge variant="secondary" class="gap-1">
-              {TREATMENT_CATEGORIES[activeCategory].name}
+              {activeCategory === "bolus" ? "Bolus" : "Carbs"}
               <button
                 onclick={() => (activeCategory = "all")}
                 class="ml-1 hover:text-foreground"
@@ -389,35 +254,11 @@
             </Badge>
           {/if}
 
-          {#each selectedEventTypes as eventType}
-            <Badge variant="outline" class="gap-1">
-              {eventType}
-              <button
-                onclick={() => toggleEventType(eventType)}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
-            </Badge>
-          {/each}
-
           {#if searchQuery.trim()}
             <Badge variant="outline" class="gap-1">
               "{searchQuery}"
               <button
                 onclick={() => (searchQuery = "")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
-            </Badge>
-          {/if}
-
-          {#if filterNoSource}
-            <Badge variant="secondary" class="gap-1">
-              No Source
-              <button
-                onclick={() => (filterNoSource = false)}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />
@@ -433,8 +274,7 @@
   <Card.Root>
     <Card.Content class="p-0">
       <TreatmentsDataTable
-        treatments={filteredTreatments}
-        onEdit={editTreatment}
+        rows={filteredRows}
         onDelete={confirmDelete}
         onBulkDelete={confirmBulkDelete}
       />
@@ -444,7 +284,7 @@
   <!-- Footer -->
   <div class="text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {treatments.length.toLocaleString()} treatments between
+      Report generated from {allRows.length.toLocaleString()} records between
       {new Date(dateRange.from).toLocaleDateString()} and {new Date(
         dateRange.to
       ).toLocaleDateString()}
@@ -452,18 +292,8 @@
   </div>
 </div>
 
-<!-- Edit Treatment Dialog -->
-<TreatmentEditDialog
-  bind:open={showEditDialog}
-  treatment={treatmentToEdit}
-  {availableEventTypes}
-  isLoading={isEditLoading}
-  onClose={handleEditClose}
-  onSave={handleEditSave}
-/>
-
 <!-- Delete Confirmation Modal -->
-{#if showDeleteConfirm && treatmentToDelete}
+{#if showDeleteConfirm && rowToDelete}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     role="dialog"
@@ -471,36 +301,36 @@
   >
     <Card.Root class="w-full max-w-md">
       <Card.Header>
-        <Card.Title>Delete Treatment</Card.Title>
+        <Card.Title>Delete {getRowLabel(rowToDelete)}</Card.Title>
         <Card.Description>
-          Are you sure you want to delete this {treatmentToDelete.eventType} treatment?
+          Are you sure you want to delete this {getRowLabel(rowToDelete)}?
           This action cannot be undone.
         </Card.Description>
       </Card.Header>
 
       <Card.Content>
         <Alert.Root>
-          <Alert.Title>Treatment Details</Alert.Title>
+          <Alert.Title>Details</Alert.Title>
           <Alert.Description>
             <div class="space-y-1 text-sm">
               <div>
                 <strong>Time:</strong>
-                {formatDate(treatmentToDelete.created_at)}
+                {formatRowTime(rowToDelete)}
               </div>
               <div>
                 <strong>Type:</strong>
-                {treatmentToDelete.eventType || "Unknown"}
+                {rowToDelete.kind === "bolus" ? "Bolus" : "Carb Intake"}
               </div>
-              {#if treatmentToDelete.insulin}
+              {#if rowToDelete.kind === "bolus" && rowToDelete.insulin}
                 <div>
                   <strong>Insulin:</strong>
-                  {formatInsulinDisplay(treatmentToDelete.insulin)}U
+                  {formatInsulinDisplay(rowToDelete.insulin)}U
                 </div>
               {/if}
-              {#if treatmentToDelete.carbs}
+              {#if rowToDelete.kind === "carbIntake" && rowToDelete.carbs}
                 <div>
                   <strong>Carbs:</strong>
-                  {formatCarbDisplay(treatmentToDelete.carbs)}g
+                  {formatCarbDisplay(rowToDelete.carbs)}g
                 </div>
               {/if}
             </div>
@@ -515,7 +345,7 @@
           class="flex-1"
           onclick={() => {
             showDeleteConfirm = false;
-            treatmentToDelete = null;
+            rowToDelete = null;
           }}
           disabled={isLoading}
         >
@@ -523,18 +353,18 @@
         </Button>
         <form
           {...deleteTreatmentForm
-            .for(treatmentToDelete._id || "")
+            .for(rowToDelete.id || "")
             .enhance(async ({ submit }) => {
               isLoading = true;
               try {
                 await submit();
-                toast.success("Treatment deleted successfully");
+                toast.success("Deleted successfully");
                 showDeleteConfirm = false;
-                treatmentToDelete = null;
+                rowToDelete = null;
                 reportsResource.refresh();
               } catch (error) {
                 console.error("Delete error:", error);
-                toast.error("Failed to delete treatment");
+                toast.error("Failed to delete");
               } finally {
                 isLoading = false;
               }
@@ -544,7 +374,12 @@
           <input
             type="hidden"
             name="treatmentId"
-            value={treatmentToDelete._id}
+            value={rowToDelete.id}
+          />
+          <input
+            type="hidden"
+            name="treatmentKind"
+            value={rowToDelete.kind}
           />
           <Button
             type="submit"
@@ -561,7 +396,7 @@
 {/if}
 
 <!-- Bulk Delete Confirmation Modal -->
-{#if showBulkDeleteConfirm && treatmentsToDelete.length > 0}
+{#if showBulkDeleteConfirm && rowsToDelete.length > 0}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     role="dialog"
@@ -569,9 +404,9 @@
   >
     <Card.Root class="w-full max-w-lg">
       <Card.Header>
-        <Card.Title>Delete {treatmentsToDelete.length} Treatments</Card.Title>
+        <Card.Title>Delete {rowsToDelete.length} Records</Card.Title>
         <Card.Description>
-          Are you sure you want to delete {treatmentsToDelete.length} selected treatment{treatmentsToDelete.length !==
+          Are you sure you want to delete {rowsToDelete.length} selected record{rowsToDelete.length !==
           1
             ? "s"
             : ""}? This action cannot be undone.
@@ -580,34 +415,34 @@
 
       <Card.Content>
         <Alert.Root>
-          <Alert.Title>Selected Treatments</Alert.Title>
+          <Alert.Title>Selected Records</Alert.Title>
           <Alert.Description>
             <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
-              {#each treatmentsToDelete.slice(0, 5) as treatment}
+              {#each rowsToDelete.slice(0, 5) as row}
                 <div
                   class="flex items-center justify-between border-b border-border py-1 last:border-b-0"
                 >
                   <div>
                     <div class="font-medium">
-                      {treatment.eventType || "Unknown"}
+                      {row.kind === "bolus" ? "Bolus" : "Carb Intake"}
                     </div>
                     <div class="text-xs text-muted-foreground">
-                      {formatDate(treatment.created_at)}
+                      {formatRowTime(row)}
                     </div>
                   </div>
                   <div class="text-xs">
-                    {#if treatment.insulin}
-                      {formatInsulinDisplay(treatment.insulin)}U
+                    {#if row.kind === "bolus" && row.insulin}
+                      {formatInsulinDisplay(row.insulin)}U
                     {/if}
-                    {#if treatment.carbs}
-                      {formatCarbDisplay(treatment.carbs)}g
+                    {#if row.kind === "carbIntake" && row.carbs}
+                      {formatCarbDisplay(row.carbs)}g
                     {/if}
                   </div>
                 </div>
               {/each}
-              {#if treatmentsToDelete.length > 5}
+              {#if rowsToDelete.length > 5}
                 <div class="py-2 text-center text-xs text-muted-foreground">
-                  ... and {treatmentsToDelete.length - 5} more treatments
+                  ... and {rowsToDelete.length - 5} more records
                 </div>
               {/if}
             </div>
@@ -622,7 +457,7 @@
           class="flex-1"
           onclick={() => {
             showBulkDeleteConfirm = false;
-            treatmentsToDelete = [];
+            rowsToDelete = [];
           }}
           disabled={isLoading}
         >
@@ -636,21 +471,20 @@
           onclick={async () => {
             isLoading = true;
             try {
-              const treatmentIds = treatmentsToDelete
-                .map((t) => t._id)
-                .filter(Boolean) as string[];
-              const result = await bulkDeleteTreatments(treatmentIds);
+              const items = rowsToDelete
+                .map((r) => ({ id: r.id!, kind: r.kind }));
+              const result = await bulkDeleteTreatments(items);
               if (result.success) {
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;
-                treatmentsToDelete = [];
+                rowsToDelete = [];
                 reportsResource.refresh();
               } else {
                 toast.error(result.message);
               }
             } catch (error) {
               console.error("Bulk delete error:", error);
-              toast.error("Failed to delete treatments");
+              toast.error("Failed to delete records");
             } finally {
               isLoading = false;
             }
@@ -658,7 +492,7 @@
         >
           {isLoading
             ? "Deleting..."
-            : `Delete ${treatmentsToDelete.length} Treatment${treatmentsToDelete.length !== 1 ? "s" : ""}`}
+            : `Delete ${rowsToDelete.length} Record${rowsToDelete.length !== 1 ? "s" : ""}`}
         </Button>
       </Card.Footer>
     </Card.Root>

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -22,13 +23,19 @@ public class StatisticsController : ControllerBase
     private readonly IPostgreSqlService _postgreSqlService;
     private readonly IProfileService _profileService;
     private readonly IStateSpanService _stateSpanService;
+    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
+    private readonly IBolusRepository _bolusRepository;
+    private readonly ICarbIntakeRepository _carbIntakeRepository;
 
     public StatisticsController(
         IStatisticsService statisticsService,
         ICacheService cacheService,
         IPostgreSqlService postgreSqlService,
         IProfileService profileService,
-        IStateSpanService stateSpanService
+        IStateSpanService stateSpanService,
+        ISensorGlucoseRepository sensorGlucoseRepository,
+        IBolusRepository bolusRepository,
+        ICarbIntakeRepository carbIntakeRepository
     )
     {
         _statisticsService = statisticsService;
@@ -36,6 +43,9 @@ public class StatisticsController : ControllerBase
         _postgreSqlService = postgreSqlService;
         _profileService = profileService;
         _stateSpanService = stateSpanService;
+        _sensorGlucoseRepository = sensorGlucoseRepository;
+        _bolusRepository = bolusRepository;
+        _carbIntakeRepository = carbIntakeRepository;
     }
 
     /// <summary>
@@ -552,35 +562,42 @@ public class StatisticsController : ControllerBase
                 var startDate = now.AddDays(-days);
                 var endDate = now;
 
-                // Get entries for this period
-                var entries = await _postgreSqlService.GetEntriesWithAdvancedFilterAsync(
-                    type: "sgv",
-                    count: 10000, // Large number to get all entries in period
-                    dateString: startDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    cancellationToken: cancellationToken
-                );
-
-                // Filter entries to the specific period
-                var filteredEntries = entries
-                    .Where(e => e.Date >= startDate && e.Date <= endDate)
-                    .ToList();
-
-                // Get treatments for this period
-                var treatments = await _postgreSqlService.GetTreatmentsAsync(
-                    count: 10000,
-                    cancellationToken: cancellationToken
-                );
-
-                // Filter treatments to the specific period using Mills (the canonical timestamp)
                 var startTimestamp = ((DateTimeOffset)startDate).ToUnixTimeMilliseconds();
                 var endTimestamp = ((DateTimeOffset)endDate).ToUnixTimeMilliseconds();
-                var filteredTreatments = treatments
-                    .Where(t =>
-                        t.Mills > 0
-                        && t.Mills >= startTimestamp
-                        && t.Mills <= endTimestamp
-                    )
-                    .ToList();
+
+                // Fetch v4 data for this period (sequential — DbContext is not thread-safe)
+                var sensorGlucoseData = await _sensorGlucoseRepository.GetAsync(
+                    from: startTimestamp,
+                    to: endTimestamp,
+                    device: null,
+                    source: null,
+                    limit: 10000,
+                    descending: false,
+                    ct: cancellationToken
+                );
+                var filteredEntries = sensorGlucoseData.ToList();
+
+                var bolusData = await _bolusRepository.GetAsync(
+                    from: startTimestamp,
+                    to: endTimestamp,
+                    device: null,
+                    source: null,
+                    limit: 10000,
+                    descending: false,
+                    ct: cancellationToken
+                );
+                var filteredBoluses = bolusData.ToList();
+
+                var carbData = await _carbIntakeRepository.GetAsync(
+                    from: startTimestamp,
+                    to: endTimestamp,
+                    device: null,
+                    source: null,
+                    limit: 10000,
+                    descending: false,
+                    ct: cancellationToken
+                );
+                var filteredCarbs = carbData.ToList();
 
                 // Calculate analytics if we have sufficient data
                 GlucoseAnalytics? analytics = null;
@@ -592,18 +609,16 @@ public class StatisticsController : ControllerBase
                 {
                     analytics = _statisticsService.AnalyzeGlucoseData(
                         filteredEntries,
-                        filteredTreatments
+                        filteredBoluses,
+                        filteredCarbs
                     );
 
-                    // Calculate treatment summary from treatments
                     treatmentSummary = _statisticsService.CalculateTreatmentSummary(
-                        filteredTreatments
+                        filteredBoluses,
+                        filteredCarbs
                     );
 
-                    // Use StateSpan basal data (actual pump delivery) when available,
-                    // falling back to profile-based or treatment-based calculation.
-                    // StateSpans represent real delivered insulin and match the
-                    // daily-basal-bolus-ratios endpoint so TDD values are consistent.
+                    // Fetch basal StateSpans (actual pump delivery data)
                     var basalSpans = await _stateSpanService.GetStateSpansAsync(
                         category: StateSpanCategory.BasalDelivery,
                         from: startTimestamp,
@@ -612,26 +627,19 @@ public class StatisticsController : ControllerBase
                     );
                     var basalSpansList = basalSpans.ToList();
 
-                    if (basalSpansList.Count > 0)
+                    insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
+                        filteredBoluses,
+                        basalSpansList,
+                        startDate,
+                        endDate
+                    );
+
+                    // If no StateSpans but we have profile data, augment with scheduled basal
+                    if (basalSpansList.Count == 0 && _profileService.HasData())
                     {
-                        insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
-                            filteredTreatments,
-                            basalSpansList,
-                            startDate,
-                            endDate
-                        );
-                    }
-                    else if (_profileService.HasData())
-                    {
-                        insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
-                            filteredTreatments,
-                            startDate,
-                            endDate
-                        );
                         var profileBasal = CalculateScheduledBasalForPeriod(
                             startTimestamp,
-                            endTimestamp,
-                            filteredTreatments
+                            endTimestamp
                         );
                         var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
                         insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
@@ -644,17 +652,41 @@ public class StatisticsController : ControllerBase
                             ? Math.Round(insulinDelivery.TotalBolus / totalWithProfile * 100 * 10) / 10
                             : 0;
                     }
-                    else
-                    {
-                        insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
-                            filteredTreatments,
-                            startDate,
-                            endDate
-                        );
-                    }
 
                     // Keep treatment summary basal consistent
                     treatmentSummary.Totals.Insulin.Basal = insulinDelivery.TotalBasal;
+                }
+
+                // Compute GMI and reliability for this period
+                GlucoseManagementIndicator? periodGmi = null;
+                StatisticReliability? periodReliability = null;
+
+                if (hasSufficientData && analytics != null)
+                {
+                    periodGmi = _statisticsService.CalculateGMI(analytics.BasicStats.Mean);
+
+                    var actualDaysWithData = filteredEntries
+                        .Where(e => e.Mills > 0)
+                        .Select(e => DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).Date)
+                        .Distinct()
+                        .Count();
+
+                    // Context-appropriate recommended minimums:
+                    // Short periods can't reasonably need 14 days
+                    var recommendedDays = days switch
+                    {
+                        <= 3 => days,
+                        <= 7 => 7,
+                        _ => 14, // clinical standard for 30/90 day periods
+                    };
+
+                    periodReliability = _statisticsService.AssessReliability(
+                        actualDaysWithData,
+                        filteredEntries.Count,
+                        recommendedDays
+                    );
+
+                    periodGmi.Reliability = periodReliability;
                 }
 
                 periodResults.Add(
@@ -669,8 +701,10 @@ public class StatisticsController : ControllerBase
                             TreatmentSummary = treatmentSummary,
                             InsulinDelivery = insulinDelivery,
                             HasSufficientData = hasSufficientData,
+                            Gmi = periodGmi,
+                            Reliability = periodReliability,
                             EntryCount = filteredEntries.Count,
-                            TreatmentCount = filteredTreatments.Count,
+                            TreatmentCount = filteredBoluses.Count + filteredCarbs.Count,
                         }
                     )
                 );
@@ -717,80 +751,29 @@ public class StatisticsController : ControllerBase
     /// </summary>
     /// <param name="startTimestamp">Start time in Unix milliseconds</param>
     /// <param name="endTimestamp">End time in Unix milliseconds</param>
-    /// <param name="treatments">Treatments in the period (for temp basal adjustments)</param>
     /// <returns>Total scheduled basal insulin in units</returns>
     private double CalculateScheduledBasalForPeriod(
         long startTimestamp,
-        long endTimestamp,
-        List<Treatment> treatments
+        long endTimestamp
     )
     {
         double totalBasal = 0.0;
 
-        // Get temp basal treatments sorted by time
-        var tempBasalTreatments = treatments
-            .Where(t =>
-                !string.IsNullOrEmpty(t.EventType) &&
-                (t.EventType.Equals("Temp Basal", StringComparison.OrdinalIgnoreCase) ||
-                 t.EventType.Equals("TempBasal", StringComparison.OrdinalIgnoreCase) ||
-                 t.EventType.Equals("Temporary Basal", StringComparison.OrdinalIgnoreCase))
-            )
-            .OrderBy(t => t.Mills)
-            .ToList();
-
         // Sample at 5-minute intervals (same as CGM readings)
+        // In v4, temp basal adjustments come from StateSpans (handled by the primary code path).
+        // This fallback uses only the profile schedule when no StateSpans exist.
         const long intervalMs = 5 * 60 * 1000; // 5 minutes in milliseconds
         var currentTime = startTimestamp;
 
         while (currentTime < endTimestamp)
         {
-            // Get scheduled basal rate at this time (units per hour)
             var scheduledRate = _profileService.GetBasalRate(currentTime);
-
-            // Check if there's an active temp basal at this time
-            var activeTempBasal = tempBasalTreatments.FirstOrDefault(t =>
-            {
-                var tempStart = t.Mills;
-                var durationMs = (t.Duration ?? 0) * 60 * 1000; // Duration is in minutes
-                var tempEnd = tempStart + durationMs;
-                return currentTime >= tempStart && currentTime < tempEnd;
-            });
-
-            double effectiveRate;
-            if (activeTempBasal != null)
-            {
-                // Use temp basal rate instead of scheduled
-                if (activeTempBasal.Absolute.HasValue)
-                {
-                    effectiveRate = activeTempBasal.Absolute.Value;
-                }
-                else if (activeTempBasal.Rate.HasValue)
-                {
-                    effectiveRate = activeTempBasal.Rate.Value;
-                }
-                else if (activeTempBasal.Percent.HasValue)
-                {
-                    // Percent is relative to scheduled rate
-                    effectiveRate = scheduledRate * (100 + activeTempBasal.Percent.Value) / 100.0;
-                }
-                else
-                {
-                    effectiveRate = scheduledRate;
-                }
-            }
-            else
-            {
-                effectiveRate = scheduledRate;
-            }
-
-            // Convert rate (units/hour) to insulin delivered in this 5-minute interval
-            var insulinDelivered = effectiveRate * (5.0 / 60.0); // 5 minutes = 5/60 hours
+            var insulinDelivered = scheduledRate * (5.0 / 60.0); // 5 minutes = 5/60 hours
             totalBasal += insulinDelivered;
-
             currentTime += intervalMs;
         }
 
-        return Math.Round(totalBasal * 100) / 100; // Round to 2 decimal places
+        return Math.Round(totalBasal * 100) / 100;
     }
 
     /// <summary>
@@ -839,12 +822,15 @@ public class StatisticsController : ControllerBase
             var startMills = new DateTimeOffset(startDate).ToUnixTimeMilliseconds();
             var endMills = new DateTimeOffset(endDate).ToUnixTimeMilliseconds();
 
-            // Fetch treatments (for bolus) and basal StateSpans sequentially
+            // Fetch boluses and basal StateSpans sequentially
             // (DbContext is not thread-safe, can't use Task.WhenAll)
-            var treatments = await _postgreSqlService.GetTreatmentsByTimeRangeAsync(
-                startMills,
-                endMills,
-                count: 10000
+            var boluses = await _bolusRepository.GetAsync(
+                from: startMills,
+                to: endMills,
+                device: null,
+                source: null,
+                limit: 10000,
+                descending: false
             );
 
             var basalSpans = await _stateSpanService.GetStateSpansAsync(
@@ -855,7 +841,7 @@ public class StatisticsController : ControllerBase
             );
 
             var result = _statisticsService.CalculateDailyBasalBolusRatios(
-                treatments,
+                boluses,
                 basalSpans
             );
             return Ok(result);
@@ -884,12 +870,14 @@ public class StatisticsController : ControllerBase
             var startMills = new DateTimeOffset(startDate).ToUnixTimeMilliseconds();
             var endMills = new DateTimeOffset(endDate).ToUnixTimeMilliseconds();
 
-            // Fetch treatments and basal StateSpans
-            var treatments = await _postgreSqlService.GetTreatmentsWithAdvancedFilterAsync(
-                count: 10000,
-                skip: 0,
-                findQuery: $"{{\"mills\":{{\"$gte\":{startMills},\"$lte\":{endMills}}}}}",
-                reverseResults: false
+            // Fetch boluses and basal StateSpans
+            var boluses = await _bolusRepository.GetAsync(
+                from: startMills,
+                to: endMills,
+                device: null,
+                source: null,
+                limit: 10000,
+                descending: false
             );
 
             var basalSpans = await _stateSpanService.GetStateSpansAsync(
@@ -898,13 +886,9 @@ public class StatisticsController : ControllerBase
                 to: endMills,
                 count: 10000
             );
-            var basalSpansList = basalSpans.ToList();
 
-            var result = basalSpansList.Count > 0
-                ? _statisticsService.CalculateInsulinDeliveryStatistics(
-                    treatments, basalSpansList, startDate, endDate)
-                : _statisticsService.CalculateInsulinDeliveryStatistics(
-                    treatments, startDate, endDate);
+            var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+                boluses, basalSpans, startDate, endDate);
             return Ok(result);
         }
         catch (Exception ex)

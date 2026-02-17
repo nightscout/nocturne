@@ -276,15 +276,14 @@ public class ChartDataService : IChartDataService
         // Device event markers from v4 DeviceEvent table
         var deviceEventMarkers = BuildDeviceEventMarkers(deviceEventList);
 
-        // Process food offsets using carb intake correlation IDs and CarbIntake for base lookup
-        var carbTreatmentIds = displayCarbIntakes
-            .Where(c => c.CorrelationId.HasValue)
-            .Select(c => c.CorrelationId!.Value)
+        // Process food offsets using carb intake IDs
+        var carbIntakeIds = displayCarbIntakes
+            .Select(c => c.Id)
             .Distinct()
             .ToList();
         await ProcessFoodOffsetsAsync(
             carbMarkers,
-            carbTreatmentIds,
+            carbIntakeIds,
             displayCarbIntakes,
             cancellationToken
         );
@@ -654,39 +653,35 @@ public class ChartDataService : IChartDataService
 
     internal async Task ProcessFoodOffsetsAsync(
         List<CarbMarkerDto> carbMarkers,
-        List<Guid> carbTreatmentIds,
+        List<Guid> carbIntakeIds,
         List<CarbIntake> displayCarbIntakes,
         CancellationToken cancellationToken
     )
     {
-        if (carbTreatmentIds.Count == 0)
+        if (carbIntakeIds.Count == 0)
             return;
 
         var foods = (
-            await _treatmentFoodService.GetByTreatmentIdsAsync(carbTreatmentIds, cancellationToken)
+            await _treatmentFoodService.GetByCarbIntakeIdsAsync(carbIntakeIds, cancellationToken)
         ).ToList();
 
         if (foods.Count == 0)
             return;
 
-        var foodsByTreatment = foods
-            .GroupBy(f => f.TreatmentId)
+        var foodsByCarbIntake = foods
+            .GroupBy(f => f.CarbIntakeId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Build a lookup from correlation ID to carb intake for base treatment resolution
-        var carbByCorrelationId = displayCarbIntakes
-            .Where(c => c.CorrelationId.HasValue)
-            .ToDictionary(c => c.CorrelationId!.Value, c => c);
+        var carbIntakeById = displayCarbIntakes.ToDictionary(c => c.Id, c => c);
 
-        foreach (var (treatmentId, treatmentFoods) in foodsByTreatment)
+        foreach (var (carbIntakeId, carbIntakeFoods) in foodsByCarbIntake)
         {
-            var offsetFoods = treatmentFoods.Where(f => f.TimeOffsetMinutes != 0).ToList();
+            var offsetFoods = carbIntakeFoods.Where(f => f.TimeOffsetMinutes != 0).ToList();
 
             if (offsetFoods.Count == 0)
                 continue;
 
-            // Look up the base carb intake via correlation ID instead of legacy Treatment
-            if (!carbByCorrelationId.TryGetValue(treatmentId, out var baseCarbIntake))
+            if (!carbIntakeById.TryGetValue(carbIntakeId, out var baseCarbIntake))
                 continue;
 
             var baseMills = baseCarbIntake.Mills;
@@ -719,7 +714,7 @@ public class ChartDataService : IChartDataService
             }
 
             // Update base marker label with base food names
-            var baseFoods = treatmentFoods.Where(f => f.TimeOffsetMinutes == 0).ToList();
+            var baseFoods = carbIntakeFoods.Where(f => f.TimeOffsetMinutes == 0).ToList();
             if (baseFoods.Count > 0)
             {
                 var baseLabels = baseFoods

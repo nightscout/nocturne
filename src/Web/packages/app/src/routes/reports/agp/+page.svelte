@@ -22,6 +22,7 @@
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -214,6 +215,8 @@
         <div class="text-[10px] text-orange-500">Target: &lt;25%</div>
       </Card>
     </div>
+
+    <ReliabilityBadge reliability={analysis?.reliability} />
 
     <!-- Main AGP Chart -->
     <Card class="border-2">

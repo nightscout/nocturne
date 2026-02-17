@@ -105,11 +105,12 @@ public class MealMatchingService : IMealMatchingService
             return;
         }
 
-        // Create TreatmentFood entry
+        // TODO: Phase 9 — MealMatchingService needs to be updated to work with CarbIntake records
+        // instead of legacy Treatments. For now, treatmentId is passed as CarbIntakeId.
         var treatmentFood = new TreatmentFood
         {
             Id = Guid.CreateVersion7(),
-            TreatmentId = treatmentId,
+            CarbIntakeId = treatmentId,
             FoodId = foodEntry.FoodId,
             Portions = foodEntry.Servings,
             Carbs = carbs,

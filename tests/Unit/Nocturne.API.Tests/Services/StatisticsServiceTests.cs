@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Nocturne.API.Services;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Tests.Services;
 
@@ -107,14 +108,15 @@ public class StatisticsServiceTests
     public void ExtractGlucoseValues_WithMixedEntries_ShouldExtractValidValues()
     {
         // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
         {
-            new Entry { Sgv = 100 },
-            new Entry { Mgdl = 120 },
-            new Entry { Sgv = null, Mgdl = 0 },
-            new Entry { Sgv = 0 },
-            new Entry { Sgv = 700 }, // Should be filtered out
-            new Entry { Mgdl = 80 },
+            new SensorGlucose { Mgdl = 100, Mills = now },
+            new SensorGlucose { Mgdl = 120, Mills = now + 1 },
+            new SensorGlucose { Mgdl = 0, Mills = now + 2 },
+            new SensorGlucose { Mgdl = 0, Mills = now + 3 },
+            new SensorGlucose { Mgdl = 700, Mills = now + 4 }, // Should be filtered out
+            new SensorGlucose { Mgdl = 80, Mills = now + 5 },
         };
 
         // Act
@@ -136,9 +138,9 @@ public class StatisticsServiceTests
         var values = new double[] { 70, 100, 130, 160, 190, 140, 110, 80 };
         var entries = values.Select(
             (v, i) =>
-                new Entry
+                new SensorGlucose
                 {
-                    Sgv = v,
+                    Mgdl = v,
                     Mills = DateTimeOffset.UtcNow.AddMinutes(i * 5).ToUnixTimeMilliseconds(),
                 }
         );
@@ -158,7 +160,7 @@ public class StatisticsServiceTests
     {
         // Arrange
         var values = new double[] { 100 };
-        var entries = new[] { new Entry { Sgv = 100 } };
+        var entries = new[] { new SensorGlucose { Mgdl = 100, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() } };
 
         // Act & Assert
         Action act = () => _statisticsService.CalculateGlycemicVariability(values, entries);
@@ -227,14 +229,15 @@ public class StatisticsServiceTests
     public void CalculateTimeInRange_WithValidEntries_ShouldReturnCorrectPercentages()
     {
         // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
         {
-            new Entry { Sgv = 50 }, // Severe low
-            new Entry { Sgv = 65 }, // Low
-            new Entry { Sgv = 100 }, // Target
-            new Entry { Sgv = 150 }, // Target
-            new Entry { Sgv = 200 }, // High
-            new Entry { Sgv = 300 }, // Severe high
+            new SensorGlucose { Mgdl = 50, Mills = now },         // Severe low
+            new SensorGlucose { Mgdl = 65, Mills = now + 1 },     // Low
+            new SensorGlucose { Mgdl = 100, Mills = now + 2 },    // Target
+            new SensorGlucose { Mgdl = 150, Mills = now + 3 },    // Target
+            new SensorGlucose { Mgdl = 200, Mills = now + 4 },    // High
+            new SensorGlucose { Mgdl = 300, Mills = now + 5 },    // Severe high
         };
 
         // Act
@@ -253,11 +256,12 @@ public class StatisticsServiceTests
     public void CalculateTimeInRange_WithCustomThresholds_ShouldUseCustomValues()
     {
         // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
         {
-            new Entry { Sgv = 100 },
-            new Entry { Sgv = 120 },
-            new Entry { Sgv = 140 },
+            new SensorGlucose { Mgdl = 100, Mills = now },
+            new SensorGlucose { Mgdl = 120, Mills = now + 1 },
+            new SensorGlucose { Mgdl = 140, Mills = now + 2 },
         };
         var customThresholds = new GlycemicThresholds { TargetBottom = 90, TargetTop = 130 };
 
@@ -273,7 +277,7 @@ public class StatisticsServiceTests
     public void CalculateTimeInRange_WithEmptyEntries_ShouldReturnZeroMetrics()
     {
         // Arrange
-        var entries = new Entry[] { };
+        var entries = Array.Empty<SensorGlucose>();
 
         // Act
         var result = _statisticsService.CalculateTimeInRange(entries);
@@ -292,12 +296,13 @@ public class StatisticsServiceTests
     public void CalculateGlucoseDistribution_WithValidEntries_ShouldReturnDistribution()
     {
         // Arrange
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
         {
-            new Entry { Sgv = 75 }, // 70-80 range
-            new Entry { Sgv = 95 }, // 90-100 range
-            new Entry { Sgv = 125 }, // 120-130 range
-            new Entry { Sgv = 175 }, // 150-180 range
+            new SensorGlucose { Mgdl = 75, Mills = now },      // 70-80 range
+            new SensorGlucose { Mgdl = 95, Mills = now + 1 },  // 90-100 range
+            new SensorGlucose { Mgdl = 125, Mills = now + 2 }, // 120-130 range
+            new SensorGlucose { Mgdl = 175, Mills = now + 3 }, // 150-180 range
         };
 
         // Act
@@ -315,12 +320,13 @@ public class StatisticsServiceTests
     public void CalculateAveragedStats_WithValidEntries_ShouldReturn24HourStats()
     {
         // Arrange
+        var baseTime = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
         var entries = Enumerable
             .Range(0, 24)
-            .Select(hour => new Entry
+            .Select(hour => new SensorGlucose
             {
-                Sgv = 100 + hour * 2, // Gradually increasing glucose
-                Date = DateTime.Today.AddHours(hour),
+                Mgdl = 100 + hour * 2, // Gradually increasing glucose
+                Mills = baseTime.AddHours(hour).ToUnixTimeMilliseconds(),
             });
 
         // Act
@@ -336,7 +342,7 @@ public class StatisticsServiceTests
     public void CalculateAveragedStats_WithEmptyEntries_ShouldReturnEmpty24HourStats()
     {
         // Arrange
-        var entries = new Entry[] { };
+        var entries = Array.Empty<SensorGlucose>();
 
         // Act
         var result = _statisticsService.CalculateAveragedStats(entries).ToList();
@@ -352,77 +358,31 @@ public class StatisticsServiceTests
     #region Treatment Statistics Tests
 
     [Fact]
-    public void CalculateTreatmentSummary_WithValidTreatments_ShouldReturnSummary()
+    public void CalculateTreatmentSummary_WithValidData_ShouldReturnSummary()
     {
         // Arrange
-        var treatments = new[]
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var boluses = new[]
         {
-            new Treatment
-            {
-                EventType = "Meal Bolus",
-                Insulin = 5.0,
-                Carbs = 45,
-            },
-            new Treatment { EventType = "Correction Bolus", Insulin = 2.0 },
-            new Treatment { EventType = "Temp Basal", Insulin = 1.5 },
-            new Treatment
-            {
-                Carbs = 15,
-                Protein = 10,
-                Fat = 5,
-            },
+            new Bolus { Insulin = 5.0, Mills = now, Automatic = false },      // Meal bolus
+            new Bolus { Insulin = 2.0, Mills = now + 1, Automatic = false },  // Correction bolus
+        };
+        var carbIntakes = new[]
+        {
+            new CarbIntake { Carbs = 45, Mills = now, Protein = 10, Fat = 5 },
+            new CarbIntake { Carbs = 15, Mills = now + 1 },
         };
 
         // Act
-        var result = _statisticsService.CalculateTreatmentSummary(treatments);
+        var result = _statisticsService.CalculateTreatmentSummary(boluses, carbIntakes);
 
         // Assert
         result.Should().NotBeNull();
         result.TreatmentCount.Should().Be(4);
         result.Totals.Insulin.Bolus.Should().Be(7.0);
-        result.Totals.Insulin.Basal.Should().Be(1.5);
         result.Totals.Food.Carbs.Should().Be(60);
         result.Totals.Food.Protein.Should().Be(10);
         result.Totals.Food.Fat.Should().Be(5);
-    }
-
-    [Fact]
-    public void IsBolusTreatment_WithBolusEventType_ShouldReturnTrue()
-    {
-        // Arrange
-        var bolusTreatments = new[]
-        {
-            new Treatment { EventType = "Meal Bolus" },
-            new Treatment { EventType = "Correction Bolus" },
-            new Treatment { EventType = "Snack Bolus" },
-            new Treatment { EventType = "Bolus Wizard" },
-            new Treatment { EventType = "Combo Bolus" },
-        };
-
-        // Act & Assert
-        foreach (var treatment in bolusTreatments)
-        {
-            _statisticsService.IsBolusTreatment(treatment).Should().BeTrue();
-        }
-    }
-
-    [Fact]
-    public void IsBolusTreatment_WithNonBolusEventType_ShouldReturnFalse()
-    {
-        // Arrange
-        var nonBolusTreatments = new[]
-        {
-            new Treatment { EventType = "Temp Basal" },
-            new Treatment { EventType = "BG Check" },
-            new Treatment { EventType = "Carb Correction" },
-            new Treatment { EventType = "Note" },
-        };
-
-        // Act & Assert
-        foreach (var treatment in nonBolusTreatments)
-        {
-            _statisticsService.IsBolusTreatment(treatment).Should().BeFalse();
-        }
     }
 
     [Fact]
@@ -635,6 +595,64 @@ public class StatisticsServiceTests
 
     #endregion
 
+    #region Reliability Assessment Tests
+
+    [Theory]
+    [InlineData(14, 100, 14, true)]   // Meets days + has readings
+    [InlineData(30, 500, 14, true)]   // Exceeds recommended days
+    [InlineData(10, 100, 14, false)]  // Below recommended days
+    [InlineData(14, 0, 14, false)]    // No readings
+    [InlineData(0, 0, 14, false)]     // No data at all
+    [InlineData(1, 288, 1, true)]     // 1-day period, 1 day of data
+    [InlineData(7, 2016, 7, true)]    // 7-day period, 7 days of data
+    public void AssessReliability_WithVariousInputs_ShouldReturnCorrectMeetsReliabilityCriteria(
+        int daysOfData,
+        int readingCount,
+        int recommendedMinimumDays,
+        bool expectedMeetsReliability
+    )
+    {
+        // Act
+        var result = _statisticsService.AssessReliability(daysOfData, readingCount, recommendedMinimumDays);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.MeetsReliabilityCriteria.Should().Be(expectedMeetsReliability);
+        result.DaysOfData.Should().Be(daysOfData);
+        result.RecommendedMinimumDays.Should().Be(recommendedMinimumDays);
+        result.ReadingCount.Should().Be(readingCount);
+    }
+
+    #endregion
+
+    #region GMI on GlycemicVariability Tests
+
+    [Fact]
+    public void CalculateGlycemicVariability_WithValidData_ShouldPopulateGmiAndEstimatedA1c()
+    {
+        // Arrange
+        var values = new double[] { 70, 100, 130, 160, 190, 140, 110, 80 };
+        var entries = values.Select(
+            (v, i) =>
+                new SensorGlucose
+                {
+                    Mgdl = v,
+                    Mills = DateTimeOffset.UtcNow.AddMinutes(i * 5).ToUnixTimeMilliseconds(),
+                }
+        );
+
+        // Act
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Gmi.Should().NotBeNull();
+        result.Gmi!.Value.Should().BeGreaterThan(0);
+        result.EstimatedA1c.Should().BeGreaterThan(0);
+    }
+
+    #endregion
+
     #region Comprehensive Analytics Tests
 
     [Fact]
@@ -643,24 +661,24 @@ public class StatisticsServiceTests
         // Arrange
         var entries = Enumerable
             .Range(0, 100)
-            .Select(i => new Entry
+            .Select(i => new SensorGlucose
             {
-                Sgv = 100 + (i % 50 - 25), // Glucose values ranging from 75-125
+                Mgdl = 100 + (i % 50 - 25), // Glucose values ranging from 75-125
                 Mills = DateTimeOffset.UtcNow.AddMinutes(i * 5).ToUnixTimeMilliseconds(),
             });
 
-        var treatments = new[]
+        var boluses = new[]
         {
-            new Treatment
-            {
-                EventType = "Meal Bolus",
-                Insulin = 5.0,
-                Carbs = 45,
-            },
+            new Bolus { Insulin = 5.0, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Automatic = false },
+        };
+
+        var carbIntakes = new[]
+        {
+            new CarbIntake { Carbs = 45, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
         };
 
         // Act
-        var result = _statisticsService.AnalyzeGlucoseData(entries, treatments);
+        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes);
 
         // Assert
         result.Should().NotBeNull();
@@ -677,11 +695,12 @@ public class StatisticsServiceTests
     public void AnalyzeGlucoseData_WithEmptyData_ShouldReturnEmptyAnalytics()
     {
         // Arrange
-        var entries = new Entry[] { };
-        var treatments = new Treatment[] { };
+        var entries = Array.Empty<SensorGlucose>();
+        var boluses = Array.Empty<Bolus>();
+        var carbIntakes = Array.Empty<CarbIntake>();
 
         // Act
-        var result = _statisticsService.AnalyzeGlucoseData(entries, treatments);
+        var result = _statisticsService.AnalyzeGlucoseData(entries, boluses, carbIntakes);
 
         // Assert
         result.Should().NotBeNull();

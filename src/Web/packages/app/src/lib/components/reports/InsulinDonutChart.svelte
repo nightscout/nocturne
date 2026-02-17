@@ -1,19 +1,14 @@
 <script lang="ts">
   import { Text, PieChart } from "layerchart";
-  import type { Treatment } from "$lib/api";
-  import { TreatmentEditDialog } from "$lib/components/treatments";
+  import type { Bolus } from "$lib/api";
 
   interface Props {
-    treatments: Treatment[];
+    boluses: Bolus[];
     basal: number;
     href?: string;
   }
 
-  let { treatments, basal }: Props = $props();
-
-  // Dialog state
-  let selectedTreatment = $state<Treatment | null>(null);
-  let editDialogOpen = $state(false);
+  let { boluses, basal }: Props = $props();
 
   // Colors - generate shades of blue for individual boluses
   const BASAL_COLOR = "hsl(38, 92%, 50%)"; // Amber for basal
@@ -25,9 +20,9 @@
     return `hsl(${baseHue}, ${baseSat}%, ${lightness}%)`;
   }
 
-  // Get bolus treatments only
+  // Get boluses with insulin
   const bolusTreatments = $derived(
-    treatments.filter((t) => (t.insulin ?? 0) > 0)
+    boluses.filter((t) => (t.insulin ?? 0) > 0)
   );
 
   // Create segment data
@@ -35,7 +30,7 @@
     key: string;
     value: number;
     color: string;
-    treatment?: Treatment;
+    bolus?: Bolus;
     startAngle: number;
     endAngle: number;
   }
@@ -57,7 +52,7 @@
         key: "Bolus",
         value,
         color: getBolusColor(i, bolusTreatments.length),
-        treatment: t,
+        bolus: t,
         startAngle: currentAngle,
         endAngle: currentAngle + angleSize,
       });
@@ -85,18 +80,7 @@
   );
   const total = $derived(totalBolus + basal);
 
-  // Handle treatment dialog close
-  function handleDialogClose() {
-    editDialogOpen = false;
-    selectedTreatment = null;
-  }
 
-  // Handle treatment save (placeholder)
-  function handleTreatmentSave(updatedTreatment: Treatment) {
-    console.log("Saving treatment:", updatedTreatment);
-    editDialogOpen = false;
-    selectedTreatment = null;
-  }
 </script>
 
 <div class="flex flex-col items-center">
@@ -137,10 +121,3 @@
   {/if}
 </div>
 
-<!-- Treatment Edit Dialog -->
-<TreatmentEditDialog
-  bind:open={editDialogOpen}
-  treatment={selectedTreatment}
-  onClose={handleDialogClose}
-  onSave={handleTreatmentSave}
-/>

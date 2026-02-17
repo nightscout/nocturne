@@ -38,7 +38,7 @@
   );
 
   // Derived data from reportsResource
-  const treatments = $derived(reportsResource.current?.treatments ?? []);
+  const boluses = $derived(reportsResource.current?.boluses ?? []);
   const basalSeries = $derived(reportsResource.current?.basalSeries ?? []);
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
@@ -259,7 +259,7 @@
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InsulinDeliveryChart {treatments} {basalSeries} showStacked={false} />
+      <InsulinDeliveryChart {boluses} {basalSeries} showStacked={false} />
     </CardContent>
   </Card>
 
@@ -389,7 +389,7 @@
   <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {treatments.length.toLocaleString()} treatments between
+      Report generated from {boluses.length.toLocaleString()} boluses between
       {startDate.toLocaleDateString()} and {endDate.toLocaleDateString()}
     </p>
     <p class="text-muted-foreground/60">

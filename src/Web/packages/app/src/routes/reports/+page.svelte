@@ -75,6 +75,7 @@
     ChevronRight,
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
@@ -445,6 +446,7 @@
                         %
                       </span>
                     </div>
+                    <ReliabilityBadge reliability={analysis?.reliability} />
                   </div>
                   <div
                     class="rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"

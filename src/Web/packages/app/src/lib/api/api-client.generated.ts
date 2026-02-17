@@ -61,7 +61,6 @@ import {
   TimeQueryClient,
   TrackerAlertsClient,
   TrackersClient,
-  TreatmentFoodsClient,
   TreatmentsClient,
   UISettingsClient,
   UserPreferencesClient,
@@ -134,7 +133,6 @@ export class ApiClient {
   public readonly timeQuery: TimeQueryClient;
   public readonly trackerAlerts: TrackerAlertsClient;
   public readonly trackers: TrackersClient;
-  public readonly treatmentFoods: TreatmentFoodsClient;
   public readonly treatments: TreatmentsClient;
   public readonly uiSettings: UISettingsClient;
   public readonly userPreferences: UserPreferencesClient;
@@ -207,7 +205,6 @@ export class ApiClient {
     this.timeQuery = new TimeQueryClient(apiBaseUrl, http);
     this.trackerAlerts = new TrackerAlertsClient(apiBaseUrl, http);
     this.trackers = new TrackersClient(apiBaseUrl, http);
-    this.treatmentFoods = new TreatmentFoodsClient(apiBaseUrl, http);
     this.treatments = new TreatmentsClient(apiBaseUrl, http);
     this.uiSettings = new UISettingsClient(apiBaseUrl, http);
     this.userPreferences = new UserPreferencesClient(apiBaseUrl, http);

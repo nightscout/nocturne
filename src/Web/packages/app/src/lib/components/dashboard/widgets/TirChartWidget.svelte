@@ -5,6 +5,7 @@
   import { getMultiPeriodStatistics } from "$lib/data/generated";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "$lib/components/ui/button";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
@@ -115,6 +116,7 @@
           ↑ {(high + severeHigh).toFixed(0)}%
         </span>
       </div>
+      <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />
     {:else}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">{showAverage ? "No 90-day data available" : "No data available"}</p>

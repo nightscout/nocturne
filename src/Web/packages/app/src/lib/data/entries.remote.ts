@@ -1,5 +1,4 @@
 import { getRequestEvent, query } from "$app/server";
-import type { Entry, Treatment } from "$lib/api";
 import { z } from "zod";
 
 const entriesSchema = z.object({
@@ -15,15 +14,13 @@ export const getEntries = query(entriesSchema, async (props) => {
 
   const { from = new Date(), to = new Date() } = props.dateRange;
   if (!from || !to) throw new Error("Invalid date range");
-  const entriesQuery = JSON.stringify({
-    date: {
-      $gte: from.toISOString(),
-      $lte: to.toISOString(),
-    },
-  });
 
-  const entries: Entry[] = await apiClient.entries.getEntries2(entriesQuery);
-  return entries;
+  const response = await apiClient.glucose.getSensorGlucose(
+    from.getTime(),
+    to.getTime(),
+    10000
+  );
+  return response.data ?? [];
 });
 
 export const getTreatments = query(entriesSchema, async (props) => {
@@ -33,14 +30,18 @@ export const getTreatments = query(entriesSchema, async (props) => {
   const { from = new Date(), to = new Date() } = props.dateRange;
   if (!from || !to) throw new Error("Invalid date range");
 
-  const treatmentsQuery = JSON.stringify({
-    created_at: {
-      $gte: from.toISOString(),
-      $lte: to.toISOString(),
-    },
-  });
-  const treatments: Treatment[] = await apiClient.treatments.getTreatments(undefined, undefined, undefined, treatmentsQuery);
-  return treatments;
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+
+  const [bolusResponse, carbResponse] = await Promise.all([
+    apiClient.insulin.getBoluses(fromMs, toMs, 10000),
+    apiClient.nutrition.getCarbIntakes(fromMs, toMs, 10000),
+  ]);
+
+  return {
+    boluses: bolusResponse.data ?? [],
+    carbIntakes: carbResponse.data ?? [],
+  };
 });
 
 export const getStats = query(entriesSchema, async (props) => {
@@ -50,27 +51,23 @@ export const getStats = query(entriesSchema, async (props) => {
   const { from = new Date(), to = new Date() } = props.dateRange;
   if (!from || !to) throw new Error("Invalid date range");
 
-  const entriesQuery = JSON.stringify({
-    date: {
-      $gte: from.toISOString(),
-      $lte: to.toISOString(),
-    },
-  });
-  const treatmentsQuery = JSON.stringify({
-    created_at: {
-      $gte: from.toISOString(),
-      $lte: to.toISOString(),
-    },
-  });
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
 
-  const [entries, treatments] = await Promise.all([
-    apiClient.entries.getEntries2(entriesQuery),
-    apiClient.treatments.getTreatments(undefined, undefined, undefined, treatmentsQuery),
+  const [entriesResponse, bolusResponse, carbResponse] = await Promise.all([
+    apiClient.glucose.getSensorGlucose(fromMs, toMs, 10000),
+    apiClient.insulin.getBoluses(fromMs, toMs, 10000),
+    apiClient.nutrition.getCarbIntakes(fromMs, toMs, 10000),
   ]);
+
+  const entries = entriesResponse.data ?? [];
+  const boluses = bolusResponse.data ?? [];
+  const carbIntakes = carbResponse.data ?? [];
 
   const stats = apiClient.statistics.analyzeGlucoseData({
     entries,
-    treatments,
+    boluses,
+    carbIntakes,
   });
 
   return stats;

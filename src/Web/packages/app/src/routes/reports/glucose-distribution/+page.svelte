@@ -4,6 +4,7 @@
   import * as Table from "$lib/components/ui/table";
   import { getReportsData } from "$lib/data/reports.remote";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -20,7 +21,6 @@
   // Unwrap the data from the resource with null safety
   const data = $derived({
     entries: reportsResource.current?.entries ?? [],
-    treatments: reportsResource.current?.treatments ?? [],
     analysis: reportsResource.current?.analysis,
     averagedStats: reportsResource.current?.averagedStats,
     dateRange: reportsResource.current?.dateRange ?? {
@@ -290,6 +290,7 @@
               </span>
             </div>
           </div>
+          <ReliabilityBadge reliability={data.analysis?.reliability} />
         </Card.Content>
       </Card.Root>
 

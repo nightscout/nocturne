@@ -3,6 +3,7 @@
   import { Text, PieChart } from "layerchart";
   import { getMultiPeriodStatistics } from "$lib/data/generated";
   import { Button } from "$lib/components/ui/button";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
@@ -116,6 +117,7 @@
           Carbs {carbs.toFixed(0)}g
         </span>
       </div>
+      <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />
     {:else}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">{showAverage ? "No data for 90-day average" : "No data today"}</p>

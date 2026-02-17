@@ -23,7 +23,8 @@
   } from "lucide-svelte";
   import BasalBolusRatioChart from "$lib/components/reports/BasalBolusRatioChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import type { Treatment, InsulinDeliveryStatistics } from "$lib/api";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import type { InsulinDeliveryStatistics } from "$lib/api";
   import { getReportsData } from "$lib/data/reports.remote";
   import { getMultiPeriodStatistics } from "$lib/data/generated";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -40,9 +41,7 @@
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
 
-  const treatments = $derived(
-    (reportsResource.current?.treatments ?? []) as Treatment[]
-  );
+  const boluses = $derived(reportsResource.current?.boluses ?? []);
   const basalSeries = $derived(reportsResource.current?.basalSeries ?? []);
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
@@ -185,6 +184,7 @@
         {(insulinStats.bolusCount ?? 0) + (insulinStats.basalCount ?? 0)} insulin events
       </span>
     </div>
+    <ReliabilityBadge reliability={insulinStats?.reliability} />
   </div>
 
   <!-- What is this report - Educational Card -->
@@ -324,7 +324,7 @@
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InsulinDeliveryChart {treatments} {basalSeries} showStacked={true} />
+      <InsulinDeliveryChart {boluses} {basalSeries} showStacked={true} />
     </CardContent>
   </Card>
 
@@ -494,7 +494,7 @@
   <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {treatments.length.toLocaleString()} treatments between
+      Report generated from {boluses.length.toLocaleString()} boluses between
       {startDate.toLocaleDateString()} and {endDate.toLocaleDateString()}
     </p>
     <p class="text-muted-foreground/60">

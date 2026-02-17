@@ -1,6 +1,6 @@
 /**
  * Remote functions for reports data
- * Provides entries, treatments, and analysis data for all report pages
+ * Provides sensor glucose, boluses, carb intakes, device events, and analysis data for all report pages
  */
 import { z } from 'zod';
 import { DiabetesPopulationSchema } from '$lib/api/generated/schemas';
@@ -55,7 +55,7 @@ function calculateDateRange(input?: DateRangeInput): { startDate: Date; endDate:
 }
 
 /**
- * Get entries for a date range
+ * Get sensor glucose readings for a date range
  */
 export const getEntries = query(
 	DateRangeSchema.optional(),
@@ -64,13 +64,8 @@ export const getEntries = query(
 		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
-		const entriesQuery = JSON.stringify({
-			date: {
-				$gte: startDate.toISOString(),
-				$lte: endDate.toISOString(),
-			},
-		});
-		const entries = await apiClient.entries.getEntries2(entriesQuery);
+		const result = await apiClient.glucose.getSensorGlucose(startDate.getTime(), endDate.getTime(), 10000);
+		const entries = result.data ?? [];
 
 		return {
 			entries,
@@ -83,7 +78,7 @@ export const getEntries = query(
 );
 
 /**
- * Get treatments for a date range with pagination support
+ * Get boluses and carb intakes for a date range with pagination support
  */
 export const getTreatments = query(
 	DateRangeSchema.optional(),
@@ -92,24 +87,20 @@ export const getTreatments = query(
 		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
-		const treatmentsQuery = JSON.stringify({
-			created_at: {
-				$gte: startDate.toISOString(),
-				$lte: endDate.toISOString(),
-			},
-		});
+		const fromMs = startDate.getTime();
+		const toMs = endDate.getTime();
 		const pageSize = 1000;
 
-		// Fetch all treatments by paginating through results using v4 endpoint
-		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments>> = [];
+		// Fetch all boluses by paginating through results
+		let allBoluses: Awaited<ReturnType<typeof apiClient.insulin.getBoluses>>['data'] = [];
 		let offset = 0;
 		let hasMore = true;
 
 		while (hasMore) {
-			const batch = await apiClient.treatments.getTreatments(undefined, pageSize, offset, treatmentsQuery);
-			allTreatments = allTreatments.concat(batch);
+			const batch = await apiClient.insulin.getBoluses(fromMs, toMs, pageSize, offset);
+			allBoluses = allBoluses!.concat(batch.data ?? []);
 
-			if (batch.length < pageSize) {
+			if ((batch.data?.length ?? 0) < pageSize) {
 				hasMore = false;
 			} else {
 				offset += pageSize;
@@ -117,13 +108,35 @@ export const getTreatments = query(
 
 			// Safety limit to prevent infinite loops
 			if (offset >= 50000) {
-				console.warn('Treatment fetch reached safety limit of 50,000 records');
+				console.warn('Bolus fetch reached safety limit of 50,000 records');
+				hasMore = false;
+			}
+		}
+
+		// Fetch all carb intakes by paginating through results
+		let allCarbIntakes: Awaited<ReturnType<typeof apiClient.nutrition.getCarbIntakes>>['data'] = [];
+		offset = 0;
+		hasMore = true;
+
+		while (hasMore) {
+			const batch = await apiClient.nutrition.getCarbIntakes(fromMs, toMs, pageSize, offset);
+			allCarbIntakes = allCarbIntakes!.concat(batch.data ?? []);
+
+			if ((batch.data?.length ?? 0) < pageSize) {
+				hasMore = false;
+			} else {
+				offset += pageSize;
+			}
+
+			if (offset >= 50000) {
+				console.warn('CarbIntake fetch reached safety limit of 50,000 records');
 				hasMore = false;
 			}
 		}
 
 		return {
-			treatments: allTreatments,
+			boluses: allBoluses!,
+			carbIntakes: allCarbIntakes!,
 			dateRange: {
 				from: startDate.toISOString(),
 				to: endDate.toISOString(),
@@ -133,21 +146,23 @@ export const getTreatments = query(
 );
 
 /**
- * Get glucose analysis for entries and treatments
+ * Get glucose analysis for entries, boluses, and carb intakes
  */
 export const getAnalysis = query(
 	z.object({
 		entries: z.array(z.any()),
-		treatments: z.array(z.any()),
+		boluses: z.array(z.any()),
+		carbIntakes: z.array(z.any()),
 		population: DiabetesPopulationSchema.optional(),
 	}),
-	async ({ entries, treatments, population = DiabetesPopulation.Type1Adult }) => {
+	async ({ entries, boluses, carbIntakes, population = DiabetesPopulation.Type1Adult }) => {
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
 
 		return apiClient.statistics.analyzeGlucoseDataExtended({
 			entries,
-			treatments,
+			boluses,
+			carbIntakes,
 			population: population as DiabetesPopulation,
 		});
 	}
@@ -173,45 +188,59 @@ export const getReportsData = query(
 		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
-		const entriesQuery = JSON.stringify({
-			date: {
-				$gte: startDate.toISOString(),
-				$lte: endDate.toISOString(),
-			},
-		});
-		const treatmentsQuery = JSON.stringify({
-			created_at: {
-				$gte: startDate.toISOString(),
-				$lte: endDate.toISOString(),
-			},
-		});
-		console.log(treatmentsQuery)
-		// Fetch entries first
-		const entries = await apiClient.entries.getEntries2(entriesQuery);
-
-		// Paginate treatments using v4 endpoint
+		const fromMs = startDate.getTime();
+		const toMs = endDate.getTime();
 		const pageSize = 1000;
-		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments>> = [];
+
+		console.log(JSON.stringify({ from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() }))
+		// Fetch sensor glucose readings
+		const glucoseResult = await apiClient.glucose.getSensorGlucose(fromMs, toMs, 10000);
+		const entries = glucoseResult.data ?? [];
+
+		// Paginate boluses
+		let allBoluses: Awaited<ReturnType<typeof apiClient.insulin.getBoluses>>['data'] = [];
 		let offset = 0;
 		let hasMore = true;
 
 		while (hasMore) {
-			const batch = await apiClient.treatments.getTreatments(undefined, pageSize, offset, treatmentsQuery);
-			allTreatments = allTreatments.concat(batch);
+			const batch = await apiClient.insulin.getBoluses(fromMs, toMs, pageSize, offset);
+			allBoluses = allBoluses!.concat(batch.data ?? []);
 
-			if (batch.length < pageSize) {
+			if ((batch.data?.length ?? 0) < pageSize) {
 				hasMore = false;
 			} else {
 				offset += pageSize;
 			}
 
 			if (offset >= 50000) {
-				console.warn('Treatment fetch reached safety limit of 50,000 records');
+				console.warn('Bolus fetch reached safety limit of 50,000 records');
 				hasMore = false;
 			}
 		}
 
-		const treatments = allTreatments;
+		// Paginate carb intakes
+		let allCarbIntakes: Awaited<ReturnType<typeof apiClient.nutrition.getCarbIntakes>>['data'] = [];
+		offset = 0;
+		hasMore = true;
+
+		while (hasMore) {
+			const batch = await apiClient.nutrition.getCarbIntakes(fromMs, toMs, pageSize, offset);
+			allCarbIntakes = allCarbIntakes!.concat(batch.data ?? []);
+
+			if ((batch.data?.length ?? 0) < pageSize) {
+				hasMore = false;
+			} else {
+				offset += pageSize;
+			}
+
+			if (offset >= 50000) {
+				console.warn('CarbIntake fetch reached safety limit of 50,000 records');
+				hasMore = false;
+			}
+		}
+
+		const boluses = allBoluses!;
+		const carbIntakes = allCarbIntakes!;
 		const population = DiabetesPopulation.Type1Adult; // TODO: Get from user settings
 
 		// Get summary, analysis, averaged stats, and basal data in parallel
@@ -219,7 +248,8 @@ export const getReportsData = query(
 			apiClient.statistics.getMultiPeriodStatistics(),
 			apiClient.statistics.analyzeGlucoseDataExtended({
 				entries,
-				treatments,
+				boluses,
+				carbIntakes,
 				population,
 			}),
 			apiClient.statistics.calculateAveragedStats(entries),
@@ -232,7 +262,8 @@ export const getReportsData = query(
 
 		return {
 			entries,
-			treatments,
+			boluses,
+			carbIntakes,
 			summary,
 			analysis,
 			averagedStats,
@@ -272,40 +303,31 @@ export const getSiteChangeImpact = query(
 		const { apiClient } = locals;
 		const { startDate, endDate } = calculateDateRange(input);
 
-		const entriesQuery = JSON.stringify({
-			date: {
-				$gte: startDate.toISOString(),
-				$lte: endDate.toISOString(),
-			},
-		});
-		const treatmentsQuery = JSON.stringify({
-			created_at: {
-				$gte: startDate.toISOString(),
-				$lte: endDate.toISOString(),
-			},
-		});
+		const fromMs = startDate.getTime();
+		const toMs = endDate.getTime();
 
-		// Fetch entries
-		const entries = await apiClient.entries.getEntries2(entriesQuery);
+		// Fetch sensor glucose readings
+		const glucoseResult = await apiClient.glucose.getSensorGlucose(fromMs, toMs, 10000);
+		const entries = glucoseResult.data ?? [];
 
-		// Paginate treatments to get all site changes using v4 endpoint
+		// Paginate device events to get all site changes
 		const pageSize = 1000;
-		let allTreatments: Awaited<ReturnType<typeof apiClient.treatments.getTreatments>> = [];
+		let allDeviceEvents: Awaited<ReturnType<typeof apiClient.observations.getDeviceEvents>>['data'] = [];
 		let offset = 0;
 		let hasMore = true;
 
 		while (hasMore) {
-			const batch = await apiClient.treatments.getTreatments(undefined, pageSize, offset, treatmentsQuery);
-			allTreatments = allTreatments.concat(batch);
+			const batch = await apiClient.observations.getDeviceEvents(fromMs, toMs, pageSize, offset);
+			allDeviceEvents = allDeviceEvents!.concat(batch.data ?? []);
 
-			if (batch.length < pageSize) {
+			if ((batch.data?.length ?? 0) < pageSize) {
 				hasMore = false;
 			} else {
 				offset += pageSize;
 			}
 
 			if (offset >= 50000) {
-				console.warn('Treatment fetch reached safety limit of 50,000 records');
+				console.warn('DeviceEvent fetch reached safety limit of 50,000 records');
 				hasMore = false;
 			}
 		}
@@ -313,7 +335,7 @@ export const getSiteChangeImpact = query(
 		// Call the site change impact analysis endpoint
 		const analysis = await apiClient.statistics.calculateSiteChangeImpact({
 			entries,
-			treatments: allTreatments,
+			deviceEvents: allDeviceEvents!,
 			hoursBeforeChange: input?.hoursBeforeChange ?? 12,
 			hoursAfterChange: input?.hoursAfterChange ?? 24,
 			bucketSizeMinutes: input?.bucketSizeMinutes ?? 30,

@@ -1,46 +1,46 @@
 /**
- * Remote functions for treatment food breakdown workflows
+ * Remote functions for food breakdown workflows on carb intake records
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { error } from "@sveltejs/kit";
 import { z } from "zod";
-import { type MealTreatment, type TreatmentFoodRequest, type Food } from "$lib/api";
-import { TreatmentFoodRequestSchema, FoodSchema } from "$lib/api/generated/schemas";
+import { type CarbIntakeFoodRequest, type MealCarbIntake, type Food } from "$lib/api";
+import { CarbIntakeFoodRequestSchema, FoodSchema } from "$lib/api/generated/schemas";
 
 /**
- * Get food breakdown for a treatment
+ * Get food breakdown for a carb intake record
  */
-export const getTreatmentFoodBreakdown = query(z.string(), async (treatmentId) => {
+export const getCarbIntakeFoodBreakdown = query(z.string(), async (carbIntakeId) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
 
   try {
-    return await apiClient.treatmentFoods.getTreatmentFoods(treatmentId);
+    return await apiClient.nutrition.getCarbIntakeFoods(carbIntakeId);
   } catch (err) {
-    console.error("Error loading treatment foods:", err);
-    throw error(500, "Failed to load treatment foods");
+    console.error("Error loading carb intake foods:", err);
+    throw error(500, "Failed to load food breakdown");
   }
 });
 
 /**
- * Add a food breakdown entry
+ * Add a food breakdown entry to a carb intake record
  */
-export const addTreatmentFood = command(
+export const addCarbIntakeFood = command(
   z.object({
-    treatmentId: z.string(),
-    request: TreatmentFoodRequestSchema,
+    carbIntakeId: z.string(),
+    request: CarbIntakeFoodRequestSchema,
   }),
-  async ({ treatmentId, request }) => {
+  async ({ carbIntakeId, request }) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
     try {
-      const result = await apiClient.treatmentFoods.addTreatmentFood(treatmentId, request as TreatmentFoodRequest);
-      await getTreatmentFoodBreakdown(treatmentId).refresh();
+      const result = await apiClient.nutrition.addCarbIntakeFood(carbIntakeId, request as CarbIntakeFoodRequest);
+      await getCarbIntakeFoodBreakdown(carbIntakeId).refresh();
       return result;
     } catch (err) {
-      console.error("Error adding treatment food:", err);
-      throw error(500, "Failed to add treatment food");
+      console.error("Error adding carb intake food:", err);
+      throw error(500, "Failed to add food entry");
     }
   }
 );
@@ -48,27 +48,27 @@ export const addTreatmentFood = command(
 /**
  * Update a food breakdown entry
  */
-export const updateTreatmentFood = command(
+export const updateCarbIntakeFood = command(
   z.object({
-    treatmentId: z.string(),
+    carbIntakeId: z.string(),
     entryId: z.string(),
-    request: TreatmentFoodRequestSchema,
+    request: CarbIntakeFoodRequestSchema,
   }),
-  async ({ treatmentId, entryId, request }) => {
+  async ({ carbIntakeId, entryId, request }) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
     try {
-      const result = await apiClient.treatmentFoods.updateTreatmentFood(
-        treatmentId,
+      const result = await apiClient.nutrition.updateCarbIntakeFood(
+        carbIntakeId,
         entryId,
-        request as TreatmentFoodRequest
+        request as CarbIntakeFoodRequest
       );
-      await getTreatmentFoodBreakdown(treatmentId).refresh();
+      await getCarbIntakeFoodBreakdown(carbIntakeId).refresh();
       return result;
     } catch (err) {
-      console.error("Error updating treatment food:", err);
-      throw error(500, "Failed to update treatment food");
+      console.error("Error updating carb intake food:", err);
+      throw error(500, "Failed to update food entry");
     }
   }
 );
@@ -76,55 +76,52 @@ export const updateTreatmentFood = command(
 /**
  * Delete a food breakdown entry
  */
-export const deleteTreatmentFood = command(
+export const deleteCarbIntakeFood = command(
   z.object({
-    treatmentId: z.string(),
+    carbIntakeId: z.string(),
     entryId: z.string(),
   }),
-  async ({ treatmentId, entryId }) => {
+  async ({ carbIntakeId, entryId }) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
     try {
-      await apiClient.treatmentFoods.deleteTreatmentFood(
-        treatmentId,
+      await apiClient.nutrition.deleteCarbIntakeFood(
+        carbIntakeId,
         entryId
       );
-      await getTreatmentFoodBreakdown(treatmentId).refresh();
+      await getCarbIntakeFoodBreakdown(carbIntakeId).refresh();
       return { success: true };
     } catch (err) {
-      console.error("Error deleting treatment food:", err);
-      throw error(500, "Failed to delete treatment food");
+      console.error("Error deleting carb intake food:", err);
+      throw error(500, "Failed to delete food entry");
     }
   }
 );
 
 /**
- * Get treatments with attribution status for meals view
+ * Get carb intake records with food attribution status for the meals view
  */
-export const getMealTreatments = query(
+export const getMeals = query(
   z
     .object({
-      from: z.string().optional(),
-      to: z.string().optional(),
+      from: z.number().optional(),
+      to: z.number().optional(),
       attributed: z.boolean().optional(),
     })
     .optional(),
-  async (params): Promise<MealTreatment[]> => {
+  async (params): Promise<MealCarbIntake[]> => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
-    const fromDate = params?.from ? new Date(params.from) : undefined;
-    const toDate = params?.to ? new Date(params.to) : undefined;
-
     try {
-      return await apiClient.treatmentFoods.getMeals(
-        fromDate,
-        toDate,
+      return await apiClient.nutrition.getMeals(
+        params?.from,
+        params?.to,
         params?.attributed
       );
     } catch (err) {
-      console.error("Error loading meal treatments:", err);
+      console.error("Error loading meals:", err);
       throw error(500, "Failed to load meals");
     }
   }

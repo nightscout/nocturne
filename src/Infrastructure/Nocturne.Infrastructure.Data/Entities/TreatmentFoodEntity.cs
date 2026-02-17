@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// PostgreSQL entity for food attribution entries linked to treatments.
+/// PostgreSQL entity for food attribution entries linked to carb intake records.
 /// </summary>
 [Table("treatment_foods")]
 public class TreatmentFoodEntity
@@ -16,10 +17,10 @@ public class TreatmentFoodEntity
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Foreign key to treatments
+    /// Foreign key to carb_intakes
     /// </summary>
-    [Column("treatment_id")]
-    public Guid TreatmentId { get; set; }
+    [Column("carb_intake_id")]
+    public Guid CarbIntakeId { get; set; }
 
     /// <summary>
     /// Foreign key to foods (nullable for "other" entries)
@@ -40,7 +41,7 @@ public class TreatmentFoodEntity
     public decimal Carbs { get; set; }
 
     /// <summary>
-    /// Offset from treatment timestamp in minutes
+    /// Offset from carb intake timestamp in minutes
     /// </summary>
     [Column("time_offset_minutes")]
     public int TimeOffsetMinutes { get; set; }
@@ -65,9 +66,9 @@ public class TreatmentFoodEntity
     public DateTime SysUpdatedAt { get; set; }
 
     /// <summary>
-    /// Navigation property to treatment
+    /// Navigation property to carb intake
     /// </summary>
-    public TreatmentEntity? Treatment { get; set; }
+    public CarbIntakeEntity? CarbIntake { get; set; }
 
     /// <summary>
     /// Navigation property to food

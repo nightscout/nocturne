@@ -13,7 +13,6 @@ import {
   SettingsClient,
   StatusClient,
   TreatmentsClient,
-  TreatmentFoodsClient,
   VersionClient,
   DDataClient,
   LoopClient,
@@ -74,7 +73,6 @@ export class ApiClient {
   public readonly settings: SettingsClient;
   public readonly status: StatusClient;
   public readonly treatments: TreatmentsClient;
-  public readonly treatmentFoods: TreatmentFoodsClient;
   public readonly version: VersionClient;
   public readonly v2DData: DDataClient;
   public readonly loopNotifications: LoopClient;
@@ -137,7 +135,6 @@ export class ApiClient {
     this.settings = new SettingsClient(apiBaseUrl, http);
     this.status = new StatusClient(apiBaseUrl, http);
     this.treatments = new TreatmentsClient(apiBaseUrl, http);
-    this.treatmentFoods = new TreatmentFoodsClient(apiBaseUrl, http);
     this.version = new VersionClient(apiBaseUrl, http);
     this.v2DData = new DDataClient(apiBaseUrl, http);
     this.loopNotifications = new LoopClient(apiBaseUrl, http);

@@ -50,7 +50,7 @@
     const timeMap = new Map<number, Record<string, number | Date>>();
 
     for (const entry of entries) {
-      const mills = entry.mills ?? new Date(entry.dateString ?? "").getTime();
+      const mills = entry.mills ?? 0;
 
       const entryDate = new Date(mills);
       const dayOfWeek = entryDate.getDay();
@@ -70,9 +70,9 @@
       const row = timeMap.get(bucket)!;
       // Average values if we already have data for this day/time slot
       if (row[dayKey] !== undefined) {
-        row[dayKey] = ((row[dayKey] as number) + bg(entry.sgv ?? 0)) / 2;
+        row[dayKey] = ((row[dayKey] as number) + bg(entry.mgdl ?? 0)) / 2;
       } else {
-        row[dayKey] = bg(entry.sgv ?? 0);
+        row[dayKey] = bg(entry.mgdl ?? 0);
       }
     }
 

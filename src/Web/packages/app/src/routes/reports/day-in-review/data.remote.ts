@@ -1,11 +1,10 @@
 /**
  * Remote functions for day-in-review report
- * Fetches entries and treatments for a specific day
+ * Fetches sensor glucose, boluses, and carb intakes for a specific day
  */
 import { z } from 'zod';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import type { Entry, Treatment } from '$lib/api';
 
 /**
  * Get day-in-review data for a specific date
@@ -34,66 +33,40 @@ export const getDayInReviewData = query(
 		const dayEnd = new Date(date);
 		dayEnd.setHours(23, 59, 59, 999);
 
-		// Build the direct query strings for the API
-		// The backend expects find[field][$op]=value directly in the URL, not as a find= parameter value
-		const entriesQueryParams = new URLSearchParams();
-		entriesQueryParams.set('find[date][$gte]', String(dayStart.getTime()));
-		entriesQueryParams.set('find[date][$lte]', String(dayEnd.getTime()));
-		entriesQueryParams.set('count', '10000'); // Get all day's entries
-
-		const treatmentsQueryParams = new URLSearchParams();
-		treatmentsQueryParams.set('find[mills][$gte]', String(dayStart.getTime()));
-		treatmentsQueryParams.set('find[mills][$lte]', String(dayEnd.getTime()));
-		treatmentsQueryParams.set('count', '1000'); // Get all day's treatments
-
-		// Fetch using the underlying fetch with properly formatted URLs
-		const baseUrl = apiClient.baseUrl;
-		// Cast to any to access the private http client which has the auth headers injection
-		const authenticatedFetch = (apiClient.client as any).http.fetch;
-
-		const [entriesResponse, treatmentsResponse] = await Promise.all([
-			// TODO: Use the proper API client.
-			authenticatedFetch(`${baseUrl}/api/v1/Entries?${entriesQueryParams.toString()}`, {
-				method: 'GET',
-				headers: { 'Accept': 'application/json' }
-			}),
-			authenticatedFetch(`${baseUrl}/api/v1/Treatments?${treatmentsQueryParams.toString()}`, {
-				method: 'GET',
-				headers: { 'Accept': 'application/json' }
-			}),
+		// Fetch v4 data
+		const [entriesResponse, bolusResponse, carbResponse] = await Promise.all([
+			apiClient.glucose.getSensorGlucose(dayStart.getTime(), dayEnd.getTime(), 10000),
+			apiClient.insulin.getBoluses(dayStart.getTime(), dayEnd.getTime(), 1000),
+			apiClient.nutrition.getCarbIntakes(dayStart.getTime(), dayEnd.getTime(), 1000),
 		]);
 
-		if (!entriesResponse.ok || !treatmentsResponse.ok) {
-			const errorMsg = !entriesResponse.ok
-				? `Entries: ${entriesResponse.statusText}`
-				: `Treatments: ${treatmentsResponse.statusText}`;
-			throw error(500, `Failed to fetch data: ${errorMsg}`);
-		}
-
-		const [entries, treatments] = await Promise.all([
-			entriesResponse.json() as Promise<Entry[]>,
-			treatmentsResponse.json() as Promise<Treatment[]>,
-		]);
+		const entries = entriesResponse.data ?? [];
+		const boluses = bolusResponse.data ?? [];
+		const carbIntakes = carbResponse.data ?? [];
 
 		// Calculate analysis from the backend - this includes treatmentSummary
 		const analysis = entries.length > 0
 			? await apiClient.statistics.analyzeGlucoseDataExtended({
 					entries,
-					treatments,
+					boluses,
+					carbIntakes,
 					population: 0 as const, // Type1Adult
 				})
 			: null;
 
 		// Use the treatmentSummary from analysis (if available) to avoid redundant API call
 		// The backend AnalyzeGlucoseDataExtended already calculates TreatmentSummary
-		// If no entries but we have treatments, calculate treatmentSummary directly
+		// If no entries but we have boluses/carbIntakes, calculate treatmentSummary directly
 		const treatmentSummary = analysis?.treatmentSummary
-			?? (treatments.length > 0 ? await apiClient.statistics.calculateTreatmentSummary(treatments) : null);
+			?? ((boluses.length > 0 || carbIntakes.length > 0)
+				? await apiClient.statistics.calculateTreatmentSummary({ boluses, carbIntakes })
+				: null);
 
 		return {
 			date: dateParam,
 			entries,
-			treatments,
+			boluses,
+			carbIntakes,
 			analysis,
 			treatmentSummary,
 			dateRange: {

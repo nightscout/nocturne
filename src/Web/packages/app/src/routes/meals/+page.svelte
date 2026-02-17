@@ -20,13 +20,13 @@
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
   import type {
-    MealTreatment,
+    MealCarbIntake,
     Treatment,
     TreatmentFood,
-    TreatmentFoodRequest,
+    CarbIntakeFoodRequest,
     SuggestedMealMatch,
   } from "$lib/api";
-  import { getMealTreatments } from "$lib/data/treatment-foods.remote";
+  import { getMeals } from "$lib/data/treatment-foods.remote";
   import {
     updateTreatment,
     deleteTreatment,
@@ -41,7 +41,7 @@
     CarbBreakdownBar,
     FoodEntryDetails,
   } from "$lib/components/treatments";
-  import { addTreatmentFood } from "$lib/data/treatment-foods.remote";
+  import { addCarbIntakeFood } from "$lib/data/treatment-foods.remote";
   import { TreatmentTypeIcon } from "$lib/components/icons";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { cn } from "$lib/utils";
@@ -70,12 +70,12 @@
 
   // Add food dialog state
   let showAddFoodDialog = $state(false);
-  let addFoodMeal = $state<MealTreatment | null>(null);
+  let addFoodMeal = $state<MealCarbIntake | null>(null);
 
   // Edit food entry dialog state
   let showEditFoodEntryDialog = $state(false);
   let editFoodEntry = $state<TreatmentFood | null>(null);
-  let editFoodEntryMeal = $state<MealTreatment | null>(null);
+  let editFoodEntryMeal = $state<MealCarbIntake | null>(null);
 
   // Meal match review dialog state
   let showReviewDialog = $state(false);
@@ -91,8 +91,8 @@
     attributed: filterMode === "unattributed" ? false : undefined,
   });
 
-  const mealsQuery = $derived(getMealTreatments(queryParams));
-  const meals = $derived<MealTreatment[]>(mealsQuery.current ?? []);
+  const mealsQuery = $derived(getMeals(queryParams));
+  const meals = $derived<MealCarbIntake[]>(mealsQuery.current ?? []);
 
   // Query for suggested meal matches using the endpoint
   const suggestionsQueryParams = $derived({
@@ -141,7 +141,7 @@
   });
 
   // Helper to get meal label for sorting
-  function getMealSortLabel(meal: MealTreatment): string {
+  function getMealSortLabel(meal: MealCarbIntake): string {
     const foods = meal.foods ?? [];
     if (foods.length === 0) return meal.treatment?.eventType ?? "Meal";
     if (foods.length === 1 && foods[0].foodName) return foods[0].foodName;
@@ -209,11 +209,11 @@
   interface MealsByDay {
     date: string;
     displayDate: string;
-    meals: MealTreatment[];
+    meals: MealCarbIntake[];
   }
 
   const mealsByDay = $derived.by(() => {
-    const grouped = new Map<string, MealTreatment[]>();
+    const grouped = new Map<string, MealCarbIntake[]>();
 
     for (const meal of filteredAndSortedMeals) {
       const dateStr = meal.treatment?.created_at;
@@ -303,19 +303,19 @@
     showEditDialog = true;
   }
 
-  function openAddFood(meal: MealTreatment) {
+  function openAddFood(meal: MealCarbIntake) {
     addFoodMeal = meal;
     showAddFoodDialog = true;
   }
 
-  function openEditFoodEntry(meal: MealTreatment, food: TreatmentFood) {
+  function openEditFoodEntry(meal: MealCarbIntake, food: TreatmentFood) {
     editFoodEntryMeal = meal;
     editFoodEntry = food;
     showEditFoodEntryDialog = true;
   }
 
   function getRemainingCarbsForEntry(
-    meal: MealTreatment,
+    meal: MealCarbIntake,
     entryId: string | undefined
   ): number {
     const totalCarbs = meal.treatment?.carbs ?? 0;
@@ -330,12 +330,12 @@
     await mealsQuery.refresh();
   }
 
-  async function handleAddFoodSubmit(request: TreatmentFoodRequest) {
+  async function handleAddFoodSubmit(request: CarbIntakeFoodRequest) {
     if (!addFoodMeal?.treatment?._id) return;
 
     try {
-      await addTreatmentFood({
-        treatmentId: addFoodMeal.treatment._id,
+      await addCarbIntakeFood({
+        carbIntakeId: addFoodMeal.carbIntake?.id ?? "",
         request,
       });
       toast.success("Food added");
@@ -395,7 +395,7 @@
     });
   }
 
-  function getMealLabel(meal: MealTreatment): string {
+  function getMealLabel(meal: MealCarbIntake): string {
     const foods = meal.foods ?? [];
     if (foods.length === 0) {
       return meal.treatment?.eventType ?? "Meal";

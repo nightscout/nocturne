@@ -450,8 +450,8 @@ public class NocturneDbContext : DbContext
         // Treatment food breakdown indexes
         modelBuilder
             .Entity<TreatmentFoodEntity>()
-            .HasIndex(tf => tf.TreatmentId)
-            .HasDatabaseName("ix_treatment_foods_treatment_id");
+            .HasIndex(tf => tf.CarbIntakeId)
+            .HasDatabaseName("ix_treatment_foods_carb_intake_id");
 
         modelBuilder
             .Entity<TreatmentFoodEntity>()
@@ -1655,9 +1655,9 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<TreatmentFoodEntity>(entity =>
         {
             entity
-                .HasOne(tf => tf.Treatment)
+                .HasOne(tf => tf.CarbIntake)
                 .WithMany()
-                .HasForeignKey(tf => tf.TreatmentId)
+                .HasForeignKey(tf => tf.CarbIntakeId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity

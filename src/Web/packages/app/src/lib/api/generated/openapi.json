@@ -1887,13 +1887,13 @@
         "operationId": "Statistics_CalculateAveragedStats",
         "requestBody": {
           "x-name": "entries",
-          "description": "Array of glucose entries",
+          "description": "Array of sensor glucose readings",
           "content": {
             "application/json": {
               "schema": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/Entry"
+                  "$ref": "#/components/schemas/SensorGlucose"
                 }
               }
             }
@@ -1924,18 +1924,15 @@
         "tags": [
           "Statistics"
         ],
-        "summary": "Calculate treatment summary for a collection of treatments",
+        "summary": "Calculate treatment summary for a collection of boluses and carb intakes",
         "operationId": "Statistics_CalculateTreatmentSummary",
         "requestBody": {
-          "x-name": "treatments",
-          "description": "Array of treatments",
+          "x-name": "request",
+          "description": "Request containing boluses and carb intakes",
           "content": {
             "application/json": {
               "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Treatment"
-                }
+                "$ref": "#/components/schemas/TreatmentSummaryRequest"
               }
             }
           },
@@ -2002,7 +1999,7 @@
         "operationId": "Statistics_AnalyzeGlucoseData",
         "requestBody": {
           "x-name": "request",
-          "description": "Request containing entries, treatments, and configuration",
+          "description": "Request containing sensor glucose readings, boluses, carb intakes, and configuration",
           "content": {
             "application/json": {
               "schema": {
@@ -2036,7 +2033,7 @@
         "operationId": "Statistics_AnalyzeGlucoseDataExtended",
         "requestBody": {
           "x-name": "request",
-          "description": "Request containing entries, treatments, population type, and configuration",
+          "description": "Request containing sensor glucose readings, boluses, carb intakes, population type, and configuration",
           "content": {
             "application/json": {
               "schema": {
@@ -2508,7 +2505,7 @@
         "operationId": "Statistics_CalculateSiteChangeImpact",
         "requestBody": {
           "x-name": "request",
-          "description": "Request containing entries, treatments, and analysis parameters",
+          "description": "Request containing sensor glucose readings, device events, and analysis parameters",
           "content": {
             "application/json": {
               "schema": {
@@ -8421,6 +8418,283 @@
         ]
       }
     },
+    "/api/v4/nutrition/carbs/{id}/foods": {
+      "get": {
+        "tags": [
+          "V4 Nutrition"
+        ],
+        "summary": "Get food breakdown for a carb intake record.",
+        "operationId": "Nutrition_GetCarbIntakeFoods",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "V4 Nutrition"
+        ],
+        "summary": "Add a food breakdown entry to a carb intake record.",
+        "operationId": "Nutrition_AddCarbIntakeFood",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CarbIntakeFoodRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/nutrition/carbs/{id}/foods/{foodEntryId}": {
+      "put": {
+        "tags": [
+          "V4 Nutrition"
+        ],
+        "summary": "Update a food breakdown entry.",
+        "operationId": "Nutrition_UpdateCarbIntakeFood",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "foodEntryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CarbIntakeFoodRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 3
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 Nutrition"
+        ],
+        "summary": "Remove a food breakdown entry.",
+        "operationId": "Nutrition_DeleteCarbIntakeFood",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "foodEntryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/nutrition/meals": {
+      "get": {
+        "tags": [
+          "V4 Nutrition"
+        ],
+        "summary": "Get carb intake records with food attribution status for the meals view.",
+        "operationId": "Nutrition_GetMeals",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 1
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            },
+            "x-position": 2
+          },
+          {
+            "name": "attributed",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            },
+            "x-position": 3
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MealCarbIntake"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/observations/bg-checks": {
       "get": {
         "tags": [
@@ -11772,229 +12046,6 @@
         "x-remote-invalidates": [
           "GetPresets"
         ]
-      }
-    },
-    "/api/v4/treatments/{id}/foods": {
-      "get": {
-        "tags": [
-          "V4 Treatment Foods"
-        ],
-        "summary": "Get food breakdown for a treatment.",
-        "operationId": "TreatmentFoods_GetTreatmentFoods",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "V4 Treatment Foods"
-        ],
-        "summary": "Add a food breakdown entry to a treatment.",
-        "operationId": "TreatmentFoods_AddTreatmentFood",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TreatmentFoodRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/treatments/{id}/foods/{foodEntryId}": {
-      "put": {
-        "tags": [
-          "V4 Treatment Foods"
-        ],
-        "summary": "Update a food breakdown entry.",
-        "operationId": "TreatmentFoods_UpdateTreatmentFood",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "foodEntryId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TreatmentFoodRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 3
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "V4 Treatment Foods"
-        ],
-        "summary": "Remove a food breakdown entry.",
-        "operationId": "TreatmentFoods_DeleteTreatmentFood",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "foodEntryId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TreatmentFoodBreakdown"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/treatments/meals": {
-      "get": {
-        "tags": [
-          "V4 Treatment Foods"
-        ],
-        "summary": "Get carb treatments with attribution status for meals view.",
-        "operationId": "TreatmentFoods_GetMeals",
-        "parameters": [
-          {
-            "name": "from",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            },
-            "x-position": 2
-          },
-          {
-            "name": "attributed",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "nullable": true
-            },
-            "x-position": 3
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MealTreatment"
-                  }
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/v4/treatments": {
@@ -20277,6 +20328,35 @@
           "carbBolusCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "reliability": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StatisticReliability"
+              }
+            ]
+          }
+        }
+      },
+      "StatisticReliability": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "meetsReliabilityCriteria": {
+            "type": "boolean"
+          },
+          "daysOfData": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "recommendedMinimumDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "readingCount": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -20847,6 +20927,14 @@
             "type": "number",
             "format": "double"
           },
+          "gmi": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseManagementIndicator"
+              }
+            ]
+          },
           "meanTotalDailyChange": {
             "type": "number",
             "format": "double"
@@ -20854,6 +20942,31 @@
           "timeInFluctuation": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "GlucoseManagementIndicator": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "meanGlucose": {
+            "type": "number",
+            "format": "double"
+          },
+          "interpretation": {
+            "type": "string"
+          },
+          "reliability": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StatisticReliability"
+              }
+            ]
           }
         }
       },
@@ -20872,213 +20985,20 @@
           },
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries with timestamps",
+            "description": "Collection of sensor glucose readings with timestamps",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           }
         }
       },
-      "Entry": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ProcessableDocumentBase"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "_id": {
-                "type": "string",
-                "nullable": true
-              },
-              "mills": {
-                "type": "integer",
-                "format": "int64"
-              },
-              "dateString": {
-                "type": "string",
-                "nullable": true
-              },
-              "mgdl": {
-                "type": "number",
-                "format": "double"
-              },
-              "mbg": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "mmol": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "sgv": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "direction": {
-                "type": "string",
-                "nullable": true
-              },
-              "trend": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "trendRate": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "isCalibration": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string"
-              },
-              "device": {
-                "type": "string",
-                "nullable": true
-              },
-              "notes": {
-                "type": "string",
-                "nullable": true
-              },
-              "delta": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "scaled": {
-                "nullable": true
-              },
-              "sysTime": {
-                "type": "string",
-                "nullable": true
-              },
-              "utcOffset": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "noise": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "filtered": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "unfiltered": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "rssi": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "slope": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "intercept": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "scale": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "created_at": {
-                "type": "string",
-                "nullable": true
-              },
-              "modified_at": {
-                "type": "string",
-                "format": "date-time",
-                "nullable": true
-              },
-              "data_source": {
-                "type": "string",
-                "nullable": true
-              },
-              "meta": {
-                "type": "object",
-                "nullable": true,
-                "additionalProperties": {}
-              },
-              "canonicalId": {
-                "type": "string",
-                "format": "guid",
-                "nullable": true
-              },
-              "sources": {
-                "type": "array",
-                "nullable": true,
-                "items": {
-                  "type": "string"
-                }
-              },
-              "app": {
-                "type": "string",
-                "nullable": true
-              },
-              "units": {
-                "type": "string",
-                "nullable": true
-              },
-              "isValid": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "isReadOnly": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "identifier": {
-                "type": "string",
-                "nullable": true
-              },
-              "srvModified": {
-                "type": "integer",
-                "format": "int64",
-                "nullable": true
-              },
-              "srvCreated": {
-                "type": "integer",
-                "format": "int64",
-                "nullable": true
-              },
-              "subject": {
-                "type": "string",
-                "nullable": true
-              }
-            }
-          }
-        ]
-      },
-      "ProcessableDocumentBase": {
+      "SensorGlucose": {
         "type": "object",
-        "x-abstract": true,
         "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "nullable": true
+            "format": "guid"
           },
           "mills": {
             "type": "integer",
@@ -21088,8 +21008,128 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "app": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mgdl": {
+            "type": "number",
+            "format": "double"
+          },
+          "mmol": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "direction": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseDirection"
+              }
+            ]
+          },
+          "trend": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseTrend"
+              }
+            ]
+          },
+          "trendRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "noise": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         }
+      },
+      "GlucoseDirection": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "None",
+          "DoubleUp",
+          "SingleUp",
+          "FortyFiveUp",
+          "Flat",
+          "FortyFiveDown",
+          "SingleDown",
+          "DoubleDown",
+          "NotComputable",
+          "RateOutOfRange"
+        ],
+        "enum": [
+          "None",
+          "DoubleUp",
+          "SingleUp",
+          "FortyFiveUp",
+          "Flat",
+          "FortyFiveDown",
+          "SingleDown",
+          "DoubleDown",
+          "NotComputable",
+          "RateOutOfRange"
+        ]
+      },
+      "GlucoseTrend": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "None",
+          "DoubleUp",
+          "SingleUp",
+          "FortyFiveUp",
+          "Flat",
+          "FortyFiveDown",
+          "SingleDown",
+          "DoubleDown",
+          "NotComputable",
+          "RateOutOfRange"
+        ],
+        "enum": [
+          "None",
+          "DoubleUp",
+          "SingleUp",
+          "FortyFiveUp",
+          "Flat",
+          "FortyFiveDown",
+          "SingleDown",
+          "DoubleDown",
+          "NotComputable",
+          "RateOutOfRange"
+        ]
       },
       "TimeInRangeMetrics": {
         "type": "object",
@@ -21286,9 +21326,9 @@
         "properties": {
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries",
+            "description": "Collection of sensor glucose readings",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           },
           "thresholds": {
@@ -21364,9 +21404,9 @@
         "properties": {
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries",
+            "description": "Collection of sensor glucose readings",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           },
           "bins": {
@@ -21508,6 +21548,296 @@
           "basal": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "TreatmentSummaryRequest": {
+        "type": "object",
+        "description": "Request model for treatment summary calculation",
+        "additionalProperties": false,
+        "properties": {
+          "boluses": {
+            "type": "array",
+            "description": "Optional collection of bolus deliveries",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/Bolus"
+            }
+          },
+          "carbIntakes": {
+            "type": "array",
+            "description": "Optional collection of carb intakes",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CarbIntake"
+            }
+          }
+        }
+      },
+      "Bolus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "app": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "insulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "programmed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "delivered": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "bolusType": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BolusType"
+              }
+            ]
+          },
+          "automatic": {
+            "type": "boolean"
+          },
+          "duration": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "insulinType": {
+            "type": "string",
+            "nullable": true
+          },
+          "unabsorbed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isBasalInsulin": {
+            "type": "boolean"
+          },
+          "pumpId": {
+            "type": "string",
+            "nullable": true
+          },
+          "pumpSerial": {
+            "type": "string",
+            "nullable": true
+          },
+          "pumpType": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BolusType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Normal",
+          "Square",
+          "Dual"
+        ],
+        "enum": [
+          "Normal",
+          "Square",
+          "Dual"
+        ]
+      },
+      "CarbIntake": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "app": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "carbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "protein": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "fat": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "foodType": {
+            "type": "string",
+            "nullable": true
+          },
+          "absorptionTime": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
+          },
+          "carbTime": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "OverallAverages": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "avgTotalDaily": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgBolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgBasal": {
+            "type": "number",
+            "format": "double"
+          },
+          "bolusPercentage": {
+            "type": "number",
+            "format": "double"
+          },
+          "basalPercentage": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgCarbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgProtein": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgFat": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgTimeInRange": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgTightTimeInRange": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "DayData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "treatments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Treatment"
+            }
+          },
+          "treatmentSummary": {
+            "$ref": "#/components/schemas/TreatmentSummary"
+          },
+          "timeInRanges": {
+            "$ref": "#/components/schemas/TimeInRangeMetrics"
           }
         }
       },
@@ -21993,70 +22323,27 @@
           "Automatic"
         ]
       },
-      "OverallAverages": {
+      "ProcessableDocumentBase": {
         "type": "object",
+        "x-abstract": true,
         "additionalProperties": false,
         "properties": {
-          "avgTotalDaily": {
-            "type": "number",
-            "format": "double"
+          "id": {
+            "type": "string",
+            "nullable": true
           },
-          "avgBolus": {
-            "type": "number",
-            "format": "double"
+          "createdAt": {
+            "type": "string",
+            "nullable": true
           },
-          "avgBasal": {
-            "type": "number",
-            "format": "double"
+          "mills": {
+            "type": "integer",
+            "format": "int64"
           },
-          "bolusPercentage": {
-            "type": "number",
-            "format": "double"
-          },
-          "basalPercentage": {
-            "type": "number",
-            "format": "double"
-          },
-          "avgCarbs": {
-            "type": "number",
-            "format": "double"
-          },
-          "avgProtein": {
-            "type": "number",
-            "format": "double"
-          },
-          "avgFat": {
-            "type": "number",
-            "format": "double"
-          },
-          "avgTimeInRange": {
-            "type": "number",
-            "format": "double"
-          },
-          "avgTightTimeInRange": {
-            "type": "number",
-            "format": "double"
-          }
-        }
-      },
-      "DayData": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "date": {
-            "type": "string"
-          },
-          "treatments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Treatment"
-            }
-          },
-          "treatmentSummary": {
-            "$ref": "#/components/schemas/TreatmentSummary"
-          },
-          "timeInRanges": {
-            "$ref": "#/components/schemas/TimeInRangeMetrics"
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         }
       },
@@ -22075,6 +22362,14 @@
           },
           "dataQuality": {
             "$ref": "#/components/schemas/DataQuality"
+          },
+          "reliability": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StatisticReliability"
+              }
+            ]
           },
           "time": {
             "$ref": "#/components/schemas/AnalysisTime"
@@ -22181,17 +22476,25 @@
         "properties": {
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries",
+            "description": "Collection of sensor glucose readings",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           },
-          "treatments": {
+          "boluses": {
             "type": "array",
-            "description": "Optional collection of treatments",
+            "description": "Optional collection of bolus deliveries",
             "nullable": true,
             "items": {
-              "$ref": "#/components/schemas/Treatment"
+              "$ref": "#/components/schemas/Bolus"
+            }
+          },
+          "carbIntakes": {
+            "type": "array",
+            "description": "Optional collection of carb intakes",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CarbIntake"
             }
           },
           "config": {
@@ -22267,23 +22570,6 @@
             }
           }
         ]
-      },
-      "GlucoseManagementIndicator": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "value": {
-            "type": "number",
-            "format": "double"
-          },
-          "meanGlucose": {
-            "type": "number",
-            "format": "double"
-          },
-          "interpretation": {
-            "type": "string"
-          }
-        }
       },
       "GlycemicRiskIndex": {
         "type": "object",
@@ -22925,17 +23211,25 @@
         "properties": {
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries",
+            "description": "Collection of sensor glucose readings",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           },
-          "treatments": {
+          "boluses": {
             "type": "array",
-            "description": "Optional collection of treatments",
+            "description": "Optional collection of bolus deliveries",
             "nullable": true,
             "items": {
-              "$ref": "#/components/schemas/Treatment"
+              "$ref": "#/components/schemas/Bolus"
+            }
+          },
+          "carbIntakes": {
+            "type": "array",
+            "description": "Optional collection of carb intakes",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CarbIntake"
             }
           },
           "population": {
@@ -22987,9 +23281,9 @@
         "properties": {
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries",
+            "description": "Collection of sensor glucose readings",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           },
           "days": {
@@ -23071,6 +23365,22 @@
           },
           "hasSufficientData": {
             "type": "boolean"
+          },
+          "gmi": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseManagementIndicator"
+              }
+            ]
+          },
+          "reliability": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StatisticReliability"
+              }
+            ]
           },
           "entryCount": {
             "type": "integer",
@@ -23199,16 +23509,16 @@
         "properties": {
           "entries": {
             "type": "array",
-            "description": "Collection of glucose entries",
+            "description": "Collection of sensor glucose readings",
             "items": {
-              "$ref": "#/components/schemas/Entry"
+              "$ref": "#/components/schemas/SensorGlucose"
             }
           },
-          "treatments": {
+          "deviceEvents": {
             "type": "array",
-            "description": "Collection of treatments (must include site changes)",
+            "description": "Collection of device events (must include site changes)",
             "items": {
-              "$ref": "#/components/schemas/Treatment"
+              "$ref": "#/components/schemas/DeviceEvent"
             }
           },
           "hoursBeforeChange": {
@@ -23227,6 +23537,119 @@
             "format": "int32"
           }
         }
+      },
+      "DeviceEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "nullable": true
+          },
+          "app": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/DeviceEventType"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "DeviceEventType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "SensorStart",
+          "SensorChange",
+          "SensorStop",
+          "SiteChange",
+          "InsulinChange",
+          "PumpBatteryChange",
+          "PodChange",
+          "ReservoirChange",
+          "CannulaChange",
+          "TransmitterSensorInsert",
+          "PodActivated",
+          "PodDeactivated",
+          "PumpSuspend",
+          "PumpResume",
+          "Priming",
+          "TubePriming",
+          "NeedlePriming",
+          "Rewind",
+          "DateChanged",
+          "TimeChanged",
+          "BolusMaxChanged",
+          "BasalMaxChanged",
+          "ProfileSwitch"
+        ],
+        "enum": [
+          "SensorStart",
+          "SensorChange",
+          "SensorStop",
+          "SiteChange",
+          "InsulinChange",
+          "PumpBatteryChange",
+          "PodChange",
+          "ReservoirChange",
+          "CannulaChange",
+          "TransmitterSensorInsert",
+          "PodActivated",
+          "PodDeactivated",
+          "PumpSuspend",
+          "PumpResume",
+          "Priming",
+          "TubePriming",
+          "NeedlePriming",
+          "Rewind",
+          "DateChanged",
+          "TimeChanged",
+          "BolusMaxChanged",
+          "BasalMaxChanged",
+          "ProfileSwitch"
+        ]
       },
       "VersionsResponse": {
         "type": "object",
@@ -24060,14 +24483,14 @@
             "nullable": true
           },
           "bolusType": {
-            "$ref": "#/components/schemas/BolusType"
+            "$ref": "#/components/schemas/BolusType2"
           },
           "isOverride": {
             "type": "boolean"
           }
         }
       },
-      "BolusType": {
+      "BolusType2": {
         "type": "string",
         "description": "",
         "x-enumNames": [
@@ -24135,60 +24558,6 @@
             "$ref": "#/components/schemas/ChartColor"
           }
         }
-      },
-      "DeviceEventType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "SensorStart",
-          "SensorChange",
-          "SensorStop",
-          "SiteChange",
-          "InsulinChange",
-          "PumpBatteryChange",
-          "PodChange",
-          "ReservoirChange",
-          "CannulaChange",
-          "TransmitterSensorInsert",
-          "PodActivated",
-          "PodDeactivated",
-          "PumpSuspend",
-          "PumpResume",
-          "Priming",
-          "TubePriming",
-          "NeedlePriming",
-          "Rewind",
-          "DateChanged",
-          "TimeChanged",
-          "BolusMaxChanged",
-          "BasalMaxChanged",
-          "ProfileSwitch"
-        ],
-        "enum": [
-          "SensorStart",
-          "SensorChange",
-          "SensorStop",
-          "SiteChange",
-          "InsulinChange",
-          "PumpBatteryChange",
-          "PodChange",
-          "ReservoirChange",
-          "CannulaChange",
-          "TransmitterSensorInsert",
-          "PodActivated",
-          "PodDeactivated",
-          "PumpSuspend",
-          "PumpResume",
-          "Priming",
-          "TubePriming",
-          "NeedlePriming",
-          "Rewind",
-          "DateChanged",
-          "TimeChanged",
-          "BolusMaxChanged",
-          "BasalMaxChanged",
-          "ProfileSwitch"
-        ]
       },
       "BgCheckMarkerDto": {
         "type": "object",
@@ -25261,6 +25630,194 @@
             }
           }
         }
+      },
+      "Entry": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProcessableDocumentBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "mills": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "dateString": {
+                "type": "string",
+                "nullable": true
+              },
+              "mgdl": {
+                "type": "number",
+                "format": "double"
+              },
+              "mbg": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "mmol": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "sgv": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "direction": {
+                "type": "string",
+                "nullable": true
+              },
+              "trend": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "trendRate": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "isCalibration": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string"
+              },
+              "device": {
+                "type": "string",
+                "nullable": true
+              },
+              "notes": {
+                "type": "string",
+                "nullable": true
+              },
+              "delta": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "scaled": {
+                "nullable": true
+              },
+              "sysTime": {
+                "type": "string",
+                "nullable": true
+              },
+              "utcOffset": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "noise": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "filtered": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "unfiltered": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "rssi": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "slope": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "intercept": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "scale": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "created_at": {
+                "type": "string",
+                "nullable": true
+              },
+              "modified_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "data_source": {
+                "type": "string",
+                "nullable": true
+              },
+              "meta": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": {}
+              },
+              "canonicalId": {
+                "type": "string",
+                "format": "guid",
+                "nullable": true
+              },
+              "sources": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "app": {
+                "type": "string",
+                "nullable": true
+              },
+              "units": {
+                "type": "string",
+                "nullable": true
+              },
+              "isValid": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "isReadOnly": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "identifier": {
+                "type": "string",
+                "nullable": true
+              },
+              "srvModified": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "srvCreated": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "subject": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        ]
       },
       "StateSpan": {
         "type": "object",
@@ -27170,145 +27727,6 @@
           }
         }
       },
-      "SensorGlucose": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "mills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "utcOffset": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "device": {
-            "type": "string",
-            "nullable": true
-          },
-          "app": {
-            "type": "string",
-            "nullable": true
-          },
-          "dataSource": {
-            "type": "string",
-            "nullable": true
-          },
-          "correlationId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "legacyId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "mgdl": {
-            "type": "number",
-            "format": "double"
-          },
-          "mmol": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "direction": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/GlucoseDirection"
-              }
-            ]
-          },
-          "trend": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/GlucoseTrend"
-              }
-            ]
-          },
-          "trendRate": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "noise": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        }
-      },
-      "GlucoseDirection": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "None",
-          "DoubleUp",
-          "SingleUp",
-          "FortyFiveUp",
-          "Flat",
-          "FortyFiveDown",
-          "SingleDown",
-          "DoubleDown",
-          "NotComputable",
-          "RateOutOfRange"
-        ],
-        "enum": [
-          "None",
-          "DoubleUp",
-          "SingleUp",
-          "FortyFiveUp",
-          "Flat",
-          "FortyFiveDown",
-          "SingleDown",
-          "DoubleDown",
-          "NotComputable",
-          "RateOutOfRange"
-        ]
-      },
-      "GlucoseTrend": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "None",
-          "DoubleUp",
-          "SingleUp",
-          "FortyFiveUp",
-          "Flat",
-          "FortyFiveDown",
-          "SingleDown",
-          "DoubleDown",
-          "NotComputable",
-          "RateOutOfRange"
-        ],
-        "enum": [
-          "None",
-          "DoubleUp",
-          "SingleUp",
-          "FortyFiveUp",
-          "Flat",
-          "FortyFiveDown",
-          "SingleDown",
-          "DoubleDown",
-          "NotComputable",
-          "RateOutOfRange"
-        ]
-      },
       "PaginatedResponseOfMeterGlucose": {
         "type": "object",
         "additionalProperties": false,
@@ -27473,126 +27891,6 @@
             "$ref": "#/components/schemas/PaginationInfo"
           }
         }
-      },
-      "Bolus": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "mills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "utcOffset": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "device": {
-            "type": "string",
-            "nullable": true
-          },
-          "app": {
-            "type": "string",
-            "nullable": true
-          },
-          "dataSource": {
-            "type": "string",
-            "nullable": true
-          },
-          "correlationId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "legacyId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "insulin": {
-            "type": "number",
-            "format": "double"
-          },
-          "programmed": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "delivered": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "bolusType": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/BolusType2"
-              }
-            ]
-          },
-          "automatic": {
-            "type": "boolean"
-          },
-          "duration": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "syncIdentifier": {
-            "type": "string",
-            "nullable": true
-          },
-          "insulinType": {
-            "type": "string",
-            "nullable": true
-          },
-          "unabsorbed": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "isBasalInsulin": {
-            "type": "boolean"
-          },
-          "pumpId": {
-            "type": "string",
-            "nullable": true
-          },
-          "pumpSerial": {
-            "type": "string",
-            "nullable": true
-          },
-          "pumpType": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "BolusType2": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Normal",
-          "Square",
-          "Dual"
-        ],
-        "enum": [
-          "Normal",
-          "Square",
-          "Dual"
-        ]
       },
       "PaginatedResponseOfBolusCalculation": {
         "type": "object",
@@ -28196,7 +28494,34 @@
           }
         }
       },
-      "CarbIntake": {
+      "TreatmentFoodBreakdown": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "carbIntakeId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "foods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreatmentFood"
+            }
+          },
+          "isAttributed": {
+            "type": "boolean"
+          },
+          "attributedCarbs": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "unspecifiedCarbs": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "TreatmentFood": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -28204,75 +28529,123 @@
             "type": "string",
             "format": "guid"
           },
-          "mills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "utcOffset": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "device": {
+          "carbIntakeId": {
             "type": "string",
-            "nullable": true
+            "format": "guid"
           },
-          "app": {
-            "type": "string",
-            "nullable": true
-          },
-          "dataSource": {
-            "type": "string",
-            "nullable": true
-          },
-          "correlationId": {
+          "foodId": {
             "type": "string",
             "format": "guid",
             "nullable": true
           },
-          "legacyId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
+          "portions": {
+            "type": "number",
+            "format": "decimal"
           },
           "carbs": {
             "type": "number",
-            "format": "double"
+            "format": "decimal"
           },
-          "protein": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
+          "timeOffsetMinutes": {
+            "type": "integer",
+            "format": "int32"
           },
-          "fat": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "foodType": {
+          "note": {
             "type": "string",
             "nullable": true
           },
-          "absorptionTime": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "syncIdentifier": {
+          "foodName": {
             "type": "string",
             "nullable": true
           },
-          "carbTime": {
+          "carbsPerPortion": {
             "type": "number",
-            "format": "double",
+            "format": "decimal",
             "nullable": true
+          }
+        }
+      },
+      "CarbIntakeFoodRequest": {
+        "type": "object",
+        "description": "Request body for adding/updating a food entry on a carb intake record.",
+        "additionalProperties": false,
+        "properties": {
+          "foodId": {
+            "type": "string",
+            "nullable": true
+          },
+          "portions": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true
+          },
+          "carbs": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true
+          },
+          "timeOffsetMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "inputMode": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CarbIntakeFoodInputMode"
+              }
+            ]
+          }
+        }
+      },
+      "CarbIntakeFoodInputMode": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Portions",
+          "Carbs"
+        ],
+        "enum": [
+          0,
+          1
+        ]
+      },
+      "MealCarbIntake": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "carbIntake": {
+            "$ref": "#/components/schemas/CarbIntake"
+          },
+          "correlatedBolus": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Bolus"
+              }
+            ]
+          },
+          "foods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TreatmentFood"
+            }
+          },
+          "isAttributed": {
+            "type": "boolean"
+          },
+          "attributedCarbs": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "unspecifiedCarbs": {
+            "type": "number",
+            "format": "decimal"
           }
         }
       },
@@ -28485,65 +28858,6 @@
           },
           "pagination": {
             "$ref": "#/components/schemas/PaginationInfo"
-          }
-        }
-      },
-      "DeviceEvent": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "mills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "utcOffset": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "device": {
-            "type": "string",
-            "nullable": true
-          },
-          "app": {
-            "type": "string",
-            "nullable": true
-          },
-          "dataSource": {
-            "type": "string",
-            "nullable": true
-          },
-          "correlationId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "legacyId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "eventType": {
-            "$ref": "#/components/schemas/DeviceEventType"
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
-          },
-          "syncIdentifier": {
-            "type": "string",
-            "nullable": true
           }
         }
       },
@@ -30510,152 +30824,6 @@
           "overrideNotes": {
             "type": "string",
             "nullable": true
-          }
-        }
-      },
-      "TreatmentFoodBreakdown": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "treatmentId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "foods": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TreatmentFood"
-            }
-          },
-          "isAttributed": {
-            "type": "boolean"
-          },
-          "attributedCarbs": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "unspecifiedCarbs": {
-            "type": "number",
-            "format": "decimal"
-          }
-        }
-      },
-      "TreatmentFood": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "treatmentId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "foodId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "portions": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "carbs": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "timeOffsetMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "note": {
-            "type": "string",
-            "nullable": true
-          },
-          "foodName": {
-            "type": "string",
-            "nullable": true
-          },
-          "carbsPerPortion": {
-            "type": "number",
-            "format": "decimal",
-            "nullable": true
-          }
-        }
-      },
-      "TreatmentFoodRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "foodId": {
-            "type": "string",
-            "nullable": true
-          },
-          "portions": {
-            "type": "number",
-            "format": "decimal",
-            "nullable": true
-          },
-          "carbs": {
-            "type": "number",
-            "format": "decimal",
-            "nullable": true
-          },
-          "timeOffsetMinutes": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "note": {
-            "type": "string",
-            "nullable": true
-          },
-          "inputMode": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/TreatmentFoodInputMode"
-              }
-            ]
-          }
-        }
-      },
-      "TreatmentFoodInputMode": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Portions",
-          "Carbs"
-        ],
-        "enum": [
-          0,
-          1
-        ]
-      },
-      "MealTreatment": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "treatment": {
-            "$ref": "#/components/schemas/Treatment"
-          },
-          "foods": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TreatmentFood"
-            }
-          },
-          "isAttributed": {
-            "type": "boolean"
-          },
-          "attributedCarbs": {
-            "type": "number",
-            "format": "decimal"
-          },
-          "unspecifiedCarbs": {
-            "type": "number",
-            "format": "decimal"
           }
         }
       },

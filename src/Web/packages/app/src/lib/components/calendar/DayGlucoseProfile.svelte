@@ -18,8 +18,8 @@
   const Y_MAX = 350;
 
   interface Props {
-    /** Glucose entries for the day: { mills, sgv } */
-    entries: Array<{ mills: number; sgv: number }>;
+    /** Glucose entries for the day: { mills, mgdl } */
+    entries: Array<{ mills: number; mgdl: number }>;
     /** Click handler */
     onclick?: () => void;
   }
@@ -30,7 +30,7 @@
   const chartData = $derived(
     entries.map((e) => ({
       date: new Date(e.mills),
-      value: e.sgv,
+      value: e.mgdl,
     }))
   );
 

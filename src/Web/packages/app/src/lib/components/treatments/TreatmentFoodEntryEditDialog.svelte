@@ -5,13 +5,13 @@
   import { Label } from "$lib/components/ui/label";
   import { Scale, Pencil } from "lucide-svelte";
   import {
-    TreatmentFoodInputMode,
+    CarbIntakeFoodInputMode,
     type TreatmentFood,
-    type TreatmentFoodRequest,
+    type CarbIntakeFoodRequest,
     type Food,
   } from "$lib/api";
   import {
-    updateTreatmentFood,
+    updateCarbIntakeFood,
     getFoodById,
     getAllFoods,
   } from "$lib/data/treatment-foods.remote";
@@ -174,14 +174,14 @@
 
     isSaving = true;
     try {
-      const request: TreatmentFoodRequest = {
+      const request: CarbIntakeFoodRequest = {
         foodId: entry.foodId ?? undefined,
         timeOffsetMinutes: editOffset,
         note: editNote.trim() || undefined,
         inputMode:
           lastEditedField === "portions"
-            ? TreatmentFoodInputMode.Portions
-            : TreatmentFoodInputMode.Carbs,
+            ? CarbIntakeFoodInputMode.Portions
+            : CarbIntakeFoodInputMode.Carbs,
       };
 
       if (entry.foodId) {
@@ -193,12 +193,12 @@
       } else {
         // "Other" entries only have carbs
         request.carbs = editCarbs;
-        request.inputMode = TreatmentFoodInputMode.Carbs;
+        request.inputMode = CarbIntakeFoodInputMode.Carbs;
       }
 
-      await updateTreatmentFood({
-        treatmentId,
-        entryId: entry.id,
+      await updateCarbIntakeFood({
+        carbIntakeId: treatmentId!,
+        entryId: entry.id!,
         request,
       });
 

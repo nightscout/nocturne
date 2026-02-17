@@ -3,23 +3,23 @@ using Nocturne.Core.Models;
 namespace Nocturne.Core.Contracts;
 
 /// <summary>
-/// Domain service for treatment food breakdown operations.
+/// Domain service for food breakdown operations linked to carb intake records.
 /// </summary>
 public interface ITreatmentFoodService
 {
     /// <summary>
-    /// Get food breakdown for a treatment.
+    /// Get food breakdown for a carb intake record.
     /// </summary>
-    Task<TreatmentFoodBreakdown?> GetByTreatmentIdAsync(
-        Guid treatmentId,
+    Task<TreatmentFoodBreakdown?> GetByCarbIntakeIdAsync(
+        Guid carbIntakeId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>
-    /// Get food breakdown entries for multiple treatments.
+    /// Get food breakdown entries for multiple carb intake records.
     /// </summary>
-    Task<IEnumerable<TreatmentFood>> GetByTreatmentIdsAsync(
-        IEnumerable<Guid> treatmentIds,
+    Task<IEnumerable<TreatmentFood>> GetByCarbIntakeIdsAsync(
+        IEnumerable<Guid> carbIntakeIds,
         CancellationToken cancellationToken = default
     );
 

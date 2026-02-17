@@ -5,12 +5,12 @@
   import {
     type TreatmentFood,
     type TreatmentFoodBreakdown,
-    type TreatmentFoodRequest,
+    type CarbIntakeFoodRequest,
   } from "$lib/api";
   import {
-    addTreatmentFood,
-    deleteTreatmentFood,
-    getTreatmentFoodBreakdown,
+    addCarbIntakeFood,
+    deleteCarbIntakeFood,
+    getCarbIntakeFoodBreakdown,
   } from "$lib/data/treatment-foods.remote";
   import TreatmentFoodSelectorDialog from "./TreatmentFoodSelectorDialog.svelte";
   import TreatmentFoodEntryEditDialog from "./TreatmentFoodEntryEditDialog.svelte";
@@ -47,7 +47,7 @@
     isLoading = true;
     loadError = null;
     try {
-      breakdown = await getTreatmentFoodBreakdown(id);
+      breakdown = await getCarbIntakeFoodBreakdown(id);
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
       loadError = "Unable to load food breakdown.";
@@ -56,10 +56,10 @@
     }
   }
 
-  async function handleAddFood(request: TreatmentFoodRequest) {
+  async function handleAddFood(request: CarbIntakeFoodRequest) {
     if (!treatmentId) return;
     try {
-      const updated = await addTreatmentFood({ treatmentId, request });
+      const updated = await addCarbIntakeFood({ carbIntakeId: treatmentId!, request });
       breakdown = updated;
       showAddFood = false;
     } catch (err) {
@@ -75,9 +75,9 @@
   async function handleDelete(entry: TreatmentFood) {
     if (!treatmentId || !entry.id) return;
     try {
-      await deleteTreatmentFood({
-        treatmentId,
-        entryId: entry.id,
+      await deleteCarbIntakeFood({
+        carbIntakeId: treatmentId!,
+        entryId: entry.id!,
       });
       // Reload the breakdown after deletion
       await loadBreakdown(treatmentId);

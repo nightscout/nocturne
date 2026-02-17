@@ -6,7 +6,7 @@ using Nocturne.Infrastructure.Data.Mappers;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// PostgreSQL repository for treatment food breakdown operations.
+/// PostgreSQL repository for food breakdown operations linked to carb intake records.
 /// </summary>
 public class TreatmentFoodRepository
 {
@@ -22,10 +22,10 @@ public class TreatmentFoodRepository
     }
 
     /// <summary>
-    /// Get food breakdown entries for a treatment.
+    /// Get food breakdown entries for a carb intake record.
     /// </summary>
-    public async Task<IReadOnlyList<TreatmentFood>> GetByTreatmentIdAsync(
-        Guid treatmentId,
+    public async Task<IReadOnlyList<TreatmentFood>> GetByCarbIntakeIdAsync(
+        Guid carbIntakeId,
         CancellationToken cancellationToken = default
     )
     {
@@ -33,7 +33,7 @@ public class TreatmentFoodRepository
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .Include(tf => tf.Food)
-            .Where(tf => tf.TreatmentId == treatmentId)
+            .Where(tf => tf.CarbIntakeId == carbIntakeId)
             .OrderBy(tf => tf.SysCreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -43,14 +43,14 @@ public class TreatmentFoodRepository
     }
 
     /// <summary>
-    /// Get food breakdown entries for multiple treatments.
+    /// Get food breakdown entries for multiple carb intake records.
     /// </summary>
-    public async Task<IReadOnlyList<TreatmentFood>> GetByTreatmentIdsAsync(
-        IEnumerable<Guid> treatmentIds,
+    public async Task<IReadOnlyList<TreatmentFood>> GetByCarbIntakeIdsAsync(
+        IEnumerable<Guid> carbIntakeIds,
         CancellationToken cancellationToken = default
     )
     {
-        var ids = treatmentIds.ToList();
+        var ids = carbIntakeIds.ToList();
         if (ids.Count == 0)
         {
             return Array.Empty<TreatmentFood>();
@@ -60,7 +60,7 @@ public class TreatmentFoodRepository
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .Include(tf => tf.Food)
-            .Where(tf => ids.Contains(tf.TreatmentId))
+            .Where(tf => ids.Contains(tf.CarbIntakeId))
             .OrderBy(tf => tf.SysCreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -70,7 +70,7 @@ public class TreatmentFoodRepository
     }
 
     /// <summary>
-    /// Create a treatment food entry.
+    /// Create a food breakdown entry.
     /// </summary>
     public async Task<TreatmentFood> CreateAsync(
         TreatmentFood entry,
@@ -91,7 +91,7 @@ public class TreatmentFoodRepository
     }
 
     /// <summary>
-    /// Update a treatment food entry.
+    /// Update a food breakdown entry.
     /// </summary>
     public async Task<TreatmentFood?> UpdateAsync(
         TreatmentFood entry,
@@ -120,7 +120,7 @@ public class TreatmentFoodRepository
     }
 
     /// <summary>
-    /// Delete a treatment food entry.
+    /// Delete a food breakdown entry.
     /// </summary>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {

@@ -1,5 +1,7 @@
 <script lang="ts" module>
-  import type { Treatment } from "$lib/api";
+  import type {
+    TreatmentRow,
+  } from "$lib/constants/treatment-categories";
   import type {
     ColumnDef,
     SortingState,
@@ -18,7 +20,7 @@
     FlexRender,
     renderSnippet,
   } from "$lib/components/ui/data-table";
-  import { getEventTypeStyle } from "$lib/constants/treatment-categories";
+  import { getRowTypeStyle } from "$lib/constants/treatment-categories";
 </script>
 
 <script lang="ts">
@@ -30,7 +32,6 @@
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
   import * as Table from "$lib/components/ui/table";
-  import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     ArrowUpDown,
     ArrowUp,
@@ -39,25 +40,22 @@
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-    Edit,
     Trash2,
     Columns3,
     Filter,
     X,
-    Braces,
     Check,
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
 
   interface Props {
-    treatments: Treatment[];
-    onEdit?: (treatment: Treatment) => void;
-    onDelete?: (treatment: Treatment) => void;
-    onBulkDelete?: (treatments: Treatment[]) => void;
+    rows: TreatmentRow[];
+    onDelete?: (row: TreatmentRow) => void;
+    onBulkDelete?: (rows: TreatmentRow[]) => void;
   }
 
-  let { treatments, onEdit, onDelete, onBulkDelete }: Props = $props();
+  let { rows, onDelete, onBulkDelete }: Props = $props();
 
   // Table state
   let sorting = $state<SortingState>([{ id: "time", desc: true }]);
@@ -68,39 +66,21 @@
   let globalFilter = $state("");
 
   // Column filter states
-  let eventTypeFilterOpen = $state(false);
-  let eventTypeFilterSearch = $state("");
-  let selectedEventTypes = $state<string[]>([]);
+  let typeFilterOpen = $state(false);
+  let selectedTypes = $state<string[]>([]);
 
   let sourceFilterOpen = $state(false);
   let sourceFilterSearch = $state("");
   let selectedSources = $state<string[]>([]);
 
-  // Compute unique event types and sources from data
-  let uniqueEventTypes = $derived.by(() => {
-    const types = new Set<string>();
-    for (const t of treatments) {
-      if (t.eventType) types.add(t.eventType);
-    }
-    return Array.from(types).sort();
-  });
-
+  // Compute unique sources from data
   let uniqueSources = $derived.by(() => {
     const sources = new Set<string>();
-    for (const t of treatments) {
-      const source = t.data_source || t.enteredBy;
+    for (const r of rows) {
+      const source = r.dataSource || r.app;
       if (source) sources.add(source);
     }
     return Array.from(sources).sort();
-  });
-
-  // Filtered lists for dropdowns
-  let filteredEventTypesForDropdown = $derived.by(() => {
-    if (!eventTypeFilterSearch.trim()) return uniqueEventTypes;
-    const search = eventTypeFilterSearch.toLowerCase();
-    return uniqueEventTypes.filter((type) =>
-      type.toLowerCase().includes(search)
-    );
   });
 
   let filteredSourcesForDropdown = $derived.by(() => {
@@ -123,8 +103,13 @@
     return unit ? `${formatted}${unit}` : formatted;
   }
 
+  function formatMills(mills: number | undefined): string {
+    if (!mills) return "—";
+    return formatDateTimeCompact(new Date(mills).toISOString());
+  }
+
   // Column definitions
-  const columns: ColumnDef<Treatment, unknown>[] = [
+  const columns: ColumnDef<TreatmentRow, unknown>[] = [
     // Selection column
     {
       id: "select",
@@ -148,149 +133,111 @@
     // Time column
     {
       id: "time",
-      accessorFn: (row) => row.created_at,
+      accessorFn: (row) => row.mills,
       header: ({ column }) =>
         renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
-      cell: ({ row }) => formatDateTimeCompact(row.original.created_at),
-      sortingFn: (rowA, rowB) => {
-        const a = new Date(rowA.original.created_at || 0).getTime();
-        const b = new Date(rowB.original.created_at || 0).getTime();
-        return a - b;
-      },
+      cell: ({ row }) => formatMills(row.original.mills),
+      sortingFn: (rowA, rowB) =>
+        (rowA.original.mills ?? 0) - (rowB.original.mills ?? 0),
     },
-    // Event Type column
+    // Type column (bolus / carb intake)
     {
-      id: "eventType",
-      accessorKey: "eventType",
-      header: () => renderSnippet(eventTypeFilterHeaderSnippet as any, {}),
+      id: "type",
+      accessorFn: (row) => row.kind,
+      header: () => renderSnippet(typeFilterHeaderSnippet as any, {}),
       cell: ({ row }) => {
-        const eventType = row.original.eventType || "<none>";
-        const styles = getEventTypeStyle(eventType);
-        return renderSnippet(eventTypeBadgeSnippet as any, { eventType, styles });
+        const label = row.original.kind === "bolus" ? "Bolus" : "Carb Intake";
+        const styles = getRowTypeStyle(row.original.kind);
+        return renderSnippet(typeBadgeSnippet as any, { label, styles });
       },
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
-        return filterValue.includes(row.original.eventType || "");
+        return filterValue.includes(row.original.kind);
       },
     },
-    // Insulin column
+    // Insulin column (bolus only)
     {
       id: "insulin",
-      accessorKey: "insulin",
+      accessorFn: (row) => (row.kind === "bolus" ? row.insulin : undefined),
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Insulin" }),
-      cell: ({ row }) => formatNumber(row.original.insulin, "U"),
-      sortingFn: (rowA, rowB) => {
-        const a = rowA.original.insulin ?? 0;
-        const b = rowB.original.insulin ?? 0;
-        return a - b;
-      },
-    },
-    // Rate column (for basal treatments)
-    {
-      id: "rate",
-      accessorKey: "rate",
-      header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Rate" }),
+        renderSnippet(sortableHeaderSnippet as any, {
+          column,
+          label: "Insulin",
+        }),
       cell: ({ row }) => {
-        const rate = row.original.rate ?? row.original.absolute;
-        if (rate === undefined || rate === null) return "—";
-        return `${rate.toFixed(2)} U/hr`;
+        if (row.original.kind !== "bolus") return "—";
+        return formatNumber(row.original.insulin, "U");
       },
       sortingFn: (rowA, rowB) => {
-        const a = rowA.original.rate ?? rowA.original.absolute ?? 0;
-        const b = rowB.original.rate ?? rowB.original.absolute ?? 0;
+        const a = rowA.original.kind === "bolus" ? (rowA.original.insulin ?? 0) : 0;
+        const b = rowB.original.kind === "bolus" ? (rowB.original.insulin ?? 0) : 0;
         return a - b;
       },
     },
-    // Carbs column
+    // Carbs column (carb intake only)
     {
       id: "carbs",
-      accessorKey: "carbs",
+      accessorFn: (row) => (row.kind === "carbIntake" ? row.carbs : undefined),
       header: ({ column }) =>
         renderSnippet(sortableHeaderSnippet as any, { column, label: "Carbs" }),
-      cell: ({ row }) => formatNumber(row.original.carbs, "g"),
+      cell: ({ row }) => {
+        if (row.original.kind !== "carbIntake") return "—";
+        return formatNumber(row.original.carbs, "g");
+      },
       sortingFn: (rowA, rowB) => {
-        const a = rowA.original.carbs ?? 0;
-        const b = rowB.original.carbs ?? 0;
+        const a = rowA.original.kind === "carbIntake" ? (rowA.original.carbs ?? 0) : 0;
+        const b = rowB.original.kind === "carbIntake" ? (rowB.original.carbs ?? 0) : 0;
         return a - b;
       },
     },
-    // Blood Glucose column
+    // Details column (context-specific: bolusType/automatic for bolus, foodType for carbs)
     {
-      id: "glucose",
-      accessorKey: "glucose",
-      header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "BG" }),
-      cell: ({ row }) => formatNumber(row.original.glucose),
+      id: "details",
+      header: "Details",
+      cell: ({ row }) => {
+        if (row.original.kind === "bolus") {
+          return renderSnippet(bolusDetailsSnippet as any, {
+            bolusType: row.original.bolusType,
+            automatic: row.original.automatic,
+          });
+        }
+        const foodType = row.original.foodType;
+        if (!foodType) return "—";
+        return foodType.length > 25 ? foodType.slice(0, 25) + "…" : foodType;
+      },
+      enableSorting: false,
     },
     // Duration column
     {
       id: "duration",
-      accessorKey: "duration",
       header: "Duration",
+      accessorFn: (row) => {
+        if (row.kind === "bolus") return row.duration;
+        return row.absorptionTime;
+      },
       cell: ({ row }) => {
-        const duration = row.original.duration;
-        if (!duration) return "—";
-        return `${duration.toFixed(0)} min`;
+        const val =
+          row.original.kind === "bolus"
+            ? row.original.duration
+            : row.original.absorptionTime;
+        if (!val) return "—";
+        return `${val.toFixed(0)} min`;
       },
     },
-    // Profile column
+    // Source column
     {
-      id: "profile",
-      accessorKey: "profile",
-      header: "Profile",
-      cell: ({ row }) => row.original.profile || "—",
-    },
-    // Entered By column
-    {
-      id: "enteredBy",
-      accessorKey: "enteredBy",
+      id: "source",
+      accessorFn: (row) => row.dataSource || row.app,
       header: () => renderSnippet(sourceFilterHeaderSnippet as any, {}),
       cell: ({ row }) => {
-        const enteredBy = row.original.enteredBy;
-        const source = row.original.data_source;
-        // Show source first, then enteredBy as secondary
-        const primary = source || enteredBy;
-        if (!primary) return "—";
-        // Build display with both if available and different
-        let display =
-          primary.length > 20 ? primary.slice(0, 20) + "…" : primary;
-        if (source && enteredBy && source !== enteredBy) {
-          const secondary =
-            enteredBy.length > 15 ? enteredBy.slice(0, 15) + "…" : enteredBy;
-          return renderSnippet(sourceSnippet as any, { primary: display, secondary });
-        }
-        return display;
+        const source = row.original.dataSource || row.original.app;
+        if (!source) return "—";
+        return source.length > 25 ? source.slice(0, 25) + "…" : source;
       },
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
-        const source = row.original.data_source || row.original.enteredBy || "";
+        const source = row.original.dataSource || row.original.app || "";
         return filterValue.includes(source);
-      },
-    },
-    // Additional Properties column
-    {
-      id: "additionalProperties",
-      accessorFn: (row) => row.additional_properties,
-      header: "",
-      cell: ({ row }) => {
-        const props = row.original.additional_properties;
-        if (!props || Object.keys(props).length === 0) return null;
-        return renderSnippet(additionalPropertiesSnippet as any, { props });
-      },
-      enableSorting: false,
-      size: 40,
-    },
-    // Notes column
-    {
-      id: "notes",
-      accessorKey: "notes",
-      header: "Notes",
-      cell: ({ row }) => {
-        const notes = row.original.notes || row.original.reason;
-        if (!notes) return "—";
-        return notes.length > 30 ? notes.slice(0, 30) + "…" : notes;
       },
     },
     // Actions column
@@ -301,16 +248,17 @@
         renderSnippet(actionsSnippet as any, { treatment: row.original }),
       enableSorting: false,
       enableHiding: false,
-      size: 80,
+      size: 50,
     },
   ];
 
   // Create the table
   const table = createSvelteTable({
     get data() {
-      return treatments;
+      return rows;
     },
     columns,
+    getRowId: (row) => row.id ?? "",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -340,12 +288,13 @@
     },
     globalFilterFn: (row, _columnId, filterValue) => {
       const search = filterValue.toLowerCase();
+      const r = row.original;
       const values = [
-        row.original.eventType,
-        row.original.notes,
-        row.original.enteredBy,
-        row.original.reason,
-        row.original.profile,
+        r.kind === "bolus" ? "bolus" : "carb intake",
+        r.kind === "bolus" ? r.bolusType : r.foodType,
+        r.dataSource,
+        r.app,
+        r.device,
       ]
         .filter(Boolean)
         .join(" ")
@@ -376,13 +325,13 @@
   });
 
   // Selected rows
-  let selectedTreatments = $derived.by(() => {
+  let selectedRows = $derived.by(() => {
     return table.getSelectedRowModel().rows.map((row) => row.original);
   });
 
   function handleBulkDelete() {
-    if (onBulkDelete && selectedTreatments.length > 0) {
-      onBulkDelete(selectedTreatments);
+    if (onBulkDelete && selectedRows.length > 0) {
+      onBulkDelete(selectedRows);
     }
   }
 
@@ -391,25 +340,25 @@
   }
 
   // Filter helper functions
-  function toggleEventTypeFilter(eventType: string) {
-    if (selectedEventTypes.includes(eventType)) {
-      selectedEventTypes = selectedEventTypes.filter((t) => t !== eventType);
+  function toggleTypeFilter(kind: string) {
+    if (selectedTypes.includes(kind)) {
+      selectedTypes = selectedTypes.filter((t) => t !== kind);
     } else {
-      selectedEventTypes = [...selectedEventTypes, eventType];
+      selectedTypes = [...selectedTypes, kind];
     }
-    applyEventTypeFilter();
+    applyTypeFilter();
   }
 
-  function clearEventTypeFilter() {
-    selectedEventTypes = [];
-    applyEventTypeFilter();
+  function clearTypeFilter() {
+    selectedTypes = [];
+    applyTypeFilter();
   }
 
-  function applyEventTypeFilter() {
-    const column = table.getColumn("eventType");
+  function applyTypeFilter() {
+    const column = table.getColumn("type");
     if (column) {
       column.setFilterValue(
-        selectedEventTypes.length > 0 ? selectedEventTypes : undefined
+        selectedTypes.length > 0 ? selectedTypes : undefined
       );
     }
   }
@@ -429,7 +378,7 @@
   }
 
   function applySourceFilter() {
-    const column = table.getColumn("enteredBy");
+    const column = table.getColumn("source");
     if (column) {
       column.setFilterValue(
         selectedSources.length > 0 ? selectedSources : undefined
@@ -488,36 +437,43 @@
   </Button>
 {/snippet}
 
-{#snippet eventTypeBadgeSnippet({
-  eventType,
+{#snippet typeBadgeSnippet({
+  label,
   styles,
 }: {
-  eventType: string;
+  label: string;
   styles: any;
 })}
   <Badge
     variant="outline"
     class="whitespace-nowrap {styles.colorClass} {styles.bgClass} {styles.borderClass}"
   >
-    {eventType}
+    {label}
   </Badge>
 {/snippet}
 
-{#snippet sourceSnippet({
-  primary,
-  secondary,
+{#snippet bolusDetailsSnippet({
+  bolusType,
+  automatic,
 }: {
-  primary: string;
-  secondary: string;
+  bolusType: string | undefined;
+  automatic: boolean | undefined;
 })}
-  <div class="flex flex-col">
-    <span class="text-sm">{primary}</span>
-    <span class="text-xs text-muted-foreground">{secondary}</span>
+  <div class="flex items-center gap-1.5">
+    {#if bolusType}
+      <span class="text-sm">{bolusType}</span>
+    {/if}
+    {#if automatic}
+      <Badge variant="secondary" class="text-[10px] px-1 py-0">Auto</Badge>
+    {/if}
+    {#if !bolusType && !automatic}
+      <span>—</span>
+    {/if}
   </div>
 {/snippet}
 
-{#snippet eventTypeFilterHeaderSnippet({})}
-  <Popover.Root bind:open={eventTypeFilterOpen}>
+{#snippet typeFilterHeaderSnippet({})}
+  <Popover.Root bind:open={typeFilterOpen}>
     <Popover.Trigger>
       {#snippet child({ props })}
         <Button
@@ -527,55 +483,49 @@
           {...props}
         >
           Type
-          {#if selectedEventTypes.length > 0}
+          {#if selectedTypes.length > 0}
             <Badge variant="secondary" class="ml-1 h-5 px-1 text-xs">
-              {selectedEventTypes.length}
+              {selectedTypes.length}
             </Badge>
           {/if}
           <Filter class="ml-1 h-3 w-3 opacity-50" />
         </Button>
       {/snippet}
     </Popover.Trigger>
-    <Popover.Content class="w-[220px] p-0" align="start">
+    <Popover.Content class="w-[180px] p-0" align="start">
       <Command.Root shouldFilter={false}>
-        <Command.Input
-          placeholder="Search types..."
-          bind:value={eventTypeFilterSearch}
-        />
-        <Command.List class="max-h-[200px]">
-          <Command.Empty>No types found.</Command.Empty>
+        <Command.List>
           <Command.Group>
-            {#each filteredEventTypesForDropdown as eventType}
-              {@const typeStyle = getEventTypeStyle(eventType)}
+            {#each [{ value: "bolus", label: "Bolus" }, { value: "carbIntake", label: "Carb Intake" }] as option}
               <Command.Item
-                value={eventType}
-                onSelect={() => toggleEventTypeFilter(eventType)}
+                value={option.value}
+                onSelect={() => toggleTypeFilter(option.value)}
                 class="cursor-pointer"
               >
                 <div
                   class={cn(
                     "mr-2 h-4 w-4 border rounded flex items-center justify-center",
-                    selectedEventTypes.includes(eventType)
+                    selectedTypes.includes(option.value)
                       ? "bg-primary border-primary"
                       : "border-muted"
                   )}
                 >
-                  {#if selectedEventTypes.includes(eventType)}
+                  {#if selectedTypes.includes(option.value)}
                     <Check class="h-3 w-3 text-primary-foreground" />
                   {/if}
                 </div>
-                <span class={typeStyle.colorClass}>{eventType}</span>
+                <span>{option.label}</span>
               </Command.Item>
             {/each}
           </Command.Group>
         </Command.List>
-        {#if selectedEventTypes.length > 0}
+        {#if selectedTypes.length > 0}
           <div class="border-t p-2">
             <Button
               variant="ghost"
               size="sm"
               class="w-full"
-              onclick={clearEventTypeFilter}
+              onclick={clearTypeFilter}
             >
               <X class="mr-2 h-3 w-3" />
               Clear filter
@@ -657,48 +607,15 @@
   </Popover.Root>
 {/snippet}
 
-{#snippet additionalPropertiesSnippet({ props }: { props: any })}
-  <Tooltip.Root>
-    <Tooltip.Trigger>
-      {#snippet child({ props: triggerProps })}
-        <div
-          class="flex items-center justify-center h-6 w-6 rounded bg-muted/50 text-muted-foreground hover:bg-muted cursor-help"
-          {...triggerProps}
-        >
-          <Braces class="h-3.5 w-3.5" />
-        </div>
-      {/snippet}
-    </Tooltip.Trigger>
-    <Tooltip.Content side="left" class="max-w-[300px]">
-      <pre class="text-xs font-mono whitespace-pre-wrap">{JSON.stringify(
-          props,
-          null,
-          2
-        )}</pre>
-    </Tooltip.Content>
-  </Tooltip.Root>
-{/snippet}
-
-{#snippet actionsSnippet({ treatment }: { treatment: Treatment })}
+{#snippet actionsSnippet({ treatment }: { treatment: TreatmentRow })}
   <div class="flex items-center gap-1">
-    {#if onEdit}
-      <Button
-        variant="ghost"
-        size="sm"
-        class="h-8 w-8 p-0"
-        onclick={() => onEdit(treatment)}
-        title="Edit treatment"
-      >
-        <Edit class="h-4 w-4" />
-      </Button>
-    {/if}
     {#if onDelete}
       <Button
         variant="ghost"
         size="sm"
         class="h-8 w-8 p-0 text-destructive hover:text-destructive"
         onclick={() => onDelete(treatment)}
-        title="Delete treatment"
+        title="Delete"
       >
         <Trash2 class="h-4 w-4" />
       </Button>
@@ -715,7 +632,7 @@
     <!-- Search -->
     <div class="flex flex-1 items-center gap-2">
       <Input
-        placeholder="Search treatments..."
+        placeholder="Search records..."
         value={globalFilter}
         oninput={(e) => {
           globalFilter = e.currentTarget.value;
@@ -758,12 +675,12 @@
   </div>
 
   <!-- Selection actions bar -->
-  {#if selectedTreatments.length > 0}
+  {#if selectedRows.length > 0}
     <div
       class="flex items-center justify-between rounded-md border bg-muted/50 px-4 py-2"
     >
       <span class="text-sm font-medium">
-        {selectedTreatments.length} treatment{selectedTreatments.length !== 1
+        {selectedRows.length} record{selectedRows.length !== 1
           ? "s"
           : ""} selected
       </span>
@@ -823,7 +740,7 @@
               colspan={columns.length}
               class="h-24 text-center text-muted-foreground"
             >
-              No treatments found.
+              No records found.
             </Table.Cell>
           </Table.Row>
         {/each}

@@ -150,6 +150,12 @@ public class GlycemicVariability
     public double EstimatedA1c { get; set; }
 
     /// <summary>
+    /// Glucose Management Indicator - modern replacement for estimated A1c
+    /// Based on: GMI (%) = 3.31 + (0.02392 x mean glucose in mg/dL)
+    /// </summary>
+    public GlucoseManagementIndicator? Gmi { get; set; }
+
+    /// <summary>
     /// Mean total daily glucose change in mg/dL - sum of absolute glucose changes divided by number of days
     /// </summary>
     public double MeanTotalDailyChange { get; set; }
@@ -741,6 +747,11 @@ public class GlucoseAnalytics
     public DataQuality DataQuality { get; set; } = new();
 
     /// <summary>
+    /// Reliability assessment for this analysis block
+    /// </summary>
+    public StatisticReliability? Reliability { get; set; }
+
+    /// <summary>
     /// Time period of the analysis
     /// </summary>
     public AnalysisTime Time { get; set; } = new();
@@ -842,6 +853,16 @@ public class PeriodStatistics
     /// Indicates if there was sufficient data for meaningful statistics
     /// </summary>
     public bool HasSufficientData { get; set; }
+
+    /// <summary>
+    /// Glucose Management Indicator for this period
+    /// </summary>
+    public GlucoseManagementIndicator? Gmi { get; set; }
+
+    /// <summary>
+    /// Reliability assessment for this period's statistics
+    /// </summary>
+    public StatisticReliability? Reliability { get; set; }
 
     /// <summary>
     /// Number of glucose entries in this period
@@ -1005,6 +1026,9 @@ public class GlucoseManagementIndicator
 
     /// <summary>Interpretation of the GMI value</summary>
     public string Interpretation { get; set; } = string.Empty;
+
+    /// <summary>Reliability assessment for this GMI calculation</summary>
+    public StatisticReliability? Reliability { get; set; }
 
     /// <summary>
     /// GMI interpretation categories based on ADA Standards
@@ -1428,6 +1452,26 @@ public enum TrendDirection
 }
 
 /// <summary>
+/// Reliability metadata for a statistics analysis block.
+/// Provides raw facts so the frontend can compose a plain-English message
+/// when the data doesn't meet clinical reliability criteria.
+/// </summary>
+public class StatisticReliability
+{
+    /// <summary>Whether the data meets clinical reliability criteria for this analysis</summary>
+    public bool MeetsReliabilityCriteria { get; set; }
+
+    /// <summary>Number of days with glucose data in this analysis window</summary>
+    public int DaysOfData { get; set; }
+
+    /// <summary>Minimum days recommended by clinical guidelines for reliable results</summary>
+    public int RecommendedMinimumDays { get; set; }
+
+    /// <summary>Number of glucose readings used in this analysis</summary>
+    public int ReadingCount { get; set; }
+}
+
+/// <summary>
 /// Comparison between two time periods
 /// </summary>
 public class TrendComparison
@@ -1819,6 +1863,11 @@ public class InsulinDeliveryStatistics
     /// Number of treatments with both carbs and bolus
     /// </summary>
     public int CarbBolusCount { get; set; }
+
+    /// <summary>
+    /// Reliability assessment for insulin delivery statistics
+    /// </summary>
+    public StatisticReliability? Reliability { get; set; }
 }
 
 /// <summary>

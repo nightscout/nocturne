@@ -2448,10 +2448,10 @@ export class StatisticsClient {
 
     /**
      * Calculate averaged statistics for each hour of the day (0-23)
-     * @param entries Array of glucose entries
+     * @param entries Array of sensor glucose readings
      * @return Collection of averaged statistics for each hour
      */
-    calculateAveragedStats(entries: Entry[], signal?: AbortSignal): Promise<AveragedStats[]> {
+    calculateAveragedStats(entries: SensorGlucose[], signal?: AbortSignal): Promise<AveragedStats[]> {
         let url_ = this.baseUrl + "/api/v1/Statistics/averaged-stats";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -2490,15 +2490,15 @@ export class StatisticsClient {
     }
 
     /**
-     * Calculate treatment summary for a collection of treatments
-     * @param treatments Array of treatments
+     * Calculate treatment summary for a collection of boluses and carb intakes
+     * @param request Request containing boluses and carb intakes
      * @return Treatment summary with totals and counts
      */
-    calculateTreatmentSummary(treatments: Treatment[], signal?: AbortSignal): Promise<TreatmentSummary> {
+    calculateTreatmentSummary(request: TreatmentSummaryRequest, signal?: AbortSignal): Promise<TreatmentSummary> {
         let url_ = this.baseUrl + "/api/v1/Statistics/treatment-summary";
         url_ = url_.replace(/[?&]$/, "");
 
-        const content_ = JSON.stringify(treatments);
+        const content_ = JSON.stringify(request);
 
         let options_: RequestInit = {
             body: content_,
@@ -2577,7 +2577,7 @@ export class StatisticsClient {
 
     /**
      * Master glucose analytics function that calculates comprehensive metrics
-     * @param request Request containing entries, treatments, and configuration
+     * @param request Request containing sensor glucose readings, boluses, carb intakes, and configuration
      * @return Comprehensive glucose analytics
      */
     analyzeGlucoseData(request: GlucoseAnalyticsRequest, signal?: AbortSignal): Promise<GlucoseAnalytics> {
@@ -2620,7 +2620,7 @@ export class StatisticsClient {
 
     /**
      * Extended glucose analytics including GMI, GRI, and clinical target assessment
-     * @param request Request containing entries, treatments, population type, and configuration
+     * @param request Request containing sensor glucose readings, boluses, carb intakes, population type, and configuration
      * @return Extended glucose analytics with modern clinical metrics
      */
     analyzeGlucoseDataExtended(request: ExtendedGlucoseAnalyticsRequest, signal?: AbortSignal): Promise<ExtendedGlucoseAnalytics> {
@@ -3211,7 +3211,7 @@ export class StatisticsClient {
 
     /**
      * Analyze glucose patterns around site changes to identify impact of site age on control
-     * @param request Request containing entries, treatments, and analysis parameters
+     * @param request Request containing sensor glucose readings, device events, and analysis parameters
      * @return Site change impact analysis with averaged glucose patterns
      */
     calculateSiteChangeImpact(request: SiteChangeImpactRequest, signal?: AbortSignal): Promise<SiteChangeImpactAnalysis> {
@@ -10685,6 +10685,256 @@ export class NutritionClient {
         }
         return Promise.resolve<void>(null as any);
     }
+
+    /**
+     * Get food breakdown for a carb intake record.
+     */
+    getCarbIntakeFoods(id: string, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
+        let url_ = this.baseUrl + "/api/v4/nutrition/carbs/{id}/foods";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetCarbIntakeFoods(_response);
+        });
+    }
+
+    protected processGetCarbIntakeFoods(response: Response): Promise<TreatmentFoodBreakdown> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
+    }
+
+    /**
+     * Add a food breakdown entry to a carb intake record.
+     */
+    addCarbIntakeFood(id: string, request: CarbIntakeFoodRequest, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
+        let url_ = this.baseUrl + "/api/v4/nutrition/carbs/{id}/foods";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAddCarbIntakeFood(_response);
+        });
+    }
+
+    protected processAddCarbIntakeFood(response: Response): Promise<TreatmentFoodBreakdown> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
+    }
+
+    /**
+     * Update a food breakdown entry.
+     */
+    updateCarbIntakeFood(id: string, foodEntryId: string, request: CarbIntakeFoodRequest, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
+        let url_ = this.baseUrl + "/api/v4/nutrition/carbs/{id}/foods/{foodEntryId}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        if (foodEntryId === undefined || foodEntryId === null)
+            throw new globalThis.Error("The parameter 'foodEntryId' must be defined.");
+        url_ = url_.replace("{foodEntryId}", encodeURIComponent("" + foodEntryId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateCarbIntakeFood(_response);
+        });
+    }
+
+    protected processUpdateCarbIntakeFood(response: Response): Promise<TreatmentFoodBreakdown> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
+    }
+
+    /**
+     * Remove a food breakdown entry.
+     */
+    deleteCarbIntakeFood(id: string, foodEntryId: string, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
+        let url_ = this.baseUrl + "/api/v4/nutrition/carbs/{id}/foods/{foodEntryId}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        if (foodEntryId === undefined || foodEntryId === null)
+            throw new globalThis.Error("The parameter 'foodEntryId' must be defined.");
+        url_ = url_.replace("{foodEntryId}", encodeURIComponent("" + foodEntryId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteCarbIntakeFood(_response);
+        });
+    }
+
+    protected processDeleteCarbIntakeFood(response: Response): Promise<TreatmentFoodBreakdown> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
+    }
+
+    /**
+     * Get carb intake records with food attribution status for the meals view.
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param attributed (optional) 
+     */
+    getMeals(from?: number | null | undefined, to?: number | null | undefined, attributed?: boolean | null | undefined, signal?: AbortSignal): Promise<MealCarbIntake[]> {
+        let url_ = this.baseUrl + "/api/v4/nutrition/meals?";
+        if (from !== undefined && from !== null)
+            url_ += "from=" + encodeURIComponent("" + from) + "&";
+        if (to !== undefined && to !== null)
+            url_ += "to=" + encodeURIComponent("" + to) + "&";
+        if (attributed !== undefined && attributed !== null)
+            url_ += "attributed=" + encodeURIComponent("" + attributed) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetMeals(_response);
+        });
+    }
+
+    protected processGetMeals(response: Response): Promise<MealCarbIntake[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MealCarbIntake[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<MealCarbIntake[]>(null as any);
+    }
 }
 
 export class ObservationsClient {
@@ -14390,237 +14640,6 @@ export class TrackersClient {
             });
         }
         return Promise.resolve<void>(null as any);
-    }
-}
-
-export class TreatmentFoodsClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Get food breakdown for a treatment.
-     */
-    getTreatmentFoods(id: string, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
-        let url_ = this.baseUrl + "/api/v4/treatments/{id}/foods";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetTreatmentFoods(_response);
-        });
-    }
-
-    protected processGetTreatmentFoods(response: Response): Promise<TreatmentFoodBreakdown> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
-    }
-
-    /**
-     * Add a food breakdown entry to a treatment.
-     */
-    addTreatmentFood(id: string, request: TreatmentFoodRequest, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
-        let url_ = this.baseUrl + "/api/v4/treatments/{id}/foods";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processAddTreatmentFood(_response);
-        });
-    }
-
-    protected processAddTreatmentFood(response: Response): Promise<TreatmentFoodBreakdown> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
-    }
-
-    /**
-     * Update a food breakdown entry.
-     */
-    updateTreatmentFood(id: string, foodEntryId: string, request: TreatmentFoodRequest, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
-        let url_ = this.baseUrl + "/api/v4/treatments/{id}/foods/{foodEntryId}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        if (foodEntryId === undefined || foodEntryId === null)
-            throw new globalThis.Error("The parameter 'foodEntryId' must be defined.");
-        url_ = url_.replace("{foodEntryId}", encodeURIComponent("" + foodEntryId));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "PUT",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processUpdateTreatmentFood(_response);
-        });
-    }
-
-    protected processUpdateTreatmentFood(response: Response): Promise<TreatmentFoodBreakdown> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
-    }
-
-    /**
-     * Remove a food breakdown entry.
-     */
-    deleteTreatmentFood(id: string, foodEntryId: string, signal?: AbortSignal): Promise<TreatmentFoodBreakdown> {
-        let url_ = this.baseUrl + "/api/v4/treatments/{id}/foods/{foodEntryId}";
-        if (id === undefined || id === null)
-            throw new globalThis.Error("The parameter 'id' must be defined.");
-        url_ = url_.replace("{id}", encodeURIComponent("" + id));
-        if (foodEntryId === undefined || foodEntryId === null)
-            throw new globalThis.Error("The parameter 'foodEntryId' must be defined.");
-        url_ = url_.replace("{foodEntryId}", encodeURIComponent("" + foodEntryId));
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "DELETE",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processDeleteTreatmentFood(_response);
-        });
-    }
-
-    protected processDeleteTreatmentFood(response: Response): Promise<TreatmentFoodBreakdown> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TreatmentFoodBreakdown;
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<TreatmentFoodBreakdown>(null as any);
-    }
-
-    /**
-     * Get carb treatments with attribution status for meals view.
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param attributed (optional) 
-     */
-    getMeals(from?: Date | null | undefined, to?: Date | null | undefined, attributed?: boolean | null | undefined, signal?: AbortSignal): Promise<MealTreatment[]> {
-        let url_ = this.baseUrl + "/api/v4/treatments/meals?";
-        if (from !== undefined && from !== null)
-            url_ += "from=" + encodeURIComponent(from ? "" + from.toISOString() : "") + "&";
-        if (to !== undefined && to !== null)
-            url_ += "to=" + encodeURIComponent(to ? "" + to.toISOString() : "") + "&";
-        if (attributed !== undefined && attributed !== null)
-            url_ += "attributed=" + encodeURIComponent("" + attributed) + "&";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetMeals(_response);
-        });
-    }
-
-    protected processGetMeals(response: Response): Promise<MealTreatment[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MealTreatment[];
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<MealTreatment[]>(null as any);
     }
 }
 
@@ -21595,6 +21614,14 @@ export interface InsulinDeliveryStatistics {
     endDate?: string;
     carbCount?: number;
     carbBolusCount?: number;
+    reliability?: StatisticReliability | undefined;
+}
+
+export interface StatisticReliability {
+    meetsReliabilityCriteria?: boolean;
+    daysOfData?: number;
+    recommendedMinimumDays?: number;
+    readingCount?: number;
 }
 
 /** Metadata about available widget definitions */
@@ -21805,69 +21832,69 @@ export interface GlycemicVariability {
     glycemicVariabilityIndex?: number;
     patientGlycemicStatus?: number;
     estimatedA1c?: number;
+    gmi?: GlucoseManagementIndicator | undefined;
     meanTotalDailyChange?: number;
     timeInFluctuation?: number;
+}
+
+export interface GlucoseManagementIndicator {
+    value?: number;
+    meanGlucose?: number;
+    interpretation?: string;
+    reliability?: StatisticReliability | undefined;
 }
 
 /** Request model for glycemic variability calculation */
 export interface GlycemicVariabilityRequest {
     /** Collection of glucose values in mg/dL */
     values?: number[];
-    /** Collection of glucose entries with timestamps */
-    entries?: Entry[];
+    /** Collection of sensor glucose readings with timestamps */
+    entries?: SensorGlucose[];
 }
 
-export interface ProcessableDocumentBase {
-    id?: string | undefined;
-    createdAt?: string | undefined;
+export interface SensorGlucose {
+    id?: string;
     mills?: number;
     utcOffset?: number | undefined;
-}
-
-export interface Entry extends ProcessableDocumentBase {
-    _id?: string | undefined;
-    mills?: number;
-    dateString?: string | undefined;
-    mgdl?: number;
-    mbg?: number | undefined;
-    mmol?: number | undefined;
-    sgv?: number | undefined;
-    direction?: string | undefined;
-    trend?: number | undefined;
-    trendRate?: number | undefined;
-    isCalibration?: boolean;
-    type?: string;
     device?: string | undefined;
-    notes?: string | undefined;
-    delta?: number | undefined;
-    scaled?: any | undefined;
-    sysTime?: string | undefined;
-    utcOffset?: number | undefined;
-    noise?: number | undefined;
-    filtered?: number | undefined;
-    unfiltered?: number | undefined;
-    rssi?: number | undefined;
-    slope?: number | undefined;
-    intercept?: number | undefined;
-    scale?: number | undefined;
-    created_at?: string | undefined;
-    modified_at?: Date | undefined;
-    data_source?: string | undefined;
-    meta?: { [key: string]: any; } | undefined;
-    canonicalId?: string | undefined;
-    sources?: string[] | undefined;
     app?: string | undefined;
-    units?: string | undefined;
-    isValid?: boolean | undefined;
-    isReadOnly?: boolean | undefined;
-    identifier?: string | undefined;
-    srvModified?: number | undefined;
-    srvCreated?: number | undefined;
-    subject?: string | undefined;
+    dataSource?: string | undefined;
+    correlationId?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    mgdl?: number;
+    mmol?: number | undefined;
+    direction?: GlucoseDirection | undefined;
+    trend?: GlucoseTrend | undefined;
+    trendRate?: number | undefined;
+    noise?: number | undefined;
 }
 
-export function isEntry(object: any): object is Entry {
-    return object && object[''] === 'Entry';
+export enum GlucoseDirection {
+    None = "None",
+    DoubleUp = "DoubleUp",
+    SingleUp = "SingleUp",
+    FortyFiveUp = "FortyFiveUp",
+    Flat = "Flat",
+    FortyFiveDown = "FortyFiveDown",
+    SingleDown = "SingleDown",
+    DoubleDown = "DoubleDown",
+    NotComputable = "NotComputable",
+    RateOutOfRange = "RateOutOfRange",
+}
+
+export enum GlucoseTrend {
+    None = "None",
+    DoubleUp = "DoubleUp",
+    SingleUp = "SingleUp",
+    FortyFiveUp = "FortyFiveUp",
+    Flat = "Flat",
+    FortyFiveDown = "FortyFiveDown",
+    SingleDown = "SingleDown",
+    DoubleDown = "DoubleDown",
+    NotComputable = "NotComputable",
+    RateOutOfRange = "RateOutOfRange",
 }
 
 export interface TimeInRangeMetrics {
@@ -21930,8 +21957,8 @@ export interface PeriodMetrics {
 
 /** Request model for time in range calculation */
 export interface TimeInRangeRequest {
-    /** Collection of glucose entries */
-    entries?: Entry[];
+    /** Collection of sensor glucose readings */
+    entries?: SensorGlucose[];
     /** Optional glycemic thresholds */
     thresholds?: GlycemicThresholds | undefined;
 }
@@ -21955,8 +21982,8 @@ export interface DistributionDataPoint {
 
 /** Request model for glucose distribution calculation */
 export interface GlucoseDistributionRequest {
-    /** Collection of glucose entries */
-    entries?: Entry[];
+    /** Collection of sensor glucose readings */
+    entries?: SensorGlucose[];
     /** Optional distribution bins */
     bins?: DistributionBin[] | undefined;
 }
@@ -22006,6 +22033,93 @@ export interface FoodTotals {
 export interface InsulinTotals {
     bolus?: number;
     basal?: number;
+}
+
+/** Request model for treatment summary calculation */
+export interface TreatmentSummaryRequest {
+    /** Optional collection of bolus deliveries */
+    boluses?: Bolus[] | undefined;
+    /** Optional collection of carb intakes */
+    carbIntakes?: CarbIntake[] | undefined;
+}
+
+export interface Bolus {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    app?: string | undefined;
+    dataSource?: string | undefined;
+    correlationId?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    insulin?: number;
+    programmed?: number | undefined;
+    delivered?: number | undefined;
+    bolusType?: BolusType | undefined;
+    automatic?: boolean;
+    duration?: number | undefined;
+    syncIdentifier?: string | undefined;
+    insulinType?: string | undefined;
+    unabsorbed?: number | undefined;
+    isBasalInsulin?: boolean;
+    pumpId?: string | undefined;
+    pumpSerial?: string | undefined;
+    pumpType?: string | undefined;
+}
+
+export enum BolusType {
+    Normal = "Normal",
+    Square = "Square",
+    Dual = "Dual",
+}
+
+export interface CarbIntake {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    app?: string | undefined;
+    dataSource?: string | undefined;
+    correlationId?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    carbs?: number;
+    protein?: number | undefined;
+    fat?: number | undefined;
+    foodType?: string | undefined;
+    absorptionTime?: number | undefined;
+    syncIdentifier?: string | undefined;
+    carbTime?: number | undefined;
+}
+
+export interface OverallAverages {
+    avgTotalDaily?: number;
+    avgBolus?: number;
+    avgBasal?: number;
+    bolusPercentage?: number;
+    basalPercentage?: number;
+    avgCarbs?: number;
+    avgProtein?: number;
+    avgFat?: number;
+    avgTimeInRange?: number;
+    avgTightTimeInRange?: number;
+}
+
+export interface DayData {
+    date?: string;
+    treatments?: Treatment[];
+    treatmentSummary?: TreatmentSummary;
+    timeInRanges?: TimeInRangeMetrics;
+}
+
+export interface ProcessableDocumentBase {
+    id?: string | undefined;
+    createdAt?: string | undefined;
+    mills?: number;
+    utcOffset?: number | undefined;
 }
 
 export interface Treatment extends ProcessableDocumentBase {
@@ -22120,31 +22234,12 @@ export enum CalculationType {
     Automatic = "Automatic",
 }
 
-export interface OverallAverages {
-    avgTotalDaily?: number;
-    avgBolus?: number;
-    avgBasal?: number;
-    bolusPercentage?: number;
-    basalPercentage?: number;
-    avgCarbs?: number;
-    avgProtein?: number;
-    avgFat?: number;
-    avgTimeInRange?: number;
-    avgTightTimeInRange?: number;
-}
-
-export interface DayData {
-    date?: string;
-    treatments?: Treatment[];
-    treatmentSummary?: TreatmentSummary;
-    timeInRanges?: TimeInRangeMetrics;
-}
-
 export interface GlucoseAnalytics {
     basicStats?: BasicGlucoseStats;
     timeInRange?: TimeInRangeMetrics;
     glycemicVariability?: GlycemicVariability;
     dataQuality?: DataQuality;
+    reliability?: StatisticReliability | undefined;
     time?: AnalysisTime;
 }
 
@@ -22179,10 +22274,12 @@ export interface AnalysisTime {
 
 /** Request model for comprehensive glucose analytics */
 export interface GlucoseAnalyticsRequest {
-    /** Collection of glucose entries */
-    entries?: Entry[];
-    /** Optional collection of treatments */
-    treatments?: Treatment[] | undefined;
+    /** Collection of sensor glucose readings */
+    entries?: SensorGlucose[];
+    /** Optional collection of bolus deliveries */
+    boluses?: Bolus[] | undefined;
+    /** Optional collection of carb intakes */
+    carbIntakes?: CarbIntake[] | undefined;
     /** Optional extended analysis configuration */
     config?: ExtendedAnalysisConfig | undefined;
 }
@@ -22208,12 +22305,6 @@ export interface ExtendedGlucoseAnalytics extends GlucoseAnalytics {
 
 export function isExtendedGlucoseAnalytics(object: any): object is ExtendedGlucoseAnalytics {
     return object && object[''] === 'ExtendedGlucoseAnalytics';
-}
-
-export interface GlucoseManagementIndicator {
-    value?: number;
-    meanGlucose?: number;
-    interpretation?: string;
 }
 
 export interface GlycemicRiskIndex {
@@ -22408,10 +22499,12 @@ export interface DataSufficiencyAssessment {
 
 /** Request model for extended glucose analytics with GMI, GRI, and clinical assessment */
 export interface ExtendedGlucoseAnalyticsRequest {
-    /** Collection of glucose entries */
-    entries?: Entry[];
-    /** Optional collection of treatments */
-    treatments?: Treatment[] | undefined;
+    /** Collection of sensor glucose readings */
+    entries?: SensorGlucose[];
+    /** Optional collection of bolus deliveries */
+    boluses?: Bolus[] | undefined;
+    /** Optional collection of carb intakes */
+    carbIntakes?: CarbIntake[] | undefined;
     /** Diabetes population type for clinical target assessment */
     population?: DiabetesPopulation;
     /** Optional extended analysis configuration */
@@ -22428,8 +22521,8 @@ export interface ClinicalAssessmentRequest {
 
 /** Request model for data sufficiency assessment */
 export interface DataSufficiencyRequest {
-    /** Collection of glucose entries */
-    entries?: Entry[];
+    /** Collection of sensor glucose readings */
+    entries?: SensorGlucose[];
     /** Number of days to assess (default: 14) */
     days?: number;
     /** Expected readings per day based on sensor type (default: 288 for 5-minute intervals) */
@@ -22453,6 +22546,8 @@ export interface PeriodStatistics {
     treatmentSummary?: TreatmentSummary | undefined;
     insulinDelivery?: InsulinDeliveryStatistics | undefined;
     hasSufficientData?: boolean;
+    gmi?: GlucoseManagementIndicator | undefined;
+    reliability?: StatisticReliability | undefined;
     entryCount?: number;
     treatmentCount?: number;
 }
@@ -22491,16 +22586,58 @@ export interface SiteChangeImpactSummary {
 
 /** Request model for site change impact analysis */
 export interface SiteChangeImpactRequest {
-    /** Collection of glucose entries */
-    entries?: Entry[];
-    /** Collection of treatments (must include site changes) */
-    treatments?: Treatment[];
+    /** Collection of sensor glucose readings */
+    entries?: SensorGlucose[];
+    /** Collection of device events (must include site changes) */
+    deviceEvents?: DeviceEvent[];
     /** Hours before site change to analyze (default: 12) */
     hoursBeforeChange?: number;
     /** Hours after site change to analyze (default: 24) */
     hoursAfterChange?: number;
     /** Time bucket size for averaging in minutes (default: 30) */
     bucketSizeMinutes?: number;
+}
+
+export interface DeviceEvent {
+    id?: string;
+    mills?: number;
+    utcOffset?: number | undefined;
+    device?: string | undefined;
+    app?: string | undefined;
+    dataSource?: string | undefined;
+    correlationId?: string | undefined;
+    legacyId?: string | undefined;
+    createdAt?: Date;
+    modifiedAt?: Date;
+    eventType?: DeviceEventType;
+    notes?: string | undefined;
+    syncIdentifier?: string | undefined;
+}
+
+export enum DeviceEventType {
+    SensorStart = "SensorStart",
+    SensorChange = "SensorChange",
+    SensorStop = "SensorStop",
+    SiteChange = "SiteChange",
+    InsulinChange = "InsulinChange",
+    PumpBatteryChange = "PumpBatteryChange",
+    PodChange = "PodChange",
+    ReservoirChange = "ReservoirChange",
+    CannulaChange = "CannulaChange",
+    TransmitterSensorInsert = "TransmitterSensorInsert",
+    PodActivated = "PodActivated",
+    PodDeactivated = "PodDeactivated",
+    PumpSuspend = "PumpSuspend",
+    PumpResume = "PumpResume",
+    Priming = "Priming",
+    TubePriming = "TubePriming",
+    NeedlePriming = "NeedlePriming",
+    Rewind = "Rewind",
+    DateChanged = "DateChanged",
+    TimeChanged = "TimeChanged",
+    BolusMaxChanged = "BolusMaxChanged",
+    BasalMaxChanged = "BasalMaxChanged",
+    ProfileSwitch = "ProfileSwitch",
 }
 
 export interface VersionsResponse {
@@ -22744,11 +22881,11 @@ export interface BolusMarkerDto {
     time?: number;
     insulin?: number;
     treatmentId?: string | undefined;
-    bolusType?: BolusType;
+    bolusType?: BolusType2;
     isOverride?: boolean;
 }
 
-export enum BolusType {
+export enum BolusType2 {
     Bolus = "Bolus",
     MealBolus = "MealBolus",
     CorrectionBolus = "CorrectionBolus",
@@ -22772,32 +22909,6 @@ export interface DeviceEventMarkerDto {
     eventType?: DeviceEventType;
     notes?: string | undefined;
     color?: ChartColor;
-}
-
-export enum DeviceEventType {
-    SensorStart = "SensorStart",
-    SensorChange = "SensorChange",
-    SensorStop = "SensorStop",
-    SiteChange = "SiteChange",
-    InsulinChange = "InsulinChange",
-    PumpBatteryChange = "PumpBatteryChange",
-    PodChange = "PodChange",
-    ReservoirChange = "ReservoirChange",
-    CannulaChange = "CannulaChange",
-    TransmitterSensorInsert = "TransmitterSensorInsert",
-    PodActivated = "PodActivated",
-    PodDeactivated = "PodDeactivated",
-    PumpSuspend = "PumpSuspend",
-    PumpResume = "PumpResume",
-    Priming = "Priming",
-    TubePriming = "TubePriming",
-    NeedlePriming = "NeedlePriming",
-    Rewind = "Rewind",
-    DateChanged = "DateChanged",
-    TimeChanged = "TimeChanged",
-    BolusMaxChanged = "BolusMaxChanged",
-    BasalMaxChanged = "BasalMaxChanged",
-    ProfileSwitch = "ProfileSwitch",
 }
 
 export interface BgCheckMarkerDto {
@@ -23153,6 +23264,52 @@ export interface CompressionLowSuggestionWithEntries {
     suggestion?: CompressionLowSuggestion;
     entries?: Entry[];
     treatments?: Treatment[];
+}
+
+export interface Entry extends ProcessableDocumentBase {
+    _id?: string | undefined;
+    mills?: number;
+    dateString?: string | undefined;
+    mgdl?: number;
+    mbg?: number | undefined;
+    mmol?: number | undefined;
+    sgv?: number | undefined;
+    direction?: string | undefined;
+    trend?: number | undefined;
+    trendRate?: number | undefined;
+    isCalibration?: boolean;
+    type?: string;
+    device?: string | undefined;
+    notes?: string | undefined;
+    delta?: number | undefined;
+    scaled?: any | undefined;
+    sysTime?: string | undefined;
+    utcOffset?: number | undefined;
+    noise?: number | undefined;
+    filtered?: number | undefined;
+    unfiltered?: number | undefined;
+    rssi?: number | undefined;
+    slope?: number | undefined;
+    intercept?: number | undefined;
+    scale?: number | undefined;
+    created_at?: string | undefined;
+    modified_at?: Date | undefined;
+    data_source?: string | undefined;
+    meta?: { [key: string]: any; } | undefined;
+    canonicalId?: string | undefined;
+    sources?: string[] | undefined;
+    app?: string | undefined;
+    units?: string | undefined;
+    isValid?: boolean | undefined;
+    isReadOnly?: boolean | undefined;
+    identifier?: string | undefined;
+    srvModified?: number | undefined;
+    srvCreated?: number | undefined;
+    subject?: string | undefined;
+}
+
+export function isEntry(object: any): object is Entry {
+    return object && object[''] === 'Entry';
 }
 
 export interface StateSpan {
@@ -23742,51 +23899,6 @@ export interface PaginatedResponseOfSensorGlucose {
     pagination?: PaginationInfo;
 }
 
-export interface SensorGlucose {
-    id?: string;
-    mills?: number;
-    utcOffset?: number | undefined;
-    device?: string | undefined;
-    app?: string | undefined;
-    dataSource?: string | undefined;
-    correlationId?: string | undefined;
-    legacyId?: string | undefined;
-    createdAt?: Date;
-    modifiedAt?: Date;
-    mgdl?: number;
-    mmol?: number | undefined;
-    direction?: GlucoseDirection | undefined;
-    trend?: GlucoseTrend | undefined;
-    trendRate?: number | undefined;
-    noise?: number | undefined;
-}
-
-export enum GlucoseDirection {
-    None = "None",
-    DoubleUp = "DoubleUp",
-    SingleUp = "SingleUp",
-    FortyFiveUp = "FortyFiveUp",
-    Flat = "Flat",
-    FortyFiveDown = "FortyFiveDown",
-    SingleDown = "SingleDown",
-    DoubleDown = "DoubleDown",
-    NotComputable = "NotComputable",
-    RateOutOfRange = "RateOutOfRange",
-}
-
-export enum GlucoseTrend {
-    None = "None",
-    DoubleUp = "DoubleUp",
-    SingleUp = "SingleUp",
-    FortyFiveUp = "FortyFiveUp",
-    Flat = "Flat",
-    FortyFiveDown = "FortyFiveDown",
-    SingleDown = "SingleDown",
-    DoubleDown = "DoubleDown",
-    NotComputable = "NotComputable",
-    RateOutOfRange = "RateOutOfRange",
-}
-
 export interface PaginatedResponseOfMeterGlucose {
     data?: MeterGlucose[];
     pagination?: PaginationInfo;
@@ -23831,38 +23943,6 @@ export interface Calibration {
 export interface PaginatedResponseOfBolus {
     data?: Bolus[];
     pagination?: PaginationInfo;
-}
-
-export interface Bolus {
-    id?: string;
-    mills?: number;
-    utcOffset?: number | undefined;
-    device?: string | undefined;
-    app?: string | undefined;
-    dataSource?: string | undefined;
-    correlationId?: string | undefined;
-    legacyId?: string | undefined;
-    createdAt?: Date;
-    modifiedAt?: Date;
-    insulin?: number;
-    programmed?: number | undefined;
-    delivered?: number | undefined;
-    bolusType?: BolusType2 | undefined;
-    automatic?: boolean;
-    duration?: number | undefined;
-    syncIdentifier?: string | undefined;
-    insulinType?: string | undefined;
-    unabsorbed?: number | undefined;
-    isBasalInsulin?: boolean;
-    pumpId?: string | undefined;
-    pumpSerial?: string | undefined;
-    pumpType?: string | undefined;
-}
-
-export enum BolusType2 {
-    Normal = "Normal",
-    Square = "Square",
-    Dual = "Dual",
 }
 
 export interface PaginatedResponseOfBolusCalculation {
@@ -24064,24 +24144,48 @@ export interface PaginatedResponseOfCarbIntake {
     pagination?: PaginationInfo;
 }
 
-export interface CarbIntake {
+export interface TreatmentFoodBreakdown {
+    carbIntakeId?: string;
+    foods?: TreatmentFood[];
+    isAttributed?: boolean;
+    attributedCarbs?: number;
+    unspecifiedCarbs?: number;
+}
+
+export interface TreatmentFood {
     id?: string;
-    mills?: number;
-    utcOffset?: number | undefined;
-    device?: string | undefined;
-    app?: string | undefined;
-    dataSource?: string | undefined;
-    correlationId?: string | undefined;
-    legacyId?: string | undefined;
-    createdAt?: Date;
-    modifiedAt?: Date;
+    carbIntakeId?: string;
+    foodId?: string | undefined;
+    portions?: number;
     carbs?: number;
-    protein?: number | undefined;
-    fat?: number | undefined;
-    foodType?: string | undefined;
-    absorptionTime?: number | undefined;
-    syncIdentifier?: string | undefined;
-    carbTime?: number | undefined;
+    timeOffsetMinutes?: number;
+    note?: string | undefined;
+    foodName?: string | undefined;
+    carbsPerPortion?: number | undefined;
+}
+
+/** Request body for adding/updating a food entry on a carb intake record. */
+export interface CarbIntakeFoodRequest {
+    foodId?: string | undefined;
+    portions?: number | undefined;
+    carbs?: number | undefined;
+    timeOffsetMinutes?: number | undefined;
+    note?: string | undefined;
+    inputMode?: CarbIntakeFoodInputMode | undefined;
+}
+
+export enum CarbIntakeFoodInputMode {
+    Portions = 0,
+    Carbs = 1,
+}
+
+export interface MealCarbIntake {
+    carbIntake?: CarbIntake;
+    correlatedBolus?: Bolus | undefined;
+    foods?: TreatmentFood[];
+    isAttributed?: boolean;
+    attributedCarbs?: number;
+    unspecifiedCarbs?: number;
 }
 
 export interface PaginatedResponseOfBGCheck {
@@ -24143,22 +24247,6 @@ export interface Note {
 export interface PaginatedResponseOfDeviceEvent {
     data?: DeviceEvent[];
     pagination?: PaginationInfo;
-}
-
-export interface DeviceEvent {
-    id?: string;
-    mills?: number;
-    utcOffset?: number | undefined;
-    device?: string | undefined;
-    app?: string | undefined;
-    dataSource?: string | undefined;
-    correlationId?: string | undefined;
-    legacyId?: string | undefined;
-    createdAt?: Date;
-    modifiedAt?: Date;
-    eventType?: DeviceEventType;
-    notes?: string | undefined;
-    syncIdentifier?: string | undefined;
 }
 
 /** Response containing glucose predictions. */
@@ -24774,48 +24862,6 @@ export interface CreateTrackerPresetRequest {
 
 export interface ApplyPresetRequest {
     overrideNotes?: string | undefined;
-}
-
-export interface TreatmentFoodBreakdown {
-    treatmentId?: string;
-    foods?: TreatmentFood[];
-    isAttributed?: boolean;
-    attributedCarbs?: number;
-    unspecifiedCarbs?: number;
-}
-
-export interface TreatmentFood {
-    id?: string;
-    treatmentId?: string;
-    foodId?: string | undefined;
-    portions?: number;
-    carbs?: number;
-    timeOffsetMinutes?: number;
-    note?: string | undefined;
-    foodName?: string | undefined;
-    carbsPerPortion?: number | undefined;
-}
-
-export interface TreatmentFoodRequest {
-    foodId?: string | undefined;
-    portions?: number | undefined;
-    carbs?: number | undefined;
-    timeOffsetMinutes?: number | undefined;
-    note?: string | undefined;
-    inputMode?: TreatmentFoodInputMode | undefined;
-}
-
-export enum TreatmentFoodInputMode {
-    Portions = 0,
-    Carbs = 1,
-}
-
-export interface MealTreatment {
-    treatment?: Treatment;
-    foods?: TreatmentFood[];
-    isAttributed?: boolean;
-    attributedCarbs?: number;
-    unspecifiedCarbs?: number;
 }
 
 export interface UISettingsConfiguration {

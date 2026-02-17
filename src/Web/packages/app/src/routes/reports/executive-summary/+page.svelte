@@ -25,6 +25,7 @@
   } from "lucide-svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
+  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$lib/data/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -336,6 +337,7 @@
                   Room for improvement
                 {/if}
               </p>
+              <ReliabilityBadge reliability={analysis?.reliability} />
             </div>
 
             <!-- What this means -->

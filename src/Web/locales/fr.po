@@ -67,6 +67,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 msgid "Site Change"
@@ -76,6 +77,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Insulin Change"
@@ -90,6 +92,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
 msgid "Sensor Start"
@@ -99,6 +102,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
 msgid "Sensor Change"
@@ -108,6 +112,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Pump Battery Change"
 msgstr ""
@@ -124,11 +129,13 @@ msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/TreatmentsTable.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Event Type"
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Date & Time"
 msgstr ""
@@ -151,12 +158,11 @@ msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/entries/EntryEditDialog.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/status-pills/CAGEPill.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/status-pills/SAGEPill.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "Notes"
 msgstr ""
@@ -213,7 +219,6 @@ msgid "Cancel"
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
-#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -227,6 +232,7 @@ msgid "Saving..."
 msgstr ""
 
 #: src/lib/components/TreatmentEditModal.svelte
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/food/FoodEditor.svelte
@@ -413,7 +419,6 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/profile/+page.svelte
@@ -433,10 +438,7 @@ msgstr ""
 
 #. placeholder {0}: selectedTreatments.size
 #. placeholder {1}: selectedTreatments.size !== 1 ? "s" : ""
-#. placeholder {0}: selectedTreatments.length
-#. placeholder {1}: selectedTreatments.length !== 1 ? "s" : ""
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "{0} treatment{1} selected"
 msgstr ""
 
@@ -465,12 +467,10 @@ msgid "Select treatment {0}"
 msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "Edit treatment"
 msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "Delete treatment"
 msgstr ""
 
@@ -785,7 +785,6 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/routes/calendar/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -805,7 +804,6 @@ msgstr ""
 #: src/routes/calendar/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -826,7 +824,6 @@ msgstr ""
 #: src/routes/calendar/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
@@ -931,9 +928,8 @@ msgstr ""
 #. placeholder {0}: dayTotalCarbs
 #. placeholder {0}: totalCarbs
 #. placeholder {0}: treatmentStats.totalCarbs.toFixed(0)
-#. placeholder {0}: treatmentStats.totalCarbs.toFixed(0)
 #. placeholder {0}: treatment.carbs
-#. placeholder {0}: formatCarbDisplay(treatment.carbs)
+#. placeholder {0}: formatCarbDisplay(row.carbs)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
@@ -960,7 +956,6 @@ msgstr ""
 #: src/routes/meals/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 msgid "{0}g"
 msgstr "{0}g"
@@ -984,12 +979,8 @@ msgstr "Insuline :"
 #. placeholder {0}: monthSummary.avgInsulin.toFixed(1)
 #. placeholder {0}: dayTotalInsulin.toFixed(1)
 #. placeholder {0}: meal.treatment.insulin.toFixed(1)
-#. placeholder {0}: treatmentStats.totalBolus.toFixed(1)
-#. placeholder {0}: treatmentStats.totalBolus.toFixed(1)
-#. placeholder {0}: treatmentStats.totalBasal.toFixed(1)
-#. placeholder {0}: treatmentStats.totalDailyInsulin.toFixed(1)
 #. placeholder {0}: treatment.insulin.toFixed(2)
-#. placeholder {0}: formatInsulinDisplay(treatment.insulin)
+#. placeholder {0}: formatInsulinDisplay(row.insulin)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
@@ -1005,10 +996,6 @@ msgstr "Insuline :"
 #: src/routes/calendar/+page.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/meals/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 msgid "{0}U"
@@ -1033,14 +1020,12 @@ msgstr ""
 #: src/lib/components/reports/DailySummaryTable.svelte
 #: src/routes/reports/+page.svelte
 #: src/routes/reports/agp/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 msgid "Time in Range"
 msgstr ""
 
 #~ msgid "Total Readings"
 #~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "Total Carbs"
 msgstr ""
@@ -1174,7 +1159,6 @@ msgstr ""
 #: src/routes/reports/battery/+page.svelte
 #: src/routes/reports/battery/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
@@ -1652,6 +1636,7 @@ msgstr ""
 msgid "Key Nutritional Info"
 msgstr ""
 
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
@@ -1689,12 +1674,14 @@ msgstr ""
 msgid "Additional Macros"
 msgstr ""
 
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/FoodEditor.svelte
 msgid "Fat (g)"
 msgstr ""
 
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/FoodEditor.svelte
@@ -1736,10 +1723,12 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/treatments/TreatmentCategoryTabs.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/food/FoodList.svelte
 #: src/routes/food/QuickPickItem.svelte
+#: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "Carbs"
@@ -1871,7 +1860,6 @@ msgstr ""
 msgid "Show hidden <0/>"
 msgstr ""
 
-#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/routes/food/QuickPicksList.svelte
@@ -2138,7 +2126,6 @@ msgstr ""
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/routes/meals/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 msgid "Failed to update treatment"
 msgstr ""
 
@@ -2147,7 +2134,6 @@ msgid "Treatment deleted"
 msgstr ""
 
 #: src/routes/meals/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 msgid "Failed to delete treatment"
 msgstr ""
 
@@ -2215,8 +2201,8 @@ msgstr ""
 
 #. placeholder {0}: filteredAndSortedMeals.length
 #. placeholder {1}: meals.length
-#. placeholder {0}: filteredTreatments.length
-#. placeholder {1}: treatments.length
+#. placeholder {0}: filteredRows.length
+#. placeholder {1}: allRows.length
 #: src/routes/meals/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 msgid "{0} of {1}"
@@ -2626,6 +2612,7 @@ msgstr ""
 msgid "<0/> Delete Profile"
 msgstr ""
 
+#: src/lib/components/entries/BGCheckSection.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
@@ -3185,7 +3172,14 @@ msgstr ""
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
+#: src/lib/components/treatments/TreatmentCategoryTabs.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
+#: src/routes/reports/treatments/+page.svelte
+#: src/routes/reports/treatments/+page.svelte
+#: src/routes/reports/treatments/+page.svelte
 msgid "Bolus"
 msgstr ""
 
@@ -3199,6 +3193,7 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
 msgid "Sensor Stop"
 msgstr ""
@@ -3208,6 +3203,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -3292,6 +3288,7 @@ msgstr ""
 
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
+#: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 msgid "Glucose"
 msgstr ""
@@ -3386,6 +3383,7 @@ msgstr ""
 msgid "Update"
 msgstr ""
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -3455,7 +3453,6 @@ msgstr ""
 msgid "Edit Entry"
 msgstr ""
 
-#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/reports/HourlyGlucoseBoxChart.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 msgid "Glucose (mg/dL)"
@@ -3521,6 +3518,7 @@ msgid "Readings"
 msgstr ""
 
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Treatments"
 msgstr ""
@@ -3562,6 +3560,7 @@ msgstr ""
 msgid "Snack"
 msgstr ""
 
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 msgid "Profile Switch"
 msgstr ""
@@ -3755,6 +3754,7 @@ msgstr ""
 msgid "Bolus (U)"
 msgstr ""
 
+#: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Insulin (U)"
 msgstr ""
@@ -3950,6 +3950,7 @@ msgstr ""
 
 #: src/lib/components/reports/DailyStatistics.svelte
 #: src/lib/components/reports/DailySummaryTable.svelte
+#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 msgid "Range"
 msgstr ""
@@ -4302,7 +4303,6 @@ msgstr ""
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 msgid "No data"
 msgstr ""
 
@@ -5087,6 +5087,7 @@ msgstr ""
 msgid "StaleData"
 msgstr ""
 
+#: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 msgid "Normal"
 msgstr ""
@@ -5825,6 +5826,7 @@ msgid "Preview"
 msgstr ""
 
 #: src/lib/components/settings/CustomSoundUpload.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -6021,6 +6023,7 @@ msgstr ""
 msgid "<0/> Insulin (U)"
 msgstr ""
 
+#: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Duration (min)"
 msgstr ""
@@ -6041,6 +6044,7 @@ msgstr ""
 msgid "<0/> Notes"
 msgstr ""
 
+#: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Add notes..."
 msgstr ""
@@ -6049,6 +6053,7 @@ msgstr ""
 msgid "<0/> Additional Properties <1/>"
 msgstr ""
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/clock/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
@@ -6194,9 +6199,8 @@ msgstr ""
 msgid "Adding..."
 msgstr ""
 
-#: src/lib/components/treatments/TreatmentStatsCard.svelte
-msgid "Total Treatments"
-msgstr ""
+#~ msgid "Total Treatments"
+#~ msgstr ""
 
 #. placeholder {0}: bolusCount
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
@@ -6228,9 +6232,8 @@ msgstr ""
 msgid "{0}g avg/meal"
 msgstr ""
 
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
-msgid "Rate"
-msgstr ""
+#~ msgid "Rate"
+#~ msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "Select all"
@@ -6244,13 +6247,11 @@ msgstr ""
 msgid "Type <0/> <1/>"
 msgstr ""
 
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
-msgid "Search types..."
-msgstr ""
+#~ msgid "Search types..."
+#~ msgstr ""
 
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
-msgid "No types found."
-msgstr ""
+#~ msgid "No types found."
+#~ msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "Source <0/> <1/>"
@@ -6264,18 +6265,15 @@ msgstr ""
 msgid "No sources found."
 msgstr ""
 
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
-#: src/routes/reports/treatments/+page.svelte
-msgid "Search treatments..."
-msgstr ""
+#~ msgid "Search treatments..."
+#~ msgstr ""
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "<0/> Columns"
 msgstr ""
 
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
-msgid "No treatments found."
-msgstr ""
+#~ msgid "No treatments found."
+#~ msgstr ""
 
 #. placeholder {0}: table.getFilteredSelectedRowModel().rows.length
 #. placeholder {1}: table.getFilteredRowModel() .rows.length
@@ -7575,20 +7573,8 @@ msgstr ""
 msgid "Insulin Delivery Report <0/>"
 msgstr ""
 
-#. placeholder {0}: treatments.length.toLocaleString()
-#. placeholder {1}: startDate.toLocaleDateString()
-#. placeholder {2}: endDate.toLocaleDateString()
-#. placeholder {0}: treatments.length.toLocaleString()
-#. placeholder {1}: startDate.toLocaleDateString()
-#. placeholder {2}: endDate.toLocaleDateString()
-#. placeholder {0}: treatments.length.toLocaleString()
-#. placeholder {1}: new Date(dateRange.from).toLocaleDateString()
-#. placeholder {2}: new Date( dateRange.to ).toLocaleDateString()
-#: src/routes/reports/basal-analysis/+page.svelte
-#: src/routes/reports/insulin-delivery/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
-msgid "Report generated from {0} treatments between {1} and {2}"
-msgstr ""
+#~ msgid "Report generated from {0} treatments between {1} and {2}"
+#~ msgstr ""
 
 #: src/routes/reports/agp/+page.svelte
 msgid "Ambulatory Glucose Profile - Nocturne Reports"
@@ -7650,10 +7636,12 @@ msgid "Est. A1C"
 msgstr ""
 
 #: src/routes/reports/agp/+page.svelte
+#: src/routes/reports/day-in-review/+page.svelte
 msgid "GMI"
 msgstr ""
 
 #: src/routes/reports/agp/+page.svelte
+#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "CV"
 msgstr ""
@@ -7838,24 +7826,18 @@ msgid "<0/> Back to Month View"
 msgstr ""
 
 #: src/routes/reports/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
 msgid "Time Low"
 msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Time High"
-msgstr ""
+#~ msgid "Time High"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Bolus Insulin"
-msgstr ""
+#~ msgid "Bolus Insulin"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "<0/> Glucose Distribution"
-msgstr ""
+#~ msgid "<0/> Glucose Distribution"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "<0/> Glucose Statistics"
 msgstr ""
@@ -7864,29 +7846,23 @@ msgstr ""
 msgid "Mean"
 msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Min / Max"
-msgstr ""
+#~ msgid "Min / Max"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Est. A1c"
-msgstr ""
+#~ msgid "Est. A1c"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "<0/> Insulin & Carbs"
-msgstr ""
+#~ msgid "<0/> Insulin & Carbs"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Basal Insulin"
-msgstr ""
+#~ msgid "Basal Insulin"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Total Daily Insulin"
-msgstr ""
+#~ msgid "Total Daily Insulin"
+#~ msgstr ""
 
-#: src/routes/reports/day-in-review/+page.svelte
-msgid "Treatment Count"
-msgstr ""
+#~ msgid "Treatment Count"
+#~ msgstr ""
 
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "<0/> Treatments Timeline"
@@ -8637,11 +8613,9 @@ msgstr ""
 msgid "View and manage your diabetes treatments, insulin doses, and carb entries"
 msgstr ""
 
-#. placeholder {0}: treatments.length.toLocaleString()
 #. placeholder {0}: dataSummary.treatments?.toLocaleString() ?? 0
 #. placeholder {0}: dataSummary.treatments?.toLocaleString() ?? 0
 #. placeholder {0}: deleteDataResult.treatmentsDeleted?.toLocaleString() ?? 0
-#: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
 #: src/routes/settings/connectors/[connector]/+page.svelte
@@ -8652,24 +8626,19 @@ msgstr ""
 msgid "Search"
 msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "<0/> Event Types <1/> <2/>"
-msgstr ""
+#~ msgid "<0/> Event Types <1/> <2/>"
+#~ msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "Delete Treatment"
-msgstr ""
+#~ msgid "Delete Treatment"
+#~ msgstr ""
 
-#. placeholder {0}: treatmentToDelete.eventType
-#: src/routes/reports/treatments/+page.svelte
-msgid ""
-"Are you sure you want to delete this {0} treatment?\n"
-"This action cannot be undone."
-msgstr ""
+#~ msgid ""
+#~ "Are you sure you want to delete this {0} treatment?\n"
+#~ "This action cannot be undone."
+#~ msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "Treatment Details"
-msgstr ""
+#~ msgid "Treatment Details"
+#~ msgstr ""
 
 #: src/routes/reports/treatments/+page.svelte
 msgid "Time:"
@@ -8679,49 +8648,36 @@ msgstr ""
 msgid "Type:"
 msgstr ""
 
-#. placeholder {0}: formatInsulinDisplay(treatmentToDelete.insulin)
+#. placeholder {0}: formatInsulinDisplay(rowToDelete.insulin)
 #: src/routes/reports/treatments/+page.svelte
 msgid "<0>Insulin:</0> {0}U"
 msgstr ""
 
-#. placeholder {0}: formatCarbDisplay(treatmentToDelete.carbs)
+#. placeholder {0}: formatCarbDisplay(rowToDelete.carbs)
 #: src/routes/reports/treatments/+page.svelte
 msgid "<0>Carbs:</0> {0}g"
 msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "Treatment deleted successfully"
-msgstr ""
+#~ msgid "Treatment deleted successfully"
+#~ msgstr ""
 
-#. placeholder {0}: treatmentsToDelete.length
-#: src/routes/reports/treatments/+page.svelte
-msgid "Delete {0} Treatments"
-msgstr ""
+#~ msgid "Delete {0} Treatments"
+#~ msgstr ""
 
-#. placeholder {0}: treatmentsToDelete.length
-#. placeholder {1}: treatmentsToDelete.length !== 1 ? "s" : ""
-#: src/routes/reports/treatments/+page.svelte
-msgid "Are you sure you want to delete {0} selected treatment{1}? This action cannot be undone."
-msgstr ""
+#~ msgid "Are you sure you want to delete {0} selected treatment{1}? This action cannot be undone."
+#~ msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "Selected Treatments"
-msgstr ""
+#~ msgid "Selected Treatments"
+#~ msgstr ""
 
-#. placeholder {0}: treatmentsToDelete.length - 5
-#: src/routes/reports/treatments/+page.svelte
-msgid "... and {0} more treatments"
-msgstr ""
+#~ msgid "... and {0} more treatments"
+#~ msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "Failed to delete treatments"
-msgstr ""
+#~ msgid "Failed to delete treatments"
+#~ msgstr ""
 
-#. placeholder {0}: treatmentsToDelete.length
-#. placeholder {1}: treatmentsToDelete.length !== 1 ? "s" : ""
-#: src/routes/reports/treatments/+page.svelte
-msgid "Delete {0} Treatment{1}"
-msgstr ""
+#~ msgid "Delete {0} Treatment{1}"
+#~ msgstr ""
 
 #: src/routes/reports/week-to-week/+page.svelte
 msgid "No data available for this week"
@@ -10735,6 +10691,7 @@ msgstr ""
 msgid "Your real health data (if any) is not affected"
 msgstr ""
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -11863,6 +11820,7 @@ msgstr ""
 msgid "Records (24h)"
 msgstr ""
 
+#: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "Total Records"
@@ -13511,6 +13469,7 @@ msgstr ""
 msgid "Maximum: {0}"
 msgstr ""
 
+#: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 msgid "<0/> Saving..."
@@ -13823,8 +13782,9 @@ msgstr ""
 msgid "Total Daily Dose"
 msgstr ""
 
-#~ msgid "<0/> Bolus"
-#~ msgstr ""
+#: src/lib/components/entries/BolusSection.svelte
+msgid "<0/> Bolus"
+msgstr ""
 
 #~ msgid "{0}U <0/>"
 #~ msgstr ""
@@ -13934,13 +13894,11 @@ msgstr ""
 #~ msgid "<0/> Stop"
 #~ msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "<0/> No Source"
-msgstr ""
+#~ msgid "<0/> No Source"
+#~ msgstr ""
 
-#: src/routes/reports/treatments/+page.svelte
-msgid "No Source <0/>"
-msgstr ""
+#~ msgid "No Source <0/>"
+#~ msgstr ""
 
 #: src/routes/reports/week-to-week/+page.svelte
 msgid "Reset"
@@ -14539,6 +14497,7 @@ msgid "<0/> Remove"
 msgstr ""
 
 #: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/entries/NoteSection.svelte
 msgid "Text"
 msgstr ""
 
@@ -15339,4 +15298,300 @@ msgstr ""
 #. placeholder {0}: entries24h.toLocaleString()
 #: src/routes/settings/connectors/+page.svelte
 msgid "({0} in last 24 hours)"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/day-in-review/+page.svelte
+#: src/routes/reports/treatments/+page.svelte
+#: src/routes/reports/treatments/+page.svelte
+msgid "Carb Intake"
+msgstr ""
+
+#. placeholder {0}: boluses.length.toLocaleString()
+#. placeholder {1}: startDate.toLocaleDateString()
+#. placeholder {2}: endDate.toLocaleDateString()
+#. placeholder {0}: boluses.length.toLocaleString()
+#. placeholder {1}: startDate.toLocaleDateString()
+#. placeholder {2}: endDate.toLocaleDateString()
+#: src/routes/reports/basal-analysis/+page.svelte
+#: src/routes/reports/insulin-delivery/+page.svelte
+msgid "Report generated from {0} boluses between {1} and {2}"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentStatsCard.svelte
+msgid "Boluses <0/>"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentStatsCard.svelte
+msgid "Carb Intakes <0/>"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/treatments/+page.svelte
+msgid "Details"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+msgid "Auto"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/treatments/+page.svelte
+msgid "Search records..."
+msgstr ""
+
+#. placeholder {0}: selectedRows.length
+#. placeholder {1}: selectedRows.length !== 1 ? "s" : ""
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+msgid "{0} record{1} selected"
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+msgid "No records found."
+msgstr ""
+
+#. placeholder {0}: allRows.length.toLocaleString()
+#: src/routes/reports/treatments/+page.svelte
+msgid "{0} records"
+msgstr ""
+
+#. placeholder {0}: allRows.length.toLocaleString()
+#. placeholder {1}: new Date(dateRange.from).toLocaleDateString()
+#. placeholder {2}: new Date( dateRange.to ).toLocaleDateString()
+#: src/routes/reports/treatments/+page.svelte
+msgid "Report generated from {0} records between {1} and {2}"
+msgstr ""
+
+#. placeholder {0}: getRowLabel(rowToDelete)
+#: src/routes/reports/treatments/+page.svelte
+msgid "Delete {0}"
+msgstr ""
+
+#. placeholder {0}: getRowLabel(rowToDelete)
+#: src/routes/reports/treatments/+page.svelte
+msgid ""
+"Are you sure you want to delete this {0}?\n"
+"This action cannot be undone."
+msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Deleted successfully"
+msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Failed to delete"
+msgstr ""
+
+#. placeholder {0}: rowsToDelete.length
+#: src/routes/reports/treatments/+page.svelte
+msgid "Delete {0} Records"
+msgstr ""
+
+#. placeholder {0}: rowsToDelete.length
+#. placeholder {1}: rowsToDelete.length !== 1 ? "s" : ""
+#: src/routes/reports/treatments/+page.svelte
+msgid "Are you sure you want to delete {0} selected record{1}? This action cannot be undone."
+msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Selected Records"
+msgstr ""
+
+#. placeholder {0}: rowsToDelete.length - 5
+#: src/routes/reports/treatments/+page.svelte
+msgid "... and {0} more records"
+msgstr ""
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Failed to delete records"
+msgstr ""
+
+#. placeholder {0}: rowsToDelete.length
+#. placeholder {1}: rowsToDelete.length !== 1 ? "s" : ""
+#: src/routes/reports/treatments/+page.svelte
+msgid "Delete {0} Record{1}"
+msgstr ""
+
+#. placeholder {0}: reliability.daysOfData ?? 0
+#. placeholder {1}: reliability.recommendedMinimumDays ?? 14
+#: src/lib/components/reports/ReliabilityBadge.svelte
+msgid "Based on {0} days of data ({1} recommended)"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Pod Change"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Reservoir Change"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Cannula Change"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Transmitter/Sensor Insert"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Pod Activated"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Pod Deactivated"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Pump Suspend"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Pump Resume"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Priming"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Tube Priming"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Needle Priming"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Rewind"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Date Changed"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Time Changed"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Bolus Max Changed"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "Basal Max Changed"
+msgstr ""
+
+#: src/lib/components/entries/DeviceEventSection.svelte
+msgid "<0/> Device Event"
+msgstr ""
+
+#: src/lib/components/entries/CarbIntakeSection.svelte
+msgid "<0/> Carb Intake"
+msgstr ""
+
+#: src/lib/components/entries/CarbIntakeSection.svelte
+msgid "Food Type"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+#: src/lib/components/entries/CarbIntakeSection.svelte
+msgid "<0/> Advanced"
+msgstr ""
+
+#: src/lib/components/entries/CarbIntakeSection.svelte
+msgid "Absorption (min)"
+msgstr ""
+
+#: src/lib/components/entries/BGCheckSection.svelte
+msgid "Finger"
+msgstr ""
+
+#: src/lib/components/entries/BGCheckSection.svelte
+msgid "<0/> BG Check"
+msgstr ""
+
+#: src/lib/components/entries/BGCheckSection.svelte
+msgid "Type"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Square Wave"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Dual Wave"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Bolus Type"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Rate (U/hr)"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Programmed (U)"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Delivered (U)"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Insulin Type"
+msgstr ""
+
+#: src/lib/components/entries/BolusSection.svelte
+msgid "Unabsorbed (U)"
+msgstr ""
+
+#: src/lib/components/entries/NoteSection.svelte
+msgid "<0/> Note"
+msgstr ""
+
+#: src/lib/components/entries/NoteSection.svelte
+msgid "Enter note..."
+msgstr ""
+
+#: src/lib/components/entries/NoteSection.svelte
+msgid "Is Announcement"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Entry updated"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Entry created"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to save entry"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Entry deleted"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Failed to delete entry"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "New Entry"
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Edit the details of this entry and its correlated records."
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "Create a new entry. Add multiple record types to correlate them."
+msgstr ""
+
+#: src/lib/components/entries/EntryEditDialog.svelte
+msgid "<0/> Add Section"
 msgstr ""

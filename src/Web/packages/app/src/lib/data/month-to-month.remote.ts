@@ -29,25 +29,19 @@ export const getPunchCardData = query(punchCardSchema, async ({
   startDate.setHours(0, 0, 0, 0);
   endDate.setHours(23, 59, 59, 999);
 
-  // Fetch entries and treatments for the full range
-  const entriesQuery = JSON.stringify({
-    date: {
-      $gte: startDate.toISOString(),
-      $lte: endDate.toISOString(),
-    },
-  });
+  // Fetch glucose readings, boluses, and carb intakes for the full range
+  const fromMs = startDate.getTime();
+  const toMs = endDate.getTime();
 
-  const treatmentsQuery = JSON.stringify({
-    created_at: {
-      $gte: startDate.toISOString(),
-      $lte: endDate.toISOString(),
-    },
-  });
-
-  const [allEntries, allTreatments] = await Promise.all([
-    apiClient.entries.getEntries2(entriesQuery, 100000),
-    apiClient.treatments.getTreatments(undefined, 10000, undefined, treatmentsQuery),
+  const [glucoseResponse, bolusResponse, carbResponse] = await Promise.all([
+    apiClient.glucose.getSensorGlucose(fromMs, toMs, 100000),
+    apiClient.insulin.getBoluses(fromMs, toMs, 10000),
+    apiClient.nutrition.getCarbIntakes(fromMs, toMs, 10000),
   ]);
+
+  const allEntries = glucoseResponse.data ?? [];
+  const allBoluses = bolusResponse.data ?? [];
+  const allCarbs = carbResponse.data ?? [];
 
   // Group by month
   const monthsMap = new Map<string, {
@@ -70,7 +64,7 @@ export const getPunchCardData = query(punchCardSchema, async ({
       inRangeCount: number;
       lowCount: number;
       highCount: number;
-      entries: Array<{ mills: number; sgv: number }>;
+      entries: Array<{ mills: number; mgdl: number }>;
     }>;
     maxCarbs: number;
     maxInsulin: number;
@@ -105,13 +99,18 @@ export const getPunchCardData = query(punchCardSchema, async ({
     dayEnd.setHours(23, 59, 59, 999);
 
     const dayEntries = allEntries.filter((e) => {
-      const entryTime = e.mills ?? new Date(e.dateString ?? "").getTime();
+      const entryTime = e.mills ?? 0;
       return entryTime >= dayStart.getTime() && entryTime <= dayEnd.getTime();
     });
 
-    const dayTreatments = allTreatments.filter((t) => {
-      const treatmentTime = t.mills ?? new Date(t.createdAt ?? "").getTime();
-      return treatmentTime >= dayStart.getTime() && treatmentTime <= dayEnd.getTime();
+    const dayBoluses = allBoluses.filter((b) => {
+      const bolusTime = b.mills ?? 0;
+      return bolusTime >= dayStart.getTime() && bolusTime <= dayEnd.getTime();
+    });
+
+    const dayCarbs = allCarbs.filter((c) => {
+      const carbTime = c.mills ?? 0;
+      return carbTime >= dayStart.getTime() && carbTime <= dayEnd.getTime();
     });
 
     let tirMetrics = null;
@@ -120,8 +119,8 @@ export const getPunchCardData = query(punchCardSchema, async ({
     if (dayEntries.length > 0) {
       tirMetrics = await apiClient.statistics.calculateTimeInRange({ entries: dayEntries });
     }
-    if (dayTreatments.length > 0) {
-      treatmentSummary = await apiClient.statistics.calculateTreatmentSummary(dayTreatments);
+    if (dayBoluses.length > 0 || dayCarbs.length > 0) {
+      treatmentSummary = await apiClient.statistics.calculateTreatmentSummary({ boluses: dayBoluses, carbIntakes: dayCarbs });
     }
 
     const percentages = tirMetrics?.percentages;
@@ -153,8 +152,8 @@ export const getPunchCardData = query(punchCardSchema, async ({
 
     // Extract raw glucose entries for profile view (sorted by time)
     const entries = dayEntries
-      .filter((e) => e.mills != null && e.sgv != null)
-      .map((e) => ({ mills: e.mills!, sgv: e.sgv! }))
+      .filter((e) => e.mills != null && e.mgdl != null)
+      .map((e) => ({ mills: e.mills!, mgdl: e.mgdl! }))
       .sort((a, b) => a.mills - b.mills);
 
     const dayStats = {
