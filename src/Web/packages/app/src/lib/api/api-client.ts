@@ -46,7 +46,11 @@ import {
   WebhookSettingsClient,
   MealMatchingClient,
   ClockFacesClient,
-  CompressionLowClient
+  CompressionLowClient,
+  GlucoseClient,
+  InsulinClient,
+  ObservationsClient,
+  NutritionClient,
 } from "./generated/nocturne-api-client";
 
 /**
@@ -106,6 +110,10 @@ export class ApiClient {
   public readonly mealMatching: MealMatchingClient;
   public readonly clockFaces: ClockFacesClient;
   public readonly compressionLow: CompressionLowClient;
+  public readonly glucose: GlucoseClient;
+  public readonly insulin: InsulinClient;
+  public readonly observations: ObservationsClient;
+  public readonly nutrition: NutritionClient;
 
   constructor(
     baseUrl: string,
@@ -164,6 +172,10 @@ export class ApiClient {
     this.mealMatching = new MealMatchingClient(apiBaseUrl, http);
     this.clockFaces = new ClockFacesClient(apiBaseUrl, http);
     this.compressionLow = new CompressionLowClient(apiBaseUrl, http);
+    this.glucose = new GlucoseClient(apiBaseUrl, http);
+    this.insulin = new InsulinClient(apiBaseUrl, http);
+    this.observations = new ObservationsClient(apiBaseUrl, http);
+    this.nutrition = new NutritionClient(apiBaseUrl, http);
   }
 
   /** Get the underlying main client for direct access if needed */

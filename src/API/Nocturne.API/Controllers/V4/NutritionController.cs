@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 
@@ -28,6 +29,7 @@ public class NutritionController : ControllerBase
     /// Get carb intakes with optional filtering
     /// </summary>
     [HttpGet("carbs")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<CarbIntake>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<CarbIntake>>> GetCarbIntakes(
@@ -49,6 +51,7 @@ public class NutritionController : ControllerBase
     /// Get a carb intake by ID
     /// </summary>
     [HttpGet("carbs/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CarbIntake>> GetCarbIntakeById(Guid id, CancellationToken ct = default)
@@ -61,6 +64,7 @@ public class NutritionController : ControllerBase
     /// Create a new carb intake
     /// </summary>
     [HttpPost("carbs")]
+    [RemoteCommand(Invalidates = ["GetCarbIntakes"])]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CarbIntake>> CreateCarbIntake([FromBody] CarbIntake model, CancellationToken ct = default)
@@ -75,6 +79,7 @@ public class NutritionController : ControllerBase
     /// Update an existing carb intake
     /// </summary>
     [HttpPut("carbs/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetCarbIntakes", "GetCarbIntakeById"])]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -97,6 +102,7 @@ public class NutritionController : ControllerBase
     /// Delete a carb intake
     /// </summary>
     [HttpDelete("carbs/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetCarbIntakes"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteCarbIntake(Guid id, CancellationToken ct = default)

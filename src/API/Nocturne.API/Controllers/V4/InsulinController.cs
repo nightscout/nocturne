@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 
@@ -30,6 +31,7 @@ public class InsulinController : ControllerBase
     /// Get boluses with optional filtering
     /// </summary>
     [HttpGet("boluses")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Bolus>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<Bolus>>> GetBoluses(
@@ -68,6 +70,7 @@ public class InsulinController : ControllerBase
     /// Get a bolus by ID
     /// </summary>
     [HttpGet("boluses/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(Bolus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Bolus>> GetBolusById(Guid id, CancellationToken ct = default)
@@ -80,6 +83,7 @@ public class InsulinController : ControllerBase
     /// Create a new bolus
     /// </summary>
     [HttpPost("boluses")]
+    [RemoteCommand(Invalidates = ["GetBoluses"])]
     [ProducesResponseType(typeof(Bolus), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Bolus>> CreateBolus(
@@ -97,6 +101,7 @@ public class InsulinController : ControllerBase
     /// Update an existing bolus
     /// </summary>
     [HttpPut("boluses/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetBoluses", "GetBolusById"])]
     [ProducesResponseType(typeof(Bolus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -123,6 +128,7 @@ public class InsulinController : ControllerBase
     /// Delete a bolus
     /// </summary>
     [HttpDelete("boluses/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetBoluses"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBolus(Guid id, CancellationToken ct = default)
@@ -146,6 +152,7 @@ public class InsulinController : ControllerBase
     /// Get bolus calculations with optional filtering
     /// </summary>
     [HttpGet("calculations")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<BolusCalculation>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<BolusCalculation>>> GetBolusCalculations(
@@ -188,6 +195,7 @@ public class InsulinController : ControllerBase
     /// Get a bolus calculation by ID
     /// </summary>
     [HttpGet("calculations/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(BolusCalculation), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BolusCalculation>> GetBolusCalculationById(
@@ -203,6 +211,7 @@ public class InsulinController : ControllerBase
     /// Create a new bolus calculation
     /// </summary>
     [HttpPost("calculations")]
+    [RemoteCommand(Invalidates = ["GetBolusCalculations"])]
     [ProducesResponseType(typeof(BolusCalculation), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BolusCalculation>> CreateBolusCalculation(
@@ -220,6 +229,7 @@ public class InsulinController : ControllerBase
     /// Update an existing bolus calculation
     /// </summary>
     [HttpPut("calculations/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetBolusCalculations", "GetBolusCalculationById"])]
     [ProducesResponseType(typeof(BolusCalculation), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -246,6 +256,7 @@ public class InsulinController : ControllerBase
     /// Delete a bolus calculation
     /// </summary>
     [HttpDelete("calculations/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetBolusCalculations"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBolusCalculation(Guid id, CancellationToken ct = default)

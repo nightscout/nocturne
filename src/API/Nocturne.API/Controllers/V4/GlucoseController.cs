@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 
@@ -35,6 +36,7 @@ public class GlucoseController : ControllerBase
     /// Get sensor glucose readings with optional filtering
     /// </summary>
     [HttpGet("sensor")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<SensorGlucose>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<SensorGlucose>>> GetSensorGlucose(
@@ -56,6 +58,7 @@ public class GlucoseController : ControllerBase
     /// Get a sensor glucose reading by ID
     /// </summary>
     [HttpGet("sensor/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(SensorGlucose), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SensorGlucose>> GetSensorGlucoseById(Guid id, CancellationToken ct = default)
@@ -68,6 +71,7 @@ public class GlucoseController : ControllerBase
     /// Create a new sensor glucose reading
     /// </summary>
     [HttpPost("sensor")]
+    [RemoteCommand(Invalidates = ["GetSensorGlucose"])]
     [ProducesResponseType(typeof(SensorGlucose), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<SensorGlucose>> CreateSensorGlucose([FromBody] SensorGlucose model, CancellationToken ct = default)
@@ -82,6 +86,7 @@ public class GlucoseController : ControllerBase
     /// Update an existing sensor glucose reading
     /// </summary>
     [HttpPut("sensor/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetSensorGlucose", "GetSensorGlucoseById"])]
     [ProducesResponseType(typeof(SensorGlucose), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -104,6 +109,7 @@ public class GlucoseController : ControllerBase
     /// Delete a sensor glucose reading
     /// </summary>
     [HttpDelete("sensor/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetSensorGlucose"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteSensorGlucose(Guid id, CancellationToken ct = default)
@@ -127,6 +133,7 @@ public class GlucoseController : ControllerBase
     /// Get meter glucose readings with optional filtering
     /// </summary>
     [HttpGet("meter")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<MeterGlucose>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<MeterGlucose>>> GetMeterGlucose(
@@ -148,6 +155,7 @@ public class GlucoseController : ControllerBase
     /// Get a meter glucose reading by ID
     /// </summary>
     [HttpGet("meter/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(MeterGlucose), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<MeterGlucose>> GetMeterGlucoseById(Guid id, CancellationToken ct = default)
@@ -160,6 +168,7 @@ public class GlucoseController : ControllerBase
     /// Create a new meter glucose reading
     /// </summary>
     [HttpPost("meter")]
+    [RemoteCommand(Invalidates = ["GetMeterGlucose"])]
     [ProducesResponseType(typeof(MeterGlucose), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MeterGlucose>> CreateMeterGlucose([FromBody] MeterGlucose model, CancellationToken ct = default)
@@ -174,6 +183,7 @@ public class GlucoseController : ControllerBase
     /// Update an existing meter glucose reading
     /// </summary>
     [HttpPut("meter/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetMeterGlucose", "GetMeterGlucoseById"])]
     [ProducesResponseType(typeof(MeterGlucose), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -196,6 +206,7 @@ public class GlucoseController : ControllerBase
     /// Delete a meter glucose reading
     /// </summary>
     [HttpDelete("meter/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetMeterGlucose"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteMeterGlucose(Guid id, CancellationToken ct = default)
@@ -219,6 +230,7 @@ public class GlucoseController : ControllerBase
     /// Get calibrations with optional filtering
     /// </summary>
     [HttpGet("calibrations")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Calibration>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<Calibration>>> GetCalibrations(
@@ -240,6 +252,7 @@ public class GlucoseController : ControllerBase
     /// Get a calibration by ID
     /// </summary>
     [HttpGet("calibrations/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(Calibration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Calibration>> GetCalibrationById(Guid id, CancellationToken ct = default)
@@ -252,6 +265,7 @@ public class GlucoseController : ControllerBase
     /// Create a new calibration
     /// </summary>
     [HttpPost("calibrations")]
+    [RemoteCommand(Invalidates = ["GetCalibrations"])]
     [ProducesResponseType(typeof(Calibration), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Calibration>> CreateCalibration([FromBody] Calibration model, CancellationToken ct = default)
@@ -266,6 +280,7 @@ public class GlucoseController : ControllerBase
     /// Update an existing calibration
     /// </summary>
     [HttpPut("calibrations/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetCalibrations", "GetCalibrationById"])]
     [ProducesResponseType(typeof(Calibration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -288,6 +303,7 @@ public class GlucoseController : ControllerBase
     /// Delete a calibration
     /// </summary>
     [HttpDelete("calibrations/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetCalibrations"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteCalibration(Guid id, CancellationToken ct = default)

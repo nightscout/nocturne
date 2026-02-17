@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 
@@ -35,6 +36,7 @@ public class DeviceStatusController : ControllerBase
     /// Get APS snapshots with optional filtering
     /// </summary>
     [HttpGet("aps")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<ApsSnapshot>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<ApsSnapshot>>> GetApsSnapshots(
@@ -56,6 +58,7 @@ public class DeviceStatusController : ControllerBase
     /// Get an APS snapshot by ID
     /// </summary>
     [HttpGet("aps/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(ApsSnapshot), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApsSnapshot>> GetApsSnapshotById(Guid id, CancellationToken ct = default)
@@ -72,6 +75,7 @@ public class DeviceStatusController : ControllerBase
     /// Get pump snapshots with optional filtering
     /// </summary>
     [HttpGet("pump")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<PumpSnapshot>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<PumpSnapshot>>> GetPumpSnapshots(
@@ -93,6 +97,7 @@ public class DeviceStatusController : ControllerBase
     /// Get a pump snapshot by ID
     /// </summary>
     [HttpGet("pump/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PumpSnapshot), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PumpSnapshot>> GetPumpSnapshotById(Guid id, CancellationToken ct = default)
@@ -109,6 +114,7 @@ public class DeviceStatusController : ControllerBase
     /// Get uploader snapshots with optional filtering
     /// </summary>
     [HttpGet("uploader")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<UploaderSnapshot>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<UploaderSnapshot>>> GetUploaderSnapshots(
@@ -130,6 +136,7 @@ public class DeviceStatusController : ControllerBase
     /// Get an uploader snapshot by ID
     /// </summary>
     [HttpGet("uploader/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(UploaderSnapshot), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<UploaderSnapshot>> GetUploaderSnapshotById(Guid id, CancellationToken ct = default)

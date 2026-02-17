@@ -5310,7 +5310,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/device-status/aps/{id}": {
@@ -5353,7 +5354,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/device-status/pump": {
@@ -5453,7 +5455,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/device-status/pump/{id}": {
@@ -5496,7 +5499,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/device-status/uploader": {
@@ -5596,7 +5600,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/device-status/uploader/{id}": {
@@ -5639,7 +5644,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Discrepancy/metrics": {
@@ -6154,7 +6160,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -6195,7 +6202,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSensorGlucose"
+        ]
       }
     },
     "/api/v4/glucose/sensor/{id}": {
@@ -6238,7 +6249,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -6301,7 +6313,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSensorGlucose",
+          "GetSensorGlucoseById"
+        ]
       },
       "delete": {
         "tags": [
@@ -6335,7 +6352,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSensorGlucose"
+        ]
       }
     },
     "/api/v4/glucose/meter": {
@@ -6435,7 +6456,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -6476,7 +6498,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMeterGlucose"
+        ]
       }
     },
     "/api/v4/glucose/meter/{id}": {
@@ -6519,7 +6545,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -6582,7 +6609,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMeterGlucose",
+          "GetMeterGlucoseById"
+        ]
       },
       "delete": {
         "tags": [
@@ -6616,7 +6648,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMeterGlucose"
+        ]
       }
     },
     "/api/v4/glucose/calibrations": {
@@ -6716,7 +6752,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -6757,7 +6794,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCalibrations"
+        ]
       }
     },
     "/api/v4/glucose/calibrations/{id}": {
@@ -6800,7 +6841,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -6863,7 +6905,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCalibrations",
+          "GetCalibrationById"
+        ]
       },
       "delete": {
         "tags": [
@@ -6897,7 +6944,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCalibrations"
+        ]
       }
     },
     "/api/v4/insulin/boluses": {
@@ -6997,7 +7048,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -7038,7 +7090,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBoluses"
+        ]
       }
     },
     "/api/v4/insulin/boluses/{id}": {
@@ -7081,7 +7137,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -7144,7 +7201,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBoluses",
+          "GetBolusById"
+        ]
       },
       "delete": {
         "tags": [
@@ -7178,7 +7240,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBoluses"
+        ]
       }
     },
     "/api/v4/insulin/calculations": {
@@ -7278,7 +7344,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -7319,7 +7386,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBolusCalculations"
+        ]
       }
     },
     "/api/v4/insulin/calculations/{id}": {
@@ -7362,7 +7433,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -7425,7 +7497,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBolusCalculations",
+          "GetBolusCalculationById"
+        ]
       },
       "delete": {
         "tags": [
@@ -7459,7 +7536,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBolusCalculations"
+        ]
       }
     },
     "/api/v4/meal-matching/food-entries/{id}": {
@@ -8141,7 +8222,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8182,7 +8264,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCarbIntakes"
+        ]
       }
     },
     "/api/v4/nutrition/carbs/{id}": {
@@ -8225,7 +8311,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8288,7 +8375,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCarbIntakes",
+          "GetCarbIntakeById"
+        ]
       },
       "delete": {
         "tags": [
@@ -8322,7 +8414,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCarbIntakes"
+        ]
       }
     },
     "/api/v4/observations/bg-checks": {
@@ -8422,7 +8518,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8463,7 +8560,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBGChecks"
+        ]
       }
     },
     "/api/v4/observations/bg-checks/{id}": {
@@ -8506,7 +8607,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8569,7 +8671,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBGChecks",
+          "GetBGCheckById"
+        ]
       },
       "delete": {
         "tags": [
@@ -8603,7 +8710,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetBGChecks"
+        ]
       }
     },
     "/api/v4/observations/notes": {
@@ -8703,7 +8814,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8744,7 +8856,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotes"
+        ]
       }
     },
     "/api/v4/observations/notes/{id}": {
@@ -8787,7 +8903,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8850,7 +8967,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotes",
+          "GetNoteById"
+        ]
       },
       "delete": {
         "tags": [
@@ -8884,7 +9006,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotes"
+        ]
       }
     },
     "/api/v4/observations/device-events": {
@@ -8984,7 +9110,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -9025,7 +9152,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDeviceEvents"
+        ]
       }
     },
     "/api/v4/observations/device-events/{id}": {
@@ -9068,7 +9199,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -9131,7 +9263,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDeviceEvents",
+          "GetDeviceEventById"
+        ]
       },
       "delete": {
         "tags": [
@@ -9165,7 +9302,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDeviceEvents"
+        ]
       }
     },
     "/api/v4/predictions": {

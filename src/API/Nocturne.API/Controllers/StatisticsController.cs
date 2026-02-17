@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data.Abstractions;
 
@@ -134,13 +135,13 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Calculate averaged statistics for each hour of the day (0-23)
     /// </summary>
-    /// <param name="entries">Array of glucose entries</param>
+    /// <param name="entries">Array of sensor glucose readings</param>
     /// <returns>Collection of averaged statistics for each hour</returns>
     [HttpPost("averaged-stats")]
     [RemoteQuery]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
     public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
-        [FromBody] Entry[] entries
+        [FromBody] SensorGlucose[] entries
     )
     {
         try
@@ -155,18 +156,21 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
-    /// Calculate treatment summary for a collection of treatments
+    /// Calculate treatment summary for a collection of boluses and carb intakes
     /// </summary>
-    /// <param name="treatments">Array of treatments</param>
+    /// <param name="request">Request containing boluses and carb intakes</param>
     /// <returns>Treatment summary with totals and counts</returns>
     [HttpPost("treatment-summary")]
     public ActionResult<TreatmentSummary> CalculateTreatmentSummary(
-        [FromBody] Treatment[] treatments
+        [FromBody] TreatmentSummaryRequest request
     )
     {
         try
         {
-            var result = _statisticsService.CalculateTreatmentSummary(treatments);
+            var result = _statisticsService.CalculateTreatmentSummary(
+                request.Boluses ?? Enumerable.Empty<Bolus>(),
+                request.CarbIntakes ?? Enumerable.Empty<CarbIntake>()
+            );
             return Ok(result);
         }
         catch (Exception ex)
@@ -203,7 +207,7 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Master glucose analytics function that calculates comprehensive metrics
     /// </summary>
-    /// <param name="request">Request containing entries, treatments, and configuration</param>
+    /// <param name="request">Request containing sensor glucose readings, boluses, carb intakes, and configuration</param>
     /// <returns>Comprehensive glucose analytics</returns>
     [HttpPost("comprehensive-analytics")]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
@@ -215,7 +219,8 @@ public class StatisticsController : ControllerBase
         {
             var result = _statisticsService.AnalyzeGlucoseData(
                 request.Entries,
-                request.Treatments ?? Enumerable.Empty<Treatment>(),
+                request.Boluses ?? Enumerable.Empty<Bolus>(),
+                request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
                 request.Config
             );
             return Ok(result);
@@ -229,7 +234,7 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Extended glucose analytics including GMI, GRI, and clinical target assessment
     /// </summary>
-    /// <param name="request">Request containing entries, treatments, population type, and configuration</param>
+    /// <param name="request">Request containing sensor glucose readings, boluses, carb intakes, population type, and configuration</param>
     /// <returns>Extended glucose analytics with modern clinical metrics</returns>
     [HttpPost("extended-analytics")]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB - needed for large datasets (90+ days)
@@ -241,7 +246,8 @@ public class StatisticsController : ControllerBase
         {
             var result = _statisticsService.AnalyzeGlucoseDataExtended(
                 request.Entries,
-                request.Treatments ?? Enumerable.Empty<Treatment>(),
+                request.Boluses ?? Enumerable.Empty<Bolus>(),
+                request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
                 request.Population,
                 request.Config
             );
@@ -790,7 +796,7 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Analyze glucose patterns around site changes to identify impact of site age on control
     /// </summary>
-    /// <param name="request">Request containing entries, treatments, and analysis parameters</param>
+    /// <param name="request">Request containing sensor glucose readings, device events, and analysis parameters</param>
     /// <returns>Site change impact analysis with averaged glucose patterns</returns>
     [HttpPost("site-change-impact")]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
@@ -802,7 +808,7 @@ public class StatisticsController : ControllerBase
         {
             var result = _statisticsService.CalculateSiteChangeImpact(
                 request.Entries,
-                request.Treatments,
+                request.DeviceEvents,
                 request.HoursBeforeChange,
                 request.HoursAfterChange,
                 request.BucketSizeMinutes
@@ -958,9 +964,9 @@ public class GlycemicVariabilityRequest
     public IEnumerable<double> Values { get; set; } = Enumerable.Empty<double>();
 
     /// <summary>
-    /// Collection of glucose entries with timestamps
+    /// Collection of sensor glucose readings with timestamps
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 }
 
 /// <summary>
@@ -969,9 +975,9 @@ public class GlycemicVariabilityRequest
 public class TimeInRangeRequest
 {
     /// <summary>
-    /// Collection of glucose entries
+    /// Collection of sensor glucose readings
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 
     /// <summary>
     /// Optional glycemic thresholds
@@ -985,9 +991,9 @@ public class TimeInRangeRequest
 public class GlucoseDistributionRequest
 {
     /// <summary>
-    /// Collection of glucose entries
+    /// Collection of sensor glucose readings
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 
     /// <summary>
     /// Optional distribution bins
@@ -1001,14 +1007,19 @@ public class GlucoseDistributionRequest
 public class GlucoseAnalyticsRequest
 {
     /// <summary>
-    /// Collection of glucose entries
+    /// Collection of sensor glucose readings
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 
     /// <summary>
-    /// Optional collection of treatments
+    /// Optional collection of bolus deliveries
     /// </summary>
-    public IEnumerable<Treatment>? Treatments { get; set; }
+    public IEnumerable<Bolus>? Boluses { get; set; }
+
+    /// <summary>
+    /// Optional collection of carb intakes
+    /// </summary>
+    public IEnumerable<CarbIntake>? CarbIntakes { get; set; }
 
     /// <summary>
     /// Optional extended analysis configuration
@@ -1022,14 +1033,19 @@ public class GlucoseAnalyticsRequest
 public class ExtendedGlucoseAnalyticsRequest
 {
     /// <summary>
-    /// Collection of glucose entries
+    /// Collection of sensor glucose readings
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 
     /// <summary>
-    /// Optional collection of treatments
+    /// Optional collection of bolus deliveries
     /// </summary>
-    public IEnumerable<Treatment>? Treatments { get; set; }
+    public IEnumerable<Bolus>? Boluses { get; set; }
+
+    /// <summary>
+    /// Optional collection of carb intakes
+    /// </summary>
+    public IEnumerable<CarbIntake>? CarbIntakes { get; set; }
 
     /// <summary>
     /// Diabetes population type for clinical target assessment
@@ -1040,6 +1056,22 @@ public class ExtendedGlucoseAnalyticsRequest
     /// Optional extended analysis configuration
     /// </summary>
     public ExtendedAnalysisConfig? Config { get; set; }
+}
+
+/// <summary>
+/// Request model for treatment summary calculation
+/// </summary>
+public class TreatmentSummaryRequest
+{
+    /// <summary>
+    /// Optional collection of bolus deliveries
+    /// </summary>
+    public IEnumerable<Bolus>? Boluses { get; set; }
+
+    /// <summary>
+    /// Optional collection of carb intakes
+    /// </summary>
+    public IEnumerable<CarbIntake>? CarbIntakes { get; set; }
 }
 
 /// <summary>
@@ -1064,9 +1096,9 @@ public class ClinicalAssessmentRequest
 public class DataSufficiencyRequest
 {
     /// <summary>
-    /// Collection of glucose entries
+    /// Collection of sensor glucose readings
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 
     /// <summary>
     /// Number of days to assess (default: 14)
@@ -1085,14 +1117,14 @@ public class DataSufficiencyRequest
 public class SiteChangeImpactRequest
 {
     /// <summary>
-    /// Collection of glucose entries
+    /// Collection of sensor glucose readings
     /// </summary>
-    public IEnumerable<Entry> Entries { get; set; } = Enumerable.Empty<Entry>();
+    public IEnumerable<SensorGlucose> Entries { get; set; } = Enumerable.Empty<SensorGlucose>();
 
     /// <summary>
-    /// Collection of treatments (must include site changes)
+    /// Collection of device events (must include site changes)
     /// </summary>
-    public IEnumerable<Treatment> Treatments { get; set; } = Enumerable.Empty<Treatment>();
+    public IEnumerable<DeviceEvent> DeviceEvents { get; set; } = Enumerable.Empty<DeviceEvent>();
 
     /// <summary>
     /// Hours before site change to analyze (default: 12)

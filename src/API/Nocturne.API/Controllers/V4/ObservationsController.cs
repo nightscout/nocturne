@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 
@@ -35,6 +36,7 @@ public class ObservationsController : ControllerBase
     /// Get blood glucose checks with optional filtering
     /// </summary>
     [HttpGet("bg-checks")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<BGCheck>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<BGCheck>>> GetBGChecks(
@@ -56,6 +58,7 @@ public class ObservationsController : ControllerBase
     /// Get a blood glucose check by ID
     /// </summary>
     [HttpGet("bg-checks/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(BGCheck), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BGCheck>> GetBGCheckById(Guid id, CancellationToken ct = default)
@@ -68,6 +71,7 @@ public class ObservationsController : ControllerBase
     /// Create a new blood glucose check
     /// </summary>
     [HttpPost("bg-checks")]
+    [RemoteCommand(Invalidates = ["GetBGChecks"])]
     [ProducesResponseType(typeof(BGCheck), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BGCheck>> CreateBGCheck([FromBody] BGCheck model, CancellationToken ct = default)
@@ -82,6 +86,7 @@ public class ObservationsController : ControllerBase
     /// Update an existing blood glucose check
     /// </summary>
     [HttpPut("bg-checks/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetBGChecks", "GetBGCheckById"])]
     [ProducesResponseType(typeof(BGCheck), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -104,6 +109,7 @@ public class ObservationsController : ControllerBase
     /// Delete a blood glucose check
     /// </summary>
     [HttpDelete("bg-checks/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetBGChecks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteBGCheck(Guid id, CancellationToken ct = default)
@@ -127,6 +133,7 @@ public class ObservationsController : ControllerBase
     /// Get notes with optional filtering
     /// </summary>
     [HttpGet("notes")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Note>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<Note>>> GetNotes(
@@ -148,6 +155,7 @@ public class ObservationsController : ControllerBase
     /// Get a note by ID
     /// </summary>
     [HttpGet("notes/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(Note), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Note>> GetNoteById(Guid id, CancellationToken ct = default)
@@ -160,6 +168,7 @@ public class ObservationsController : ControllerBase
     /// Create a new note
     /// </summary>
     [HttpPost("notes")]
+    [RemoteCommand(Invalidates = ["GetNotes"])]
     [ProducesResponseType(typeof(Note), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Note>> CreateNote([FromBody] Note model, CancellationToken ct = default)
@@ -174,6 +183,7 @@ public class ObservationsController : ControllerBase
     /// Update an existing note
     /// </summary>
     [HttpPut("notes/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetNotes", "GetNoteById"])]
     [ProducesResponseType(typeof(Note), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -196,6 +206,7 @@ public class ObservationsController : ControllerBase
     /// Delete a note
     /// </summary>
     [HttpDelete("notes/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetNotes"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteNote(Guid id, CancellationToken ct = default)
@@ -219,6 +230,7 @@ public class ObservationsController : ControllerBase
     /// Get device events with optional filtering
     /// </summary>
     [HttpGet("device-events")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<DeviceEvent>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<DeviceEvent>>> GetDeviceEvents(
@@ -240,6 +252,7 @@ public class ObservationsController : ControllerBase
     /// Get a device event by ID
     /// </summary>
     [HttpGet("device-events/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(DeviceEvent), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DeviceEvent>> GetDeviceEventById(Guid id, CancellationToken ct = default)
@@ -252,6 +265,7 @@ public class ObservationsController : ControllerBase
     /// Create a new device event
     /// </summary>
     [HttpPost("device-events")]
+    [RemoteCommand(Invalidates = ["GetDeviceEvents"])]
     [ProducesResponseType(typeof(DeviceEvent), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<DeviceEvent>> CreateDeviceEvent([FromBody] DeviceEvent model, CancellationToken ct = default)
@@ -266,6 +280,7 @@ public class ObservationsController : ControllerBase
     /// Update an existing device event
     /// </summary>
     [HttpPut("device-events/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetDeviceEvents", "GetDeviceEventById"])]
     [ProducesResponseType(typeof(DeviceEvent), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -288,6 +303,7 @@ public class ObservationsController : ControllerBase
     /// Delete a device event
     /// </summary>
     [HttpDelete("device-events/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetDeviceEvents"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteDeviceEvent(Guid id, CancellationToken ct = default)

@@ -7,6 +7,7 @@
 
 import {
   ActivityClient,
+  BackfillClient,
   AlexaClient,
   AnalyticsClient,
   AuthenticationClient,
@@ -20,6 +21,7 @@ import {
   ConnectorFoodEntriesClient,
   MyFitnessPalSettingsClient,
   ConnectorStatusClient,
+  CorrelationClient,
   CountClient,
   DebugClient,
   DeduplicationClient,
@@ -31,6 +33,8 @@ import {
   EntriesClient,
   FoodClient,
   FoodsClient,
+  GlucoseClient,
+  InsulinClient,
   IobClient,
   LastModifiedClient,
   LocalAuthClient,
@@ -39,6 +43,8 @@ import {
   MetadataClient,
   MigrationClient,
   NotificationsClient,
+  NutritionClient,
+  ObservationsClient,
   OidcClient,
   WellKnownClient,
   PebbleClient,
@@ -74,6 +80,7 @@ import {
 export class ApiClient {
   public readonly baseUrl: string;
   public readonly activity: ActivityClient;
+  public readonly admin: BackfillClient;
   public readonly alexa: AlexaClient;
   public readonly analytics: AnalyticsClient;
   public readonly authentication: AuthenticationClient;
@@ -87,6 +94,7 @@ export class ApiClient {
   public readonly connectorFoodEntries: ConnectorFoodEntriesClient;
   public readonly connectorSettings: MyFitnessPalSettingsClient;
   public readonly connectorStatus: ConnectorStatusClient;
+  public readonly correlation: CorrelationClient;
   public readonly count: CountClient;
   public readonly debug: DebugClient;
   public readonly deduplication: DeduplicationClient;
@@ -98,6 +106,8 @@ export class ApiClient {
   public readonly entries: EntriesClient;
   public readonly food: FoodClient;
   public readonly foodsV4: FoodsClient;
+  public readonly glucose: GlucoseClient;
+  public readonly insulin: InsulinClient;
   public readonly iob: IobClient;
   public readonly lastModified: LastModifiedClient;
   public readonly localAuth: LocalAuthClient;
@@ -106,6 +116,8 @@ export class ApiClient {
   public readonly metadata: MetadataClient;
   public readonly migration: MigrationClient;
   public readonly notifications: NotificationsClient;
+  public readonly nutrition: NutritionClient;
+  public readonly observations: ObservationsClient;
   public readonly oidc: OidcClient;
   public readonly oidcDiscovery: WellKnownClient;
   public readonly pebble: PebbleClient;
@@ -141,6 +153,7 @@ export class ApiClient {
     this.baseUrl = apiBaseUrl;
 
     this.activity = new ActivityClient(apiBaseUrl, http);
+    this.admin = new BackfillClient(apiBaseUrl, http);
     this.alexa = new AlexaClient(apiBaseUrl, http);
     this.analytics = new AnalyticsClient(apiBaseUrl, http);
     this.authentication = new AuthenticationClient(apiBaseUrl, http);
@@ -154,6 +167,7 @@ export class ApiClient {
     this.connectorFoodEntries = new ConnectorFoodEntriesClient(apiBaseUrl, http);
     this.connectorSettings = new MyFitnessPalSettingsClient(apiBaseUrl, http);
     this.connectorStatus = new ConnectorStatusClient(apiBaseUrl, http);
+    this.correlation = new CorrelationClient(apiBaseUrl, http);
     this.count = new CountClient(apiBaseUrl, http);
     this.debug = new DebugClient(apiBaseUrl, http);
     this.deduplication = new DeduplicationClient(apiBaseUrl, http);
@@ -165,6 +179,8 @@ export class ApiClient {
     this.entries = new EntriesClient(apiBaseUrl, http);
     this.food = new FoodClient(apiBaseUrl, http);
     this.foodsV4 = new FoodsClient(apiBaseUrl, http);
+    this.glucose = new GlucoseClient(apiBaseUrl, http);
+    this.insulin = new InsulinClient(apiBaseUrl, http);
     this.iob = new IobClient(apiBaseUrl, http);
     this.lastModified = new LastModifiedClient(apiBaseUrl, http);
     this.localAuth = new LocalAuthClient(apiBaseUrl, http);
@@ -173,6 +189,8 @@ export class ApiClient {
     this.metadata = new MetadataClient(apiBaseUrl, http);
     this.migration = new MigrationClient(apiBaseUrl, http);
     this.notifications = new NotificationsClient(apiBaseUrl, http);
+    this.nutrition = new NutritionClient(apiBaseUrl, http);
+    this.observations = new ObservationsClient(apiBaseUrl, http);
     this.oidc = new OidcClient(apiBaseUrl, http);
     this.oidcDiscovery = new WellKnownClient(apiBaseUrl, http);
     this.pebble = new PebbleClient(apiBaseUrl, http);
