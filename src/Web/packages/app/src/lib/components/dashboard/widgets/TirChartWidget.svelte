@@ -2,7 +2,7 @@
   import WidgetCard from "./WidgetCard.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { TrendingUp, TrendingDown, Minus } from "lucide-svelte";
-  import { getMultiPeriodStatistics } from "$api/generated";
+  import { getMultiPeriodStatistics } from "$api";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "$lib/components/ui/button";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";

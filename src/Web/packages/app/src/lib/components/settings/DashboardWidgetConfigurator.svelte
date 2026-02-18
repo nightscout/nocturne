@@ -18,7 +18,7 @@
     WIDGET_ICONS,
     DEFAULT_TOP_WIDGETS,
   } from "$lib/types/dashboard-widgets";
-  import { getWidgetDefinitions } from "$api/generated";
+  import { getWidgetDefinitions } from "$api";
   import { GripVertical, LayoutGrid, Plus, X } from "lucide-svelte";
   interface Props {
     /** Currently selected widget IDs (ordered) */

@@ -6,7 +6,7 @@
   import { X, Loader2 } from "lucide-svelte";
   import { StateHistory } from "runed";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getDefinitions } from "$api/generated";
+  import { getDefinitions } from "$api";
   import { getByIdForEdit as getClockFaceById } from "$api/clockfaces.remote";
   import { update as updateClockFace } from "$api/generated/clockFaces.generated.remote";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";

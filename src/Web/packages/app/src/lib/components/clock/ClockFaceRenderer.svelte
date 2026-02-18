@@ -15,7 +15,7 @@
     ClockElementStyle,
     TrackerDefinitionDto,
   } from "$lib/api";
-  import { getDefinitions } from "$api/generated";
+  import { getDefinitions } from "$api";
 
   interface Props {
     config: ClockFaceConfig;

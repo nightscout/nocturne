@@ -1,7 +1,7 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
   import { Text, PieChart } from "layerchart";
-  import { getMultiPeriodStatistics } from "$api/generated";
+  import { getMultiPeriodStatistics } from "$api";
   import { Button } from "$lib/components/ui/button";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
 

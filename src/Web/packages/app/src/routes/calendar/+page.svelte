@@ -19,7 +19,7 @@
     getActiveInstances,
     getDefinitions,
     getInstanceHistory,
-  } from "$api/generated";
+  } from "$api";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import {
     NotificationUrgency as NotificationUrgencyEnum,

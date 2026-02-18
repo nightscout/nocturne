@@ -28,7 +28,7 @@
     HelpCircle,
     CheckCircle,
   } from "lucide-svelte";
-  import { getExternalUrls } from "$api/generated";
+  import { getExternalUrls } from "$api";
   import { onMount } from "svelte";
   import { getApiClient } from "$lib/api/client";
   import type { ExternalUrls } from "$lib/api";

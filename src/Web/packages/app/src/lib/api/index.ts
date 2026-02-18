@@ -23,3 +23,6 @@ export function getUniversalApiClient(event?: RequestEvent) {
 // Re-export everything from the main API client
 export * from './api-client.generated';
 export * from './client';
+
+// Re-export generated remote functions
+export * from './generated';

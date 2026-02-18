@@ -23,7 +23,7 @@
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import { getReportsData } from "$api/reports.remote";
-  import { getBasalAnalysis } from "$api/generated";
+  import { getBasalAnalysis } from "$api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 

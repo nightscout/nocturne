@@ -1,7 +1,7 @@
 import type { RequestHandler } from "./$types";
 import { redirect } from "@sveltejs/kit";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { logout } from "$api/generated";
+import { logout } from "$api";
 
 /**
  * Helper to clear all auth cookies
