@@ -907,14 +907,22 @@ public class StatisticsController : ControllerBase
     [HttpGet("basal-analysis")]
     [RemoteQuery]
     public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null
     )
     {
         try
         {
-            var startMills = new DateTimeOffset(startDate).ToUnixTimeMilliseconds();
-            var endMills = new DateTimeOffset(endDate).ToUnixTimeMilliseconds();
+            if (startDate is null || endDate is null)
+                return BadRequest(new { error = "startDate and endDate are required." });
+
+            // Force UTC kind to avoid DateTimeOffset throwing when the server's local
+            // timezone offset would push DateTime.MinValue/MaxValue out of the valid range.
+            var startUtc = DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc);
+            var endUtc = DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc);
+
+            var startMills = new DateTimeOffset(startUtc).ToUnixTimeMilliseconds();
+            var endMills = new DateTimeOffset(endUtc).ToUnixTimeMilliseconds();
 
             // Fetch basal StateSpans directly
             var basalSpans = await _stateSpanService.GetStateSpansAsync(
@@ -926,8 +934,8 @@ public class StatisticsController : ControllerBase
 
             var result = _statisticsService.CalculateBasalAnalysis(
                 basalSpans,
-                startDate,
-                endDate
+                startUtc,
+                endUtc
             );
             return Ok(result);
         }

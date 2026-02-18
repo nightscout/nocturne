@@ -1,4 +1,32 @@
 import { getContext, setContext } from "svelte";
+import type { ReportsParamsReturn } from "./date-params.svelte";
+
+export interface DateInfo {
+  readonly from: Date;
+  readonly to: Date;
+  readonly dayCount: number;
+}
+
+type QueryResult<T> = { loading: boolean; error: unknown; current: T | undefined; refresh: () => void };
+
+interface ContextResourceBase<T> {
+  readonly loading: boolean;
+  readonly error: unknown;
+  readonly current: T | undefined;
+  refresh(): void;
+}
+
+interface ContextResourceWithDate<T> extends ContextResourceBase<T> {
+  readonly date: DateInfo;
+}
+
+interface ContextResourceOptions {
+  errorTitle?: string;
+}
+
+interface ContextResourceOptionsWithDate extends ContextResourceOptions {
+  dateParams: ReportsParamsReturn;
+}
 
 const RESOURCE_CONTEXT_KEY = Symbol("resource-context");
 
@@ -104,6 +132,7 @@ export function useResourceContext(config: {
  * This is the recommended way to use queries in report pages - it handles:
  * - Automatic registration with layout-level loading/error handling
  * - Uses $effect.pre to sync state before render
+ * - Optionally exposes date info from URL params via the `date` property
  *
  * @example
  * ```svelte
@@ -114,23 +143,29 @@ export function useResourceContext(config: {
  *
  *   const reportsParams = requireDateParamsContext(14);
  *
- *   // Pass a derived query - contextResource syncs it to layout's ResourceGuard
  *   const reportsQuery = contextResource(
  *     () => getReportsData(reportsParams.dateRangeInput),
- *     { errorTitle: "Error Loading AGP Report" }
+ *     { errorTitle: "Error Loading AGP Report", dateParams: reportsParams }
  *   );
- * </script>
  *
- * {#if reportsQuery.current}
- *   <!-- Your content here -->
- * {/if}
+ *   // Date info derived from URL params — no separate $derived needed
+ *   // reportsQuery.date.from, reportsQuery.date.to, reportsQuery.date.dayCount
+ * </script>
  * ```
  */
 export function contextResource<T>(
-  queryFn: () => { loading: boolean; error: unknown; current: T | undefined; refresh: () => void },
-  options: { errorTitle?: string } = {}
-) {
-  const { errorTitle = "Error Loading Data" } = options;
+  queryFn: () => QueryResult<T>,
+  options: ContextResourceOptionsWithDate
+): ContextResourceWithDate<T>;
+export function contextResource<T>(
+  queryFn: () => QueryResult<T>,
+  options?: ContextResourceOptions
+): ContextResourceBase<T>;
+export function contextResource<T>(
+  queryFn: () => QueryResult<T>,
+  options: ContextResourceOptions & { dateParams?: ReportsParamsReturn } = {}
+): ContextResourceBase<T> | ContextResourceWithDate<T> {
+  const { errorTitle = "Error Loading Data", dateParams } = options;
   const ctx = getResourceContext();
 
   // Use $effect.pre to sync state BEFORE render
@@ -145,8 +180,7 @@ export function contextResource<T>(
     }
   });
 
-  // Return a reactive object that reads from the query
-  return {
+  const base = {
     get loading() {
       return queryFn().loading;
     },
@@ -158,6 +192,21 @@ export function contextResource<T>(
     },
     refresh() {
       queryFn().refresh();
+    },
+  };
+
+  if (!dateParams) return base;
+
+  return {
+    ...base,
+    get date(): DateInfo {
+      const range = dateParams.getDateRange();
+      const ms = range.end.getTime() - range.start.getTime();
+      return {
+        from: range.start,
+        to: range.end,
+        dayCount: Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24))),
+      };
     },
   };
 }

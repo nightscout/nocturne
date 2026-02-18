@@ -9,7 +9,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import BolusSection from "./BolusSection.svelte";
-  import CarbIntakeSection from "./CarbIntakeSection.svelte";
+  import CarbIntakeSection, { type PendingFood } from "./CarbIntakeSection.svelte";
   import BGCheckSection from "./BGCheckSection.svelte";
   import NoteSection from "./NoteSection.svelte";
   import DeviceEventSection from "./DeviceEventSection.svelte";
@@ -33,6 +33,7 @@
     createCarbIntake,
     updateCarbIntake,
     deleteCarbIntake,
+    addCarbIntakeFood,
   } from "$api/generated/nutritions.generated.remote";
   import {
     createBGCheck,
@@ -79,6 +80,7 @@
   let mills = $state<number>(Date.now());
   let isSaving = $state(false);
   let isDeleting = $state(false);
+  let carbsPendingFoods = $state<PendingFood[]>([]);
 
   let isEditing = $derived(entry != null);
 
@@ -130,6 +132,7 @@
 
       sections = fresh;
       mills = entry.data.mills ?? Date.now();
+      carbsPendingFoods = [];
     } else {
       // New entry: default to Meal Bolus layout (bolus + carbs)
       sections = {
@@ -140,6 +143,7 @@
         deviceEvent: null,
       };
       mills = Date.now();
+      carbsPendingFoods = [];
     }
   });
 
@@ -230,6 +234,16 @@
             updateCarbIntake({
               id: existing.data.id,
               request: data as CarbIntake,
+            }),
+          );
+        } else if (carbsPendingFoods.length > 0) {
+          // Create carb intake first, then add pending foods
+          promises.push(
+            createCarbIntake(data as CarbIntake).then(async (result) => {
+              if (!result?.id) return;
+              for (const pf of carbsPendingFoods) {
+                await addCarbIntakeFood({ id: result.id, request: pf.request });
+              }
             }),
           );
         } else {
@@ -413,6 +427,8 @@
         {:else if key === "carbs" && sections.carbs != null}
           <CarbIntakeSection
             bind:carbIntake={sections.carbs}
+            carbIntakeId={findExistingRecord("carbs")?.data.id}
+            bind:pendingFoods={carbsPendingFoods}
             onRemove={activeSectionCount > 1 ? () => removeSection("carbs") : undefined}
           />
         {:else if key === "bgCheck" && sections.bgCheck != null}

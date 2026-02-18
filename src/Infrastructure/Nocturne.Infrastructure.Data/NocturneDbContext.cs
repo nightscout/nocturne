@@ -71,6 +71,16 @@ public class NocturneDbContext : DbContext
     public DbSet<ActivityEntity> Activities { get; set; }
 
     /// <summary>
+    /// Gets or sets the StepCounts table for xDrip step count / PebbleMovement records
+    /// </summary>
+    public DbSet<StepCountEntity> StepCounts { get; set; }
+
+    /// <summary>
+    /// Gets or sets the HeartRates table for xDrip heart rate records
+    /// </summary>
+    public DbSet<HeartRateEntity> HeartRates { get; set; }
+
+    /// <summary>
     /// Gets or sets the DiscrepancyAnalyses table for response comparison analysis
     /// </summary>
     public DbSet<DiscrepancyAnalysisEntity> DiscrepancyAnalyses { get; set; }
@@ -547,6 +557,30 @@ public class NocturneDbContext : DbContext
             .Entity<ActivityEntity>()
             .HasIndex(a => a.SysCreatedAt)
             .HasDatabaseName("ix_activities_sys_created_at");
+
+        // StepCount indexes - optimized for time-range graph queries
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => s.Mills)
+            .HasDatabaseName("ix_step_counts_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => s.SysCreatedAt)
+            .HasDatabaseName("ix_step_counts_sys_created_at");
+
+        // HeartRate indexes - optimized for time-range graph queries
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => h.Mills)
+            .HasDatabaseName("ix_heart_rates_mills")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => h.SysCreatedAt)
+            .HasDatabaseName("ix_heart_rates_sys_created_at");
 
         // Discrepancy analysis indexes - optimized for dashboard queries
         modelBuilder
@@ -1406,6 +1440,14 @@ public class NocturneDbContext : DbContext
             .Property(a => a.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
+            .Entity<StepCountEntity>()
+            .Property(s => s.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .Property(h => h.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
             .Entity<DiscrepancyAnalysisEntity>()
             .Property(d => d.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
@@ -1625,6 +1667,18 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<ActivityEntity>()
             .Property(a => a.SysUpdatedAt)
+            .HasDefaultValueSql("CURRENT_TIMESTAMP")
+            .ValueGeneratedOnAddOrUpdate();
+
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .Property(s => s.SysUpdatedAt)
+            .HasDefaultValueSql("CURRENT_TIMESTAMP")
+            .ValueGeneratedOnAddOrUpdate();
+
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .Property(h => h.SysUpdatedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP")
             .ValueGeneratedOnAddOrUpdate();
 
@@ -2162,6 +2216,22 @@ public class NocturneDbContext : DbContext
                     activityEntity.SysCreatedAt = utcNow;
                 }
                 activityEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is StepCountEntity stepCountEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    stepCountEntity.SysCreatedAt = utcNow;
+                }
+                stepCountEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is HeartRateEntity heartRateEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    heartRateEntity.SysCreatedAt = utcNow;
+                }
+                heartRateEntity.SysUpdatedAt = utcNow;
             }
             else if (entry.Entity is ProfileEntity profileEntity)
             {

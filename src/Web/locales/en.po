@@ -1288,6 +1288,7 @@ msgstr "Food Editor - Nightscout"
 msgid "Food Editor"
 msgstr "Food Editor"
 
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/routes/food/+page.svelte
@@ -1771,9 +1772,11 @@ msgstr "Hide after use"
 msgid "Total: {0}g carbs"
 msgstr "Total: {0}g carbs"
 
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/status-pills/COBPill.svelte
+#: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/QuickPickItem.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -1864,6 +1867,7 @@ msgstr "No foods attributed"
 #: src/lib/components/treatments/CarbBreakdownBar.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
+#: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/notifications/+page.svelte
@@ -2785,12 +2789,14 @@ msgstr "No recent entries"
 #~ msgid "Error loading recent treatments."
 #~ msgstr "Error loading recent treatments."
 
+#. placeholder {0}: food.displayCarbs
 #. placeholder {0}: foodEntry.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: food.carbs
 #. placeholder {0}: foodCarbs
 #. placeholder {0}: (insulinStats.totalCarbs ?? 0).toFixed(0)
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -5753,20 +5759,25 @@ msgstr "Loading breakdown..."
 #~ msgid "Treatment Total"
 #~ msgstr "Treatment Total"
 
+#. placeholder {0}: pendingTotalCarbs
 #. placeholder {0}: breakdown.attributedCarbs
 #. placeholder {0}: breakdown.attributedCarbs
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Attributed {0}g"
 msgstr "Attributed {0}g"
 
+#. placeholder {0}: unspecifiedCarbs
 #. placeholder {0}: breakdown.unspecifiedCarbs
 #. placeholder {0}: breakdown.unspecifiedCarbs
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Unspecified {0}g"
 msgstr "Unspecified {0}g"
 
+#: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "No foods added yet."
@@ -7198,7 +7209,7 @@ msgid "Insulin Delivery <0/>"
 msgstr "Insulin Delivery <0/>"
 
 #. placeholder {0}: dayCount
-#. placeholder {0}: dayCount
+#. placeholder {0}: reportsResource.date.dayCount
 #. placeholder {0}: dayCount
 #: src/routes/reports/agp/+page.svelte
 #: src/routes/reports/basal-analysis/+page.svelte
@@ -7232,13 +7243,12 @@ msgstr "The <0>shaded bands</0> show the range of variation (10th-90th percentil
 msgid "Wider bands indicate more variability in your basal needs"
 msgstr "Wider bands indicate more variability in your basal needs"
 
-#: src/routes/reports/basal-analysis/+page.svelte
-msgid ""
-"Use this to identify times when your basal insulin may need adjustment,\n"
-"or to discuss temp basal patterns with your healthcare provider."
-msgstr ""
-"Use this to identify times when your basal insulin may need adjustment,\n"
-"or to discuss temp basal patterns with your healthcare provider."
+#~ msgid ""
+#~ "Use this to identify times when your basal insulin may need adjustment,\n"
+#~ "or to discuss temp basal patterns with your healthcare provider."
+#~ msgstr ""
+#~ "Use this to identify times when your basal insulin may need adjustment,\n"
+#~ "or to discuss temp basal patterns with your healthcare provider."
 
 #: src/routes/reports/basal-analysis/+page.svelte
 msgid "Avg Rate"
@@ -7321,13 +7331,12 @@ msgstr "Temp Basal Activity"
 msgid "High temp basal activity ({0}/day) suggests active automated or manual adjustments."
 msgstr "High temp basal activity ({0}/day) suggests active automated or manual adjustments."
 
-#: src/routes/reports/basal-analysis/+page.svelte
-msgid ""
-"Moderate temp basal activity — typical for automated insulin\n"
-"delivery systems."
-msgstr ""
-"Moderate temp basal activity — typical for automated insulin\n"
-"delivery systems."
+#~ msgid ""
+#~ "Moderate temp basal activity — typical for automated insulin\n"
+#~ "delivery systems."
+#~ msgstr ""
+#~ "Moderate temp basal activity — typical for automated insulin\n"
+#~ "delivery systems."
 
 #: src/routes/reports/basal-analysis/+page.svelte
 msgid ""
@@ -7357,7 +7366,7 @@ msgstr ""
 msgid "Daily Basal Insulin"
 msgstr "Daily Basal Insulin"
 
-#. placeholder {0}: dayCount
+#. placeholder {0}: reportsResource.date.dayCount
 #: src/routes/reports/basal-analysis/+page.svelte
 msgid ""
 "Average of <0>{0} units</0> of basal insulin delivered per day over this {0}-day\n"
@@ -13240,8 +13249,8 @@ msgid "Carb Intake"
 msgstr "Carb Intake"
 
 #. placeholder {0}: boluses.length.toLocaleString()
-#. placeholder {1}: startDate.toLocaleDateString()
-#. placeholder {2}: endDate.toLocaleDateString()
+#. placeholder {1}: reportsResource.date.from.toLocaleDateString()
+#. placeholder {2}: reportsResource.date.to.toLocaleDateString()
 #. placeholder {0}: boluses.length.toLocaleString()
 #. placeholder {1}: startDate.toLocaleDateString()
 #. placeholder {2}: endDate.toLocaleDateString()
@@ -13725,3 +13734,33 @@ msgstr "Record updated successfully"
 #: src/routes/reports/treatments/+page.svelte
 msgid "Failed to update record"
 msgstr "Failed to update record"
+
+#: src/routes/reports/basal-analysis/+page.svelte
+msgid "Error Loading Basal Analysis Data"
+msgstr "Error Loading Basal Analysis Data"
+
+#: src/lib/components/entries/CarbIntakeSection.svelte
+msgid "Foods"
+msgstr "Foods"
+
+#: src/lib/components/entries/CarbIntakeSection.svelte
+msgid "Link foods to this carb intake."
+msgstr "Link foods to this carb intake."
+
+#: src/routes/reports/basal-analysis/+page.svelte
+msgid ""
+"Use this to identify times when your basal insulin may need\n"
+"adjustment, or to discuss temp basal patterns with your healthcare\n"
+"provider."
+msgstr ""
+"Use this to identify times when your basal insulin may need\n"
+"adjustment, or to discuss temp basal patterns with your healthcare\n"
+"provider."
+
+#: src/routes/reports/basal-analysis/+page.svelte
+msgid ""
+"Moderate temp basal activity — typical for automated\n"
+"insulin delivery systems."
+msgstr ""
+"Moderate temp basal activity — typical for automated\n"
+"insulin delivery systems."

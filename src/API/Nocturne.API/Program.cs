@@ -437,6 +437,8 @@ builder.Services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService
 builder.Services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
 builder.Services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
+builder.Services.AddScoped<IHeartRateService, HeartRateService>();
+builder.Services.AddScoped<IStepCountService, StepCountService>();
 builder.Services.AddScoped<
     IMyFitnessPalMatchingSettingsService,
     MyFitnessPalMatchingSettingsService

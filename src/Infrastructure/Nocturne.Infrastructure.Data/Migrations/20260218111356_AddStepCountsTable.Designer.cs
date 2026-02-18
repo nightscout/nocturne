@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260218111356_AddStepCountsTable")]
+    partial class AddStepCountsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1675,70 +1678,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_foods_type_name");
 
                     b.ToTable("foods");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.HeartRateEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Accuracy")
-                        .HasColumnType("integer")
-                        .HasColumnName("accuracy");
-
-                    b.Property<int>("Bpm")
-                        .HasColumnType("integer")
-                        .HasColumnName("bpm");
-
-                    b.Property<string>("CreatedAt")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Device")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("device");
-
-                    b.Property<string>("EnteredBy")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("entered_by");
-
-                    b.Property<long>("Mills")
-                        .HasColumnType("bigint")
-                        .HasColumnName("mills");
-
-                    b.Property<string>("OriginalId")
-                        .HasMaxLength(24)
-                        .HasColumnType("character varying(24)")
-                        .HasColumnName("original_id");
-
-                    b.Property<DateTime>("SysCreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sys_created_at");
-
-                    b.Property<DateTime>("SysUpdatedAt")
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sys_updated_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<int?>("UtcOffset")
-                        .HasColumnType("integer")
-                        .HasColumnName("utc_offset");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Mills")
-                        .IsDescending()
-                        .HasDatabaseName("ix_heart_rates_mills");
-
-                    b.HasIndex("SysCreatedAt")
-                        .HasDatabaseName("ix_heart_rates_sys_created_at");
-
-                    b.ToTable("heart_rates");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.InAppNotificationEntity", b =>

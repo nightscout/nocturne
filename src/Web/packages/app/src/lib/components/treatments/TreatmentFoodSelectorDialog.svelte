@@ -41,7 +41,7 @@
   interface Props {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSubmit: (request: CarbIntakeFoodRequest) => void;
+    onSubmit: (request: CarbIntakeFoodRequest, displayName?: string) => void;
     /** Total carbs from the treatment */
     totalCarbs?: number;
     /** Remaining unspecified carbs */
@@ -429,7 +429,7 @@
     }
 
     isSubmitting = true;
-    onSubmit(request);
+    onSubmit(request, selectedFood?.name ?? "Food");
     isSubmitting = false;
   }
 
@@ -503,7 +503,7 @@
           request.carbs = entryCarbs;
         }
 
-        onSubmit(request);
+        onSubmit(request, newFood.name ?? foodName.trim());
       } else {
         throw new Error("Failed to create food");
       }
@@ -531,7 +531,7 @@
     };
 
     isSubmitting = true;
-    onSubmit(request);
+    onSubmit(request, note.trim() || "Other");
     isSubmitting = false;
   }
 
