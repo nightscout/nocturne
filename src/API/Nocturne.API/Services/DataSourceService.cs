@@ -681,12 +681,23 @@ public class DataSourceService : IDataSourceService
 
         var deviceId = metadata.DataSourceId;
 
-        var entriesCount = await _context
+        // Count legacy entries + V4 sensor glucose (data may exist in either or both tables)
+        var legacyEntriesCount = await _context
             .Entries.Where(e => e.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
+        var sensorGlucoseCount = await _context
+            .SensorGlucose.Where(sg => sg.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
 
-        var treatmentsCount = await _context
+        // Count legacy treatments + V4 treatment-derived tables
+        var legacyTreatmentsCount = await _context
             .Treatments.Where(t => t.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
+        var bolusCount = await _context
+            .Boluses.Where(b => b.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
+        var carbIntakeCount = await _context
+            .CarbIntakes.Where(c => c.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
 
         var deviceStatusCount = await _context
@@ -696,8 +707,8 @@ public class DataSourceService : IDataSourceService
         return new ConnectorDataSummary
         {
             ConnectorId = connectorId,
-            Entries = entriesCount,
-            Treatments = treatmentsCount,
+            Entries = legacyEntriesCount + sensorGlucoseCount,
+            Treatments = legacyTreatmentsCount + bolusCount + carbIntakeCount,
             DeviceStatuses = deviceStatusCount,
         };
     }
@@ -733,27 +744,59 @@ public class DataSourceService : IDataSourceService
                 deviceId
             );
 
-            // Delete using the connector's data source ID
-            // This avoids the 30-day lookback window limitation in GetActiveDataSourcesAsync
-            // Use DataSource field which is what connectors use to identify their data
-            var entriesDeleted = await _context
+            // Delete from both legacy and V4 tables
+            // Data may exist in either or both depending on the import pathway
+            var legacyEntriesDeleted = await _context
                 .Entries.Where(e => e.DataSource == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
+            var sensorGlucoseDeleted = await _context
+                .SensorGlucose.Where(sg => sg.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var meterGlucoseDeleted = await _context
+                .MeterGlucose.Where(mg => mg.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var calibrationsDeleted = await _context
+                .Calibrations.Where(c => c.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
 
-            var treatmentsDeleted = await _context
+            var legacyTreatmentsDeleted = await _context
                 .Treatments.Where(t => t.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var bolusesDeleted = await _context
+                .Boluses.Where(b => b.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var carbIntakesDeleted = await _context
+                .CarbIntakes.Where(c => c.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var bgChecksDeleted = await _context
+                .BGChecks.Where(b => b.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var notesDeleted = await _context
+                .Notes.Where(n => n.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var deviceEventsDeleted = await _context
+                .DeviceEvents.Where(de => de.DataSource == deviceId)
+                .ExecuteDeleteAsync(cancellationToken);
+            var bolusCalcsDeleted = await _context
+                .BolusCalculations.Where(bc => bc.DataSource == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deviceStatusDeleted = await _context
                 .DeviceStatuses.Where(ds => ds.Device == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
+            var totalEntriesDeleted = legacyEntriesDeleted + sensorGlucoseDeleted
+                + meterGlucoseDeleted + calibrationsDeleted;
+            var totalTreatmentsDeleted = legacyTreatmentsDeleted + bolusesDeleted
+                + carbIntakesDeleted + bgChecksDeleted + notesDeleted
+                + deviceEventsDeleted + bolusCalcsDeleted;
+
             _logger.LogInformation(
                 "Deleted data for connector {ConnectorId} (device {DeviceId}): {EntriesDeleted} entries, {TreatmentsDeleted} treatments, {DeviceStatusDeleted} device status records",
                 connectorId,
                 deviceId,
-                entriesDeleted,
-                treatmentsDeleted,
+                totalEntriesDeleted,
+                totalTreatmentsDeleted,
                 deviceStatusDeleted
             );
 
@@ -761,8 +804,8 @@ public class DataSourceService : IDataSourceService
             {
                 Success = true,
                 DataSource = deviceId,
-                EntriesDeleted = entriesDeleted,
-                TreatmentsDeleted = treatmentsDeleted,
+                EntriesDeleted = totalEntriesDeleted,
+                TreatmentsDeleted = totalTreatmentsDeleted,
                 DeviceStatusDeleted = deviceStatusDeleted,
             };
         }

@@ -217,7 +217,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Core synchronization logic that processes data types in parallel.
+    ///     Core synchronization logic that processes data types sequentially.
     ///     Shared between manual and background sync flows.
     /// </summary>
     protected virtual async Task<SyncResult> PerformSyncInternalAsync(
@@ -231,92 +231,81 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         if (!request.DataTypes.Any())
             request.DataTypes = SupportedDataTypes;
 
-        var tasks = request
-            .DataTypes.Where(type => SupportedDataTypes.Contains(type))
-            .Select(async type =>
+        foreach (var type in request.DataTypes.Where(type => SupportedDataTypes.Contains(type)))
+        {
+            try
             {
-                try
+                var count = 0;
+                DateTime? lastTime = null;
+                var publishSuccess = true;
+
+                switch (type)
                 {
-                    var count = 0;
-                    DateTime? lastTime = null;
-                    var publishSuccess = true;
+                    case SyncDataType.Glucose:
+                        var entries = await FetchGlucoseDataRangeAsync(
+                            request.From,
+                            request.To
+                        );
+                        var entryList = entries.ToList();
+                        count = entryList.Count;
+                        if (count > 0)
+                            lastTime = entryList.Max(e => e.Date);
+                        publishSuccess = await PublishGlucoseDataInBatchesAsync(
+                            entryList,
+                            config,
+                            cancellationToken
+                        );
+                        break;
 
-                    switch (type)
-                    {
-                        case SyncDataType.Glucose:
-                            var entries = await FetchGlucoseDataRangeAsync(
-                                request.From,
-                                request.To
-                            );
-                            var entryList = entries.ToList();
-                            count = entryList.Count;
-                            if (count > 0)
-                                lastTime = entryList.Max(e => e.Date);
-                            publishSuccess = await PublishGlucoseDataInBatchesAsync(
-                                entryList,
-                                config,
-                                cancellationToken
-                            );
-                            break;
+                    case SyncDataType.Treatments:
+                        var treatments = await FetchTreatmentsAsync(request.From, request.To);
+                        var treatmentList = treatments.ToList();
+                        count = treatmentList.Count;
+                        if (count > 0)
+                            lastTime = treatmentList
+                                .Select(t =>
+                                    DateTime.TryParse(t.CreatedAt, out var dt)
+                                        ? dt
+                                        : (DateTime?)null
+                                )
+                                .Where(dt => dt.HasValue)
+                                .Max();
+                        publishSuccess = await PublishTreatmentDataInBatchesAsync(
+                            treatmentList,
+                            config,
+                            cancellationToken
+                        );
+                        break;
 
-                        case SyncDataType.Treatments:
-                            var treatments = await FetchTreatmentsAsync(request.From, request.To);
-                            var treatmentList = treatments.ToList();
-                            count = treatmentList.Count;
-                            if (count > 0)
-                                lastTime = treatmentList
-                                    .Select(t =>
-                                        DateTime.TryParse(t.CreatedAt, out var dt)
-                                            ? dt
-                                            : (DateTime?)null
-                                    )
-                                    .Where(dt => dt.HasValue)
-                                    .Max();
-                            publishSuccess = await PublishTreatmentDataInBatchesAsync(
-                                treatmentList,
-                                config,
-                                cancellationToken
-                            );
-                            break;
-
-                        default:
-                            // Other data types (Profiles, DeviceStatus, Activity, Food) not yet supported by connectors
-                            _logger.LogDebug(
-                                "Data type {DataType} not supported by this connector",
-                                type
-                            );
-                            break;
-                    }
-
-                    lock (result)
-                    {
-                        result.ItemsSynced[type] = count;
-                        result.LastEntryTimes[type] = lastTime;
-                        if (!publishSuccess)
-                        {
-                            result.Success = false;
-                            result.Errors.Add($"{type} publish failed");
-                        }
-                    }
+                    default:
+                        _logger.LogDebug(
+                            "Data type {DataType} not supported by this connector",
+                            type
+                        );
+                        break;
                 }
-                catch (Exception ex)
+
+                result.ItemsSynced[type] = count;
+                result.LastEntryTimes[type] = lastTime;
+                if (!publishSuccess)
                 {
-                    lock (result)
-                    {
-                        result.Success = false;
-                        result.Errors.Add($"Failed to sync {type}: {ex.Message}");
-                    }
-
-                    _logger.LogError(
-                        ex,
-                        "Failed to sync {DataType} for {Connector}",
-                        type,
-                        ConnectorSource
-                    );
+                    result.Success = false;
+                    result.Errors.Add($"{type} publish failed");
                 }
-            });
+            }
+            catch (Exception ex)
+            {
+                result.Success = false;
+                result.Errors.Add($"Failed to sync {type}: {ex.Message}");
 
-        await Task.WhenAll(tasks);
+                _logger.LogError(
+                    ex,
+                    "Failed to sync {DataType} for {Connector}",
+                    type,
+                    ConnectorSource
+                );
+            }
+        }
 
         result.EndTime = DateTimeOffset.UtcNow;
         return result;
@@ -747,7 +736,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </summary>
     /// <summary>
     ///     Main sync method for background synchronization.
-    ///     Uses PerformSyncInternalAsync for parallelized processing.
+    ///     Uses PerformSyncInternalAsync for sequential processing.
     /// </summary>
     public virtual async Task<bool> SyncDataAsync(
         TConfig config,

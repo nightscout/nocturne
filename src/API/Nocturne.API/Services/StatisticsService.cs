@@ -1410,9 +1410,13 @@ public class StatisticsService : IStatisticsService
                     continue; // Skip entries without valid timestamps
                 }
 
-                var date = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).DateTime;
+                var dateTimeOffset = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
+                if (entry.UtcOffset.HasValue)
+                {
+                    dateTimeOffset = dateTimeOffset.ToOffset(TimeSpan.FromMinutes(entry.UtcOffset.Value));
+                }
 
-                var hour = date.Hour;
+                var hour = dateTimeOffset.Hour;
                 if (hour >= 0 && hour < 24)
                 {
                     hourlyGroups[hour].Add(entry);

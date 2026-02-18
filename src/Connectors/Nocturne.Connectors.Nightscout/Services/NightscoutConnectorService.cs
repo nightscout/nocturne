@@ -119,45 +119,114 @@ public class NightscoutConnectorService : BaseConnectorService<NightscoutConnect
     protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
         DateTime? from, DateTime? to)
     {
-        var entries = await FetchDataAsync<Entry[]>(
-            BuildEntriesUrl(from, to),
-            "FetchGlucoseData");
+        var allEntries = new List<Entry>();
+        var currentTo = to;
 
-        if (entries == null) return [];
-
-        foreach (var entry in entries)
+        while (true)
         {
-            entry.DataSource = ConnectorSource;
+            var entries = await FetchDataAsync<Entry[]>(
+                BuildEntriesUrl(from, currentTo),
+                "FetchGlucoseData");
+
+            if (entries == null || entries.Length == 0)
+                break;
+
+            foreach (var entry in entries)
+                entry.DataSource = ConnectorSource;
+
+            allEntries.AddRange(entries);
+
+            // If we got fewer than MaxCount, we've fetched everything in this range
+            if (entries.Length < _config.MaxCount)
+                break;
+
+            // Find the oldest entry's date and paginate backwards
+            var oldestMs = entries.Min(e => e.Mills);
+            if (oldestMs <= 0)
+                break;
+
+            var oldestDate = DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime;
+
+            // Avoid infinite loop if the oldest date hasn't changed
+            if (currentTo.HasValue && oldestDate >= currentTo.Value)
+                break;
+
+            // Next page: fetch entries older than the oldest we've seen
+            currentTo = oldestDate.AddMilliseconds(-1);
+
+            // If we've gone past the requested 'from', stop
+            if (from.HasValue && currentTo < from)
+                break;
+
+            _logger.LogDebug(
+                "[{ConnectorSource}] Paginating glucose entries, fetched {Count} so far, next page before {Before:yyyy-MM-dd HH:mm:ss}",
+                ConnectorSource,
+                allEntries.Count,
+                currentTo);
         }
 
         _logger.LogInformation(
             "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
             ConnectorSource,
-            entries.Length);
+            allEntries.Count);
 
-        return entries;
+        return allEntries;
     }
 
     protected override async Task<IEnumerable<Treatment>> FetchTreatmentsAsync(
         DateTime? from, DateTime? to)
     {
-        var treatments = await FetchDataAsync<Treatment[]>(
-            BuildTreatmentsUrl(from, to),
-            "FetchTreatments");
+        var allTreatments = new List<Treatment>();
+        var currentTo = to;
 
-        if (treatments == null) return [];
-
-        foreach (var treatment in treatments)
+        while (true)
         {
-            treatment.DataSource = ConnectorSource;
+            var treatments = await FetchDataAsync<Treatment[]>(
+                BuildTreatmentsUrl(from, currentTo),
+                "FetchTreatments");
+
+            if (treatments == null || treatments.Length == 0)
+                break;
+
+            foreach (var treatment in treatments)
+                treatment.DataSource = ConnectorSource;
+
+            allTreatments.AddRange(treatments);
+
+            if (treatments.Length < _config.MaxCount)
+                break;
+
+            // Find the oldest treatment's created_at and paginate backwards.
+            // Use DateTimeOffset to ensure consistent UTC comparison regardless of system timezone.
+            var oldestDate = treatments
+                .Select(t => DateTimeOffset.TryParse(t.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
+                .Where(dt => dt.HasValue)
+                .Min();
+
+            if (!oldestDate.HasValue)
+                break;
+
+            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value)
+                break;
+
+            currentTo = oldestDate.Value.AddMilliseconds(-1);
+
+            if (from.HasValue && currentTo < from)
+                break;
+
+            _logger.LogDebug(
+                "[{ConnectorSource}] Paginating treatments, fetched {Count} so far, next page before {Before:yyyy-MM-dd HH:mm:ss}",
+                ConnectorSource,
+                allTreatments.Count,
+                currentTo);
         }
 
         _logger.LogInformation(
             "[{ConnectorSource}] Retrieved {Count} treatments from Nightscout",
             ConnectorSource,
-            treatments.Length);
+            allTreatments.Count);
 
-        return treatments;
+        return allTreatments;
     }
 
     private async Task<T?> FetchDataAsync<T>(string url, string operationName) where T : class

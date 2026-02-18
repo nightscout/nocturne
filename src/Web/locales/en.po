@@ -119,7 +119,6 @@ msgid "Pump Battery Change"
 msgstr "Pump Battery Change"
 
 #: src/lib/components/TreatmentEditModal.svelte
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Edit Treatment"
 msgstr "Edit Treatment"
 
@@ -162,6 +161,7 @@ msgstr "Absorption Time (minutes)"
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "Notes"
 msgstr "Notes"
@@ -352,7 +352,6 @@ msgid "Time"
 msgstr "Time"
 
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Blood Glucose"
 msgstr "Blood Glucose"
 
@@ -396,7 +395,6 @@ msgstr "Basal Value"
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/calendar/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
@@ -504,6 +502,7 @@ msgstr "Connection error"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/stores/realtime-store.svelte.ts
 #: src/lib/websocket/websocket-client.svelte.ts
@@ -1650,6 +1649,7 @@ msgstr "Additional Macros"
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/FoodEditor.svelte
 msgid "Fat (g)"
@@ -1657,6 +1657,7 @@ msgstr "Fat (g)"
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/routes/food/FoodEditor.svelte
 msgid "Protein (g)"
@@ -2853,6 +2854,7 @@ msgstr "Sensor Stop"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/settings/trackers/+page.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "Sensor"
@@ -2890,6 +2892,7 @@ msgstr "Battery"
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Automatic"
 msgstr "Automatic"
 
@@ -4471,6 +4474,7 @@ msgstr "Avg Before"
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/reports/agp/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "mg/dL"
@@ -4657,6 +4661,7 @@ msgstr "StaleData"
 
 #: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Normal"
 msgstr "Normal"
 
@@ -5239,6 +5244,10 @@ msgid "From Env"
 msgstr "From Env"
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Select..."
 msgstr "Select..."
 
@@ -5763,30 +5772,23 @@ msgstr "Unspecified {0}g"
 msgid "No foods added yet."
 msgstr "No foods added yet."
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "Invalid JSON"
-msgstr "Invalid JSON"
+#~ msgid "Invalid JSON"
+#~ msgstr "Invalid JSON"
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "New Treatment"
-msgstr "New Treatment"
+#~ msgid "New Treatment"
+#~ msgstr "New Treatment"
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "Edit the details of this treatment entry."
-msgstr "Edit the details of this treatment entry."
+#~ msgid "Edit the details of this treatment entry."
+#~ msgstr "Edit the details of this treatment entry."
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "Enter details for the new treatment."
-msgstr "Enter details for the new treatment."
+#~ msgid "Enter details for the new treatment."
+#~ msgstr "Enter details for the new treatment."
 
-#. placeholder {0}: treatment?._id ? "Edit the details of this treatment entry." : "Enter details for the new treatment."
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "{0} Changes will be saved to the database."
-msgstr "{0} Changes will be saved to the database."
+#~ msgid "{0} Changes will be saved to the database."
+#~ msgstr "{0} Changes will be saved to the database."
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "Select or enter event type..."
-msgstr "Select or enter event type..."
+#~ msgid "Select or enter event type..."
+#~ msgstr "Select or enter event type..."
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "<0/> Insulin (U)"
@@ -5797,30 +5799,25 @@ msgstr "<0/> Insulin (U)"
 msgid "Duration (min)"
 msgstr "Duration (min)"
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "<0/> Rate (U/hr)"
-msgstr "<0/> Rate (U/hr)"
+#~ msgid "<0/> Rate (U/hr)"
+#~ msgstr "<0/> Rate (U/hr)"
 
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "<0/> Carbs (g)"
 msgstr "<0/> Carbs (g)"
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "Profile name"
-msgstr "Profile name"
+#~ msgid "Profile name"
+#~ msgstr "Profile name"
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "<0/> Notes"
-msgstr "<0/> Notes"
+#~ msgid "<0/> Notes"
+#~ msgstr "<0/> Notes"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Add notes..."
 msgstr "Add notes..."
 
-#: src/lib/components/treatments/TreatmentEditDialog.svelte
-msgid "<0/> Additional Properties <1/>"
-msgstr "<0/> Additional Properties <1/>"
+#~ msgid "<0/> Additional Properties <1/>"
+#~ msgstr "<0/> Additional Properties <1/>"
 
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -8447,8 +8444,9 @@ msgstr "Mean"
 #~ msgid "<0/> Insulin & Carbs"
 #~ msgstr "<0/> Insulin & Carbs"
 
-#~ msgid "Basal Insulin"
-#~ msgstr "Basal Insulin"
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Basal Insulin"
+msgstr "Basal Insulin"
 
 #~ msgid "Total Daily Insulin"
 #~ msgstr "Total Daily Insulin"
@@ -9362,6 +9360,7 @@ msgstr "Configure measurement units and display formats"
 msgid "Blood glucose units"
 msgstr "Blood glucose units"
 
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "mmol/L"
 msgstr "mmol/L"
@@ -9618,6 +9617,7 @@ msgid "<0/> Edit Profile"
 msgstr "<0/> Edit Profile"
 
 #: src/lib/components/entries/BGCheckSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/routes/settings/profile/+page.svelte
 #: src/routes/settings/profile/+page.svelte
 msgid "Units"
@@ -12948,30 +12948,36 @@ msgstr "Data Quality"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "SensorStart"
 msgstr "SensorStart"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "SensorChange"
 msgstr "SensorChange"
 
 #: src/lib/components/icons/DeviceEventIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "SensorStop"
 msgstr "SensorStop"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "SiteChange"
 msgstr "SiteChange"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "InsulinChange"
 msgstr "InsulinChange"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/DeviceEventIcon.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "PumpBatteryChange"
 msgstr "PumpBatteryChange"
 
@@ -13345,6 +13351,7 @@ msgid "Based on {0} days of data ({1} recommended)"
 msgstr "Based on {0} days of data ({1} recommended)"
 
 #: src/lib/components/entries/BGCheckSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Finger"
 msgstr "Finger"
 
@@ -13365,6 +13372,7 @@ msgid "Dual Wave"
 msgstr "Dual Wave"
 
 #: src/lib/components/entries/BolusSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Bolus Type"
 msgstr "Bolus Type"
 
@@ -13386,6 +13394,7 @@ msgid "Delivered (U)"
 msgstr "Delivered (U)"
 
 #: src/lib/components/entries/BolusSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Insulin Type"
 msgstr "Insulin Type"
 
@@ -13398,6 +13407,7 @@ msgid "<0/> Carb Intake"
 msgstr "<0/> Carb Intake"
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Food Type"
 msgstr "Food Type"
 
@@ -13438,6 +13448,7 @@ msgid "Pump Resume"
 msgstr "Pump Resume"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Priming"
 msgstr "Priming"
 
@@ -13450,6 +13461,7 @@ msgid "Needle Priming"
 msgstr "Needle Priming"
 
 #: src/lib/components/entries/DeviceEventSection.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Rewind"
 msgstr "Rewind"
 
@@ -13566,3 +13578,150 @@ msgstr ""
 #: src/routes/reports/treatments/+page.svelte
 msgid "Value:"
 msgstr "Value:"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Square"
+msgstr "Square"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Dual"
+msgstr "Dual"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "MgDl"
+msgstr "MgDl"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Mmol"
+msgstr "Mmol"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "PodChange"
+msgstr "PodChange"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "ReservoirChange"
+msgstr "ReservoirChange"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "CannulaChange"
+msgstr "CannulaChange"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "TransmitterSensorInsert"
+msgstr "TransmitterSensorInsert"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "PodActivated"
+msgstr "PodActivated"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "PodDeactivated"
+msgstr "PodDeactivated"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "PumpSuspend"
+msgstr "PumpSuspend"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "PumpResume"
+msgstr "PumpResume"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "TubePriming"
+msgstr "TubePriming"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "NeedlePriming"
+msgstr "NeedlePriming"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "DateChanged"
+msgstr "DateChanged"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "TimeChanged"
+msgstr "TimeChanged"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "BolusMaxChanged"
+msgstr "BolusMaxChanged"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "BasalMaxChanged"
+msgstr "BasalMaxChanged"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "ProfileSwitch"
+msgstr "ProfileSwitch"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "<0/> Edit Record"
+msgstr "<0/> Edit Record"
+
+#. placeholder {0}: activeCategory.name.toLowerCase()
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Edit the details of this {0} record."
+msgstr "Edit the details of this {0} record."
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Programmed"
+msgstr "Programmed"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Delivered"
+msgstr "Delivered"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Absorption Time (min)"
+msgstr "Absorption Time (min)"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Carb Time (min)"
+msgstr "Carb Time (min)"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "<0/> Glucose"
+msgstr "<0/> Glucose"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Glucose Type"
+msgstr "Glucose Type"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "<0/> Text"
+msgstr "<0/> Text"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Note text..."
+msgstr "Note text..."
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "<0/> Event Type"
+msgstr "<0/> Event Type"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Additional notes..."
+msgstr "Additional notes..."
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "<0/> Linked Records <1/>"
+msgstr "<0/> Linked Records <1/>"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "No Record Selected"
+msgstr "No Record Selected"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Click on a row in the table to view and edit its details."
+msgstr "Click on a row in the table to view and edit its details."
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Record updated successfully"
+msgstr "Record updated successfully"
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Failed to update record"
+msgstr "Failed to update record"

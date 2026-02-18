@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { getRequestEvent, form, command, query } from '$app/server';
 import { invalid } from '@sveltejs/kit';
+import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent } from '$lib/api';
 
 /**
  * Input schema for date range queries (matches reports layout pattern)
@@ -187,5 +188,33 @@ export const bulkDeleteEntries = command(
 			message: `Successfully deleted ${deletedIds.length} entr${deletedIds.length !== 1 ? 'ies' : 'y'}`,
 			deletedEntryIds: deletedIds,
 		};
+	}
+);
+
+/**
+ * Update a single entry (v4: dispatches to the correct endpoint by kind)
+ */
+export const updateEntry = command(
+	z.object({
+		kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent']),
+		id: z.string().min(1),
+		data: z.record(z.string(), z.unknown()),
+	}),
+	async ({ kind, id, data }) => {
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
+
+		switch (kind) {
+			case 'bolus':
+				return await apiClient.insulin.updateBolus(id, data as Bolus);
+			case 'carbs':
+				return await apiClient.nutrition.updateCarbIntake(id, data as CarbIntake);
+			case 'bgCheck':
+				return await apiClient.observations.updateBGCheck(id, data as BGCheck);
+			case 'note':
+				return await apiClient.observations.updateNote(id, data as Note);
+			case 'deviceEvent':
+				return await apiClient.observations.updateDeviceEvent(id, data as DeviceEvent);
+		}
 	}
 );

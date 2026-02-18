@@ -55,9 +55,10 @@
     rows: EntryRecord[];
     onDelete?: (row: EntryRecord) => void;
     onBulkDelete?: (rows: EntryRecord[]) => void;
+    onRowClick?: (row: EntryRecord) => void;
   }
 
-  let { rows, onDelete, onBulkDelete }: Props = $props();
+  let { rows, onDelete, onBulkDelete, onRowClick }: Props = $props();
 
   // Table state
   let sorting = $state<SortingState>([{ id: "time", desc: true }]);
@@ -774,7 +775,15 @@
       </Table.Header>
       <Table.Body>
         {#each table.getRowModel().rows as row (row.id)}
-          <Table.Row data-state={row.getIsSelected() ? "selected" : undefined}>
+          <Table.Row
+            data-state={row.getIsSelected() ? "selected" : undefined}
+            class={onRowClick ? "cursor-pointer" : ""}
+            onclick={(e: MouseEvent) => {
+              const target = e.target as HTMLElement;
+              if (target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
+              onRowClick?.(row.original);
+            }}
+          >
             {#each row.getVisibleCells() as cell}
               <Table.Cell class="py-2">
                 <FlexRender

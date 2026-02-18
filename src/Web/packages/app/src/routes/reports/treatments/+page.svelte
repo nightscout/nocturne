@@ -4,6 +4,7 @@
   import type { TreatmentSummary } from "$lib/api";
   import {
     TreatmentsDataTable,
+    TreatmentEditDialog,
     TreatmentCategoryTabs,
     TreatmentStatsCard,
   } from "$lib/components/treatments";
@@ -36,6 +37,7 @@
     getTreatmentsData,
     deleteEntryForm,
     bulkDeleteEntries,
+    updateEntry,
   } from "./data.remote";
 
   // Get shared date params from context (set by reports layout)
@@ -86,6 +88,20 @@
   let showBulkDeleteConfirm = $state(false);
   let rowToDelete = $state<EntryRecord | null>(null);
   let rowsToDelete = $state<EntryRecord[]>([]);
+
+  // Edit dialog states
+  let editDialogOpen = $state(false);
+  let editRecord = $state<EntryRecord | null>(null);
+  let editLoading = $state(false);
+
+  const editCorrelatedRecords = $derived.by(() => {
+    if (!editRecord?.data.correlationId) return [];
+    return allRows.filter(
+      (r) =>
+        r.data.correlationId === editRecord!.data.correlationId &&
+        r.data.id !== editRecord!.data.id,
+    );
+  });
 
   // Loading states
   let isLoading = $state(false);
@@ -168,6 +184,42 @@
   function confirmBulkDelete(rows: EntryRecord[]) {
     rowsToDelete = rows;
     showBulkDeleteConfirm = true;
+  }
+
+  function handleRowClick(record: EntryRecord) {
+    editRecord = record;
+    editDialogOpen = true;
+  }
+
+  function handleEditClose() {
+    editDialogOpen = false;
+    editRecord = null;
+  }
+
+  async function handleEditSave(record: EntryRecord) {
+    editLoading = true;
+    try {
+      await updateEntry({
+        kind: record.kind,
+        id: record.data.id!,
+        data: record.data as Record<string, unknown>,
+      });
+      toast.success("Record updated successfully");
+      editDialogOpen = false;
+      editRecord = null;
+      reportsResource.refresh();
+    } catch (error) {
+      console.error("Update error:", error);
+      toast.error("Failed to update record");
+    } finally {
+      editLoading = false;
+    }
+  }
+
+  async function handleEditDelete(record: EntryRecord) {
+    editDialogOpen = false;
+    editRecord = null;
+    confirmDelete(record);
   }
 
   let hasActiveFilters = $derived(
@@ -323,6 +375,7 @@
         rows={filteredRows}
         onDelete={confirmDelete}
         onBulkDelete={confirmBulkDelete}
+        onRowClick={handleRowClick}
       />
     </Card.Content>
   </Card.Root>
@@ -531,4 +584,15 @@
     </Card.Root>
   </div>
 {/if}
+
+<!-- Edit Record Dialog -->
+<TreatmentEditDialog
+  bind:open={editDialogOpen}
+  record={editRecord}
+  correlatedRecords={editCorrelatedRecords}
+  isLoading={editLoading}
+  onClose={handleEditClose}
+  onSave={handleEditSave}
+  onDelete={handleEditDelete}
+/>
 {/if}

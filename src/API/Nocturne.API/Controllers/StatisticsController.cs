@@ -733,9 +733,10 @@ public class StatisticsController : ControllerBase
                 }
             }
 
-            // Cache the result until the next day at midnight (daily expiration)
-            var tomorrow = DateTime.UtcNow.Date.AddDays(1);
-            await _cacheService.SetAsync(cacheKey, result, tomorrow, cancellationToken);
+            // Cache for 5 minutes — long enough to absorb rapid dashboard refreshes,
+            // short enough that newly-imported connector data (basal StateSpans, etc.) appears promptly.
+            var expiry = DateTime.UtcNow.AddMinutes(5);
+            await _cacheService.SetAsync(cacheKey, result, expiry, cancellationToken);
 
             return Ok(result);
         }
