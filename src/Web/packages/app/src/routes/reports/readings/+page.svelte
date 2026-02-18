@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GlucoseChartCard } from "$lib/components/dashboard/glucose-chart";
-  import { getReportsData } from "$lib/data/reports.remote";
+  import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 

@@ -10,7 +10,7 @@
   } from "lucide-svelte";
   import { formatTime, timeAgo } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getBatteryCardData } from "$lib/data/battery.remote";
+  import { getBatteryCardData } from "$api/battery.remote";
 
   interface Props {
     /** Override lastUpdated from props instead of realtime store */

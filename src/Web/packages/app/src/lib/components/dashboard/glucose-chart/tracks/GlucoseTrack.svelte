@@ -3,7 +3,7 @@
   import { curveMonotoneX } from "d3";
   import type { ScaleLinear } from "d3-scale";
   import PredictionVisualizations from "../../PredictionVisualizations.svelte";
-  import type { PredictionData } from "$lib/data/predictions.remote";
+  import type { PredictionData } from "$api/predictions.remote";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
 
   interface GlucoseDataPoint {

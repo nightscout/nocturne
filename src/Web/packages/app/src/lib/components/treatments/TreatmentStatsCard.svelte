@@ -2,13 +2,14 @@
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import type { TreatmentSummary } from "$lib/api";
-  import type { V4TreatmentCounts } from "$lib/constants/treatment-categories";
+  import type { EntryCategoryId } from "$lib/constants/entry-categories";
+  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import { Activity } from "lucide-svelte";
   import { BolusIcon, CarbsIcon } from "$lib/components/icons";
 
   interface Props {
     treatmentSummary: TreatmentSummary;
-    counts: V4TreatmentCounts;
+    counts: Record<EntryCategoryId | "all", number>;
     dateRange: { from: string; to: string };
   }
 
@@ -51,7 +52,7 @@
           <p class="text-sm font-medium text-muted-foreground">
             Total Records
           </p>
-          <p class="text-2xl font-bold tabular-nums">{counts.total}</p>
+          <p class="text-2xl font-bold tabular-nums">{counts.all}</p>
         </div>
         <div
           class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"
@@ -60,12 +61,13 @@
         </div>
       </div>
       <div class="mt-2 flex flex-wrap gap-1">
-        <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-          Boluses <span class="opacity-70">{counts.bolus}</span>
-        </Badge>
-        <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-          Carb Intakes <span class="opacity-70">{counts.carbs}</span>
-        </Badge>
+        {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+          {#if counts[id as EntryCategoryId] > 0}
+            <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
+              {cat.name} <span class="opacity-70">{counts[id as EntryCategoryId]}</span>
+            </Badge>
+          {/if}
+        {/each}
       </div>
     </Card.Content>
   </Card.Root>

@@ -18,7 +18,7 @@
     WIDGET_ICONS,
     DEFAULT_TOP_WIDGETS,
   } from "$lib/types/dashboard-widgets";
-  import { fetchWidgetDefinitions } from "$lib/data/metadata.remote";
+  import { getWidgetDefinitions } from "$api/generated";
   import { GripVertical, LayoutGrid, Plus, X } from "lucide-svelte";
   interface Props {
     /** Currently selected widget IDs (ordered) */
@@ -125,12 +125,12 @@
     </CardDescription>
   </CardHeader>
   <CardContent class="space-y-4">
-    {#await fetchWidgetDefinitions()}
+    {#await getWidgetDefinitions()}
       <div class="text-center py-8 text-muted-foreground">
         <p class="text-sm">Loading widget definitions...</p>
       </div>
     {:then allDefinitions}
-      {@const topWidgetDefinitions = allDefinitions.filter(
+      {@const topWidgetDefinitions = (allDefinitions.definitions ?? []).filter(
         (w) => w.placement === WidgetPlacement.Top
       )}
       {@const availableWidgets = topWidgetDefinitions.filter(

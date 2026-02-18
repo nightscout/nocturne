@@ -9,13 +9,13 @@
 		SelectTrigger
 	} from '$lib/components/ui/select';
 	import {
-		getCompressionLowSuggestions,
-		getCompressionLowSuggestion,
-		acceptCompressionLow,
-		dismissCompressionLow,
-		deleteCompressionLow,
-		triggerCompressionLowDetection
-	} from '$lib/data/compression-lows.remote';
+		getSuggestions as getCompressionLowSuggestions,
+		getSuggestion as getCompressionLowSuggestion,
+		acceptSuggestion as acceptCompressionLow,
+		dismissSuggestion as dismissCompressionLow,
+		deleteSuggestion as deleteCompressionLow,
+		triggerDetection as triggerCompressionLowDetection
+	} from '$api/generated/compressionLows.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
 	import { GlucoseChartCard } from '$lib/components/dashboard/glucose-chart';
 	import Check from 'lucide-svelte/icons/check';
@@ -87,8 +87,10 @@
 			const currentIndex = filteredSuggestions.findIndex((s) => s.id === selectedSuggestion);
 			await acceptCompressionLow({
 				id: selectedSuggestion,
-				startMills: brushDomain[0].getTime(),
-				endMills: brushDomain[1].getTime()
+				request: {
+					startMills: brushDomain[0].getTime(),
+					endMills: brushDomain[1].getTime()
+				}
 			});
 			suggestionsResource.refresh();
 			selectNextSuggestion(currentIndex);

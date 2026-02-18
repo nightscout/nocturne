@@ -80,7 +80,7 @@ export const getEntries = query(
 /**
  * Get boluses and carb intakes for a date range with pagination support
  */
-export const getTreatments = query(
+export const getBolusesAndCarbs = query(
 	DateRangeSchema.optional(),
 	async (input) => {
 		const { locals } = getRequestEvent();

@@ -8,9 +8,9 @@
 		CardTitle
 	} from '$lib/components/ui/card';
 	import {
-		getCompressionLowSuggestions,
-		triggerCompressionLowDetection
-	} from '$lib/data/compression-lows.remote';
+		getSuggestions as getCompressionLowSuggestions,
+		triggerDetection as triggerCompressionLowDetection
+	} from '$api/generated/compressionLows.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
 	import ShieldCheck from 'lucide-svelte/icons/shield-check';
 	import Activity from 'lucide-svelte/icons/activity';

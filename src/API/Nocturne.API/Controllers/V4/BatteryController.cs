@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models.Battery;
 
@@ -28,6 +29,7 @@ public class BatteryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Current battery status for all devices</returns>
     [HttpGet("current")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(CurrentBatteryStatus), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<CurrentBatteryStatus>> GetCurrentBatteryStatus(
@@ -65,6 +67,7 @@ public class BatteryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Battery readings for the specified period</returns>
     [HttpGet("readings")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<BatteryReading>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<BatteryReading>>> GetBatteryReadings(
@@ -108,6 +111,7 @@ public class BatteryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Battery statistics for the specified period</returns>
     [HttpGet("statistics")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<BatteryStatistics>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<BatteryStatistics>>> GetBatteryStatistics(
@@ -152,6 +156,7 @@ public class BatteryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Charge cycles for the specified period</returns>
     [HttpGet("cycles")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<ChargeCycle>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<ChargeCycle>>> GetChargeCycles(
@@ -195,6 +200,7 @@ public class BatteryController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of device identifiers</returns>
     [HttpGet("devices")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<string>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<string>>> GetKnownDevices(

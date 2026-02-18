@@ -12,7 +12,7 @@
   import {
     createNewFood,
     updateExistingFood,
-  } from "$lib/data/treatment-foods.remote";
+  } from "$api/treatment-foods.remote";
 
   interface Props {
     /** Whether the dialog is open */

@@ -7,7 +7,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Popover from "$lib/components/ui/popover";
   import { Settings, RotateCcw } from "lucide-svelte";
-  import type { ClockSettings } from "$lib/api/api-client";
+  import type { ClockSettings } from "$lib/api";
 
   interface Props {
     settings: ClockSettings;

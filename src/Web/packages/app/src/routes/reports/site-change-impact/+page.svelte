@@ -21,7 +21,7 @@
   } from "lucide-svelte";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
-  import { getSiteChangeImpact } from "$lib/data/reports.remote";
+  import { getSiteChangeImpact } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 

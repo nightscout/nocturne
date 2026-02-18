@@ -7,7 +7,7 @@
     getWebhookSettings,
     saveWebhookSettings,
     testWebhookSettings,
-  } from "$lib/data/notifications/webhooks.remote";
+  } from "$api/notifications/webhooks.remote";
   import WebhookSettingsModal from "./WebhookSettingsModal.svelte";
 
   const settingsQuery = $derived(getWebhookSettings());

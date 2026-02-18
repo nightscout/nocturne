@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
@@ -36,6 +37,7 @@ public class NotificationsController : ControllerBase
     /// </summary>
     /// <returns>List of active notifications</returns>
     [HttpGet]
+    [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(List<InAppNotificationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -63,6 +65,7 @@ public class NotificationsController : ControllerBase
     /// <param name="actionId">The action ID to execute</param>
     /// <returns>No content if successful</returns>
     [HttpPost("{id:guid}/actions/{actionId}")]
+    [RemoteCommand(Invalidates = ["GetNotifications"])]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -104,6 +107,7 @@ public class NotificationsController : ControllerBase
     /// <param name="id">The notification ID to dismiss</param>
     /// <returns>No content if successful</returns>
     [HttpDelete("{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetNotifications"])]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

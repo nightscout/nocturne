@@ -56,6 +56,8 @@ msgstr "Carb Correction"
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/treatments/+page.svelte
 msgid "Note"
 msgstr "Note"
 
@@ -356,7 +358,6 @@ msgstr "Blood Glucose"
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "Insulin"
 msgstr "Insulin"
@@ -375,7 +376,6 @@ msgstr "Fat"
 
 #: src/lib/components/TreatmentsTable.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/routes/settings/trackers/+page.svelte
@@ -504,6 +504,7 @@ msgstr "Connection error"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/stores/realtime-store.svelte.ts
 #: src/lib/websocket/websocket-client.svelte.ts
 msgid "Announcement"
@@ -740,7 +741,8 @@ msgstr "Carbs:"
 #. placeholder {0}: marker.carbs
 #. placeholder {0}: carbs
 #. placeholder {0}: totalCarbs
-#. placeholder {0}: meal.carbs ?? 0
+#. placeholder {0}: carbIntake.carbs ?? 0
+#. placeholder {0}: totalCarbs
 #. placeholder {0}: foodEntry.protein
 #. placeholder {0}: scaledProtein()
 #. placeholder {0}: foodEntry.protein
@@ -763,11 +765,11 @@ msgstr "Carbs:"
 #. placeholder {0}: totalCarbs
 #. placeholder {0}: treatmentStats.totalCarbs.toFixed(0)
 #. placeholder {0}: treatment.carbs
-#. placeholder {0}: formatCarbDisplay(row.carbs)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -790,7 +792,6 @@ msgstr "Carbs:"
 #: src/routes/meals/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 msgid "{0}g"
 msgstr "{0}g"
 
@@ -814,7 +815,6 @@ msgstr "Insulin:"
 #. placeholder {0}: dayTotalInsulin.toFixed(1)
 #. placeholder {0}: meal.correlatedBolus.insulin.toFixed(1)
 #. placeholder {0}: treatment.insulin.toFixed(2)
-#. placeholder {0}: formatInsulinDisplay(row.insulin)
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
@@ -831,7 +831,6 @@ msgstr "Insulin:"
 #: src/routes/meals/+page.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 msgid "{0}U"
 msgstr "{0}U"
 
@@ -860,6 +859,8 @@ msgstr "Time in Range"
 #~ msgid "Total Readings"
 #~ msgstr "Total Readings"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
+#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 msgid "Total Carbs"
 msgstr "Total Carbs"
@@ -1288,6 +1289,7 @@ msgstr "Food Editor - Nightscout"
 msgid "Food Editor"
 msgstr "Food Editor"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 #: src/routes/food/+page.svelte
 msgid "<0/> Add Food"
@@ -1679,12 +1681,9 @@ msgstr "Your database"
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
-#: src/lib/components/treatments/TreatmentCategoryTabs.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/food/FoodList.svelte
 #: src/routes/food/QuickPickItem.svelte
-#: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "Carbs"
@@ -1857,6 +1856,7 @@ msgstr "Failed to update treatment"
 msgid "No foods attributed"
 msgstr "No foods attributed"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
@@ -1892,9 +1892,8 @@ msgstr "Failed to dismiss match"
 msgid "Meals - Nocturne"
 msgstr "Meals - Nocturne"
 
-#: src/routes/meals/+page.svelte
-msgid "Review carb treatments and add food breakdowns for better meal documentation"
-msgstr "Review carb treatments and add food breakdowns for better meal documentation"
+#~ msgid "Review carb treatments and add food breakdowns for better meal documentation"
+#~ msgstr "Review carb treatments and add food breakdowns for better meal documentation"
 
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/meals/+page.svelte
@@ -1905,9 +1904,8 @@ msgstr "Meals"
 msgid "Meal Attribution"
 msgstr "Meal Attribution"
 
-#: src/routes/meals/+page.svelte
-msgid "Pair carb treatments with foods when you want more detail."
-msgstr "Pair carb treatments with foods when you want more detail."
+#~ msgid "Pair carb treatments with foods when you want more detail."
+#~ msgstr "Pair carb treatments with foods when you want more detail."
 
 #: src/routes/meals/+page.svelte
 msgid "Unattributed only"
@@ -2826,13 +2824,9 @@ msgstr "Temp Basal"
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
-#: src/lib/components/treatments/TreatmentCategoryTabs.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/reports/day-in-review/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 msgid "Bolus"
 msgstr "Bolus"
@@ -3222,6 +3216,8 @@ msgstr "Question"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/treatments/+page.svelte
 msgid "BG Check"
 msgstr "BG Check"
 
@@ -3630,6 +3626,7 @@ msgstr "<0/> Add"
 
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
 msgid "Value"
 msgstr "Value"
 
@@ -5724,36 +5721,44 @@ msgstr "<0/> Create new event type..."
 msgid "<0/> None (don't create event)"
 msgstr "<0/> None (don't create event)"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Unable to load food breakdown."
 msgstr "Unable to load food breakdown."
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Food Breakdown"
 msgstr "Food Breakdown"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Add foods to match carbs when it helps. Partial attribution is fine."
 msgstr "Add foods to match carbs when it helps. Partial attribution is fine."
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Loading breakdown..."
 msgstr "Loading breakdown..."
 
-#: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
-msgid "Treatment Total"
-msgstr "Treatment Total"
+#~ msgid "Treatment Total"
+#~ msgstr "Treatment Total"
 
 #. placeholder {0}: breakdown.attributedCarbs
+#. placeholder {0}: breakdown.attributedCarbs
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Attributed {0}g"
 msgstr "Attributed {0}g"
 
 #. placeholder {0}: breakdown.unspecifiedCarbs
+#. placeholder {0}: breakdown.unspecifiedCarbs
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "Unspecified {0}g"
 msgstr "Unspecified {0}g"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/lib/components/treatments/TreatmentFoodBreakdown.svelte
 msgid "No foods added yet."
 msgstr "No foods added yet."
@@ -5981,9 +5986,8 @@ msgstr "Failed to update food entry"
 msgid "Edit Food Entry"
 msgstr "Edit Food Entry"
 
-#: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
-msgid "Treatment total"
-msgstr "Treatment total"
+#~ msgid "Treatment total"
+#~ msgstr "Treatment total"
 
 #. placeholder {0}: carbsPerPortion
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
@@ -8500,13 +8504,12 @@ msgstr "View and manage your diabetes treatments, insulin doses, and carb entrie
 msgid "{0} treatments"
 msgstr "{0} treatments"
 
-#: src/routes/reports/treatments/+page.svelte
-msgid ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
-msgstr ""
-"Review and manage your insulin doses, carb entries, and device events. Use\n"
-"filters to find specific treatments."
+#~ msgid ""
+#~ "Review and manage your insulin doses, carb entries, and device events. Use\n"
+#~ "filters to find specific treatments."
+#~ msgstr ""
+#~ "Review and manage your insulin doses, carb entries, and device events. Use\n"
+#~ "filters to find specific treatments."
 
 #: src/routes/reports/treatments/+page.svelte
 msgid "Search"
@@ -8536,15 +8539,11 @@ msgstr "Time:"
 msgid "Type:"
 msgstr "Type:"
 
-#. placeholder {0}: formatInsulinDisplay(rowToDelete.insulin)
-#: src/routes/reports/treatments/+page.svelte
-msgid "<0>Insulin:</0> {0}U"
-msgstr "<0>Insulin:</0> {0}U"
+#~ msgid "<0>Insulin:</0> {0}U"
+#~ msgstr "<0>Insulin:</0> {0}U"
 
-#. placeholder {0}: formatCarbDisplay(rowToDelete.carbs)
-#: src/routes/reports/treatments/+page.svelte
-msgid "<0>Carbs:</0> {0}g"
-msgstr "<0>Carbs:</0> {0}g"
+#~ msgid "<0>Carbs:</0> {0}g"
+#~ msgstr "<0>Carbs:</0> {0}g"
 
 #~ msgid "Treatment deleted successfully"
 #~ msgstr "Treatment deleted successfully"
@@ -13229,9 +13228,7 @@ msgid "Credentials"
 msgstr "Credentials"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
-#: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/reports/day-in-review/+page.svelte
-#: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 msgid "Carb Intake"
 msgstr "Carb Intake"
@@ -13247,13 +13244,11 @@ msgstr "Carb Intake"
 msgid "Report generated from {0} boluses between {1} and {2}"
 msgstr "Report generated from {0} boluses between {1} and {2}"
 
-#: src/lib/components/treatments/TreatmentStatsCard.svelte
-msgid "Boluses <0/>"
-msgstr "Boluses <0/>"
+#~ msgid "Boluses <0/>"
+#~ msgstr "Boluses <0/>"
 
-#: src/lib/components/treatments/TreatmentStatsCard.svelte
-msgid "Carb Intakes <0/>"
-msgstr "Carb Intakes <0/>"
+#~ msgid "Carb Intakes <0/>"
+#~ msgstr "Carb Intakes <0/>"
 
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/reports/treatments/+page.svelte
@@ -13531,6 +13526,8 @@ msgid "Last 24 hours"
 msgstr "Last 24 hours"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
+#: src/lib/components/treatments/TreatmentsDataTable.svelte
+#: src/routes/reports/treatments/+page.svelte
 msgid "Device Event"
 msgstr "Device Event"
 
@@ -13545,3 +13542,27 @@ msgstr "Multiple Entries"
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentDisambiguationDialog.svelte
 msgid "Several entries occurred around this time. Select one to edit."
 msgstr "Several entries occurred around this time. Select one to edit."
+
+#: src/routes/meals/+page.svelte
+msgid "Review carb intake records and add food breakdowns for better meal documentation"
+msgstr "Review carb intake records and add food breakdowns for better meal documentation"
+
+#: src/routes/meals/+page.svelte
+msgid "Pair carb intakes with foods when you want more detail."
+msgstr "Pair carb intakes with foods when you want more detail."
+
+#: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
+msgid "Carb intake total"
+msgstr "Carb intake total"
+
+#: src/routes/reports/treatments/+page.svelte
+msgid ""
+"Review and manage your insulin doses, carb entries, BG checks, notes, and\n"
+"device events. Use filters to find specific records."
+msgstr ""
+"Review and manage your insulin doses, carb entries, BG checks, notes, and\n"
+"device events. Use filters to find specific records."
+
+#: src/routes/reports/treatments/+page.svelte
+msgid "Value:"
+msgstr "Value:"

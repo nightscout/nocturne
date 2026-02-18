@@ -397,9 +397,9 @@ export function processCAGE(
 	}
 
 	const lastChange = siteChanges[0];
-	const treatmentDate = lastChange.mills ?? 0;
+	const eventDate = lastChange.mills ?? 0;
 
-	const ageMs = now - treatmentDate;
+	const ageMs = now - eventDate;
 	const ageHours = Math.floor(ageMs / HOURS(1));
 	const ageDays = Math.floor(ageHours / 24);
 	const remainingHours = ageHours % 24;
@@ -427,13 +427,13 @@ export function processCAGE(
 		days: ageDays,
 		hours: remainingHours,
 		timeRemaining: urgentThreshold - ageHours,
-		treatmentDate,
+		eventDate,
 		notes: lastChange.notes,
 		display,
 		label: 'CAGE',
 		info: [],
 		level,
-		lastUpdated: treatmentDate
+		lastUpdated: eventDate
 	};
 }
 
@@ -463,9 +463,9 @@ export function processSAGE(
 	}
 
 	const lastEvent = sensorEvents[0];
-	const treatmentDate = lastEvent.mills ?? 0;
+	const eventDate = lastEvent.mills ?? 0;
 
-	const ageMs = now - treatmentDate;
+	const ageMs = now - eventDate;
 	const ageHours = Math.floor(ageMs / HOURS(1));
 	const ageDays = Math.floor(ageHours / 24);
 	const remainingHours = ageHours % 24;
@@ -493,14 +493,14 @@ export function processSAGE(
 		days: ageDays,
 		hours: remainingHours,
 		timeRemaining: urgentThreshold - ageHours,
-		treatmentDate,
+		eventDate,
 		notes: lastEvent.notes,
 		eventType: lastEvent.eventType,
 		display,
 		label: 'SAGE',
 		info: [],
 		level,
-		lastUpdated: treatmentDate
+		lastUpdated: eventDate
 	};
 }
 

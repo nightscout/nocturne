@@ -108,15 +108,13 @@ export const getPredictionStatus = query(z.object({}), async () => {
 		const response = await apiClient.predictions.getStatus();
 		return {
 			available: response.available ?? false,
-			version: response.version ?? null,
-			healthCheck: response.healthCheck ?? null,
+			source: response.source ?? null,
 		};
 	} catch (err) {
 		console.error('Error checking prediction status:', err);
 		return {
 			available: false,
-			version: null,
-			healthCheck: null,
+			source: null,
 		};
 	}
 });

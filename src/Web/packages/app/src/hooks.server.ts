@@ -1,6 +1,6 @@
 import type { Handle } from "@sveltejs/kit";
 import { randomUUID } from "$lib/utils";
-import { ApiClient } from "$lib/api/api-client";
+import { ApiClient } from "$lib/api/api-client.generated";
 import type { HandleServerError } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { env as publicEnv } from "$env/dynamic/public";

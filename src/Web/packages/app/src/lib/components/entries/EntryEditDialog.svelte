@@ -28,12 +28,12 @@
     createBolus,
     updateBolus,
     deleteBolus,
-  } from "$lib/data/generated/insulins.generated.remote";
+  } from "$api/generated/insulins.generated.remote";
   import {
     createCarbIntake,
     updateCarbIntake,
     deleteCarbIntake,
-  } from "$lib/data/generated/nutritions.generated.remote";
+  } from "$api/generated/nutritions.generated.remote";
   import {
     createBGCheck,
     updateBGCheck,
@@ -44,7 +44,7 @@
     createDeviceEvent,
     updateDeviceEvent,
     deleteDeviceEvent,
-  } from "$lib/data/generated/observations.generated.remote";
+  } from "$api/generated/observations.generated.remote";
 
   interface Sections {
     bolus: Partial<Bolus> | null;

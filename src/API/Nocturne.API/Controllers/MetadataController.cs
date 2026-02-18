@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -11,6 +12,7 @@ namespace Nocturne.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Tags("Metadata")]
 public class MetadataController : ControllerBase
 {
     /// <summary>
@@ -19,6 +21,7 @@ public class MetadataController : ControllerBase
     /// </summary>
     /// <returns>WebSocket events metadata</returns>
     [HttpGet("websocket-events")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(WebSocketEventsMetadata), 200)]
     public ActionResult<WebSocketEventsMetadata> GetWebSocketEvents()
     {
@@ -37,6 +40,7 @@ public class MetadataController : ControllerBase
     /// </summary>
     /// <returns>External URLs configuration</returns>
     [HttpGet("external-urls")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(ExternalUrls), 200)]
     public ActionResult<ExternalUrls> GetExternalUrls()
     {
@@ -62,6 +66,7 @@ public class MetadataController : ControllerBase
     /// </summary>
     /// <returns>Treatment event types metadata</returns>
     [HttpGet("treatment-event-types")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(TreatmentEventTypesMetadata), 200)]
     public ActionResult<TreatmentEventTypesMetadata> GetTreatmentEventTypes()
     {
@@ -81,6 +86,7 @@ public class MetadataController : ControllerBase
     /// </summary>
     /// <returns>State span types metadata</returns>
     [HttpGet("state-span-types")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(StateSpanTypesMetadata), 200)]
     public ActionResult<StateSpanTypesMetadata> GetStateSpanTypes()
     {
@@ -103,6 +109,7 @@ public class MetadataController : ControllerBase
     /// </summary>
     /// <returns>Statistics types metadata</returns>
     [HttpGet("statistics-types")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(StatisticsTypesMetadata), 200)]
     public ActionResult<StatisticsTypesMetadata> GetStatisticsTypes()
     {
@@ -120,6 +127,7 @@ public class MetadataController : ControllerBase
     /// </summary>
     /// <returns>Widget definitions metadata</returns>
     [HttpGet("widget-definitions")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(WidgetDefinitionsMetadata), 200)]
     public ActionResult<WidgetDefinitionsMetadata> GetWidgetDefinitions()
     {

@@ -14,7 +14,7 @@
     type ClockElementType,
     type InternalElement,
   } from "$lib/clock-builder";
-  import type { ClockElement } from "$lib/api/api-client";
+  import type { ClockElement } from "$lib/api";
 
   interface Props {
     element: InternalElement;

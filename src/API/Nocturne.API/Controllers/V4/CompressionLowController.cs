@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -11,6 +12,7 @@ namespace Nocturne.API.Controllers.V4;
 [ApiController]
 [Route("api/v4/compression-lows")]
 [Authorize]
+[Tags("V4 Compression Lows")]
 public class CompressionLowController : ControllerBase
 {
     private readonly ICompressionLowService _compressionLowService;
@@ -28,6 +30,7 @@ public class CompressionLowController : ControllerBase
     /// Get compression low suggestions with optional filtering
     /// </summary>
     [HttpGet("suggestions")]
+    [RemoteQuery]
     public async Task<ActionResult<IEnumerable<CompressionLowSuggestion>>> GetSuggestions(
         [FromQuery] CompressionLowStatus? status = null,
         [FromQuery] string? nightOf = null,
@@ -46,6 +49,7 @@ public class CompressionLowController : ControllerBase
     /// Get a single suggestion with glucose entries for charting
     /// </summary>
     [HttpGet("suggestions/{id:guid}")]
+    [RemoteQuery]
     public async Task<ActionResult<CompressionLowSuggestionWithEntries>> GetSuggestion(
         Guid id,
         CancellationToken cancellationToken = default)
@@ -60,6 +64,7 @@ public class CompressionLowController : ControllerBase
     /// Accept a suggestion with adjusted bounds
     /// </summary>
     [HttpPost("suggestions/{id:guid}/accept")]
+    [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -84,6 +89,7 @@ public class CompressionLowController : ControllerBase
     /// Dismiss a suggestion
     /// </summary>
     [HttpPost("suggestions/{id:guid}/dismiss")]
+    [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -106,6 +112,7 @@ public class CompressionLowController : ControllerBase
     /// Delete a suggestion and its associated state span
     /// </summary>
     [HttpDelete("suggestions/{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSuggestion(
@@ -131,6 +138,7 @@ public class CompressionLowController : ControllerBase
     /// When using a range, detection runs for each night in the range (inclusive).
     /// </remarks>
     [HttpPost("detect")]
+    [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(typeof(DetectionResult), StatusCodes.Status200OK)]
     public async Task<ActionResult<DetectionResult>> TriggerDetection(
         [FromBody] TriggerDetectionRequest request,

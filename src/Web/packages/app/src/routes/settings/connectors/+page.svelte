@@ -1,16 +1,20 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import {
-    getServicesOverview,
-    getUploaderSetup,
     deleteDemoData as deleteDemoDataRemote,
     deleteDataSourceData as deleteDataSourceDataRemote,
-    getConnectorStatuses,
+  } from "$api/services.remote";
+  import {
+    getServicesOverview,
+    getUploaderSetup,
     getConnectorCapabilities,
+  } from "$api/generated/services.generated.remote";
+  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
+  import {
     startDeduplicationJob,
-    getDeduplicationJobStatus,
-    cancelDeduplicationJob,
-  } from "$lib/data/services.remote";
+    getJobStatus as getDeduplicationJobStatus,
+    cancelJob as cancelDeduplicationJob,
+  } from "$api/generated/deduplications.generated.remote";
   import type {
     ServicesOverview,
     UploaderApp,
@@ -260,13 +264,12 @@
 
     try {
       const result = await startDeduplicationJob();
-      if (result.success && result.jobId) {
+      if (result.jobId) {
         deduplicationJobId = result.jobId;
         // Start polling for status
         startDeduplicationPolling();
       } else {
-        deduplicationError =
-          result.error ?? "Failed to start deduplication job";
+        deduplicationError = "Failed to start deduplication job";
         isDeduplicating = false;
       }
     } catch (e) {
@@ -318,7 +321,7 @@
 
     try {
       const result = await cancelDeduplicationJob(deduplicationJobId);
-      if (result.success) {
+      if (result.cancelled) {
         stopDeduplicationPolling();
         isDeduplicating = false;
       }

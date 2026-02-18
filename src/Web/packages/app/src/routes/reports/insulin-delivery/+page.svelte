@@ -25,8 +25,8 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
-  import { getReportsData } from "$lib/data/reports.remote";
-  import { getMultiPeriodStatistics } from "$lib/data/generated";
+  import { getReportsData } from "$api/reports.remote";
+  import { getMultiPeriodStatistics } from "$api/generated";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resource } from "runed";

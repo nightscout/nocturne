@@ -17,7 +17,7 @@
   import {
     getPredictions,
     type PredictionData,
-  } from "$lib/data/predictions.remote";
+  } from "$api/predictions.remote";
   import { getDirectionInfo } from "$lib/utils";
 
   const realtimeStore = getRealtimeStore();

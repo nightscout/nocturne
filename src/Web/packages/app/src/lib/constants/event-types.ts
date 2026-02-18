@@ -2,7 +2,7 @@
  * Event types module - exports types and utilities for treatment event types.
  *
  * The actual configuration data should be fetched from the backend using
- * the remote function in `$lib/data/event-types.remote.ts`.
+ * the remote function in `$api/event-types.remote.ts`.
  */
 
 // Re-export types from the generated API client

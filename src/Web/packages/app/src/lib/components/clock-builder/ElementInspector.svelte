@@ -8,7 +8,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Select from "$lib/components/ui/select";
   import { X, Trash2 } from "lucide-svelte";
-  import type { ClockElement, TrackerDefinitionDto } from "$lib/api/api-client";
+  import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
   import {
     ELEMENT_INFO,
     VISIBILITY_OPTIONS,

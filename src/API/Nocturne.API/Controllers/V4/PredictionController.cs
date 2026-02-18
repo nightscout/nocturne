@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V4;
 [Route("api/v4/predictions")]
 [Produces("application/json")]
 [ClientPropertyName("predictions")]
+[Tags("V4 Predictions")]
 public class PredictionController : ControllerBase
 {
     private readonly IPredictionService? _predictionService;
@@ -37,6 +38,7 @@ public class PredictionController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Glucose predictions including IOB, UAM, COB, and zero-temp curves</returns>
     [HttpGet]
+    [RemoteQuery]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 400)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 404)]
@@ -78,6 +80,7 @@ public class PredictionController : ControllerBase
     /// </summary>
     /// <returns>Status of the prediction service including configured source</returns>
     [HttpGet("status")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(PredictionStatusResponse), 200)]
     public ActionResult<PredictionStatusResponse> GetStatus()
     {

@@ -1,5 +1,5 @@
 import type { OpenAPIV3 } from 'openapi-types';
-import type { OperationInfo, ParsedSpec, ParameterInfo, RemoteType } from './types.js';
+import type { OperationInfo, InlineRequestBody, ParsedSpec, ParameterInfo, RemoteType } from './types.js';
 
 // Extended operation type to include our custom extensions
 type OperationWithExtensions = OpenAPIV3.OperationObject & {
@@ -58,6 +58,7 @@ export function parseOpenApiSpec(spec: OpenAPIV3.Document): ParsedSpec {
         requestBodySchema,
         requestBodyRequired: requestBodyResult?.required,
         isArrayBody,
+        inlineRequestBody: requestBodyResult?.inline,
         responseSchema,
         isVoidResponse,
         summary: operation.summary,
@@ -171,7 +172,14 @@ function findEnumName(
   return undefined;
 }
 
-function parseRequestBody(body: OpenAPIV3.RequestBodyObject | undefined): { schema: string; isArray: boolean; required: boolean } | undefined {
+interface RequestBodyParseResult {
+  schema: string;
+  isArray: boolean;
+  required: boolean;
+  inline?: InlineRequestBody;
+}
+
+function parseRequestBody(body: OpenAPIV3.RequestBodyObject | undefined): RequestBodyParseResult | undefined {
   if (!body?.content?.['application/json']?.schema) return undefined;
 
   const required = body.required ?? false;
@@ -188,6 +196,58 @@ function parseRequestBody(body: OpenAPIV3.RequestBodyObject | undefined): { sche
     if ('$ref' in items) {
       const itemName = items.$ref.split('/').pop();
       return itemName ? { schema: `${itemName}Schema`, isArray: true, required } : undefined;
+    }
+  }
+
+  // Handle inline object schemas (e.g., Dictionary<string, string> -> { type: "object", additionalProperties: ... })
+  if (schemaObj.type === 'object' && schemaObj.additionalProperties) {
+    const inline = resolveInlineObjectSchema(schemaObj);
+    if (inline) {
+      return { schema: '', isArray: false, required, inline };
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Convert an inline OpenAPI object schema with additionalProperties to a Zod schema and TS type.
+ * Handles Dictionary<TKey, TValue> patterns from C#.
+ */
+function resolveInlineObjectSchema(schema: OpenAPIV3.SchemaObject): InlineRequestBody | undefined {
+  const additionalProps = schema.additionalProperties;
+  if (!additionalProps || additionalProps === true) {
+    // additionalProperties: true or {} -> Record<string, unknown>
+    return {
+      zodSchema: 'z.record(z.string(), z.unknown())',
+      tsType: '{ [key: string]: any; }',
+    };
+  }
+
+  if (typeof additionalProps === 'object' && !('$ref' in additionalProps)) {
+    const valueSchema = additionalProps as OpenAPIV3.SchemaObject;
+    switch (valueSchema.type) {
+      case 'string':
+        return {
+          zodSchema: 'z.record(z.string(), z.string())',
+          tsType: '{ [key: string]: string; }',
+        };
+      case 'number':
+      case 'integer':
+        return {
+          zodSchema: 'z.record(z.string(), z.number())',
+          tsType: '{ [key: string]: number; }',
+        };
+      case 'boolean':
+        return {
+          zodSchema: 'z.record(z.string(), z.boolean())',
+          tsType: '{ [key: string]: boolean; }',
+        };
+      default:
+        return {
+          zodSchema: 'z.record(z.string(), z.unknown())',
+          tsType: '{ [key: string]: any; }',
+        };
     }
   }
 

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 
 namespace Nocturne.API.Controllers.Internal;
@@ -35,6 +36,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     /// <returns>Configuration response or 404 if not found</returns>
     [HttpGet("{connectorName}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> GetConfiguration(
@@ -61,6 +63,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     /// <returns>JSON Schema document</returns>
     [HttpGet("{connectorName}/schema")]
+    [RemoteQuery]
     [AllowAnonymous]
     [ProducesResponseType(typeof(JsonDocument), StatusCodes.Status200OK)]
     public async Task<ActionResult<JsonDocument>> GetSchema(
@@ -82,6 +85,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     /// <returns>Dictionary of property names to effective values</returns>
     [HttpGet("{connectorName}/effective")]
+    [RemoteQuery]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Dictionary<string, object?>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -113,6 +117,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     /// <returns>The saved configuration</returns>
     [HttpPut("{connectorName}")]
+    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> SaveConfiguration(
@@ -267,6 +272,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="ct">Cancellation token</param>
     [HttpPut("{connectorName}/secrets")]
+    [RemoteCommand(Invalidates = ["GetConfiguration"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SaveSecrets(
@@ -296,6 +302,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     /// <returns>List of connector status information</returns>
     [HttpGet]
+    [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<ConnectorStatusInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ConnectorStatusInfo>>> GetAllConnectorStatus(
         CancellationToken ct)
@@ -313,6 +320,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="request">Request containing the active state</param>
     /// <param name="ct">Cancellation token</param>
     [HttpPatch("{connectorName}/active")]
+    [RemoteCommand(Invalidates = ["GetAllConnectorStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetActive(
         string connectorName,
@@ -333,6 +341,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="connectorName">The connector name</param>
     /// <param name="ct">Cancellation token</param>
     [HttpDelete("{connectorName}")]
+    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteConfiguration(

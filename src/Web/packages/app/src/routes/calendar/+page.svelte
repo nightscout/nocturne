@@ -14,12 +14,12 @@
     Check,
   } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
-  import { getPunchCardData } from "$lib/data/month-to-month.remote";
+  import { getPunchCardData } from "$api/month-to-month.remote";
   import {
     getActiveInstances,
     getDefinitions,
     getInstanceHistory,
-  } from "$lib/data/generated";
+  } from "$api/generated";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import {
     NotificationUrgency as NotificationUrgencyEnum,

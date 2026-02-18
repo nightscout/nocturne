@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -11,6 +12,7 @@ namespace Nocturne.API.Controllers.V4;
 [ApiController]
 [Route("api/v4/admin/deduplication")]
 [Produces("application/json")]
+[Tags("V4 Deduplication")]
 public class DeduplicationController : ControllerBase
 {
     private readonly IDeduplicationService _deduplicationService;
@@ -31,6 +33,7 @@ public class DeduplicationController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Job ID for tracking progress</returns>
     [HttpPost("run")]
+    [RemoteCommand]
     [ProducesResponseType(typeof(DeduplicationJobResponse), 202)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DeduplicationJobResponse>> StartDeduplicationJob(
@@ -63,6 +66,7 @@ public class DeduplicationController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Current status and progress of the job</returns>
     [HttpGet("status/{jobId:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(DeduplicationJobStatus), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -97,6 +101,7 @@ public class DeduplicationController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Whether the job was successfully cancelled</returns>
     [HttpPost("cancel/{jobId:guid}")]
+    [RemoteCommand]
     [ProducesResponseType(typeof(CancelJobResponse), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -136,6 +141,7 @@ public class DeduplicationController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>All linked records in the same canonical group</returns>
     [HttpGet("entries/{entryId}/sources")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(LinkedRecordsResponse), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -182,6 +188,7 @@ public class DeduplicationController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>All linked records in the same canonical group</returns>
     [HttpGet("treatments/{treatmentId}/sources")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(LinkedRecordsResponse), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -228,6 +235,7 @@ public class DeduplicationController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>All linked records in the same canonical group</returns>
     [HttpGet("state-spans/{stateSpanId}/sources")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(LinkedRecordsResponse), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]

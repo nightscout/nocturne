@@ -5,9 +5,11 @@
   import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Apple, X, ChevronDown } from "lucide-svelte";
+  import FoodBreakdown from "./FoodBreakdown.svelte";
 
   interface Props {
     carbIntake: Partial<CarbIntake>;
+    /** Set when editing an existing CarbIntake — enables food breakdown */
     carbIntakeId?: string;
     onRemove?: () => void;
   }
@@ -101,4 +103,8 @@
       </div>
     </Collapsible.Content>
   </Collapsible.Root>
+
+  {#if carbIntakeId}
+    <FoodBreakdown {carbIntakeId} totalCarbs={carbIntake.carbs ?? 0} />
+  {/if}
 </div>

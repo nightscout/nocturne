@@ -18,7 +18,7 @@
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
-  import { updateLanguagePreference } from "$lib/data/user-preferences.remote";
+  import { updateLanguagePreference } from "$api/user-preferences.remote";
   import {
     Card,
     CardContent,

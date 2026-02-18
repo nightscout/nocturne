@@ -1,6 +1,6 @@
 /**
  * Remote functions for treatments report page.
- * Data comes from V4 decomposed endpoints (boluses + carb intakes).
+ * Data comes from V4 decomposed endpoints (boluses, carb intakes, BG checks, notes, device events).
  */
 import { z } from 'zod';
 import { getRequestEvent, form, command, query } from '$app/server';
@@ -39,7 +39,8 @@ function calculateDateRange(input?: z.infer<typeof DateRangeSchema>) {
 }
 
 /**
- * Get v4 boluses and carb intakes for the treatments page.
+ * Get all v4 entry types for the treatments page.
+ * Fetches boluses, carb intakes, BG checks, notes, and device events in parallel.
  * Treatment summary comes from the backend via calculateTreatmentSummary.
  */
 export const getTreatmentsData = query(
@@ -51,21 +52,32 @@ export const getTreatmentsData = query(
 		const fromMs = startDate.getTime();
 		const toMs = endDate.getTime();
 
-		const [bolusResponse, carbResponse] = await Promise.all([
-			apiClient.insulin.getBoluses(fromMs, toMs, 10000),
-			apiClient.nutrition.getCarbIntakes(fromMs, toMs, 10000),
-		]);
+		const [bolusResponse, carbResponse, bgCheckResponse, noteResponse, deviceEventResponse] =
+			await Promise.all([
+				apiClient.insulin.getBoluses(fromMs, toMs, 10000),
+				apiClient.nutrition.getCarbIntakes(fromMs, toMs, 10000),
+				apiClient.observations.getBGChecks(fromMs, toMs, 10000),
+				apiClient.observations.getNotes(fromMs, toMs, 10000),
+				apiClient.observations.getDeviceEvents(fromMs, toMs, 10000),
+			]);
 
 		const boluses = bolusResponse.data ?? [];
 		const carbIntakes = carbResponse.data ?? [];
+		const bgChecks = bgCheckResponse.data ?? [];
+		const notes = noteResponse.data ?? [];
+		const deviceEvents = deviceEventResponse.data ?? [];
 
-		const treatmentSummary = (boluses.length > 0 || carbIntakes.length > 0)
-			? await apiClient.statistics.calculateTreatmentSummary({ boluses, carbIntakes })
-			: null;
+		const treatmentSummary =
+			boluses.length > 0 || carbIntakes.length > 0
+				? await apiClient.statistics.calculateTreatmentSummary({ boluses, carbIntakes })
+				: null;
 
 		return {
 			boluses,
 			carbIntakes,
+			bgChecks,
+			notes,
+			deviceEvents,
 			treatmentSummary,
 			dateRange: {
 				from: startDate.toISOString(),
@@ -76,41 +88,58 @@ export const getTreatmentsData = query(
 );
 
 /**
- * Delete a single treatment form (v4: dispatches to bolus or carb intake endpoint by kind)
+ * Delete a single entry form (v4: dispatches to the correct endpoint by kind)
  */
-export const deleteTreatmentForm = form(
+export const deleteEntryForm = form(
 	z.object({
-		treatmentId: z.string().min(1, 'Treatment ID is required'),
-		treatmentKind: z.enum(['bolus', 'carbIntake']),
+		entryId: z.string().min(1, 'Entry ID is required'),
+		entryKind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent']),
 	}),
-	async ({ treatmentId, treatmentKind }, issue) => {
+	async ({ entryId, entryKind }, issue) => {
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
 
 		try {
-			if (treatmentKind === 'bolus') {
-				await apiClient.insulin.deleteBolus(treatmentId);
-			} else {
-				await apiClient.nutrition.deleteCarbIntake(treatmentId);
+			switch (entryKind) {
+				case 'bolus':
+					await apiClient.insulin.deleteBolus(entryId);
+					break;
+				case 'carbs':
+					await apiClient.nutrition.deleteCarbIntake(entryId);
+					break;
+				case 'bgCheck':
+					await apiClient.observations.deleteBGCheck(entryId);
+					break;
+				case 'note':
+					await apiClient.observations.deleteNote(entryId);
+					break;
+				case 'deviceEvent':
+					await apiClient.observations.deleteDeviceEvent(entryId);
+					break;
 			}
 
 			return {
 				success: true,
-				message: 'Treatment deleted successfully',
-				deletedTreatmentId: treatmentId,
+				message: 'Entry deleted successfully',
+				deletedEntryId: entryId,
 			};
 		} catch (error) {
-			console.error('Error deleting treatment:', error);
-			invalid(issue.treatmentId('Failed to delete treatment. Please try again.'));
+			console.error('Error deleting entry:', error);
+			invalid(issue.entryId('Failed to delete entry. Please try again.'));
 		}
 	}
 );
 
 /**
- * Bulk delete treatments command (v4: dispatches each item by kind)
+ * Bulk delete entries command (v4: dispatches each item by kind)
  */
-export const bulkDeleteTreatments = command(
-	z.array(z.object({ id: z.string(), kind: z.enum(['bolus', 'carbIntake']) })),
+export const bulkDeleteEntries = command(
+	z.array(
+		z.object({
+			id: z.string(),
+			kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent']),
+		})
+	),
 	async (items) => {
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
@@ -120,10 +149,22 @@ export const bulkDeleteTreatments = command(
 
 		for (const item of items) {
 			try {
-				if (item.kind === 'bolus') {
-					await apiClient.insulin.deleteBolus(item.id);
-				} else {
-					await apiClient.nutrition.deleteCarbIntake(item.id);
+				switch (item.kind) {
+					case 'bolus':
+						await apiClient.insulin.deleteBolus(item.id);
+						break;
+					case 'carbs':
+						await apiClient.nutrition.deleteCarbIntake(item.id);
+						break;
+					case 'bgCheck':
+						await apiClient.observations.deleteBGCheck(item.id);
+						break;
+					case 'note':
+						await apiClient.observations.deleteNote(item.id);
+						break;
+					case 'deviceEvent':
+						await apiClient.observations.deleteDeviceEvent(item.id);
+						break;
 				}
 				deletedIds.push(item.id);
 			} catch (err) {
@@ -135,16 +176,16 @@ export const bulkDeleteTreatments = command(
 		if (failedIds.length > 0) {
 			return {
 				success: false,
-				message: `Failed to delete ${failedIds.length} of ${items.length} treatments`,
-				deletedTreatmentIds: deletedIds,
-				failedTreatmentIds: failedIds,
+				message: `Failed to delete ${failedIds.length} of ${items.length} entries`,
+				deletedEntryIds: deletedIds,
+				failedEntryIds: failedIds,
 			};
 		}
 
 		return {
 			success: true,
-			message: `Successfully deleted ${deletedIds.length} treatment${deletedIds.length !== 1 ? 's' : ''}`,
-			deletedTreatmentIds: deletedIds,
+			message: `Successfully deleted ${deletedIds.length} entr${deletedIds.length !== 1 ? 'ies' : 'y'}`,
+			deletedEntryIds: deletedIds,
 		};
 	}
 );

@@ -33,7 +33,7 @@
   import type {
     JsonSchema,
     JsonSchemaProperty,
-  } from "$lib/data/connectorConfig.remote";
+  } from "$api/connectorConfig.remote";
 
   interface Props {
     schema: JsonSchema;

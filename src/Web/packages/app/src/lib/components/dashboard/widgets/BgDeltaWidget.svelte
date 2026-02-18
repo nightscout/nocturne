@@ -14,7 +14,7 @@
     Wifi,
     WifiOff,
   } from "lucide-svelte";
-  import { getBatteryCardData } from "$lib/data/battery.remote";
+  import { getBatteryCardData } from "$api/battery.remote";
 
   interface Props {
     /** Override bgDelta from props instead of realtime store */

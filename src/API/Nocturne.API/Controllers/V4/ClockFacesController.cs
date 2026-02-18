@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
@@ -31,6 +32,7 @@ public class ClockFacesController : ControllerBase
     /// <param name="id">Clock face UUID</param>
     /// <returns>Clock face configuration</returns>
     [HttpGet("{id:guid}")]
+    [RemoteQuery]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ClockFacePublicDto), 200)]
     [ProducesResponseType(404)]
@@ -55,6 +57,7 @@ public class ClockFacesController : ControllerBase
     /// </summary>
     /// <returns>List of clock faces</returns>
     [HttpGet]
+    [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(ClockFaceListItem[]), 200)]
     public async Task<ActionResult<ClockFaceListItem[]>> List()
@@ -71,6 +74,7 @@ public class ClockFacesController : ControllerBase
     /// <param name="request">Clock face creation request</param>
     /// <returns>Created clock face</returns>
     [HttpPost]
+    [RemoteCommand(Invalidates = ["List"])]
     [Authorize]
     [ProducesResponseType(typeof(ClockFace), 201)]
     [ProducesResponseType(400)]
@@ -94,6 +98,7 @@ public class ClockFacesController : ControllerBase
     /// <param name="request">Update request</param>
     /// <returns>Updated clock face</returns>
     [HttpPut("{id:guid}")]
+    [RemoteCommand(Invalidates = ["List", "GetById"])]
     [Authorize]
     [ProducesResponseType(typeof(ClockFace), 200)]
     [ProducesResponseType(404)]
@@ -116,6 +121,7 @@ public class ClockFacesController : ControllerBase
     /// <param name="id">Clock face UUID</param>
     /// <returns>Success status</returns>
     [HttpDelete("{id:guid}")]
+    [RemoteCommand(Invalidates = ["List"])]
     [Authorize]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]

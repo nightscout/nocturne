@@ -4,7 +4,7 @@
   import { Bell, ChevronRight } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import * as notificationsRemote from "$lib/data/notifications.remote";
+  import { executeAction } from "$api/generated/notifications.generated.remote";
   import {
     NotificationUrgency,
     InAppNotificationType,
@@ -86,7 +86,7 @@
     }
 
     try {
-      await notificationsRemote.executeAction({
+      await executeAction({
         id: notification.id!,
         actionId,
       });

@@ -145,6 +145,7 @@ public class NutritionController : ControllerBase
     /// Get food breakdown for a carb intake record.
     /// </summary>
     [HttpGet("carbs/{id:guid}/foods")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TreatmentFoodBreakdown>> GetCarbIntakeFoods(Guid id, CancellationToken ct = default)
@@ -157,6 +158,7 @@ public class NutritionController : ControllerBase
     /// Add a food breakdown entry to a carb intake record.
     /// </summary>
     [HttpPost("carbs/{id:guid}/foods")]
+    [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -186,6 +188,7 @@ public class NutritionController : ControllerBase
     /// Update a food breakdown entry.
     /// </summary>
     [HttpPut("carbs/{id:guid}/foods/{foodEntryId:guid}")]
+    [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TreatmentFoodBreakdown>> UpdateCarbIntakeFood(
@@ -218,6 +221,7 @@ public class NutritionController : ControllerBase
     /// Remove a food breakdown entry.
     /// </summary>
     [HttpDelete("carbs/{id:guid}/foods/{foodEntryId:guid}")]
+    [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TreatmentFoodBreakdown>> DeleteCarbIntakeFood(
@@ -246,6 +250,7 @@ public class NutritionController : ControllerBase
     /// Get carb intake records with food attribution status for the meals view.
     /// </summary>
     [HttpGet("meals")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(MealCarbIntake[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<MealCarbIntake[]>> GetMeals(
         [FromQuery] long? from = null,

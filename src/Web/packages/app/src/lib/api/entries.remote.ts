@@ -23,7 +23,7 @@ export const getEntries = query(entriesSchema, async (props) => {
   return response.data ?? [];
 });
 
-export const getTreatments = query(entriesSchema, async (props) => {
+export const getBolusesAndCarbs = query(entriesSchema, async (props) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
 

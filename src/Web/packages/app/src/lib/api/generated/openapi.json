@@ -828,7 +828,7 @@
     "/api/v1/connectors/status": {
       "get": {
         "tags": [
-          "ConnectorStatus"
+          "V1 Connector Status"
         ],
         "summary": "Gets the current status and metrics for all registered connectors",
         "operationId": "ConnectorStatus_GetStatus",
@@ -846,7 +846,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/auth/local/config": {
@@ -1327,7 +1328,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/Metadata/external-urls": {
@@ -1348,7 +1350,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/Metadata/treatment-event-types": {
@@ -1369,7 +1372,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/Metadata/state-span-types": {
@@ -1390,7 +1394,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/Metadata/statistics-types": {
@@ -1411,7 +1416,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/Metadata/widget-definitions": {
@@ -1432,7 +1438,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/auth/providers": {
@@ -2817,7 +2824,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Battery/readings": {
@@ -2878,7 +2886,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Battery/statistics": {
@@ -2939,7 +2948,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Battery/cycles": {
@@ -3011,7 +3021,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Battery/devices": {
@@ -3038,7 +3049,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/ChartData/dashboard": {
@@ -3102,7 +3114,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/clockfaces/{id}": {
@@ -3146,7 +3159,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -3201,7 +3215,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "List",
+          "GetById"
+        ]
       },
       "delete": {
         "tags": [
@@ -3236,7 +3255,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "List"
+        ]
       }
     },
     "/api/v4/clockfaces": {
@@ -3260,7 +3283,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -3302,7 +3326,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "List"
+        ]
       }
     },
     "/api/v4/compatibility/config": {
@@ -3602,7 +3630,7 @@
     "/api/v4/compression-lows/suggestions": {
       "get": {
         "tags": [
-          "CompressionLow"
+          "V4 Compression Lows"
         ],
         "summary": "Get compression low suggestions with optional filtering",
         "operationId": "CompressionLow_GetSuggestions",
@@ -3648,13 +3676,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/compression-lows/suggestions/{id}": {
       "get": {
         "tags": [
-          "CompressionLow"
+          "V4 Compression Lows"
         ],
         "summary": "Get a single suggestion with glucose entries for charting",
         "operationId": "CompressionLow_GetSuggestion",
@@ -3681,11 +3710,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "delete": {
         "tags": [
-          "CompressionLow"
+          "V4 Compression Lows"
         ],
         "summary": "Delete a suggestion and its associated state span",
         "operationId": "CompressionLow_DeleteSuggestion",
@@ -3715,13 +3745,17 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSuggestions"
+        ]
       }
     },
     "/api/v4/compression-lows/suggestions/{id}/accept": {
       "post": {
         "tags": [
-          "CompressionLow"
+          "V4 Compression Lows"
         ],
         "summary": "Accept a suggestion with adjusted bounds",
         "operationId": "CompressionLow_AcceptSuggestion",
@@ -3780,13 +3814,17 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSuggestions"
+        ]
       }
     },
     "/api/v4/compression-lows/suggestions/{id}/dismiss": {
       "post": {
         "tags": [
-          "CompressionLow"
+          "V4 Compression Lows"
         ],
         "summary": "Dismiss a suggestion",
         "operationId": "CompressionLow_DismissSuggestion",
@@ -3826,13 +3864,17 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSuggestions"
+        ]
       }
     },
     "/api/v4/compression-lows/detect": {
       "post": {
         "tags": [
-          "CompressionLow"
+          "V4 Compression Lows"
         ],
         "summary": "Manually trigger detection for a date range (for testing)",
         "description": "Provide either a single `nightOf` date or a range with `startDate` and `endDate`.\nWhen using a range, detection runs for each night in the range (inclusive).",
@@ -3860,7 +3902,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSuggestions"
+        ]
       }
     },
     "/api/v4/connector-food-entries/import": {
@@ -4262,7 +4308,7 @@
     "/api/v4/admin/deduplication/run": {
       "post": {
         "tags": [
-          "Deduplication"
+          "V4 Deduplication"
         ],
         "summary": "Start a deduplication job to link related records from different data sources.\nThe job runs in the background and can be monitored using the status endpoint.",
         "operationId": "Deduplication_StartDeduplicationJob",
@@ -4280,13 +4326,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/admin/deduplication/status/{jobId}": {
       "get": {
         "tags": [
-          "Deduplication"
+          "V4 Deduplication"
         ],
         "summary": "Get the status of a deduplication job.",
         "operationId": "Deduplication_GetJobStatus",
@@ -4327,13 +4374,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/admin/deduplication/cancel/{jobId}": {
       "post": {
         "tags": [
-          "Deduplication"
+          "V4 Deduplication"
         ],
         "summary": "Cancel a running deduplication job.",
         "operationId": "Deduplication_CancelJob",
@@ -4374,13 +4422,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/admin/deduplication/entries/{entryId}/sources": {
       "get": {
         "tags": [
-          "Deduplication"
+          "V4 Deduplication"
         ],
         "summary": "Get linked records for a specific entry by its canonical group.",
         "operationId": "Deduplication_GetEntryLinkedRecords",
@@ -4420,13 +4469,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/admin/deduplication/treatments/{treatmentId}/sources": {
       "get": {
         "tags": [
-          "Deduplication"
+          "V4 Deduplication"
         ],
         "summary": "Get linked records for a specific treatment by its canonical group.",
         "operationId": "Deduplication_GetTreatmentLinkedRecords",
@@ -4466,13 +4516,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/admin/deduplication/state-spans/{stateSpanId}/sources": {
       "get": {
         "tags": [
-          "Deduplication"
+          "V4 Deduplication"
         ],
         "summary": "Get linked records for a specific state span by its canonical group.",
         "operationId": "Deduplication_GetStateSpanLinkedRecords",
@@ -4512,7 +4563,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/deviceage/cannula": {
@@ -5954,6 +6006,7 @@
             }
           }
         },
+        "x-remote-type": "query",
         "x-client-property": "foodsV4"
       }
     },
@@ -5988,6 +6041,10 @@
             }
           }
         },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetFavorites"
+        ],
         "x-client-property": "foodsV4"
       },
       "delete": {
@@ -6020,6 +6077,10 @@
             }
           }
         },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetFavorites"
+        ],
         "x-client-property": "foodsV4"
       }
     },
@@ -6057,6 +6118,7 @@
             }
           }
         },
+        "x-remote-type": "query",
         "x-client-property": "foodsV4"
       }
     },
@@ -7580,7 +7642,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/meal-matching/suggestions": {
@@ -7626,7 +7689,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/meal-matching/accept": {
@@ -7662,7 +7726,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSuggestions"
+        ]
       }
     },
     "/api/v4/meal-matching/dismiss": {
@@ -7688,7 +7756,11 @@
           "204": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSuggestions"
+        ]
       }
     },
     "/api/v4/migration/test": {
@@ -8015,7 +8087,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/notifications/{id}/actions/{actionId}": {
@@ -8072,7 +8145,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotifications"
+        ]
       }
     },
     "/api/v4/notifications/{id}": {
@@ -8119,7 +8196,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotifications"
+        ]
       }
     },
     "/api/v4/nutrition/carbs": {
@@ -8458,7 +8539,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "post": {
         "tags": [
@@ -8521,7 +8603,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCarbIntakeFoods"
+        ]
       }
     },
     "/api/v4/nutrition/carbs/{id}/foods/{foodEntryId}": {
@@ -8586,7 +8672,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCarbIntakeFoods"
+        ]
       },
       "delete": {
         "tags": [
@@ -8637,7 +8727,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetCarbIntakeFoods"
+        ]
       }
     },
     "/api/v4/nutrition/meals": {
@@ -8692,7 +8786,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/observations/bg-checks": {
@@ -9586,7 +9681,7 @@
     "/api/v4/predictions": {
       "get": {
         "tags": [
-          "Prediction"
+          "V4 Predictions"
         ],
         "summary": "Get glucose predictions based on current data.\nReturns predicted glucose values for the next 4 hours in 5-minute intervals.",
         "operationId": "Prediction_GetPredictions",
@@ -9644,13 +9739,14 @@
             }
           }
         },
+        "x-remote-type": "query",
         "x-client-property": "predictions"
       }
     },
     "/api/v4/predictions/status": {
       "get": {
         "tags": [
-          "Prediction"
+          "V4 Predictions"
         ],
         "summary": "Check the status of the prediction service.",
         "operationId": "Prediction_GetStatus",
@@ -9666,6 +9762,7 @@
             }
           }
         },
+        "x-remote-type": "query",
         "x-client-property": "predictions"
       }
     },
@@ -9950,7 +10047,7 @@
     "/api/v4/services": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get a complete overview of services, data sources, and available integrations.",
         "operationId": "Services_GetServicesOverview",
@@ -9968,13 +10065,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/data-sources": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get all active data sources that have been sending data to this Nocturne instance.\nThis includes CGM apps, AID systems, and any other uploaders.",
         "operationId": "Services_GetActiveDataSources",
@@ -9995,13 +10093,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/data-sources/{id}": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get detailed information about a specific data source.",
         "operationId": "Services_GetDataSource",
@@ -10041,11 +10140,12 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "delete": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Delete all data from a specific data source.\nWARNING: This is a destructive operation that cannot be undone.",
         "operationId": "Services_DeleteDataSourceData",
@@ -10085,13 +10185,18 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetServicesOverview",
+          "GetActiveDataSources"
+        ]
       }
     },
     "/api/v4/services/connectors": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get available connectors that can be configured to pull data into Nocturne.",
         "operationId": "Services_GetAvailableConnectors",
@@ -10109,13 +10214,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/connectors/{id}/capabilities": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get capabilities for a specific connector.",
         "operationId": "Services_GetConnectorCapabilities",
@@ -10152,13 +10258,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/uploaders": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get uploader apps that can push data to Nocturne with setup instructions.",
         "operationId": "Services_GetUploaderApps",
@@ -10176,13 +10283,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/api-info": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get API endpoint information for configuring external apps.\nThis provides all the information needed to configure xDrip+, Loop, AAPS, etc.",
         "operationId": "Services_GetApiInfo",
@@ -10197,13 +10305,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/uploaders/{appId}/setup": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get setup instructions for a specific uploader app.",
         "operationId": "Services_GetUploaderSetup",
@@ -10240,13 +10349,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/data-sources/demo": {
       "delete": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Delete all demo data. This operation is safe as demo data can be easily regenerated.",
         "operationId": "Services_DeleteDemoData",
@@ -10264,13 +10374,18 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetServicesOverview",
+          "GetActiveDataSources"
+        ]
       }
     },
     "/api/v4/services/connectors/{id}/data-summary": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get a summary of data counts for a specific connector.\nReturns the number of entries, treatments, and device statuses synced by this connector.",
         "operationId": "Services_GetConnectorDataSummary",
@@ -10300,13 +10415,14 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/services/connectors/{id}/data": {
       "delete": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Delete all data from a specific connector.\nWARNING: This is a destructive operation that cannot be undone.",
         "operationId": "Services_DeleteConnectorData",
@@ -10346,13 +10462,18 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetServicesOverview",
+          "GetActiveDataSources"
+        ]
       }
     },
     "/api/v4/services/connectors/{id}/sync": {
       "post": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Trigger a manual sync for a specific connector.",
         "operationId": "Services_TriggerConnectorSync",
@@ -10402,13 +10523,14 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/services/connectors/{id}/sync-status": {
       "get": {
         "tags": [
-          "Services"
+          "V4 Services"
         ],
         "summary": "Get sync status for a specific connector, including latest timestamps and connector state.\nUsed by connectors on startup to determine where to resume syncing from.",
         "operationId": "Services_GetConnectorSyncStatus",
@@ -10448,7 +10570,8 @@
           "500": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/state-spans": {
@@ -18528,7 +18651,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -18582,7 +18706,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetConfiguration",
+          "GetAllConnectorStatus"
+        ]
       },
       "delete": {
         "tags": [
@@ -18616,7 +18745,12 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetConfiguration",
+          "GetAllConnectorStatus"
+        ]
       }
     },
     "/internal/config/{connectorName}/schema": {
@@ -18649,7 +18783,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/internal/config/{connectorName}/effective": {
@@ -18686,7 +18821,8 @@
           "503": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/internal/config/{connectorName}/secrets": {
@@ -18738,7 +18874,11 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetConfiguration"
+        ]
       }
     },
     "/internal/config": {
@@ -18762,7 +18902,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/internal/config/{connectorName}/active": {
@@ -18801,7 +18942,11 @@
           "204": {
             "description": ""
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAllConnectorStatus"
+        ]
       }
     }
   },

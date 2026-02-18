@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from "$lib/utils";
-import type { ClockElement, ClockFaceConfig } from "$lib/api/api-client";
+import type { ClockElement, ClockFaceConfig } from "$lib/api";
 import {
   ELEMENT_INFO,
   DEFAULT_SETTINGS,

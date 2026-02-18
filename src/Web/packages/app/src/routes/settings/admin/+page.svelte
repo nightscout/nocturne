@@ -33,8 +33,8 @@
     TriangleAlert,
   } from "lucide-svelte";
   import * as Alert from "$lib/components/ui/alert";
-  import * as authorizationRemote from "$lib/data/generated/authorizations.generated.remote";
-  import * as adminRemote from "$lib/data/generated/localauths.generated.remote";
+  import * as authorizationRemote from "$api/generated/authorizations.generated.remote";
+  import * as adminRemote from "$api/generated/localauths.generated.remote";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import type { Subject, Role, PasswordResetRequestDto } from "$api";
 

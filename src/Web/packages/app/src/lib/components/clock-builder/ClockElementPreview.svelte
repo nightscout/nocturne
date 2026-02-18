@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ArrowUp } from "lucide-svelte";
   import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
-  import type { TrackerDefinitionDto } from "$lib/api/api-client";
+  import type { TrackerDefinitionDto } from "$lib/api";
   import {
     ELEMENT_INFO,
     type InternalElement,

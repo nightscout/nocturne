@@ -5,7 +5,7 @@
  * and other utilities used by the clock face builder.
  */
 
-import type { ClockElement, TrackerDefinitionDto } from "$lib/api/api-client";
+import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
 import { ELEMENT_INFO, type ClockElementType, type InternalElement } from "./types";
 
 /**

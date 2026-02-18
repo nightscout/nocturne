@@ -3,7 +3,7 @@
   import * as Card from "$lib/components/ui/card";
   import Button from "$lib/components/ui/button/button.svelte";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
-  import { getReportsData } from "$lib/data/reports.remote";
+  import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg } from "$lib/utils/formatting";

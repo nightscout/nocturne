@@ -26,14 +26,16 @@
     type CarbIntakeFoodRequest,
   } from "$lib/api";
   import {
-    addFavoriteFood,
     getAllFoods,
-    getFavoriteFoods,
-    getRecentFoods,
-    removeFavoriteFood,
     createNewFood,
     updateExistingFood,
-  } from "$lib/data/treatment-foods.remote";
+  } from "$api/treatment-foods.remote";
+  import {
+    getFavorites as getFavoriteFoods,
+    addFavorite as addFavoriteFood,
+    removeFavorite as removeFavoriteFood,
+    getRecentFoods,
+  } from "$api/generated/foods.generated.remote";
   import { CategorySubcategoryCombobox } from "$lib/components/food";
 
   interface Props {
@@ -222,7 +224,7 @@
       const [favoriteResult, recentResult, allResult] =
         await Promise.allSettled([
           getFavoriteFoods(),
-          getRecentFoods(5),
+          getRecentFoods({ limit: 5 }),
           getAllFoods(),
         ]);
 

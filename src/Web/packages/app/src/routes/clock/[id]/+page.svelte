@@ -12,8 +12,8 @@
     Loader2,
   } from "lucide-svelte";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
-  import type { ClockFaceConfig } from "$lib/api/api-client";
-  import { getById as getClockFaceById } from "$lib/data/clockfaces.remote";
+  import type { ClockFaceConfig } from "$lib/api";
+  import { getById as getClockFaceById } from "$api/generated/clockFaces.generated.remote";
 
   const realtimeStore = getRealtimeStore();
 

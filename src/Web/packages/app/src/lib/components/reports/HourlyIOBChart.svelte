@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import * as ChartC from "$lib/components/ui/chart/index.js";
-  import { getHourlyIob } from "$lib/data/iob.remote";
+  import { getHourlyIob } from "$api/iob.remote";
   import { onMount } from "svelte";
 
   interface Props {

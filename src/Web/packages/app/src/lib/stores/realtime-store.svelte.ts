@@ -29,7 +29,7 @@ import {
 import { toast } from "svelte-sonner";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
-import { processPillsData, type ProcessedPillsData } from "$lib/data/pills-processor";
+import { processPillsData, type ProcessedPillsData } from "$api/pills-processor";
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
@@ -259,7 +259,7 @@ export class RealtimeStore {
         apiClient.profile.getProfiles2(1).catch(() => []),
         apiClient.trackers.getDefinitions().catch(() => []),
         apiClient.trackers.getActiveInstances().catch(() => []),
-        apiClient.v2Notifications.getNotifications().catch(() => []),
+        apiClient.notifications.getNotifications().catch(() => []),
         apiClient.insulin.getBoluses(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.nutrition.getCarbIntakes(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.observations.getBGChecks(oneDayAgoMs, nowMs, 500).then((r) => r.data ?? []).catch(() => []),

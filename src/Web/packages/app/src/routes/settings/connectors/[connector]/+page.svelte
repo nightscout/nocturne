@@ -13,12 +13,12 @@
     deleteConnectorConfiguration,
     getConnectorDataSummary,
     type JsonSchema,
-  } from "$lib/data/connectorConfig.remote";
+  } from "$api/connectorConfig.remote";
+  import { deleteConnectorData } from "$api/services.remote";
   import {
     getServicesOverview,
-    deleteConnectorData,
     getConnectorCapabilities,
-  } from "$lib/data/services.remote";
+  } from "$api/generated/services.generated.remote";
   import type {
     AvailableConnector,
     ConnectorConfigurationResponse,

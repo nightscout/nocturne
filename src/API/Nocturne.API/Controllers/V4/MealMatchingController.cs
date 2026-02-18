@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
@@ -36,6 +37,7 @@ public class MealMatchingController : ControllerBase
     /// Get a food entry for review
     /// </summary>
     [HttpGet("food-entries/{id:guid}")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorFoodEntry), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorFoodEntry>> GetFoodEntry(Guid id)
@@ -52,6 +54,7 @@ public class MealMatchingController : ControllerBase
     /// Get suggested meal matches for a date range
     /// </summary>
     [HttpGet("suggestions")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(SuggestedMealMatch[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<SuggestedMealMatch[]>> GetSuggestions(
         [FromQuery] DateTimeOffset? from,
@@ -85,6 +88,7 @@ public class MealMatchingController : ControllerBase
     /// Accept a meal match
     /// </summary>
     [HttpPost("accept")]
+    [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> AcceptMatch([FromBody] AcceptMatchRequest request)
@@ -126,6 +130,7 @@ public class MealMatchingController : ControllerBase
     /// Dismiss a meal match
     /// </summary>
     [HttpPost("dismiss")]
+    [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DismissMatch([FromBody] DismissMatchRequest request)
     {

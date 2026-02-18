@@ -29,7 +29,7 @@
     RefreshCw,
     Info,
   } from "lucide-svelte";
-  import * as migrationRemote from "$lib/data/generated/migrations.generated.remote";
+  import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import {
     type MigrationJobInfo,
     type MigrationJobStatus,

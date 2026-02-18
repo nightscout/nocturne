@@ -8,7 +8,7 @@
     UserMenu,
   } from "./index";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
-  import { updateLanguagePreference } from "$lib/data/user-preferences.remote";
+  import { updateLanguagePreference } from "$api/user-preferences.remote";
   import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
   import {
     Home,

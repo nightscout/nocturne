@@ -16,5 +16,5 @@ export const defaultConfig: GeneratorConfig = {
   schemasPath: resolve(__dirname, '../../app/src/lib/api/generated/schemas.ts'),
   outputDir: resolve(__dirname, '../../app/src/lib'),
   apiClientOutput: 'api/api-client.generated.ts',
-  remoteFunctionsOutput: 'data/generated',
+  remoteFunctionsOutput: 'api/generated',
 };

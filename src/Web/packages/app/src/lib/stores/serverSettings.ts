@@ -1,4 +1,4 @@
-import type { DeviceStatus, Entry, Treatment } from "$lib/api/api-client";
+import type { DeviceStatus, Entry, Treatment } from "$lib/api";
 
 export interface ServerSettings {
   name?: string;

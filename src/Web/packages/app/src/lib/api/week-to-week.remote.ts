@@ -31,8 +31,8 @@ export interface PointInTimeData {
     source: string;
   };
 
-  // Recent treatments near this time
-  recentTreatments: {
+  // Recent boluses and carb intakes near this time
+  recentActivity: {
     carbs?: number;
     insulin?: number;
     bolus?: number;
@@ -101,18 +101,18 @@ export const getPointInTimeData = query(pointInTimeSchema, async ({ timestamp })
   const delta = previousEntry ? glucoseValue - (previousEntry.mgdl ?? 0) : undefined;
 
   // Aggregate boluses and carb intakes in the window
-  const recentTreatments: PointInTimeData["recentTreatments"] = {};
+  const recentActivity: PointInTimeData["recentActivity"] = {};
 
   for (const bolus of boluses) {
     if (bolus.insulin && bolus.insulin > 0) {
-      recentTreatments.insulin = (recentTreatments.insulin ?? 0) + bolus.insulin;
-      recentTreatments.bolus = (recentTreatments.bolus ?? 0) + bolus.insulin;
+      recentActivity.insulin = (recentActivity.insulin ?? 0) + bolus.insulin;
+      recentActivity.bolus = (recentActivity.bolus ?? 0) + bolus.insulin;
     }
   }
 
   for (const carb of carbIntakes) {
     if (carb.carbs && carb.carbs > 0) {
-      recentTreatments.carbs = (recentTreatments.carbs ?? 0) + carb.carbs;
+      recentActivity.carbs = (recentActivity.carbs ?? 0) + carb.carbs;
     }
   }
 
@@ -200,7 +200,7 @@ export const getPointInTimeData = query(pointInTimeSchema, async ({ timestamp })
     },
     iob,
     cob,
-    recentTreatments,
+    recentActivity,
     pumpStatus,
   };
 });

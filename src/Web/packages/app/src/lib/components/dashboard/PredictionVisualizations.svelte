@@ -2,7 +2,7 @@
   import { Area, Spline, Text } from "layerchart";
   import { curveMonotoneX } from "d3";
   import { bg } from "$lib/utils/formatting";
-  import type { PredictionData } from "$lib/data/predictions.remote";
+  import type { PredictionData } from "$api/predictions.remote";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
 
   interface Props {

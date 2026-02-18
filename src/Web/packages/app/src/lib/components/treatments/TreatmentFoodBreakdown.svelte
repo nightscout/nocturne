@@ -7,11 +7,11 @@
     type TreatmentFoodBreakdown,
     type CarbIntakeFoodRequest,
   } from "$lib/api";
+  import { deleteCarbIntakeFood } from "$api/treatment-foods.remote";
   import {
     addCarbIntakeFood,
-    deleteCarbIntakeFood,
-    getCarbIntakeFoodBreakdown,
-  } from "$lib/data/treatment-foods.remote";
+    getCarbIntakeFoods as getCarbIntakeFoodBreakdown,
+  } from "$api/generated/nutritions.generated.remote";
   import TreatmentFoodSelectorDialog from "./TreatmentFoodSelectorDialog.svelte";
   import TreatmentFoodEntryEditDialog from "./TreatmentFoodEntryEditDialog.svelte";
   import { CarbBreakdownBar, FoodEntryDetails } from "./index";
@@ -59,7 +59,7 @@
   async function handleAddFood(request: CarbIntakeFoodRequest) {
     if (!treatmentId) return;
     try {
-      const updated = await addCarbIntakeFood({ carbIntakeId: treatmentId!, request });
+      const updated = await addCarbIntakeFood({ id: treatmentId!, request });
       breakdown = updated;
       showAddFood = false;
     } catch (err) {
@@ -130,7 +130,7 @@
         <div
           class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
         >
-          <span class="text-sm font-medium">Treatment Total</span>
+          <span class="text-sm font-medium">Total Carbs</span>
           <span class="text-lg font-bold tabular-nums">{totalCarbs}g</span>
         </div>
       {/if}

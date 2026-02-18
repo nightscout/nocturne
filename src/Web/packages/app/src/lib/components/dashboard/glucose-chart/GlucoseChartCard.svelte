@@ -24,8 +24,8 @@
   import {
     getPredictions,
     type PredictionData,
-  } from "$lib/data/predictions.remote";
-  import { getChartData } from "$lib/data/chart-data.remote";
+  } from "$api/predictions.remote";
+  import { getChartData } from "$api/chart-data.remote";
   import {
     predictionMinutes,
     predictionEnabled,

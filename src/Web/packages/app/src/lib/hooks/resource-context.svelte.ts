@@ -109,7 +109,7 @@ export function useResourceContext(config: {
  * ```svelte
  * <script>
  *   import { contextResource } from "$lib/hooks/resource-context.svelte";
- *   import { getReportsData } from "$lib/data/reports.remote";
+ *   import { getReportsData } from "$api/reports.remote";
  *   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
  *
  *   const reportsParams = requireDateParamsContext(14);

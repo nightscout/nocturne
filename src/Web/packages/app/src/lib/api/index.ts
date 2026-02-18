@@ -21,5 +21,5 @@ export function getUniversalApiClient(event?: RequestEvent) {
 }
 
 // Re-export everything from the main API client
-export * from './api-client';
+export * from './api-client.generated';
 export * from './client';

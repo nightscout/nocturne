@@ -2,11 +2,11 @@
  * Status Pills UI Types
  *
  * UI-specific types for displaying status information in pill format.
- * Data types (DeviceStatus, Treatment, Profile, etc.) come from the backend
- * via the generated API client in $lib/api.
+ * Data types (DeviceStatus, Bolus, CarbIntake, DeviceEvent, Profile, etc.)
+ * come from the backend via the generated API client in $lib/api.
  *
  * @see $lib/api for backend types: DeviceStatus, LoopStatus, PumpStatus,
- *      OpenApsStatus, LoopIob, LoopCob, Treatment, Profile, etc.
+ *      OpenApsStatus, LoopIob, LoopCob, Bolus, CarbIntake, DeviceEvent, Profile, etc.
  */
 
 /**
@@ -95,9 +95,9 @@ export interface CAGEPillData extends PillDisplayProps {
 	hours: number;
 	/** Time remaining before change needed (hours) */
 	timeRemaining?: number;
-	/** Treatment timestamp */
-	treatmentDate: number;
-	/** Notes from the treatment */
+	/** Timestamp of the device event (e.g., site change) */
+	eventDate: number;
+	/** Notes from the device event */
 	notes?: string;
 }
 
@@ -113,9 +113,9 @@ export interface SAGEPillData extends PillDisplayProps {
 	hours: number;
 	/** Time remaining before change needed (hours) */
 	timeRemaining?: number;
-	/** Treatment timestamp */
-	treatmentDate: number;
-	/** Notes from the treatment */
+	/** Timestamp of the device event (e.g., sensor start/change) */
+	eventDate: number;
+	/** Notes from the device event */
 	notes?: string;
 	/** Transmitter ID from treatment */
 	transmitterId?: string;

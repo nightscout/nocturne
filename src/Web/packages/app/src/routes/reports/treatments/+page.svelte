@@ -8,11 +8,12 @@
     TreatmentStatsCard,
   } from "$lib/components/treatments";
   import {
-    mergeTreatmentRows,
-    countV4Rows,
-    type V4CategoryId,
-    type TreatmentRow,
-  } from "$lib/constants/treatment-categories";
+    mergeEntryRecords,
+    countEntryRecords,
+    type EntryCategoryId,
+    type EntryRecord,
+    ENTRY_CATEGORIES,
+  } from "$lib/constants/entry-categories";
 
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -33,8 +34,8 @@
   // Import remote function forms and commands
   import {
     getTreatmentsData,
-    deleteTreatmentForm,
-    bulkDeleteTreatments,
+    deleteEntryForm,
+    bulkDeleteEntries,
   } from "./data.remote";
 
   // Get shared date params from context (set by reports layout)
@@ -45,9 +46,15 @@
     { errorTitle: "Error Loading Treatments" }
   );
 
-  const boluses = $derived(reportsResource.current?.boluses ?? []);
-  const carbIntakes = $derived(reportsResource.current?.carbIntakes ?? []);
-  const allRows = $derived(mergeTreatmentRows(boluses, carbIntakes));
+  const allRows = $derived(
+    mergeEntryRecords({
+      boluses: reportsResource.current?.boluses,
+      carbIntakes: reportsResource.current?.carbIntakes,
+      bgChecks: reportsResource.current?.bgChecks,
+      notes: reportsResource.current?.notes,
+      deviceEvents: reportsResource.current?.deviceEvents,
+    })
+  );
   const dateRange = $derived(
     reportsResource.current?.dateRange ?? {
       from: new Date().toISOString(),
@@ -63,22 +70,22 @@
       } as TreatmentSummary)
   );
 
-  const counts = $derived(countV4Rows(allRows));
+  const counts = $derived(countEntryRecords(allRows));
 
   // State
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
 
-  let activeCategory = $state<V4CategoryId | "all">(
-    (initialCategory as V4CategoryId | "all") || "all"
+  let activeCategory = $state<EntryCategoryId | "all">(
+    (initialCategory as EntryCategoryId | "all") || "all"
   );
   let searchQuery = $state(initialSearch || "");
 
   // Modal states
   let showDeleteConfirm = $state(false);
   let showBulkDeleteConfirm = $state(false);
-  let rowToDelete = $state<TreatmentRow | null>(null);
-  let rowsToDelete = $state<TreatmentRow[]>([]);
+  let rowToDelete = $state<EntryRecord | null>(null);
+  let rowsToDelete = $state<EntryRecord[]>([]);
 
   // Loading states
   let isLoading = $state(false);
@@ -88,37 +95,51 @@
     let filtered = allRows;
 
     // Apply category filter
-    if (activeCategory === "bolus") {
-      filtered = filtered.filter((r) => r.kind === "bolus");
-    } else if (activeCategory === "carbs") {
-      filtered = filtered.filter((r) => r.kind === "carbIntake");
+    if (activeCategory !== "all") {
+      filtered = filtered.filter((r) => r.kind === activeCategory);
     }
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((r) => {
-        const searchable = [
-          r.kind === "bolus" ? "bolus" : "carb intake",
-          r.kind === "bolus" ? r.bolusType : r.foodType,
-          r.dataSource,
-          r.app,
-          r.device,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return searchable.includes(query);
+        const searchable: string[] = [ENTRY_CATEGORIES[r.kind].name];
+
+        switch (r.kind) {
+          case "bolus":
+            if (r.data.bolusType) searchable.push(r.data.bolusType);
+            break;
+          case "carbs":
+            if (r.data.foodType) searchable.push(r.data.foodType);
+            break;
+          case "bgCheck":
+            if (r.data.glucoseType) searchable.push(r.data.glucoseType);
+            break;
+          case "note":
+            if (r.data.text) searchable.push(r.data.text);
+            if (r.data.eventType) searchable.push(r.data.eventType);
+            break;
+          case "deviceEvent":
+            if (r.data.eventType) searchable.push(r.data.eventType);
+            if (r.data.notes) searchable.push(r.data.notes);
+            break;
+        }
+
+        if (r.data.dataSource) searchable.push(r.data.dataSource);
+        if (r.data.app) searchable.push(r.data.app);
+        if (r.data.device) searchable.push(r.data.device);
+
+        return searchable.join(" ").toLowerCase().includes(query);
       });
     }
 
     return filtered;
   });
 
-  let filteredCounts = $derived(countV4Rows(filteredRows));
+  let filteredCounts = $derived(countEntryRecords(filteredRows));
 
   // Handlers
-  function handleCategoryChange(category: V4CategoryId | "all") {
+  function handleCategoryChange(category: EntryCategoryId | "all") {
     activeCategory = category;
     const url = new URL(window.location.href);
     if (category === "all") {
@@ -139,12 +160,12 @@
     activeCategory = "all";
   }
 
-  function confirmDelete(row: TreatmentRow) {
+  function confirmDelete(row: EntryRecord) {
     rowToDelete = row;
     showDeleteConfirm = true;
   }
 
-  function confirmBulkDelete(rows: TreatmentRow[]) {
+  function confirmBulkDelete(rows: EntryRecord[]) {
     rowsToDelete = rows;
     showBulkDeleteConfirm = true;
   }
@@ -153,13 +174,38 @@
     searchQuery.trim() !== "" || activeCategory !== "all"
   );
 
-  function getRowLabel(row: TreatmentRow): string {
-    return row.kind === "bolus" ? "bolus" : "carb intake";
+  function getRowLabel(record: EntryRecord): string {
+    return ENTRY_CATEGORIES[record.kind].name.toLowerCase();
   }
 
-  function formatRowTime(row: TreatmentRow): string {
-    if (!row.mills) return "Unknown";
-    return formatDateTimeCompact(new Date(row.mills).toISOString());
+  function formatRowTime(record: EntryRecord): string {
+    if (!record.data.mills) return "Unknown";
+    return formatDateTimeCompact(new Date(record.data.mills).toISOString());
+  }
+
+  function getDeleteDescription(record: EntryRecord): string {
+    switch (record.kind) {
+      case "bolus":
+        return record.data.insulin
+          ? `${formatInsulinDisplay(record.data.insulin)}U`
+          : "Bolus";
+      case "carbs":
+        return record.data.carbs
+          ? `${formatCarbDisplay(record.data.carbs)}g`
+          : "Carb Intake";
+      case "bgCheck":
+        return record.data.mgdl
+          ? `${record.data.mgdl} mg/dL`
+          : "BG Check";
+      case "note":
+        return record.data.text
+          ? record.data.text.length > 50
+            ? record.data.text.slice(0, 50) + "..."
+            : record.data.text
+          : "Note";
+      case "deviceEvent":
+        return record.data.eventType ?? "Device Event";
+    }
   }
 </script>
 
@@ -189,8 +235,8 @@
     </div>
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
-      Review and manage your insulin doses, carb entries, and device events. Use
-      filters to find specific treatments.
+      Review and manage your insulin doses, carb entries, BG checks, notes, and
+      device events. Use filters to find specific records.
     </p>
   </div>
 
@@ -244,7 +290,7 @@
 
           {#if activeCategory !== "all"}
             <Badge variant="secondary" class="gap-1">
-              {activeCategory === "bolus" ? "Bolus" : "Carbs"}
+              {ENTRY_CATEGORIES[activeCategory].name}
               <button
                 onclick={() => (activeCategory = "all")}
                 class="ml-1 hover:text-foreground"
@@ -319,20 +365,12 @@
               </div>
               <div>
                 <strong>Type:</strong>
-                {rowToDelete.kind === "bolus" ? "Bolus" : "Carb Intake"}
+                {ENTRY_CATEGORIES[rowToDelete.kind].name}
               </div>
-              {#if rowToDelete.kind === "bolus" && rowToDelete.insulin}
-                <div>
-                  <strong>Insulin:</strong>
-                  {formatInsulinDisplay(rowToDelete.insulin)}U
-                </div>
-              {/if}
-              {#if rowToDelete.kind === "carbIntake" && rowToDelete.carbs}
-                <div>
-                  <strong>Carbs:</strong>
-                  {formatCarbDisplay(rowToDelete.carbs)}g
-                </div>
-              {/if}
+              <div>
+                <strong>Value:</strong>
+                {getDeleteDescription(rowToDelete)}
+              </div>
             </div>
           </Alert.Description>
         </Alert.Root>
@@ -352,8 +390,8 @@
           Cancel
         </Button>
         <form
-          {...deleteTreatmentForm
-            .for(rowToDelete.id || "")
+          {...deleteEntryForm
+            .for(rowToDelete.data.id || "")
             .enhance(async ({ submit }) => {
               isLoading = true;
               try {
@@ -373,12 +411,12 @@
         >
           <input
             type="hidden"
-            name="treatmentId"
-            value={rowToDelete.id}
+            name="entryId"
+            value={rowToDelete.data.id}
           />
           <input
             type="hidden"
-            name="treatmentKind"
+            name="entryKind"
             value={rowToDelete.kind}
           />
           <Button
@@ -424,19 +462,14 @@
                 >
                   <div>
                     <div class="font-medium">
-                      {row.kind === "bolus" ? "Bolus" : "Carb Intake"}
+                      {ENTRY_CATEGORIES[row.kind].name}
                     </div>
                     <div class="text-xs text-muted-foreground">
                       {formatRowTime(row)}
                     </div>
                   </div>
                   <div class="text-xs">
-                    {#if row.kind === "bolus" && row.insulin}
-                      {formatInsulinDisplay(row.insulin)}U
-                    {/if}
-                    {#if row.kind === "carbIntake" && row.carbs}
-                      {formatCarbDisplay(row.carbs)}g
-                    {/if}
+                    {getDeleteDescription(row)}
                   </div>
                 </div>
               {/each}
@@ -472,8 +505,8 @@
             isLoading = true;
             try {
               const items = rowsToDelete
-                .map((r) => ({ id: r.id!, kind: r.kind }));
-              const result = await bulkDeleteTreatments(items);
+                .map((r) => ({ id: r.data.id!, kind: r.kind }));
+              const result = await bulkDeleteEntries(items);
               if (result.success) {
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -34,6 +35,7 @@ public class ChartDataController : ControllerBase
     /// state spans, system events, tracker markers, and glucose readings.
     /// </summary>
     [HttpGet("dashboard")]
+    [RemoteQuery]
     [ProducesResponseType(typeof(DashboardChartData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

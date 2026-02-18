@@ -88,7 +88,7 @@ export class ApiClient {
   public readonly chartData: ChartDataClient;
   public readonly clockFaces: ClockFacesClient;
   public readonly compatibility: CompatibilityClient;
-  public readonly compressionLow: CompressionLowClient;
+  public readonly compressionLows: CompressionLowClient;
   public readonly configuration: ConfigurationClient;
   public readonly connectorFoodEntries: ConnectorFoodEntriesClient;
   public readonly connectorSettings: MyFitnessPalSettingsClient;
@@ -160,7 +160,7 @@ export class ApiClient {
     this.chartData = new ChartDataClient(apiBaseUrl, http);
     this.clockFaces = new ClockFacesClient(apiBaseUrl, http);
     this.compatibility = new CompatibilityClient(apiBaseUrl, http);
-    this.compressionLow = new CompressionLowClient(apiBaseUrl, http);
+    this.compressionLows = new CompressionLowClient(apiBaseUrl, http);
     this.configuration = new ConfigurationClient(apiBaseUrl, http);
     this.connectorFoodEntries = new ConnectorFoodEntriesClient(apiBaseUrl, http);
     this.connectorSettings = new MyFitnessPalSettingsClient(apiBaseUrl, http);

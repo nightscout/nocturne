@@ -26,8 +26,8 @@
     CarbIntakeFoodRequest,
     SuggestedMealMatch,
   } from "$lib/api";
-  import { getMeals } from "$lib/data/treatment-foods.remote";
-  import * as mealMatchingRemote from "$lib/data/meal-matching.remote";
+  import { getMeals } from "$api/generated/nutritions.generated.remote";
+  import { getSuggestions as getMealMatchingSuggestions, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import { toast } from "svelte-sonner";
   import {
     TreatmentFoodSelectorDialog,
@@ -35,7 +35,7 @@
     CarbBreakdownBar,
     FoodEntryDetails,
   } from "$lib/components/treatments";
-  import { addCarbIntakeFood } from "$lib/data/treatment-foods.remote";
+  import { addCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { cn } from "$lib/utils";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
@@ -90,7 +90,7 @@
     to: dateRange.to ?? new Date().toISOString().split("T")[0],
   });
   const suggestionsQuery = $derived(
-    mealMatchingRemote.getSuggestions(suggestionsQueryParams)
+    getMealMatchingSuggestions(suggestionsQueryParams)
   );
   const suggestedMatches = $derived<SuggestedMealMatch[]>(
     suggestionsQuery.current ?? []
@@ -320,7 +320,7 @@
 
     try {
       await addCarbIntakeFood({
-        carbIntakeId: addFoodMeal.carbIntake.id,
+        id: addFoodMeal.carbIntake.id,
         request,
       });
       toast.success("Food added");
@@ -367,7 +367,7 @@
 
   async function handleQuickAccept(match: SuggestedMealMatch) {
     try {
-      await mealMatchingRemote.acceptMatch({
+      await acceptMatch({
         foodEntryId: match.foodEntryId!,
         treatmentId: match.treatmentId!,
         carbs: match.carbs ?? 0,
@@ -384,7 +384,7 @@
 
   async function handleDismiss(match: SuggestedMealMatch) {
     try {
-      await mealMatchingRemote.dismissMatch({ foodEntryId: match.foodEntryId! });
+      await dismissMatch({ foodEntryId: match.foodEntryId! });
       toast.success("Match dismissed");
       suggestionsQuery.refresh();
     } catch (err) {
@@ -404,7 +404,7 @@
   <title>Meals - Nocturne</title>
   <meta
     name="description"
-    content="Review carb treatments and add food breakdowns for better meal documentation"
+    content="Review carb intake records and add food breakdowns for better meal documentation"
   />
 </svelte:head>
 
@@ -418,7 +418,7 @@
     </div>
     <h1 class="text-3xl font-bold">Meal Attribution</h1>
     <p class="text-muted-foreground">
-      Pair carb treatments with foods when you want more detail.
+      Pair carb intakes with foods when you want more detail.
     </p>
   </div>
 

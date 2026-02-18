@@ -1,7 +1,9 @@
 <script lang="ts" module>
   import type {
-    TreatmentRow,
-  } from "$lib/constants/treatment-categories";
+    EntryRecord,
+    EntryCategoryId,
+  } from "$lib/constants/entry-categories";
+  import { getEntryStyle } from "$lib/constants/entry-categories";
   import type {
     ColumnDef,
     SortingState,
@@ -20,7 +22,6 @@
     FlexRender,
     renderSnippet,
   } from "$lib/components/ui/data-table";
-  import { getRowTypeStyle } from "$lib/constants/treatment-categories";
 </script>
 
 <script lang="ts">
@@ -48,11 +49,12 @@
   } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
 
   interface Props {
-    rows: TreatmentRow[];
-    onDelete?: (row: TreatmentRow) => void;
-    onBulkDelete?: (rows: TreatmentRow[]) => void;
+    rows: EntryRecord[];
+    onDelete?: (row: EntryRecord) => void;
+    onBulkDelete?: (rows: EntryRecord[]) => void;
   }
 
   let { rows, onDelete, onBulkDelete }: Props = $props();
@@ -73,11 +75,20 @@
   let sourceFilterSearch = $state("");
   let selectedSources = $state<string[]>([]);
 
+  // Map category IDs to display labels
+  const categoryLabels: Record<EntryCategoryId, string> = {
+    bolus: "Bolus",
+    carbs: "Carb Intake",
+    bgCheck: "BG Check",
+    note: "Note",
+    deviceEvent: "Device Event",
+  };
+
   // Compute unique sources from data
   let uniqueSources = $derived.by(() => {
     const sources = new Set<string>();
     for (const r of rows) {
-      const source = r.dataSource || r.app;
+      const source = r.data.dataSource || r.data.app;
       if (source) sources.add(source);
     }
     return Array.from(sources).sort();
@@ -96,7 +107,7 @@
     value: number | undefined | null,
     unit?: string
   ): string {
-    if (value === undefined || value === null) return "—";
+    if (value === undefined || value === null) return "\u2014";
     const formatted = Number.isInteger(value)
       ? value.toString()
       : value.toFixed(1);
@@ -104,12 +115,63 @@
   }
 
   function formatMills(mills: number | undefined): string {
-    if (!mills) return "—";
+    if (!mills) return "\u2014";
     return formatDateTimeCompact(new Date(mills).toISOString());
   }
 
+  /** Get the primary value column content for an entry record */
+  function getPrimaryValue(record: EntryRecord): string {
+    switch (record.kind) {
+      case "bolus":
+        return formatNumber(record.data.insulin, "U");
+      case "carbs":
+        return formatNumber(record.data.carbs, "g");
+      case "bgCheck":
+        return formatNumber(record.data.mgdl, " mg/dL");
+      case "note":
+        return record.data.text
+          ? record.data.text.length > 40
+            ? record.data.text.slice(0, 40) + "\u2026"
+            : record.data.text
+          : "\u2014";
+      case "deviceEvent":
+        return record.data.eventType ?? "\u2014";
+    }
+  }
+
+  /** Get details column content */
+  function getDetails(record: EntryRecord): string {
+    switch (record.kind) {
+      case "bolus": {
+        const parts: string[] = [];
+        if (record.data.bolusType) parts.push(record.data.bolusType);
+        if (record.data.automatic) parts.push("Auto");
+        return parts.length > 0 ? parts.join(" \u00B7 ") : "\u2014";
+      }
+      case "carbs": {
+        const foodType = record.data.foodType;
+        if (!foodType) return "\u2014";
+        return foodType.length > 30 ? foodType.slice(0, 30) + "\u2026" : foodType;
+      }
+      case "bgCheck":
+        return record.data.glucoseType ?? "\u2014";
+      case "note": {
+        const parts: string[] = [];
+        if (record.data.eventType) parts.push(record.data.eventType);
+        if (record.data.isAnnouncement) parts.push("Announcement");
+        return parts.length > 0 ? parts.join(" \u00B7 ") : "\u2014";
+      }
+      case "deviceEvent":
+        return record.data.notes
+          ? record.data.notes.length > 30
+            ? record.data.notes.slice(0, 30) + "\u2026"
+            : record.data.notes
+          : "\u2014";
+    }
+  }
+
   // Column definitions
-  const columns: ColumnDef<TreatmentRow, unknown>[] = [
+  const columns: ColumnDef<EntryRecord, unknown>[] = [
     // Selection column
     {
       id: "select",
@@ -133,21 +195,21 @@
     // Time column
     {
       id: "time",
-      accessorFn: (row) => row.mills,
+      accessorFn: (row) => row.data.mills,
       header: ({ column }) =>
         renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
-      cell: ({ row }) => formatMills(row.original.mills),
+      cell: ({ row }) => formatMills(row.original.data.mills),
       sortingFn: (rowA, rowB) =>
-        (rowA.original.mills ?? 0) - (rowB.original.mills ?? 0),
+        (rowA.original.data.mills ?? 0) - (rowB.original.data.mills ?? 0),
     },
-    // Type column (bolus / carb intake)
+    // Type column
     {
       id: "type",
       accessorFn: (row) => row.kind,
       header: () => renderSnippet(typeFilterHeaderSnippet as any, {}),
       cell: ({ row }) => {
-        const label = row.original.kind === "bolus" ? "Bolus" : "Carb Intake";
-        const styles = getRowTypeStyle(row.original.kind);
+        const label = categoryLabels[row.original.kind];
+        const styles = getEntryStyle(row.original.kind);
         return renderSnippet(typeBadgeSnippet as any, { label, styles });
       },
       filterFn: (row, _id, filterValue: string[]) => {
@@ -155,88 +217,75 @@
         return filterValue.includes(row.original.kind);
       },
     },
-    // Insulin column (bolus only)
+    // Value column (insulin/carbs/glucose/text/event type depending on kind)
     {
-      id: "insulin",
-      accessorFn: (row) => (row.kind === "bolus" ? row.insulin : undefined),
+      id: "value",
       header: ({ column }) =>
         renderSnippet(sortableHeaderSnippet as any, {
           column,
-          label: "Insulin",
+          label: "Value",
         }),
-      cell: ({ row }) => {
-        if (row.original.kind !== "bolus") return "—";
-        return formatNumber(row.original.insulin, "U");
+      cell: ({ row }) => getPrimaryValue(row.original),
+      accessorFn: (row) => {
+        switch (row.kind) {
+          case "bolus":
+            return row.data.insulin ?? 0;
+          case "carbs":
+            return row.data.carbs ?? 0;
+          case "bgCheck":
+            return row.data.mgdl ?? 0;
+          default:
+            return 0;
+        }
       },
       sortingFn: (rowA, rowB) => {
-        const a = rowA.original.kind === "bolus" ? (rowA.original.insulin ?? 0) : 0;
-        const b = rowB.original.kind === "bolus" ? (rowB.original.insulin ?? 0) : 0;
-        return a - b;
+        const valA = (() => {
+          switch (rowA.original.kind) {
+            case "bolus":
+              return rowA.original.data.insulin ?? 0;
+            case "carbs":
+              return rowA.original.data.carbs ?? 0;
+            case "bgCheck":
+              return rowA.original.data.mgdl ?? 0;
+            default:
+              return 0;
+          }
+        })();
+        const valB = (() => {
+          switch (rowB.original.kind) {
+            case "bolus":
+              return rowB.original.data.insulin ?? 0;
+            case "carbs":
+              return rowB.original.data.carbs ?? 0;
+            case "bgCheck":
+              return rowB.original.data.mgdl ?? 0;
+            default:
+              return 0;
+          }
+        })();
+        return valA - valB;
       },
     },
-    // Carbs column (carb intake only)
-    {
-      id: "carbs",
-      accessorFn: (row) => (row.kind === "carbIntake" ? row.carbs : undefined),
-      header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Carbs" }),
-      cell: ({ row }) => {
-        if (row.original.kind !== "carbIntake") return "—";
-        return formatNumber(row.original.carbs, "g");
-      },
-      sortingFn: (rowA, rowB) => {
-        const a = rowA.original.kind === "carbIntake" ? (rowA.original.carbs ?? 0) : 0;
-        const b = rowB.original.kind === "carbIntake" ? (rowB.original.carbs ?? 0) : 0;
-        return a - b;
-      },
-    },
-    // Details column (context-specific: bolusType/automatic for bolus, foodType for carbs)
+    // Details column
     {
       id: "details",
       header: "Details",
-      cell: ({ row }) => {
-        if (row.original.kind === "bolus") {
-          return renderSnippet(bolusDetailsSnippet as any, {
-            bolusType: row.original.bolusType,
-            automatic: row.original.automatic,
-          });
-        }
-        const foodType = row.original.foodType;
-        if (!foodType) return "—";
-        return foodType.length > 25 ? foodType.slice(0, 25) + "…" : foodType;
-      },
+      cell: ({ row }) => getDetails(row.original),
       enableSorting: false,
-    },
-    // Duration column
-    {
-      id: "duration",
-      header: "Duration",
-      accessorFn: (row) => {
-        if (row.kind === "bolus") return row.duration;
-        return row.absorptionTime;
-      },
-      cell: ({ row }) => {
-        const val =
-          row.original.kind === "bolus"
-            ? row.original.duration
-            : row.original.absorptionTime;
-        if (!val) return "—";
-        return `${val.toFixed(0)} min`;
-      },
     },
     // Source column
     {
       id: "source",
-      accessorFn: (row) => row.dataSource || row.app,
+      accessorFn: (row) => row.data.dataSource || row.data.app,
       header: () => renderSnippet(sourceFilterHeaderSnippet as any, {}),
       cell: ({ row }) => {
-        const source = row.original.dataSource || row.original.app;
-        if (!source) return "—";
-        return source.length > 25 ? source.slice(0, 25) + "…" : source;
+        const source = row.original.data.dataSource || row.original.data.app;
+        if (!source) return "\u2014";
+        return source.length > 25 ? source.slice(0, 25) + "\u2026" : source;
       },
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
-        const source = row.original.dataSource || row.original.app || "";
+        const source = row.original.data.dataSource || row.original.data.app || "";
         return filterValue.includes(source);
       },
     },
@@ -245,7 +294,7 @@
       id: "actions",
       header: "",
       cell: ({ row }) =>
-        renderSnippet(actionsSnippet as any, { treatment: row.original }),
+        renderSnippet(actionsSnippet as any, { entry: row.original }),
       enableSorting: false,
       enableHiding: false,
       size: 50,
@@ -258,7 +307,7 @@
       return rows;
     },
     columns,
-    getRowId: (row) => row.id ?? "",
+    getRowId: (row) => row.data.id ?? "",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -289,17 +338,33 @@
     globalFilterFn: (row, _columnId, filterValue) => {
       const search = filterValue.toLowerCase();
       const r = row.original;
-      const values = [
-        r.kind === "bolus" ? "bolus" : "carb intake",
-        r.kind === "bolus" ? r.bolusType : r.foodType,
-        r.dataSource,
-        r.app,
-        r.device,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return values.includes(search);
+      const values: string[] = [categoryLabels[r.kind]];
+
+      switch (r.kind) {
+        case "bolus":
+          if (r.data.bolusType) values.push(r.data.bolusType);
+          break;
+        case "carbs":
+          if (r.data.foodType) values.push(r.data.foodType);
+          break;
+        case "bgCheck":
+          if (r.data.glucoseType) values.push(r.data.glucoseType);
+          break;
+        case "note":
+          if (r.data.text) values.push(r.data.text);
+          if (r.data.eventType) values.push(r.data.eventType);
+          break;
+        case "deviceEvent":
+          if (r.data.eventType) values.push(r.data.eventType);
+          if (r.data.notes) values.push(r.data.notes);
+          break;
+      }
+
+      if (r.data.dataSource) values.push(r.data.dataSource);
+      if (r.data.app) values.push(r.data.app);
+      if (r.data.device) values.push(r.data.device);
+
+      return values.join(" ").toLowerCase().includes(search);
     },
     state: {
       get sorting() {
@@ -385,6 +450,11 @@
       );
     }
   }
+
+  const typeFilterOptions = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
+    value: id,
+    label: cat.name,
+  }));
 </script>
 
 <!-- Snippets for cell rendering -->
@@ -452,26 +522,6 @@
   </Badge>
 {/snippet}
 
-{#snippet bolusDetailsSnippet({
-  bolusType,
-  automatic,
-}: {
-  bolusType: string | undefined;
-  automatic: boolean | undefined;
-})}
-  <div class="flex items-center gap-1.5">
-    {#if bolusType}
-      <span class="text-sm">{bolusType}</span>
-    {/if}
-    {#if automatic}
-      <Badge variant="secondary" class="text-[10px] px-1 py-0">Auto</Badge>
-    {/if}
-    {#if !bolusType && !automatic}
-      <span>—</span>
-    {/if}
-  </div>
-{/snippet}
-
 {#snippet typeFilterHeaderSnippet({})}
   <Popover.Root bind:open={typeFilterOpen}>
     <Popover.Trigger>
@@ -492,11 +542,11 @@
         </Button>
       {/snippet}
     </Popover.Trigger>
-    <Popover.Content class="w-[180px] p-0" align="start">
+    <Popover.Content class="w-[200px] p-0" align="start">
       <Command.Root shouldFilter={false}>
         <Command.List>
           <Command.Group>
-            {#each [{ value: "bolus", label: "Bolus" }, { value: "carbIntake", label: "Carb Intake" }] as option}
+            {#each typeFilterOptions as option}
               <Command.Item
                 value={option.value}
                 onSelect={() => toggleTypeFilter(option.value)}
@@ -607,14 +657,14 @@
   </Popover.Root>
 {/snippet}
 
-{#snippet actionsSnippet({ treatment }: { treatment: TreatmentRow })}
+{#snippet actionsSnippet({ entry }: { entry: EntryRecord })}
   <div class="flex items-center gap-1">
     {#if onDelete}
       <Button
         variant="ghost"
         size="sm"
         class="h-8 w-8 p-0 text-destructive hover:text-destructive"
-        onclick={() => onDelete(treatment)}
+        onclick={() => onDelete(entry)}
         title="Delete"
       >
         <Trash2 class="h-4 w-4" />

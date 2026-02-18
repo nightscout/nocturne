@@ -78,7 +78,7 @@
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
-  import { getReportsData } from "$lib/data/reports.remote";
+  import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {

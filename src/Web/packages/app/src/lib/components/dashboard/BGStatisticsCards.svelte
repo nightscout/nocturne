@@ -18,7 +18,7 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import WebSocketStatus from "$lib/components/WebSocketStatus.svelte";
-  import { getBatteryCardData } from "$lib/data/battery.remote";
+  import { getBatteryCardData } from "$api/battery.remote";
 
   let {
     bgDelta,

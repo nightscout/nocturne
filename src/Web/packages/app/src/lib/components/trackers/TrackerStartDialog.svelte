@@ -14,8 +14,8 @@
     TrackerMode,
     CompletionReason,
   } from "$api";
-  import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
-  import { createDeviceEvent } from "$lib/data/generated/observations.generated.remote";
+  import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { createDeviceEvent } from "$api/generated/observations.generated.remote";
   import { DeviceEventType } from "$api";
 
   interface TrackerStartDialogProps {

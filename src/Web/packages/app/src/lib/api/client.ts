@@ -1,4 +1,4 @@
-import { ApiClient } from "./api-client";
+import { ApiClient } from "./api-client.generated";
 import { browser } from "$app/environment";
 
 /**

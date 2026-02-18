@@ -23,7 +23,7 @@
     RefreshCw,
   } from "lucide-svelte";
   import type { BatteryStatistics, ChargeCycle, DeviceStatus } from "$lib/api";
-  import { getBatteryReportData } from "$lib/data/battery.remote";
+  import { getBatteryReportData } from "$api/battery.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 

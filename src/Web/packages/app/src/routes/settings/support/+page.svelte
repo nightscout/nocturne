@@ -28,7 +28,7 @@
     HelpCircle,
     CheckCircle,
   } from "lucide-svelte";
-  import { fetchExternalUrls } from "$lib/data/metadata.remote";
+  import { getExternalUrls } from "$api/generated";
   import { onMount } from "svelte";
   import { getApiClient } from "$lib/api/client";
   import type { ExternalUrls } from "$lib/api";
@@ -63,7 +63,7 @@
     }
 
     try {
-      externalUrls = await fetchExternalUrls();
+      externalUrls = await getExternalUrls();
     } catch (e) {
       console.error("Failed to load external URLs", e);
     }

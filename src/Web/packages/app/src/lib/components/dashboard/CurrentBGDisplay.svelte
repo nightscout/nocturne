@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Entry, Treatment } from "$lib/api";
+  import type { Entry } from "$lib/api";
   import { TrackerCategory } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
   import {
@@ -11,6 +11,7 @@
   } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import { TrackerCompletionDialog } from "$lib/components/trackers";
+  import { EntryEditDialog } from "$lib/components/entries";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
@@ -19,8 +20,6 @@
     formatGlucoseDelta,
   } from "$lib/utils/formatting";
   import { Clock } from "lucide-svelte";
-  import TreatmentEditDialog from "$lib/components/treatments/TreatmentEditDialog.svelte";
-  import { createTreatment } from "../../../routes/reports/treatments/data.remote";
 
   interface ComponentProps {
     entries?: Entry[];
@@ -137,23 +136,8 @@
     }
   });
 
-  // Treatment Dialog State
-  let showTreatmentDialog = $state(false);
-  let treatmentEventType = $state("");
-  let isSavingTreatment = $state(false);
-
-  async function handleSaveTreatment(treatment: Treatment) {
-    isSavingTreatment = true;
-    try {
-      await createTreatment({ treatmentData: treatment });
-      showTreatmentDialog = false;
-    } catch (e) {
-      console.error("Failed to create treatment", e);
-      // TODO: Toast error
-    } finally {
-      isSavingTreatment = false;
-    }
-  }
+  // Entry Dialog State
+  let showEntryDialog = $state(false);
 
   // Tracker Completion Dialog State
   let showCompletionDialog = $state(false);
@@ -273,13 +257,10 @@
   </div>
 {/if}
 
-<TreatmentEditDialog
-  bind:open={showTreatmentDialog}
-  treatment={null}
-  availableEventTypes={[treatmentEventType]}
-  isLoading={isSavingTreatment}
-  onClose={() => (showTreatmentDialog = false)}
-  onSave={handleSaveTreatment}
+<EntryEditDialog
+  bind:open={showEntryDialog}
+  entry={null}
+  onClose={() => (showEntryDialog = false)}
 />
 
 <TrackerCompletionDialog

@@ -16,7 +16,7 @@ import type {
   NotificationSettings,
   ServicesSettings,
   DataQualitySettings,
-} from "$lib/api/api-client";
+} from "$lib/api";
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
 import {
   createDefaultUserAlarmConfiguration,

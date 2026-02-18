@@ -32,6 +32,7 @@ public class FoodsController : ControllerBase
     /// Get current user's favorite foods.
     /// </summary>
     [HttpGet("favorites")]
+    [RemoteQuery]
     [Authorize]
     public async Task<ActionResult<Food[]>> GetFavorites()
     {
@@ -53,6 +54,7 @@ public class FoodsController : ControllerBase
     /// Add a food to favorites.
     /// </summary>
     [HttpPost("{foodId}/favorite")]
+    [RemoteCommand(Invalidates = ["GetFavorites"])]
     [Authorize]
     public async Task<ActionResult> AddFavorite(string foodId)
     {
@@ -81,6 +83,7 @@ public class FoodsController : ControllerBase
     /// Remove a food from favorites.
     /// </summary>
     [HttpDelete("{foodId}/favorite")]
+    [RemoteCommand(Invalidates = ["GetFavorites"])]
     [Authorize]
     public async Task<ActionResult> RemoveFavorite(string foodId)
     {
@@ -109,6 +112,7 @@ public class FoodsController : ControllerBase
     /// Get recently used foods (excluding favorites).
     /// </summary>
     [HttpGet("recent")]
+    [RemoteQuery]
     [Authorize]
     public async Task<ActionResult<Food[]>> GetRecentFoods([FromQuery] int limit = 20)
     {

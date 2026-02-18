@@ -6,13 +6,11 @@
   import { X, Loader2 } from "lucide-svelte";
   import { StateHistory } from "runed";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getDefinitions } from "$lib/data/generated";
-  import {
-    update as updateClockFace,
-    getByIdForEdit as getClockFaceById,
-  } from "$lib/data/clockfaces.remote";
+  import { getDefinitions } from "$api/generated";
+  import { getByIdForEdit as getClockFaceById } from "$api/clockfaces.remote";
+  import { update as updateClockFace } from "$api/generated/clockFaces.generated.remote";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
-  import type { ClockElement, TrackerDefinitionDto } from "$lib/api/api-client";
+  import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
 
   // Clock builder imports
   import {

@@ -14,7 +14,7 @@
     updateCarbIntakeFood,
     getFoodById,
     getAllFoods,
-  } from "$lib/data/treatment-foods.remote";
+  } from "$api/treatment-foods.remote";
   import { toast } from "svelte-sonner";
   import { AddFoodDialog } from "$lib/components/food";
 
@@ -228,7 +228,7 @@
             <div
               class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm"
             >
-              <span>Treatment total</span>
+              <span>Carb intake total</span>
               <span class="font-semibold tabular-nums">{totalCarbs}g</span>
             </div>
             {#if actualUnattributed > 0}

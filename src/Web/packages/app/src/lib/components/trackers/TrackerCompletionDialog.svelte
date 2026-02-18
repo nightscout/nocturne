@@ -9,8 +9,8 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Check } from "lucide-svelte";
   import { CompletionReason, TrackerCategory, DeviceEventType } from "$api";
-  import * as trackersRemote from "$lib/data/generated/trackers.generated.remote";
-  import { createDeviceEvent } from "$lib/data/generated/observations.generated.remote";
+  import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { createDeviceEvent } from "$api/generated/observations.generated.remote";
 
   interface TrackerCompletionDialogProps {
     open: boolean;

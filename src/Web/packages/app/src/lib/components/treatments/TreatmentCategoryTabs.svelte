@@ -2,26 +2,35 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Tabs from "$lib/components/ui/tabs";
   import type {
-    V4CategoryId,
-    V4TreatmentCounts,
-  } from "$lib/constants/treatment-categories";
-  import { Syringe, Utensils, List } from "lucide-svelte";
+    EntryCategoryId,
+  } from "$lib/constants/entry-categories";
+  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  import { Syringe, Utensils, Droplet, FileText, Smartphone, List } from "lucide-svelte";
 
   interface Props {
-    activeCategory: V4CategoryId | "all";
-    categoryCounts: V4TreatmentCounts;
-    onChange: (category: V4CategoryId | "all") => void;
+    activeCategory: EntryCategoryId | "all";
+    categoryCounts: Record<EntryCategoryId | "all", number>;
+    onChange: (category: EntryCategoryId | "all") => void;
   }
 
   let { activeCategory, categoryCounts, onChange }: Props = $props();
+
+  const categoryIcons = {
+    bolus: Syringe,
+    carbs: Utensils,
+    bgCheck: Droplet,
+    note: FileText,
+    deviceEvent: Smartphone,
+  } as const;
 </script>
 
 <Tabs.Root
   value={activeCategory}
-  onValueChange={(v) => onChange(v as V4CategoryId | "all")}
+  onValueChange={(v) => onChange(v as EntryCategoryId | "all")}
 >
   <Tabs.List
-    class="grid w-full grid-cols-3 h-auto gap-2 bg-transparent p-0"
+    class="grid w-full h-auto gap-2 bg-transparent p-0"
+    style="grid-template-columns: repeat({Object.keys(ENTRY_CATEGORIES).length + 1}, minmax(0, 1fr));"
   >
     <Tabs.Trigger
       value="all"
@@ -30,30 +39,22 @@
       <List class="h-5 w-5" />
       <span class="text-xs font-medium">All</span>
       <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-        {categoryCounts.total}
+        {categoryCounts.all}
       </Badge>
     </Tabs.Trigger>
 
-    <Tabs.Trigger
-      value="bolus"
-      class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg border data-[state=active]:border-primary/30"
-    >
-      <Syringe class="h-5 w-5 text-blue-600 dark:text-blue-400" />
-      <span class="text-xs font-medium">Bolus</span>
-      <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-        {categoryCounts.bolus}
-      </Badge>
-    </Tabs.Trigger>
-
-    <Tabs.Trigger
-      value="carbs"
-      class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg border data-[state=active]:border-primary/30"
-    >
-      <Utensils class="h-5 w-5 text-green-600 dark:text-green-400" />
-      <span class="text-xs font-medium">Carbs</span>
-      <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-        {categoryCounts.carbs}
-      </Badge>
-    </Tabs.Trigger>
+    {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+      {@const Icon = categoryIcons[id as EntryCategoryId]}
+      <Tabs.Trigger
+        value={id}
+        class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg border data-[state=active]:border-primary/30"
+      >
+        <Icon class="h-5 w-5 {cat.colorClass}" />
+        <span class="text-xs font-medium">{cat.name}</span>
+        <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
+          {categoryCounts[id as EntryCategoryId]}
+        </Badge>
+      </Tabs.Trigger>
+    {/each}
   </Tabs.List>
 </Tabs.Root>

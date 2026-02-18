@@ -4,7 +4,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
-  import * as mealMatchingRemote from "$lib/data/meal-matching.remote";
+  import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import type {
     InAppNotificationDto,
     ConnectorFoodEntry,
@@ -121,7 +121,7 @@
   async function loadFoodEntry() {
     if (!foodEntryId) return;
     try {
-      foodEntry = await mealMatchingRemote.getFoodEntry({ id: foodEntryId });
+      foodEntry = await getFoodEntry(foodEntryId);
     } catch (err) {
       console.error("Failed to load food entry:", err);
     }
@@ -145,7 +145,7 @@
 
     isLoading = true;
     try {
-      await mealMatchingRemote.acceptMatch({
+      await acceptMatch({
         foodEntryId,
         treatmentId,
         carbs,
@@ -170,7 +170,7 @@
 
     isLoading = true;
     try {
-      await mealMatchingRemote.dismissMatch({ foodEntryId });
+      await dismissMatch({ foodEntryId });
       toast.success("Meal match dismissed");
       onComplete?.();
       resetAndClose();
