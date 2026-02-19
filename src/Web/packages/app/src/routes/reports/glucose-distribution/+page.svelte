@@ -2,105 +2,58 @@
   import { PieChart, Text } from "layerchart";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
+  import Button from "$lib/components/ui/button/button.svelte";
   import { getReportsData } from "$api/reports.remote";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
-  // Get shared date params from context (set by reports layout)
-  // Default: 14 days is standard for glucose distribution analysis
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Glucose Distribution" }
   );
 
-  // Unwrap the data from the resource with null safety
-  const data = $derived({
-    entries: reportsResource.current?.entries ?? [],
-    analysis: reportsResource.current?.analysis,
-    averagedStats: reportsResource.current?.averagedStats,
-    dateRange: reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    },
-  });
-
-  // Glucose distribution ranges (using CSS variables for theme support)
-  const RANGES = [
-    { name: "Very Low", color: "#8b5cf6" }, // purple - <54 mg/dL
-    { name: "Low", color: "var(--glucose-low)" }, // red - 54-70 mg/dL
-    { name: "Tight Range", color: "#22c55e" }, // bright green - 70-140 mg/dL
-    { name: "In Range", color: "#16a34a" }, // darker green - 70-180 mg/dL
-    { name: "High", color: "var(--glucose-high)" }, // yellow - 180-250 mg/dL
-    { name: "Very High", color: "#ea580c" }, // dark orange - >250 mg/dL
-  ] as const;
+  let showTightRange = $state(true);
 
   const rangeStats = $derived.by(() => {
-    const analysis = reportsResource.current?.analysis;
-    const tir = analysis?.timeInRange?.percentages;
+    const tir =
+      reportsResource.current?.analysis?.timeInRange?.percentages;
 
-    if (!tir) {
-      return RANGES.map((range) => ({
-        name: range.name,
-        color: range.color,
-        percentage: 0,
-      }));
+    const stats = [
+      { key: "Very Low", color: "var(--glucose-very-low)", value: tir?.veryLow ?? 0 },
+      { key: "Low", color: "var(--glucose-low)", value: tir?.low ?? 0 },
+    ];
+
+    if (showTightRange) {
+      stats.push(
+        { key: "Tight Range", color: "var(--glucose-tight-range)", value: tir?.tightTarget ?? 0 },
+        { key: "In Range", color: "var(--glucose-in-range)", value: (tir?.target ?? 0) - (tir?.tightTarget ?? 0) },
+      );
+    } else {
+      stats.push(
+        { key: "In Range", color: "var(--glucose-in-range)", value: tir?.target ?? 0 },
+      );
     }
 
-    return [
-      {
-        name: "Very Low",
-        color: RANGES[0].color,
-        percentage: tir.severeLow ?? 0,
-      },
-      {
-        name: "Low",
-        color: RANGES[1].color,
-        percentage: tir.low ?? 0,
-      },
-      {
-        name: "Tight Range",
-        color: RANGES[2].color,
-        percentage: tir.tightTarget ?? 0,
-      },
-      {
-        name: "In Range",
-        color: RANGES[3].color,
-        percentage: tir.target ?? 0,
-      },
-      {
-        name: "High",
-        color: RANGES[4].color,
-        percentage: tir.high ?? 0,
-      },
-      {
-        name: "Very High",
-        color: RANGES[5].color,
-        percentage: tir.severeHigh ?? 0,
-      },
-    ];
+    stats.push(
+      { key: "High", color: "var(--glucose-high)", value: tir?.high ?? 0 },
+      { key: "Very High", color: "var(--glucose-very-high)", value: tir?.veryHigh ?? 0 },
+    );
+
+    return stats;
   });
 
-  // Pie chart data
-  const pieData = $derived(
-    rangeStats.map((stat) => ({
-      name: stat.name,
-      value: stat.percentage,
-      color: stat.color,
-    }))
+  const tirPercentage = $derived(
+    reportsResource.current?.analysis?.timeInRange?.percentages?.target ?? 0
   );
 
-  // Overall statistics from backend
   const overallStats = $derived.by(() => {
-    const analysis = data.analysis;
+    const analysis = reportsResource.current?.analysis;
     const basicStats = analysis?.basicStats;
     const glycemicVariability = analysis?.glycemicVariability;
-    const gmi = analysis?.gmi;
 
     if (!basicStats || basicStats.count === 0) {
       return {
@@ -117,9 +70,7 @@
       };
     }
 
-    // GMI value is the A1c estimate (DCCT format)
-    const a1cDCCT = gmi?.value ?? glycemicVariability?.estimatedA1c ?? 0;
-    // Convert DCCT to IFCC: IFCC = 10.929 × (DCCT - 2.15)
+    const a1cDCCT = analysis?.gmi?.value ?? glycemicVariability?.estimatedA1c ?? 0;
     const a1cIFCC = 10.929 * (a1cDCCT - 2.15);
 
     return {
@@ -136,22 +87,17 @@
     };
   });
 
-  // Date range display
   const dateRangeDisplay = $derived.by(() => {
-    const from = new Date(data.dateRange.from);
-    const to = new Date(data.dateRange.to);
-    const options: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${from.toLocaleDateString(undefined, options)} – ${to.toLocaleDateString(undefined, options)}`;
+    const dateRange = reportsResource.current?.dateRange;
+    if (!dateRange) return "";
+    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+    return `${new Date(dateRange.from).toLocaleDateString(undefined, options)} – ${new Date(dateRange.to).toLocaleDateString(undefined, options)}`;
   });
 </script>
 
 {#if reportsResource.current}
+  {@const report = reportsResource.current}
   <div class="space-y-6 p-4">
-    <!-- Header -->
     <Card.Root>
       <Card.Header>
         <Card.Title class="flex items-center gap-2">
@@ -164,34 +110,35 @@
     </Card.Root>
 
     <div class="grid gap-6 lg:grid-cols-2">
-      <!-- Pie Chart -->
       <Card.Root>
         <Card.Header>
-          <Card.Title class="text-lg">Distribution Chart</Card.Title>
+          <div class="flex items-center justify-between">
+            <Card.Title class="text-lg">Distribution Chart</Card.Title>
+            <Button
+              variant="ghost"
+              size="sm"
+              onclick={() => (showTightRange = !showTightRange)}
+            >
+              {showTightRange ? "Hide" : "Show"} Tight Range
+            </Button>
+          </div>
         </Card.Header>
         <Card.Content>
           <div class="flex flex-col items-center">
-            {#if pieData.some((d) => d.value > 0)}
+            {#if rangeStats.some((d) => d.value > 0)}
               <div class="h-[300px] w-full">
                 <PieChart
                   data={rangeStats}
-                  key="name"
-                  value="percentage"
+                  value="value"
                   cRange={rangeStats.map((s) => s.color)}
                   innerRadius={-60}
                   cornerRadius={3}
                   padAngle={0.02}
-                  renderContext="svg"
                   legend
-                  props={{
-                    legend: {
-                      placement: "bottom",
-                    },
-                  }}
                 >
                   {#snippet aboveMarks()}
                     <Text
-                      value={`${rangeStats.find((s) => s.name === "In Range")?.percentage.toFixed(0)}%`}
+                      value={`${tirPercentage.toFixed(0)}%`}
                       textAnchor="middle"
                       verticalAnchor="middle"
                       dy={-8}
@@ -218,7 +165,6 @@
         </Card.Content>
       </Card.Root>
 
-      <!-- Statistics Table -->
       <Card.Root>
         <Card.Header>
           <Card.Title class="text-lg">Distribution Statistics</Card.Title>
@@ -240,11 +186,11 @@
                         class="h-3 w-3 rounded-full"
                         style="background-color: {stat.color}"
                       ></div>
-                      {stat.name}
+                      {stat.key}
                     </div>
                   </Table.Cell>
                   <Table.Cell class="text-right font-medium">
-                    {stat.percentage.toFixed(1)}%
+                    {stat.value.toFixed(1)}%
                   </Table.Cell>
                 </Table.Row>
               {/each}
@@ -254,7 +200,6 @@
       </Card.Root>
     </div>
 
-    <!-- Hourly Distribution Chart -->
     <Card.Root>
       <Card.Header>
         <Card.Title class="text-lg">Hourly Distribution</Card.Title>
@@ -263,13 +208,11 @@
         </Card.Description>
       </Card.Header>
       <Card.Content>
-        <HourlyGlucoseDistributionChart averagedStats={data.averagedStats} />
+        <HourlyGlucoseDistributionChart averagedStats={report.averagedStats} />
       </Card.Content>
     </Card.Root>
 
-    <!-- Additional Statistics -->
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <!-- A1c Estimation -->
       <Card.Root>
         <Card.Header>
           <Card.Title class="text-lg">A1c Estimation</Card.Title>
@@ -290,11 +233,10 @@
               </span>
             </div>
           </div>
-          <ReliabilityBadge reliability={data.analysis?.reliability} />
+          <ReliabilityBadge reliability={report.analysis?.reliability} />
         </Card.Content>
       </Card.Root>
 
-      <!-- Glycemic Variability -->
       <Card.Root>
         <Card.Header>
           <Card.Title class="text-lg">Glycemic Variability</Card.Title>
@@ -318,7 +260,6 @@
         </Card.Content>
       </Card.Root>
 
-      <!-- Daily Fluctuation -->
       <Card.Root>
         <Card.Header>
           <Card.Title class="text-lg">Fluctuation</Card.Title>
@@ -343,7 +284,6 @@
       </Card.Root>
     </div>
 
-    <!-- Overall Summary -->
     <Card.Root>
       <Card.Header>
         <Card.Title class="text-lg">Overall Summary</Card.Title>

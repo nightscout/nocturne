@@ -160,7 +160,14 @@ public class StatisticsServiceTests
     {
         // Arrange
         var values = new double[] { 100 };
-        var entries = new[] { new SensorGlucose { Mgdl = 100, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() } };
+        var entries = new[]
+        {
+            new SensorGlucose
+            {
+                Mgdl = 100,
+                Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            },
+        };
 
         // Act & Assert
         Action act = () => _statisticsService.CalculateGlycemicVariability(values, entries);
@@ -232,12 +239,12 @@ public class StatisticsServiceTests
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
         {
-            new SensorGlucose { Mgdl = 50, Mills = now },         // Severe low
-            new SensorGlucose { Mgdl = 65, Mills = now + 1 },     // Low
-            new SensorGlucose { Mgdl = 100, Mills = now + 2 },    // Target
-            new SensorGlucose { Mgdl = 150, Mills = now + 3 },    // Target
-            new SensorGlucose { Mgdl = 200, Mills = now + 4 },    // High
-            new SensorGlucose { Mgdl = 300, Mills = now + 5 },    // Severe high
+            new SensorGlucose { Mgdl = 50, Mills = now }, // Very low
+            new SensorGlucose { Mgdl = 65, Mills = now + 1 }, // Low
+            new SensorGlucose { Mgdl = 100, Mills = now + 2 }, // Target
+            new SensorGlucose { Mgdl = 150, Mills = now + 3 }, // Target
+            new SensorGlucose { Mgdl = 200, Mills = now + 4 }, // High
+            new SensorGlucose { Mgdl = 300, Mills = now + 5 }, // Very high
         };
 
         // Act
@@ -245,11 +252,11 @@ public class StatisticsServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Percentages.SevereLow.Should().BeApproximately(16.67, 0.1);
+        result.Percentages.VeryLow.Should().BeApproximately(16.67, 0.1);
         result.Percentages.Low.Should().BeApproximately(16.67, 0.1);
         result.Percentages.Target.Should().BeApproximately(33.33, 0.1);
         result.Percentages.High.Should().BeApproximately(16.67, 0.1);
-        result.Percentages.SevereHigh.Should().BeApproximately(16.67, 0.1);
+        result.Percentages.VeryHigh.Should().BeApproximately(16.67, 0.1);
     }
 
     [Fact]
@@ -299,8 +306,8 @@ public class StatisticsServiceTests
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var entries = new[]
         {
-            new SensorGlucose { Mgdl = 75, Mills = now },      // 70-80 range
-            new SensorGlucose { Mgdl = 95, Mills = now + 1 },  // 90-100 range
+            new SensorGlucose { Mgdl = 75, Mills = now }, // 70-80 range
+            new SensorGlucose { Mgdl = 95, Mills = now + 1 }, // 90-100 range
             new SensorGlucose { Mgdl = 125, Mills = now + 2 }, // 120-130 range
             new SensorGlucose { Mgdl = 175, Mills = now + 3 }, // 150-180 range
         };
@@ -364,12 +371,28 @@ public class StatisticsServiceTests
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var boluses = new[]
         {
-            new Bolus { Insulin = 5.0, Mills = now, Automatic = false },      // Meal bolus
-            new Bolus { Insulin = 2.0, Mills = now + 1, Automatic = false },  // Correction bolus
+            new Bolus
+            {
+                Insulin = 5.0,
+                Mills = now,
+                Automatic = false,
+            }, // Meal bolus
+            new Bolus
+            {
+                Insulin = 2.0,
+                Mills = now + 1,
+                Automatic = false,
+            }, // Correction bolus
         };
         var carbIntakes = new[]
         {
-            new CarbIntake { Carbs = 45, Mills = now, Protein = 10, Fat = 5 },
+            new CarbIntake
+            {
+                Carbs = 45,
+                Mills = now,
+                Protein = 10,
+                Fat = 5,
+            },
             new CarbIntake { Carbs = 15, Mills = now + 1 },
         };
 
@@ -598,13 +621,13 @@ public class StatisticsServiceTests
     #region Reliability Assessment Tests
 
     [Theory]
-    [InlineData(14, 100, 14, true)]   // Meets days + has readings
-    [InlineData(30, 500, 14, true)]   // Exceeds recommended days
-    [InlineData(10, 100, 14, false)]  // Below recommended days
-    [InlineData(14, 0, 14, false)]    // No readings
-    [InlineData(0, 0, 14, false)]     // No data at all
-    [InlineData(1, 288, 1, true)]     // 1-day period, 1 day of data
-    [InlineData(7, 2016, 7, true)]    // 7-day period, 7 days of data
+    [InlineData(14, 100, 14, true)] // Meets days + has readings
+    [InlineData(30, 500, 14, true)] // Exceeds recommended days
+    [InlineData(10, 100, 14, false)] // Below recommended days
+    [InlineData(14, 0, 14, false)] // No readings
+    [InlineData(0, 0, 14, false)] // No data at all
+    [InlineData(1, 288, 1, true)] // 1-day period, 1 day of data
+    [InlineData(7, 2016, 7, true)] // 7-day period, 7 days of data
     public void AssessReliability_WithVariousInputs_ShouldReturnCorrectMeetsReliabilityCriteria(
         int daysOfData,
         int readingCount,
@@ -613,7 +636,11 @@ public class StatisticsServiceTests
     )
     {
         // Act
-        var result = _statisticsService.AssessReliability(daysOfData, readingCount, recommendedMinimumDays);
+        var result = _statisticsService.AssessReliability(
+            daysOfData,
+            readingCount,
+            recommendedMinimumDays
+        );
 
         // Assert
         result.Should().NotBeNull();
@@ -669,7 +696,12 @@ public class StatisticsServiceTests
 
         var boluses = new[]
         {
-            new Bolus { Insulin = 5.0, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Automatic = false },
+            new Bolus
+            {
+                Insulin = 5.0,
+                Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Automatic = false,
+            },
         };
 
         var carbIntakes = new[]

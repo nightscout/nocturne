@@ -14,17 +14,23 @@ import { bg as formatBg, bgDelta as formatBgDelta } from "$lib/utils/formatting"
 /** Status levels for glucose values */
 export type GlucoseStatus = "very-high" | "high" | "in-range" | "low" | "very-low";
 
-/** Color palette for different glucose statuses */
-const STATUS_COLORS: Record<GlucoseStatus, string> = {
-  "very-high": "#ef4444", // red-500
-  "high": "#f97316",        // orange-500
-  "in-range": "#22c55e",    // green-500
-  "low": "#eab308",         // yellow-500
-  "very-low": "#ef4444",  // red-500
+/** Resolve CSS variable to its computed value */
+function resolveCssVar(name: string): string {
+  if (!browser) return "#000000"; // fallback for SSR
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/** Color palette for different glucose statuses - resolves from CSS variables */
+const STATUS_COLORS: Record<GlucoseStatus, () => string> = {
+  "very-high": () => resolveCssVar("--glucose-very-high"),
+  "high": () => resolveCssVar("--glucose-high"),
+  "in-range": () => resolveCssVar("--glucose-in-range"),
+  "low": () => resolveCssVar("--glucose-low"),
+  "very-low": () => resolveCssVar("--glucose-very-low"),
 };
 
-/** Grey color for disconnected/stale states */
-const DISCONNECTED_COLOR = "#6b7280"; // gray-500
+/** Disconnected/stale state color - resolves from CSS variable */
+const DISCONNECTED_COLOR = () => resolveCssVar("--muted-foreground");
 
 /** Status labels for alarm display */
 const STATUS_LABELS: Record<GlucoseStatus, string> = {
@@ -132,9 +138,9 @@ export class TitleFaviconService {
     if (settings.faviconEnabled && this.canvas && this.ctx && this.linkElement) {
       let color: string;
       if (isDisconnected || isStale) {
-        color = DISCONNECTED_COLOR;
+        color = DISCONNECTED_COLOR();
       } else {
-        color = settings.faviconColorCoded ? STATUS_COLORS[status] : "#6b7280";
+        color = settings.faviconColorCoded ? STATUS_COLORS[status]() : resolveCssVar("--muted-foreground");
       }
       const faviconDataUrl = this.generateFaviconDataUrl(
         settings.faviconShowBg ? bg : null,
@@ -201,7 +207,7 @@ export class TitleFaviconService {
       if (this.canvas && this.ctx && this.linkElement && this.currentAlarmVisual) {
         const faviconDataUrl = this.generateFaviconDataUrl(
           this.currentBg,
-          this.currentAlarmVisual.flashColor || STATUS_COLORS[this.currentStatus]
+          this.currentAlarmVisual.flashColor || STATUS_COLORS[this.currentStatus]()
         );
         this.linkElement.href = faviconDataUrl;
       }
@@ -215,7 +221,7 @@ export class TitleFaviconService {
           this.linkElement.href = this.originalFavicon;
         } else if (this.canvas && this.ctx) {
           // Generate dim favicon
-          const faviconDataUrl = this.generateFaviconDataUrl(this.currentBg, "#374151");
+          const faviconDataUrl = this.generateFaviconDataUrl(this.currentBg, resolveCssVar("--muted-foreground"));
           this.linkElement.href = faviconDataUrl;
         }
       }
@@ -308,7 +314,7 @@ export class TitleFaviconService {
 
     // Draw BG value if provided
     if (bg !== null) {
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = resolveCssVar("--foreground");
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 

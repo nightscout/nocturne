@@ -17,13 +17,11 @@
     aboveTarget: number;
     high: number;
     veryHigh: number;
-    severeHigh: number;
     count: number;
   }
 
   let { averagedStats }: Props = $props();
 
-  // Transform backend data to chart format
   function transformToChartData(stats: AveragedStats[]): HourlyRangeData[] {
     return stats.map((s) => ({
       hour: s.hour ?? 0,
@@ -32,8 +30,7 @@
       normal: s.timeInRange?.normal ?? 0,
       aboveTarget: s.timeInRange?.aboveTarget ?? 0,
       high: s.timeInRange?.high ?? 0,
-      veryHigh: s.timeInRange?.veryHigh ?? 0,
-      severeHigh: s.timeInRange?.severeHigh ?? 0,
+      veryHigh: (s.timeInRange?.veryHigh ?? 0) + (s.timeInRange?.veryHigh ?? 0),
       count: s.count ?? 0,
     }));
   }
@@ -52,13 +49,12 @@
   // Chart series configuration - labels respect mmol/mg/dL preference
   // Using $derived to make labels reactive to unit changes
   const chartSeries = $derived([
-    { key: "veryLow", label: `<${bg(54)}`, color: "#8b5cf6" }, // purple
-    { key: "low", label: `${bg(54)}-${bg(63)}`, color: "#ef4444" }, // red
-    { key: "normal", label: `${bg(63)}-${bg(140)}`, color: "#22c55e" }, // bright green
-    { key: "aboveTarget", label: `${bg(140)}-${bg(180)}`, color: "#16a34a" }, // darker green
-    { key: "high", label: `${bg(180)}-${bg(200)}`, color: "#facc15" }, // yellow
-    { key: "veryHigh", label: `${bg(200)}-${bg(220)}`, color: "#f97316" }, // orange
-    { key: "severeHigh", label: `>${bg(220)}`, color: "#ea580c" }, // dark orange
+    { key: "veryLow", label: `<${bg(54)}`, color: "var(--glucose-very-low)" },
+    { key: "low", label: `${bg(54)}-${bg(63)}`, color: "var(--glucose-low)" },
+    { key: "normal", label: `${bg(63)}-${bg(140)}`, color: "var(--glucose-tight-range)" },
+    { key: "aboveTarget", label: `${bg(140)}-${bg(180)}`, color: "var(--glucose-in-range)" },
+    { key: "high", label: `${bg(180)}-${bg(200)}`, color: "var(--glucose-high)" },
+    { key: "veryHigh", label: `>${bg(200)}`, color: "var(--glucose-very-high)" },
   ]);
 
   // Derived chart data

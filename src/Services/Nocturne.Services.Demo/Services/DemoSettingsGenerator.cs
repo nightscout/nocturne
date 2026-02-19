@@ -248,7 +248,6 @@ public class DemoSettingsGenerator
                         Visual = new AlarmVisualSettings
                         {
                             ScreenFlash = true,
-                            FlashColor = "#ff0000",
                             PersistentBanner = true,
                             WakeScreen = true,
                         },

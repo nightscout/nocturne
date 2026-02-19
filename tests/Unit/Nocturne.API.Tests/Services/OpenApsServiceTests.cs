@@ -45,11 +45,6 @@ public class OpenApsServiceTests
         Assert.Equal(30, result.Warn);
         Assert.Equal(60, result.Urgent);
         Assert.False(result.EnableAlerts);
-        Assert.Equal("#1e88e5", result.PredIobColor);
-        Assert.Equal("#FB8C00", result.PredCobColor);
-        Assert.Equal("#FB8C00", result.PredAcobColor);
-        Assert.Equal("#00d2d2", result.PredZtColor);
-        Assert.Equal("#c9bd60", result.PredUamColor);
         Assert.True(result.ColorPredictionLines);
     }
 
@@ -65,7 +60,6 @@ public class OpenApsServiceTests
             { "warn", "45" },
             { "urgent", "90" },
             { "enableAlerts", "true" },
-            { "predIobColor", "#ff0000" },
             { "colorPredictionLines", "false" },
         };
 
@@ -79,7 +73,6 @@ public class OpenApsServiceTests
         Assert.Equal(45, result.Warn);
         Assert.Equal(90, result.Urgent);
         Assert.True(result.EnableAlerts);
-        Assert.Equal("#ff0000", result.PredIobColor);
         Assert.False(result.ColorPredictionLines);
     }
 

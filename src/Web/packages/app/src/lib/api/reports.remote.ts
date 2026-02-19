@@ -36,10 +36,10 @@ function calculateDateRange(input?: DateRangeInput): { startDate: Date; endDate:
 		startDate = new Date(endDate);
 		startDate.setDate(endDate.getDate() - (input.days - 1));
 	} else {
-		// Default to last 24 hours
+		// Default to last 7 days
 		endDate = new Date();
 		startDate = new Date(endDate);
-		startDate.setDate(endDate.getDate() - 1);
+		startDate.setDate(endDate.getDate() - 6);
 	}
 
 	// Validate dates

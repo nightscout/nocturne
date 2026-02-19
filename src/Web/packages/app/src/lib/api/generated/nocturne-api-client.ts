@@ -3354,15 +3354,11 @@ export class StatisticsClient {
      * @param endDate (optional) End date of the analysis period
      * @return Comprehensive basal analysis with stats, temp basal info, and hourly percentiles
      */
-    getBasalAnalysis(startDate?: Date | undefined, endDate?: Date | undefined, signal?: AbortSignal): Promise<BasalAnalysisResponse> {
+    getBasalAnalysis(startDate?: Date | null | undefined, endDate?: Date | null | undefined, signal?: AbortSignal): Promise<BasalAnalysisResponse> {
         let url_ = this.baseUrl + "/api/v1/Statistics/basal-analysis?";
-        if (startDate === null)
-            throw new globalThis.Error("The parameter 'startDate' cannot be null.");
-        else if (startDate !== undefined)
+        if (startDate !== undefined && startDate !== null)
             url_ += "startDate=" + encodeURIComponent(startDate ? "" + startDate.toISOString() : "") + "&";
-        if (endDate === null)
-            throw new globalThis.Error("The parameter 'endDate' cannot be null.");
-        else if (endDate !== undefined)
+        if (endDate !== undefined && endDate !== null)
             url_ += "endDate=" + encodeURIComponent(endDate ? "" + endDate.toISOString() : "") + "&";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -8675,6 +8671,272 @@ export class GlucoseClient {
     }
 }
 
+export class HeartRateClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get heart rate records with optional pagination
+     * @param count (optional) Maximum number of records to return (default: 10)
+     * @param skip (optional) Number of records to skip for pagination (default: 0)
+     * @return List of heart rate records ordered by most recent first
+     */
+    getHeartRates(count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<HeartRate[]> {
+        let url_ = this.baseUrl + "/api/v4/HeartRate?";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetHeartRates(_response);
+        });
+    }
+
+    protected processGetHeartRates(response: Response): Promise<HeartRate[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as HeartRate[];
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<HeartRate[]>(null as any);
+    }
+
+    /**
+     * Create one or more heart rate records (single object or array)
+     */
+    createHeartRates(heartRates: any, signal?: AbortSignal): Promise<HeartRate[]> {
+        let url_ = this.baseUrl + "/api/v4/HeartRate";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(heartRates);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateHeartRates(_response);
+        });
+    }
+
+    protected processCreateHeartRates(response: Response): Promise<HeartRate[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as HeartRate[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<HeartRate[]>(null as any);
+    }
+
+    /**
+     * Get a specific heart rate record by ID
+     * @param id Record ID
+     */
+    getHeartRate(id: string, signal?: AbortSignal): Promise<HeartRate> {
+        let url_ = this.baseUrl + "/api/v4/HeartRate/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetHeartRate(_response);
+        });
+    }
+
+    protected processGetHeartRate(response: Response): Promise<HeartRate> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as HeartRate;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<HeartRate>(null as any);
+    }
+
+    /**
+     * Update an existing heart rate record
+     */
+    updateHeartRate(id: string, heartRate: HeartRate, signal?: AbortSignal): Promise<HeartRate> {
+        let url_ = this.baseUrl + "/api/v4/HeartRate/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(heartRate);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateHeartRate(_response);
+        });
+    }
+
+    protected processUpdateHeartRate(response: Response): Promise<HeartRate> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as HeartRate;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<HeartRate>(null as any);
+    }
+
+    /**
+     * Delete a heart rate record by ID
+     */
+    deleteHeartRate(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/HeartRate/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteHeartRate(_response);
+        });
+    }
+
+    protected processDeleteHeartRate(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+}
+
 export class InsulinClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -13695,6 +13957,272 @@ export class StatusClient {
             });
         }
         return Promise.resolve<FileResponse>(null as any);
+    }
+}
+
+export class StepCountClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get step count records with optional pagination
+     * @param count (optional) Maximum number of records to return (default: 10)
+     * @param skip (optional) Number of records to skip for pagination (default: 0)
+     * @return List of step count records ordered by most recent first
+     */
+    getStepCounts(count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<StepCount[]> {
+        let url_ = this.baseUrl + "/api/v4/StepCount?";
+        if (count === null)
+            throw new globalThis.Error("The parameter 'count' cannot be null.");
+        else if (count !== undefined)
+            url_ += "count=" + encodeURIComponent("" + count) + "&";
+        if (skip === null)
+            throw new globalThis.Error("The parameter 'skip' cannot be null.");
+        else if (skip !== undefined)
+            url_ += "skip=" + encodeURIComponent("" + skip) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStepCounts(_response);
+        });
+    }
+
+    protected processGetStepCounts(response: Response): Promise<StepCount[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StepCount[];
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StepCount[]>(null as any);
+    }
+
+    /**
+     * Create one or more step count records (single object or array)
+     */
+    createStepCounts(stepCounts: any, signal?: AbortSignal): Promise<StepCount[]> {
+        let url_ = this.baseUrl + "/api/v4/StepCount";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(stepCounts);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateStepCounts(_response);
+        });
+    }
+
+    protected processCreateStepCounts(response: Response): Promise<StepCount[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StepCount[];
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StepCount[]>(null as any);
+    }
+
+    /**
+     * Get a specific step count record by ID
+     * @param id Record ID
+     */
+    getStepCount(id: string, signal?: AbortSignal): Promise<StepCount> {
+        let url_ = this.baseUrl + "/api/v4/StepCount/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetStepCount(_response);
+        });
+    }
+
+    protected processGetStepCount(response: Response): Promise<StepCount> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StepCount;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StepCount>(null as any);
+    }
+
+    /**
+     * Update an existing step count record
+     */
+    updateStepCount(id: string, stepCount: StepCount, signal?: AbortSignal): Promise<StepCount> {
+        let url_ = this.baseUrl + "/api/v4/StepCount/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(stepCount);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdateStepCount(_response);
+        });
+    }
+
+    protected processUpdateStepCount(response: Response): Promise<StepCount> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as StepCount;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<StepCount>(null as any);
+    }
+
+    /**
+     * Delete a step count record by ID
+     */
+    deleteStepCount(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/StepCount/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteStepCount(_response);
+        });
+    }
+
+    protected processDeleteStepCount(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
     }
 }
 
@@ -21840,8 +22368,17 @@ export interface GlycemicVariability {
 export interface GlucoseManagementIndicator {
     value?: number;
     meanGlucose?: number;
-    interpretation?: string;
+    interpretation?: GlucoseManagementIndicatorLevel;
     reliability?: StatisticReliability | undefined;
+}
+
+export enum GlucoseManagementIndicatorLevel {
+    NonDiabetic = "NonDiabetic",
+    Prediabetes = "Prediabetes",
+    WellControlled = "WellControlled",
+    ModerateControl = "ModerateControl",
+    SuboptimalControl = "SuboptimalControl",
+    PoorControl = "PoorControl",
 }
 
 /** Request model for glycemic variability calculation */
@@ -21905,28 +22442,28 @@ export interface TimeInRangeMetrics {
 }
 
 export interface TimeInRangePercentages {
-    severeLow?: number;
+    veryLow?: number;
     low?: number;
     target?: number;
     tightTarget?: number;
     high?: number;
-    severeHigh?: number;
+    veryHigh?: number;
 }
 
 export interface TimeInRangeDurations {
-    severeLow?: number;
+    veryLow?: number;
     low?: number;
     target?: number;
     tightTarget?: number;
     high?: number;
-    severeHigh?: number;
+    veryHigh?: number;
 }
 
 export interface TimeInRangeEpisodes {
-    severeLow?: number;
+    veryLow?: number;
     low?: number;
     high?: number;
-    severeHigh?: number;
+    veryHigh?: number;
 }
 
 export interface TimeInRangeDetailedStats {
@@ -21964,14 +22501,14 @@ export interface TimeInRangeRequest {
 }
 
 export interface GlycemicThresholds {
-    severeLow?: number;
+    veryLow?: number;
     low?: number;
     targetBottom?: number;
     targetTop?: number;
     tightTargetBottom?: number;
     tightTargetTop?: number;
     high?: number;
-    severeHigh?: number;
+    veryHigh?: number;
 }
 
 export interface DistributionDataPoint {
@@ -22010,7 +22547,6 @@ export interface ExtendedTimeInRangePercentages {
     aboveTarget?: number;
     high?: number;
     veryHigh?: number;
-    severeHigh?: number;
 }
 
 export interface TreatmentSummary {
@@ -22241,6 +22777,7 @@ export interface GlucoseAnalytics {
     dataQuality?: DataQuality;
     reliability?: StatisticReliability | undefined;
     time?: AnalysisTime;
+    clinicalAssessment?: ClinicalTargetAssessment | undefined;
 }
 
 export interface DataQuality {
@@ -22270,6 +22807,89 @@ export interface AnalysisTime {
     start?: number;
     end?: number;
     timeOfAnalysis?: number;
+}
+
+export interface ClinicalTargetAssessment {
+    population?: DiabetesPopulation;
+    targets?: ClinicalTargets;
+    tirAssessment?: TargetAssessment;
+    tbrAssessment?: TargetAssessment;
+    veryLowAssessment?: TargetAssessment;
+    tarAssessment?: TargetAssessment;
+    veryHighAssessment?: TargetAssessment;
+    cvAssessment?: TargetAssessment;
+    targetsMet?: number;
+    totalTargets?: number;
+    overallAssessment?: ClinicalAssessmentLevel;
+    actionableInsights?: LocalizedInsight[];
+    priorityAreas?: LocalizedInsight[];
+    strengths?: LocalizedInsight[];
+}
+
+export enum DiabetesPopulation {
+    Type1Adult = 0,
+    Type2Adult = 1,
+    Type1Pediatric = 2,
+    Elderly = 3,
+    Pregnancy = 4,
+    PregnancyType1 = 5,
+}
+
+export interface ClinicalTargets {
+    targetTIR?: number;
+    maxTBR?: number;
+    maxTBRVeryLow?: number;
+    maxTAR?: number;
+    maxTARVeryHigh?: number;
+    targetCV?: number;
+    targetLow?: number;
+    targetHigh?: number;
+}
+
+export interface TargetAssessment {
+    metricName?: string;
+    currentValue?: number;
+    targetValue?: number;
+    isMaximumTarget?: boolean;
+    status?: TargetStatus;
+    differenceFromTarget?: number;
+    progressPercentage?: number;
+}
+
+export enum TargetStatus {
+    Met = 0,
+    Close = 1,
+    NotMet = 2,
+}
+
+export enum ClinicalAssessmentLevel {
+    Excellent = "Excellent",
+    Good = "Good",
+    NeedsAttention = "NeedsAttention",
+    NeedsSignificantImprovement = "NeedsSignificantImprovement",
+}
+
+export interface LocalizedInsight {
+    key?: InsightKey;
+    context?: { [key: string]: number; };
+}
+
+export enum InsightKey {
+    TimeInRangeExcellent = "TimeInRangeExcellent",
+    NoSevereHypoglycemia = "NoSevereHypoglycemia",
+    VariabilityControlled = "VariabilityControlled",
+    AllTargetsMet = "AllTargetsMet",
+    ReduceSevereHypoglycemia = "ReduceSevereHypoglycemia",
+    ReduceHypoglycemia = "ReduceHypoglycemia",
+    IncreaseTIR = "IncreaseTIR",
+    ReduceSevereHyperglycemia = "ReduceSevereHyperglycemia",
+    ReduceVariability = "ReduceVariability",
+    TimeVeryLow = "TimeVeryLow",
+    TimeBelowRange = "TimeBelowRange",
+    TimeInRange = "TimeInRange",
+    TimeVeryHigh = "TimeVeryHigh",
+    Variability = "Variability",
+    AllTargetsAchieved = "AllTargetsAchieved",
 }
 
 /** Request model for comprehensive glucose analytics */
@@ -22312,7 +22932,7 @@ export interface GlycemicRiskIndex {
     hypoglycemiaComponent?: number;
     hyperglycemiaComponent?: number;
     zone?: GRIZone;
-    interpretation?: string;
+    interpretation?: GlycomicRiskInterpretation;
 }
 
 export enum GRIZone {
@@ -22321,6 +22941,15 @@ export enum GRIZone {
     C = 2,
     D = 3,
     E = 4,
+}
+
+export enum GlycomicRiskInterpretation {
+    Excellent = "Excellent",
+    Good = "Good",
+    Moderate = "Moderate",
+    Suboptimal = "Suboptimal",
+    Poor = "Poor",
+    Unknown = "Unknown",
 }
 
 export interface TimeOfDayAnalysis {
@@ -22430,59 +23059,6 @@ export interface HyperglycemiaEpisode {
     averageGlucose?: number;
 }
 
-export interface ClinicalTargetAssessment {
-    population?: DiabetesPopulation;
-    targets?: ClinicalTargets;
-    tirAssessment?: TargetAssessment;
-    tbrAssessment?: TargetAssessment;
-    veryLowAssessment?: TargetAssessment;
-    tarAssessment?: TargetAssessment;
-    veryHighAssessment?: TargetAssessment;
-    cvAssessment?: TargetAssessment;
-    targetsMet?: number;
-    totalTargets?: number;
-    overallAssessment?: string;
-    actionableInsights?: string[];
-    priorityAreas?: string[];
-    strengths?: string[];
-}
-
-export enum DiabetesPopulation {
-    Type1Adult = 0,
-    Type2Adult = 1,
-    Type1Pediatric = 2,
-    Elderly = 3,
-    Pregnancy = 4,
-    PregnancyType1 = 5,
-}
-
-export interface ClinicalTargets {
-    targetTIR?: number;
-    maxTBR?: number;
-    maxTBRVeryLow?: number;
-    maxTAR?: number;
-    maxTARVeryHigh?: number;
-    targetCV?: number;
-    targetLow?: number;
-    targetHigh?: number;
-}
-
-export interface TargetAssessment {
-    metricName?: string;
-    currentValue?: number;
-    targetValue?: number;
-    isMaximumTarget?: boolean;
-    status?: TargetStatus;
-    differenceFromTarget?: number;
-    progressPercentage?: number;
-}
-
-export enum TargetStatus {
-    Met = 0,
-    Close = 1,
-    NotMet = 2,
-}
-
 export interface DataSufficiencyAssessment {
     isSufficient?: boolean;
     totalDays?: number;
@@ -22493,8 +23069,15 @@ export interface DataSufficiencyAssessment {
     minimumRequiredCompleteness?: number;
     averageReadingsPerDay?: number;
     longestGapHours?: number;
+    status?: DataSufficiencyStatus;
     warningMessage?: string;
     recommendation?: string;
+}
+
+export enum DataSufficiencyStatus {
+    Sufficient = "Sufficient",
+    InsufficientCoverage = "InsufficientCoverage",
+    LargeGaps = "LargeGaps",
 }
 
 /** Request model for extended glucose analytics with GMI, GRI, and clinical assessment */
@@ -23940,6 +24523,22 @@ export interface Calibration {
     scale?: number | undefined;
 }
 
+export interface HeartRate extends ProcessableDocumentBase {
+    _id?: string | undefined;
+    created_at?: string | undefined;
+    mills?: number;
+    utcOffset?: number | undefined;
+    bpm?: number;
+    accuracy?: number;
+    device?: string | undefined;
+    enteredBy?: string | undefined;
+    data_source?: string | undefined;
+}
+
+export function isHeartRate(object: any): object is HeartRate {
+    return object && object[''] === 'HeartRate';
+}
+
 export interface PaginatedResponseOfBolus {
     data?: Bolus[];
     pagination?: PaginationInfo;
@@ -24630,6 +25229,22 @@ export interface StatusResponse {
     authorized?: any | undefined;
     runtimeState?: string | undefined;
     head?: string | undefined;
+}
+
+export interface StepCount extends ProcessableDocumentBase {
+    _id?: string | undefined;
+    created_at?: string | undefined;
+    mills?: number;
+    utcOffset?: number | undefined;
+    metric?: number;
+    source?: number;
+    device?: string | undefined;
+    enteredBy?: string | undefined;
+    data_source?: string | undefined;
+}
+
+export function isStepCount(object: any): object is StepCount {
+    return object && object[''] === 'StepCount';
 }
 
 export interface SystemEvent {

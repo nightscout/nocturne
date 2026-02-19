@@ -84,7 +84,7 @@ public class StatisticsServiceTDDTests
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<StateSpan>(), StartDate, EndDate);
+            boluses, Array.Empty<StateSpan>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         result.TotalBolus.Should().Be(6.8);
         result.TotalBasal.Should().Be(0);
@@ -102,7 +102,7 @@ public class StatisticsServiceTDDTests
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
-            Array.Empty<Bolus>(), stateSpans, StartDate, EndDate);
+            Array.Empty<Bolus>(), stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         result.TotalBasal.Should().Be(1.3);
         result.TotalBolus.Should().Be(0);
@@ -124,7 +124,7 @@ public class StatisticsServiceTDDTests
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         result.Tdd.Should().Be(10.0, "70U / 7 days = 10 U/day");
         result.DayCount.Should().Be(7);
@@ -151,7 +151,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         // TreatmentSummary in v4 only tracks bolus (basal comes from StateSpans)
         summary.Totals.Insulin.Bolus.Should().Be(delivery.TotalBolus,
@@ -174,7 +174,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         summary.Totals.Insulin.Bolus.Should().Be(delivery.TotalBolus,
             "bolus totals should match between methods");
@@ -199,7 +199,7 @@ public class StatisticsServiceTDDTests
         };
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
         var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, stateSpans);
 
         var ratiosGrandTotal = ratios.DailyData.Sum(d => d.Total);
@@ -222,7 +222,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         (delivery.BolusPercent + delivery.BasalPercent).Should().BeApproximately(100.0, 0.1,
             "InsulinDelivery basal% + bolus% should sum to 100");
@@ -265,7 +265,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         // Bolus total from TreatmentSummary should match delivery bolus total
         summary.Totals.Insulin.Bolus.Should().Be(delivery.TotalBolus,
@@ -290,7 +290,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<StateSpan>(), StartDate, EndDate);
+            boluses, Array.Empty<StateSpan>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         // Only bolus insulin should be reported
         summary.Totals.Insulin.Bolus.Should().Be(11.0);
@@ -326,7 +326,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         // Basal comes from StateSpan: 20/24 U/hr * 24 hr = 20U
         delivery.TotalBasal.Should().BeApproximately(20.0, 0.01, "long-acting basal = 20U via StateSpan");
@@ -410,7 +410,7 @@ public class StatisticsServiceTDDTests
         };
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<StateSpan>(), StartDate, EndDate);
+            boluses, Array.Empty<StateSpan>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
         var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, Array.Empty<StateSpan>());
 
         // InsulinDelivery: 70U / 7 days = 10 U/day
@@ -519,7 +519,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(emptyBoluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            emptyBoluses, emptyStateSpans, StartDate, EndDate);
+            emptyBoluses, emptyStateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
         var ratios = _sut.CalculateDailyBasalBolusRatios(emptyBoluses, emptyStateSpans);
 
         _sut.GetTotalInsulin(summary).Should().Be(0);
@@ -538,7 +538,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, Array.Empty<StateSpan>(), StartDate, EndDate);
+            boluses, Array.Empty<StateSpan>(), Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         // 20 * 0.05 = 1.0U
         summary.Totals.Insulin.Bolus.Should().BeApproximately(1.0, 0.001,
@@ -580,7 +580,7 @@ public class StatisticsServiceTDDTests
         };
 
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            Array.Empty<Bolus>(), stateSpans, StartDate, EndDate);
+            Array.Empty<Bolus>(), stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
 
         delivery.TotalBasal.Should().Be(0);
     }
@@ -620,7 +620,7 @@ public class StatisticsServiceTDDTests
 
         var summary = _sut.CalculateTreatmentSummary(boluses, Array.Empty<CarbIntake>());
         var delivery = _sut.CalculateInsulinDeliveryStatistics(
-            boluses, stateSpans, StartDate, EndDate);
+            boluses, stateSpans, Array.Empty<CarbIntake>(), StartDate, EndDate);
         var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, stateSpans);
 
         var expectedTotalBolus = dailyExpectedBolus.Sum();

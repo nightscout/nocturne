@@ -7,16 +7,25 @@
 
 import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
 import { ELEMENT_INFO, type ClockElementType, type InternalElement } from "./types";
+import { browser } from "$app/environment";
+
+/**
+ * Resolve CSS variable to its computed value
+ */
+function resolveCssVar(name: string): string {
+  if (!browser) return "#000000"; // fallback for SSR
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 /**
  * Get BG color based on glucose value
  */
 export function getBgColor(bg: number): string {
-  if (bg < 70) return "#ef4444";
-  if (bg < 80) return "#eab308";
-  if (bg > 250) return "#ef4444";
-  if (bg > 180) return "#f97316";
-  return "#22c55e";
+  if (bg < 70) return resolveCssVar("--glucose-very-low");
+  if (bg < 80) return resolveCssVar("--glucose-low");
+  if (bg > 250) return resolveCssVar("--glucose-very-high");
+  if (bg > 180) return resolveCssVar("--glucose-high");
+  return resolveCssVar("--glucose-in-range");
 }
 
 /**

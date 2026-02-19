@@ -8,19 +8,19 @@ export interface GlucoseAnalytics {
 }
 
 export interface ExtendedAnalysisConfig {
-  severeLow: number;
+  veryLow: number;
   low: number;
   target: number;
   high: number;
-  severeHigh: number;
+  veryHigh: number;
 }
 
 export const DEFAULT_CONFIG: ExtendedAnalysisConfig = {
-  severeLow: 54,
+  veryLow: 54,
   low: 70,
   target: 180,
   high: 250,
-  severeHigh: 400,
+  veryHigh: 400,
 };
 
 export function getGlucoseColor(value: number, thresholds: any) {

@@ -153,7 +153,7 @@
         if (!titleFaviconService.isFlashing) {
           const alarmVisual: AlarmVisualSettings = {
             screenFlash: true,
-            flashColor: status === "very-low" ? "#ef4444" : "#ef4444",
+            flashColor: "",
             flashIntervalMs: 500,
             persistentBanner: true,
             wakeScreen: true,

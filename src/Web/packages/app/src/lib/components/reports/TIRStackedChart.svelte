@@ -8,11 +8,11 @@
   const MIN_BAR_PERCENT = 5;
 
   interface TimeInRangePercentages {
-    severeLow?: number;
+    veryLow?: number;
     low?: number;
     target?: number;
     high?: number;
-    severeHigh?: number;
+    veryHigh?: number;
   }
 
   interface Props {
@@ -20,10 +20,10 @@
     percentages?: TimeInRangePercentages;
     /** Thresholds for the glucose ranges in mg/dL */
     thresholds?: {
-      severeLow: number;
+      veryLow: number;
       low: number;
       high: number;
-      severeHigh: number;
+      veryHigh: number;
     };
     /** Chart orientation - 'vertical' (default) or 'horizontal' */
     orientation?: "vertical" | "horizontal";
@@ -39,7 +39,7 @@
 
   let {
     percentages,
-    thresholds = { severeLow: 54, low: 70, high: 180, severeHigh: 250 },
+    thresholds = { veryLow: 54, low: 70, high: 180, veryHigh: 250 },
     orientation = "vertical",
     showThresholds,
     showLabels = true,
@@ -53,38 +53,38 @@
 
   // Range keys in stacking order (bottom to top for vertical, left to right for horizontal)
   const rangeKeys = [
-    "severeLow",
+    "veryLow",
     "low",
     "target",
     "high",
-    "severeHigh",
+    "veryHigh",
   ] as const;
   type RangeKey = (typeof rangeKeys)[number];
 
   // Color mapping
   const colorMap: Record<RangeKey, string> = {
-    severeLow: "var(--glucose-very-low)",
+    veryLow: "var(--glucose-very-low)",
     low: "var(--glucose-low)",
     target: "var(--glucose-in-range)",
     high: "var(--glucose-high)",
-    severeHigh: "var(--glucose-very-high)",
+    veryHigh: "var(--glucose-very-high)",
   };
 
   const labelMap: Record<RangeKey, string> = {
-    severeLow: "Very Low",
+    veryLow: "Very Low",
     low: "Low",
     target: "In Range",
     high: "High",
-    severeHigh: "Very High",
+    veryHigh: "Very High",
   };
 
   // Normalized percentages
   const pct = $derived({
-    severeLow: percentages?.severeLow ?? 0,
+    veryLow: percentages?.veryLow ?? 0,
     low: percentages?.low ?? 0,
     target: percentages?.target ?? 0,
     high: percentages?.high ?? 0,
-    severeHigh: percentages?.severeHigh ?? 0,
+    veryHigh: percentages?.veryHigh ?? 0,
   });
 
   // Transform data for stacked bar chart - one row per range with cumulative positions
@@ -136,10 +136,10 @@
   // Calculate positions for threshold labels (using display positions from stackedData)
   const thresholdPositions = $derived.by(() => {
     const thresholdValues = [
-      thresholds.severeLow,
+      thresholds.veryLow,
       thresholds.low,
       thresholds.high,
-      thresholds.severeHigh,
+      thresholds.veryHigh,
     ];
     // Use the end of each segment (except the last) as the position
     return stackedData.slice(0, -1).map((segment, i) => ({

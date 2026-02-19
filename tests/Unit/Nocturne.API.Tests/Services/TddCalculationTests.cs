@@ -164,6 +164,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -211,6 +212,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -241,6 +243,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             boluses,
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -269,6 +272,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -289,6 +293,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -308,6 +313,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -332,6 +338,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -355,6 +362,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -393,6 +401,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -425,6 +434,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -457,6 +467,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -528,6 +539,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             boluses,
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -573,6 +585,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -761,6 +774,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             Array.Empty<StateSpan>(),
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -783,6 +797,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             boluses,
             Array.Empty<StateSpan>(),
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -814,6 +829,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             start,
             end
         );
@@ -837,6 +853,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             stateSpans,
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );
@@ -857,6 +874,7 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateInsulinDeliveryStatistics(
             boluses,
             Array.Empty<StateSpan>(),
+            Array.Empty<CarbIntake>(),
             StartDate,
             EndDate
         );

@@ -2639,7 +2639,8 @@
             "description": "Start date of the analysis period",
             "schema": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "nullable": true
             },
             "x-position": 1
           },
@@ -2649,7 +2650,8 @@
             "description": "End date of the analysis period",
             "schema": {
               "type": "string",
-              "format": "date-time"
+              "format": "date-time",
+              "nullable": true
             },
             "x-position": 2
           }
@@ -7010,6 +7012,241 @@
         ]
       }
     },
+    "/api/v4/HeartRate": {
+      "get": {
+        "tags": [
+          "V4 HeartRate"
+        ],
+        "summary": "Get heart rate records with optional pagination",
+        "operationId": "HeartRate_GetHeartRates",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "description": "Maximum number of records to return (default: 10)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "x-position": 1
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "description": "Number of records to skip for pagination (default: 0)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of heart rate records ordered by most recent first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HeartRate"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "post": {
+        "tags": [
+          "V4 HeartRate"
+        ],
+        "summary": "Create one or more heart rate records (single object or array)",
+        "operationId": "HeartRate_CreateHeartRates",
+        "requestBody": {
+          "x-name": "heartRates",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HeartRate"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/HeartRate/{id}": {
+      "get": {
+        "tags": [
+          "V4 HeartRate"
+        ],
+        "summary": "Get a specific heart rate record by ID",
+        "operationId": "HeartRate_GetHeartRate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Record ID",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartRate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "V4 HeartRate"
+        ],
+        "summary": "Update an existing heart rate record",
+        "operationId": "HeartRate_UpdateHeartRate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "heartRate",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartRate"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartRate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 HeartRate"
+        ],
+        "summary": "Delete a heart rate record by ID",
+        "operationId": "HeartRate_DeleteHeartRate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v4/insulin/boluses": {
       "get": {
         "tags": [
@@ -11323,6 +11560,241 @@
                 "schema": {}
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v4/StepCount": {
+      "get": {
+        "tags": [
+          "V4 StepCount"
+        ],
+        "summary": "Get step count records with optional pagination",
+        "operationId": "StepCount_GetStepCounts",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "description": "Maximum number of records to return (default: 10)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "x-position": 1
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "description": "Number of records to skip for pagination (default: 0)",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of step count records ordered by most recent first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StepCount"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "post": {
+        "tags": [
+          "V4 StepCount"
+        ],
+        "summary": "Create one or more step count records (single object or array)",
+        "operationId": "StepCount_CreateStepCounts",
+        "requestBody": {
+          "x-name": "stepCounts",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StepCount"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v4/StepCount/{id}": {
+      "get": {
+        "tags": [
+          "V4 StepCount"
+        ],
+        "summary": "Get a specific step count record by ID",
+        "operationId": "StepCount_GetStepCount",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Record ID",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepCount"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "V4 StepCount"
+        ],
+        "summary": "Update an existing step count record",
+        "operationId": "StepCount_UpdateStepCount",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "stepCount",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepCount"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepCount"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "V4 StepCount"
+        ],
+        "summary": "Delete a step count record by ID",
+        "operationId": "StepCount_DeleteStepCount",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
           }
         }
       }
@@ -21103,7 +21575,7 @@
             "format": "double"
           },
           "interpretation": {
-            "type": "string"
+            "$ref": "#/components/schemas/GlucoseManagementIndicatorLevel"
           },
           "reliability": {
             "nullable": true,
@@ -21114,6 +21586,26 @@
             ]
           }
         }
+      },
+      "GlucoseManagementIndicatorLevel": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "NonDiabetic",
+          "Prediabetes",
+          "WellControlled",
+          "ModerateControl",
+          "SuboptimalControl",
+          "PoorControl"
+        ],
+        "enum": [
+          "NonDiabetic",
+          "Prediabetes",
+          "WellControlled",
+          "ModerateControl",
+          "SuboptimalControl",
+          "PoorControl"
+        ]
       },
       "GlycemicVariabilityRequest": {
         "type": "object",
@@ -21298,7 +21790,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "severeLow": {
+          "veryLow": {
             "type": "number",
             "format": "double"
           },
@@ -21318,7 +21810,7 @@
             "type": "number",
             "format": "double"
           },
-          "severeHigh": {
+          "veryHigh": {
             "type": "number",
             "format": "double"
           }
@@ -21328,7 +21820,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "severeLow": {
+          "veryLow": {
             "type": "number",
             "format": "double"
           },
@@ -21348,7 +21840,7 @@
             "type": "number",
             "format": "double"
           },
-          "severeHigh": {
+          "veryHigh": {
             "type": "number",
             "format": "double"
           }
@@ -21358,7 +21850,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "severeLow": {
+          "veryLow": {
             "type": "integer",
             "format": "int32"
           },
@@ -21370,7 +21862,7 @@
             "type": "integer",
             "format": "int32"
           },
-          "severeHigh": {
+          "veryHigh": {
             "type": "integer",
             "format": "int32"
           }
@@ -21491,7 +21983,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "severeLow": {
+          "veryLow": {
             "type": "number",
             "format": "double"
           },
@@ -21519,7 +22011,7 @@
             "type": "number",
             "format": "double"
           },
-          "severeHigh": {
+          "veryHigh": {
             "type": "number",
             "format": "double"
           }
@@ -21626,10 +22118,6 @@
             "format": "double"
           },
           "veryHigh": {
-            "type": "number",
-            "format": "double"
-          },
-          "severeHigh": {
             "type": "number",
             "format": "double"
           }
@@ -22518,6 +23006,14 @@
           },
           "time": {
             "$ref": "#/components/schemas/AnalysisTime"
+          },
+          "clinicalAssessment": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClinicalTargetAssessment"
+              }
+            ]
           }
         }
       },
@@ -22613,6 +23109,238 @@
             "format": "int64"
           }
         }
+      },
+      "ClinicalTargetAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "population": {
+            "$ref": "#/components/schemas/DiabetesPopulation"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/ClinicalTargets"
+          },
+          "tirAssessment": {
+            "$ref": "#/components/schemas/TargetAssessment"
+          },
+          "tbrAssessment": {
+            "$ref": "#/components/schemas/TargetAssessment"
+          },
+          "veryLowAssessment": {
+            "$ref": "#/components/schemas/TargetAssessment"
+          },
+          "tarAssessment": {
+            "$ref": "#/components/schemas/TargetAssessment"
+          },
+          "veryHighAssessment": {
+            "$ref": "#/components/schemas/TargetAssessment"
+          },
+          "cvAssessment": {
+            "$ref": "#/components/schemas/TargetAssessment"
+          },
+          "targetsMet": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalTargets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overallAssessment": {
+            "$ref": "#/components/schemas/ClinicalAssessmentLevel"
+          },
+          "actionableInsights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocalizedInsight"
+            }
+          },
+          "priorityAreas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocalizedInsight"
+            }
+          },
+          "strengths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocalizedInsight"
+            }
+          }
+        }
+      },
+      "DiabetesPopulation": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Type1Adult",
+          "Type2Adult",
+          "Type1Pediatric",
+          "Elderly",
+          "Pregnancy",
+          "PregnancyType1"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "ClinicalTargets": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "targetTIR": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxTBR": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxTBRVeryLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxTAR": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxTARVeryHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "targetCV": {
+            "type": "number",
+            "format": "double"
+          },
+          "targetLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "targetHigh": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TargetAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "metricName": {
+            "type": "string"
+          },
+          "currentValue": {
+            "type": "number",
+            "format": "double"
+          },
+          "targetValue": {
+            "type": "number",
+            "format": "double"
+          },
+          "isMaximumTarget": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TargetStatus"
+          },
+          "differenceFromTarget": {
+            "type": "number",
+            "format": "double"
+          },
+          "progressPercentage": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TargetStatus": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Met",
+          "Close",
+          "NotMet"
+        ],
+        "enum": [
+          0,
+          1,
+          2
+        ]
+      },
+      "ClinicalAssessmentLevel": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Excellent",
+          "Good",
+          "NeedsAttention",
+          "NeedsSignificantImprovement"
+        ],
+        "enum": [
+          "Excellent",
+          "Good",
+          "NeedsAttention",
+          "NeedsSignificantImprovement"
+        ]
+      },
+      "LocalizedInsight": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/InsightKey"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        }
+      },
+      "InsightKey": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "TimeInRangeExcellent",
+          "NoSevereHypoglycemia",
+          "VariabilityControlled",
+          "AllTargetsMet",
+          "ReduceSevereHypoglycemia",
+          "ReduceHypoglycemia",
+          "IncreaseTIR",
+          "ReduceSevereHyperglycemia",
+          "ReduceVariability",
+          "TimeVeryLow",
+          "TimeBelowRange",
+          "TimeInRange",
+          "TimeVeryHigh",
+          "Variability",
+          "AllTargetsAchieved"
+        ],
+        "enum": [
+          "TimeInRangeExcellent",
+          "NoSevereHypoglycemia",
+          "VariabilityControlled",
+          "AllTargetsMet",
+          "ReduceSevereHypoglycemia",
+          "ReduceHypoglycemia",
+          "IncreaseTIR",
+          "ReduceSevereHyperglycemia",
+          "ReduceVariability",
+          "TimeVeryLow",
+          "TimeBelowRange",
+          "TimeInRange",
+          "TimeVeryHigh",
+          "Variability",
+          "AllTargetsAchieved"
+        ]
       },
       "GlucoseAnalyticsRequest": {
         "type": "object",
@@ -22736,7 +23464,7 @@
             "$ref": "#/components/schemas/GRIZone"
           },
           "interpretation": {
-            "type": "string"
+            "$ref": "#/components/schemas/GlycomicRiskInterpretation"
           }
         }
       },
@@ -22756,6 +23484,26 @@
           2,
           3,
           4
+        ]
+      },
+      "GlycomicRiskInterpretation": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Excellent",
+          "Good",
+          "Moderate",
+          "Suboptimal",
+          "Poor",
+          "Unknown"
+        ],
+        "enum": [
+          "Excellent",
+          "Good",
+          "Moderate",
+          "Suboptimal",
+          "Poor",
+          "Unknown"
         ]
       },
       "TimeOfDayAnalysis": {
@@ -23140,168 +23888,6 @@
           }
         }
       },
-      "ClinicalTargetAssessment": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "population": {
-            "$ref": "#/components/schemas/DiabetesPopulation"
-          },
-          "targets": {
-            "$ref": "#/components/schemas/ClinicalTargets"
-          },
-          "tirAssessment": {
-            "$ref": "#/components/schemas/TargetAssessment"
-          },
-          "tbrAssessment": {
-            "$ref": "#/components/schemas/TargetAssessment"
-          },
-          "veryLowAssessment": {
-            "$ref": "#/components/schemas/TargetAssessment"
-          },
-          "tarAssessment": {
-            "$ref": "#/components/schemas/TargetAssessment"
-          },
-          "veryHighAssessment": {
-            "$ref": "#/components/schemas/TargetAssessment"
-          },
-          "cvAssessment": {
-            "$ref": "#/components/schemas/TargetAssessment"
-          },
-          "targetsMet": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalTargets": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "overallAssessment": {
-            "type": "string"
-          },
-          "actionableInsights": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "priorityAreas": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "strengths": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "DiabetesPopulation": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Type1Adult",
-          "Type2Adult",
-          "Type1Pediatric",
-          "Elderly",
-          "Pregnancy",
-          "PregnancyType1"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5
-        ]
-      },
-      "ClinicalTargets": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "targetTIR": {
-            "type": "number",
-            "format": "double"
-          },
-          "maxTBR": {
-            "type": "number",
-            "format": "double"
-          },
-          "maxTBRVeryLow": {
-            "type": "number",
-            "format": "double"
-          },
-          "maxTAR": {
-            "type": "number",
-            "format": "double"
-          },
-          "maxTARVeryHigh": {
-            "type": "number",
-            "format": "double"
-          },
-          "targetCV": {
-            "type": "number",
-            "format": "double"
-          },
-          "targetLow": {
-            "type": "number",
-            "format": "double"
-          },
-          "targetHigh": {
-            "type": "number",
-            "format": "double"
-          }
-        }
-      },
-      "TargetAssessment": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "metricName": {
-            "type": "string"
-          },
-          "currentValue": {
-            "type": "number",
-            "format": "double"
-          },
-          "targetValue": {
-            "type": "number",
-            "format": "double"
-          },
-          "isMaximumTarget": {
-            "type": "boolean"
-          },
-          "status": {
-            "$ref": "#/components/schemas/TargetStatus"
-          },
-          "differenceFromTarget": {
-            "type": "number",
-            "format": "double"
-          },
-          "progressPercentage": {
-            "type": "number",
-            "format": "double"
-          }
-        }
-      },
-      "TargetStatus": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Met",
-          "Close",
-          "NotMet"
-        ],
-        "enum": [
-          0,
-          1,
-          2
-        ]
-      },
       "DataSufficiencyAssessment": {
         "type": "object",
         "additionalProperties": false,
@@ -23341,6 +23927,9 @@
             "type": "number",
             "format": "double"
           },
+          "status": {
+            "$ref": "#/components/schemas/DataSufficiencyStatus"
+          },
           "warningMessage": {
             "type": "string"
           },
@@ -23348,6 +23937,20 @@
             "type": "string"
           }
         }
+      },
+      "DataSufficiencyStatus": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Sufficient",
+          "InsufficientCoverage",
+          "LargeGaps"
+        ],
+        "enum": [
+          "Sufficient",
+          "InsufficientCoverage",
+          "LargeGaps"
+        ]
       },
       "ExtendedGlucoseAnalyticsRequest": {
         "type": "object",
@@ -28022,6 +28625,56 @@
           }
         }
       },
+      "HeartRate": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProcessableDocumentBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "created_at": {
+                "type": "string",
+                "nullable": true
+              },
+              "mills": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "utcOffset": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "bpm": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "accuracy": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "device": {
+                "type": "string",
+                "nullable": true
+              },
+              "enteredBy": {
+                "type": "string",
+                "nullable": true
+              },
+              "data_source": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
       "PaginatedResponseOfBolus": {
         "type": "object",
         "additionalProperties": false,
@@ -30201,6 +30854,56 @@
             "nullable": true
           }
         }
+      },
+      "StepCount": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProcessableDocumentBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "created_at": {
+                "type": "string",
+                "nullable": true
+              },
+              "mills": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "utcOffset": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "metric": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "source": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "device": {
+                "type": "string",
+                "nullable": true
+              },
+              "enteredBy": {
+                "type": "string",
+                "nullable": true
+              },
+              "data_source": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        ]
       },
       "SystemEvent": {
         "type": "object",

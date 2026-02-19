@@ -36,31 +36,6 @@ public class OpenApsPreferences
     public bool EnableAlerts { get; set; }
 
     /// <summary>
-    /// IOB prediction line color
-    /// </summary>
-    public string PredIobColor { get; set; } = "#1e88e5";
-
-    /// <summary>
-    /// COB prediction line color
-    /// </summary>
-    public string PredCobColor { get; set; } = "#FB8C00";
-
-    /// <summary>
-    /// ACOB prediction line color
-    /// </summary>
-    public string PredAcobColor { get; set; } = "#FB8C00";
-
-    /// <summary>
-    /// Zero temp prediction line color
-    /// </summary>
-    public string PredZtColor { get; set; } = "#00d2d2";
-
-    /// <summary>
-    /// UAM prediction line color
-    /// </summary>
-    public string PredUamColor { get; set; } = "#c9bd60";
-
-    /// <summary>
     /// Whether to color prediction lines
     /// </summary>
     public bool ColorPredictionLines { get; set; } = true;

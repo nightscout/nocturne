@@ -27,6 +27,7 @@
 
   /* Glucose Levels - Trio Colors */
   --glucose-in-range: rgb(111, 207, 151); /* LoopGreen */
+  --glucose-tight-range: rgb(76, 217, 100); /* Fresh - brighter green for ideal zone */
   --glucose-low: rgb(255, 193, 69); /* LoopYellow */
   --glucose-very-low: rgb(235, 87, 87); /* LoopRed */
   --glucose-high: rgb(255, 193, 69); /* LoopYellow */
@@ -57,6 +58,13 @@
   /* Additional Trio Colors */
   --darker-blue: rgb(0, 122, 255);
   --fresh: rgb(76, 217, 100);
+
+  /* OpenAPS Prediction Lines - Trio palette */
+  --pred-iob: rgb(30, 150, 252);        /* Insulin blue */
+  --pred-cob: rgb(255, 240, 23);        /* Lemon/Carbs yellow */
+  --pred-acob: rgb(255, 240, 23);       /* Lemon/Carbs yellow */
+  --pred-zt: rgb(113, 97, 239);         /* Purple */
+  --pred-uam: rgb(255, 132, 69);        /* Orange UAM */
 
   /* Status Colors */
   --status-warning: rgb(255, 193, 69);

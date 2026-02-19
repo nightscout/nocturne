@@ -49,7 +49,7 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateGMI(0);
 
         result.Value.Should().Be(0);
-        result.Interpretation.Should().Be("Insufficient data");
+        result.Interpretation.Should().Be(GlucoseManagementIndicatorLevel.NonDiabetic);
     }
 
     [Fact]
@@ -58,19 +58,19 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateGMI(-50);
 
         result.Value.Should().Be(0);
-        result.Interpretation.Should().Be("Insufficient data");
+        result.Interpretation.Should().Be(GlucoseManagementIndicatorLevel.NonDiabetic);
     }
 
     [Theory]
-    [InlineData(90, "Non-diabetic range")]         // GMI 5.5 < 5.7 → Non-diabetic
-    [InlineData(120, "Prediabetes range")]         // GMI 6.2 → Prediabetes
-    [InlineData(150, "Well-controlled diabetes")]  // GMI 6.9 → Well-controlled
-    [InlineData(183, "Moderate control")]          // GMI 7.7 → Moderate
-    [InlineData(212, "Suboptimal control")]        // GMI 8.4 → Suboptimal
-    [InlineData(300, "Poor control - intervention recommended")] // GMI 10.5 → Poor
+    [InlineData(90, GlucoseManagementIndicatorLevel.NonDiabetic)]         // GMI 5.5 < 5.7 → Non-diabetic
+    [InlineData(120, GlucoseManagementIndicatorLevel.Prediabetes)]         // GMI 6.2 → Prediabetes
+    [InlineData(150, GlucoseManagementIndicatorLevel.WellControlled)]  // GMI 6.9 → Well-controlled
+    [InlineData(183, GlucoseManagementIndicatorLevel.ModerateControl)]          // GMI 7.7 → Moderate
+    [InlineData(212, GlucoseManagementIndicatorLevel.SuboptimalControl)]        // GMI 8.4 → Suboptimal
+    [InlineData(300, GlucoseManagementIndicatorLevel.PoorControl)] // GMI 10.5 → Poor
     public void CalculateGMI_ShouldReturnCorrectInterpretation(
         double meanGlucose,
-        string expectedInterpretation
+        GlucoseManagementIndicatorLevel expectedInterpretation
     )
     {
         var result = _sut.CalculateGMI(meanGlucose);
@@ -93,11 +93,11 @@ public class StatisticsServiceClinicalAccuracyTests
         {
             Percentages = new TimeInRangePercentages
             {
-                SevereLow = 0,
+                VeryLow = 0,
                 Low = 0,
                 Target = 100,
                 High = 0,
-                SevereHigh = 0,
+                VeryHigh = 0,
             },
         };
 
@@ -119,11 +119,11 @@ public class StatisticsServiceClinicalAccuracyTests
         {
             Percentages = new TimeInRangePercentages
             {
-                SevereLow = 2,
+                VeryLow = 2,
                 Low = 3,
                 Target = 60,
                 High = 25,
-                SevereHigh = 10,
+                VeryHigh = 10,
             },
         };
 
@@ -141,11 +141,11 @@ public class StatisticsServiceClinicalAccuracyTests
     [InlineData(1, 4, 60, 25, 10, GRIZone.C)]   // (3*1)+(2.4*4)+(1.6*10)+(0.8*25) = 48.6 → Zone C
     [InlineData(3, 5, 40, 30, 22, GRIZone.E)]   // (3*3)+(2.4*5)+(1.6*22)+(0.8*30) = 80.2 → Zone E
     public void CalculateGRI_ShouldReturnCorrectZone(
-        double severeLow,
+        double veryLow,
         double low,
         double target,
         double high,
-        double severeHigh,
+        double veryHigh,
         GRIZone expectedZone
     )
     {
@@ -153,11 +153,11 @@ public class StatisticsServiceClinicalAccuracyTests
         {
             Percentages = new TimeInRangePercentages
             {
-                SevereLow = severeLow,
+                VeryLow = veryLow,
                 Low = low,
                 Target = target,
                 High = high,
-                SevereHigh = severeHigh,
+                VeryHigh = veryHigh,
             },
         };
 
@@ -176,11 +176,11 @@ public class StatisticsServiceClinicalAccuracyTests
         {
             Percentages = new TimeInRangePercentages
             {
-                SevereLow = 20,
+                VeryLow = 20,
                 Low = 20,
                 Target = 0,
                 High = 30,
-                SevereHigh = 30,
+                VeryHigh = 30,
             },
         };
 
@@ -230,7 +230,7 @@ public class StatisticsServiceClinicalAccuracyTests
     public void CalculateTimeInRange_WithKnownDistribution_ShouldReturnExactPercentages()
     {
         // Create 100 entries with a known distribution using default thresholds:
-        // SevereLow: <54, Low: 54-70, Target: 70-180, High: 180-250, SevereHigh: >250
+        // VeryLow: <54, Low: 54-70, Target: 70-180, High: 180-250, VeryHigh: >250
         var entries = new List<SensorGlucose>();
 
         // 5 entries at 40 mg/dL (severe low)
@@ -246,11 +246,11 @@ public class StatisticsServiceClinicalAccuracyTests
 
         var result = _sut.CalculateTimeInRange(entries);
 
-        result.Percentages.SevereLow.Should().Be(5);
+        result.Percentages.VeryLow.Should().Be(5);
         result.Percentages.Low.Should().Be(10);
         result.Percentages.Target.Should().Be(70);
         result.Percentages.High.Should().Be(10);
-        result.Percentages.SevereHigh.Should().Be(5);
+        result.Percentages.VeryHigh.Should().Be(5);
     }
 
     [Fact]
@@ -268,11 +268,11 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateTimeInRange(entries);
 
         var totalPercentage =
-            result.Percentages.SevereLow
+            result.Percentages.VeryLow
             + result.Percentages.Low
             + result.Percentages.Target
             + result.Percentages.High
-            + result.Percentages.SevereHigh;
+            + result.Percentages.VeryHigh;
 
         totalPercentage.Should().BeApproximately(100, 0.1);
     }
@@ -287,10 +287,10 @@ public class StatisticsServiceClinicalAccuracyTests
 
         // All in target (70-180 default), so all 100 minutes should be in target
         result.Durations.Target.Should().Be(100); // 20 readings * 5 min
-        result.Durations.SevereLow.Should().Be(0);
+        result.Durations.VeryLow.Should().Be(0);
         result.Durations.Low.Should().Be(0);
         result.Durations.High.Should().Be(0);
-        result.Durations.SevereHigh.Should().Be(0);
+        result.Durations.VeryHigh.Should().Be(0);
     }
 
     [Fact]
@@ -299,12 +299,12 @@ public class StatisticsServiceClinicalAccuracyTests
         // Pregnancy thresholds: target 63-140
         var thresholds = new GlycemicThresholds
         {
-            SevereLow = 54,
+            VeryLow = 54,
             Low = 63,
             TargetBottom = 63,
             TargetTop = 140,
             High = 140,
-            SevereHigh = 250,
+            VeryHigh = 250,
         };
 
         var entries = new[]
@@ -334,11 +334,11 @@ public class StatisticsServiceClinicalAccuracyTests
 
         var result = _sut.CalculateTimeInRange(entries);
 
-        result.Percentages.SevereLow.Should().Be(0);
+        result.Percentages.VeryLow.Should().Be(0);
         result.Percentages.Low.Should().Be(25);     // 1/4 = 25%
         result.Percentages.Target.Should().Be(50);   // 2/4 = 50%
         result.Percentages.High.Should().Be(25);     // 1/4 = 25%
-        result.Percentages.SevereHigh.Should().Be(0);
+        result.Percentages.VeryHigh.Should().Be(0);
     }
 
     [Fact]
@@ -552,7 +552,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new Bolus { Insulin = 1.5, Automatic = false, Mills = DateTimeOffset.Parse("2024-01-02T20:00:00Z").ToUnixTimeMilliseconds() },
         };
 
-        var result = _sut.CalculateInsulinDeliveryStatistics(boluses, Array.Empty<StateSpan>(), startDate, endDate);
+        var result = _sut.CalculateInsulinDeliveryStatistics(boluses, Array.Empty<StateSpan>(), Array.Empty<CarbIntake>(), startDate, endDate);
 
         // Bolus = 5 + 7 + 2 + 1.5 = 15.5
         result.TotalBolus.Should().Be(15.5);
@@ -574,6 +574,7 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateInsulinDeliveryStatistics(
             Array.Empty<Bolus>(),
             Array.Empty<StateSpan>(),
+            Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
             new DateTime(2024, 1, 8)
         );
@@ -609,6 +610,7 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateInsulinDeliveryStatistics(
             boluses,
             basalSpans,
+            Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
             new DateTime(2024, 1, 2)
         );
@@ -630,6 +632,7 @@ public class StatisticsServiceClinicalAccuracyTests
         var result = _sut.CalculateInsulinDeliveryStatistics(
             boluses,
             Array.Empty<StateSpan>(),
+            Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
             new DateTime(2024, 1, 3)
         );
@@ -682,14 +685,14 @@ public class StatisticsServiceClinicalAccuracyTests
     public void AssessAgainstTargets_AllTargetsMet_ShouldReturnExcellent()
     {
         var analytics = CreateAnalyticsWithTIR(
-            severeLow: 0, low: 2, target: 80, high: 15, severeHigh: 3, cv: 30
+            veryLow: 0, low: 2, target: 80, high: 15, veryHigh: 3, cv: 30
         );
 
         var result = _sut.AssessAgainstTargets(analytics, DiabetesPopulation.Type1Adult);
 
         result.TargetsMet.Should().Be(6);
         result.TotalTargets.Should().Be(6);
-        result.OverallAssessment.Should().Be("Excellent");
+        result.OverallAssessment.Should().Be(ClinicalAssessmentLevel.Excellent);
         result.TIRAssessment.Status.Should().Be(TargetStatus.Met);
         result.TBRAssessment.Status.Should().Be(TargetStatus.Met);
         result.VeryLowAssessment.Status.Should().Be(TargetStatus.Met);
@@ -703,13 +706,13 @@ public class StatisticsServiceClinicalAccuracyTests
     {
         // TIR < 70%, TBR > 4%, VLow > 1%, TAR > 25%, VHigh > 5%, CV > 36%
         var analytics = CreateAnalyticsWithTIR(
-            severeLow: 5, low: 10, target: 40, high: 30, severeHigh: 15, cv: 50
+            veryLow: 5, low: 10, target: 40, high: 30, veryHigh: 15, cv: 50
         );
 
         var result = _sut.AssessAgainstTargets(analytics, DiabetesPopulation.Type1Adult);
 
         result.TargetsMet.Should().Be(0);
-        result.OverallAssessment.Should().Be("Needs Significant Improvement");
+        result.OverallAssessment.Should().Be(ClinicalAssessmentLevel.NeedsSignificantImprovement);
     }
 
     [Fact]
@@ -717,7 +720,7 @@ public class StatisticsServiceClinicalAccuracyTests
     {
         // Elderly has relaxed targets: TIR >= 50%, TBR <= 1%, VLow <= 0%
         var analytics = CreateAnalyticsWithTIR(
-            severeLow: 0, low: 0, target: 55, high: 35, severeHigh: 10, cv: 30
+            veryLow: 0, low: 0, target: 55, high: 35, veryHigh: 10, cv: 30
         );
 
         var result = _sut.AssessAgainstTargets(analytics, DiabetesPopulation.Elderly);
@@ -735,7 +738,7 @@ public class StatisticsServiceClinicalAccuracyTests
     {
         // TIR at 63% (>= 70 * 0.9 = 63) → Close
         var analytics = CreateAnalyticsWithTIR(
-            severeLow: 0, low: 2, target: 65, high: 25, severeHigh: 8, cv: 30
+            veryLow: 0, low: 2, target: 65, high: 25, veryHigh: 8, cv: 30
         );
 
         var result = _sut.AssessAgainstTargets(analytics, DiabetesPopulation.Type1Adult);
@@ -747,7 +750,7 @@ public class StatisticsServiceClinicalAccuracyTests
     public void AssessAgainstTargets_ShouldGenerateActionableInsights()
     {
         var analytics = CreateAnalyticsWithTIR(
-            severeLow: 3, low: 5, target: 50, high: 30, severeHigh: 12, cv: 45
+            veryLow: 3, low: 5, target: 50, high: 30, veryHigh: 12, cv: 45
         );
 
         var result = _sut.AssessAgainstTargets(analytics, DiabetesPopulation.Type1Adult);
@@ -755,7 +758,7 @@ public class StatisticsServiceClinicalAccuracyTests
         result.PriorityAreas.Should().NotBeEmpty();
         result.ActionableInsights.Should().NotBeEmpty();
         // Should flag severe hypoglycemia since VeryLow > 1%
-        result.PriorityAreas.Should().Contain(p => p.Contains("severe hypoglycemia"));
+        result.PriorityAreas.Should().Contain(p => p.Key == InsightKey.ReduceSevereHypoglycemia);
     }
 
     #endregion
@@ -1301,7 +1304,7 @@ public class StatisticsServiceClinicalAccuracyTests
     /// Clinically this is a single continuous hypoglycemic event.
     /// </summary>
     [Fact]
-    public void TimeInRange_Episodes_SevereLowToLowTransition_CountsSeparateEpisodes()
+    public void TimeInRange_Episodes_VeryLowToLowTransition_CountsSeparateEpisodes()
     {
         var entries = new[]
         {
@@ -1317,11 +1320,11 @@ public class StatisticsServiceClinicalAccuracyTests
 
         // Current behavior: counts separate episodes for severity transitions
         // This means one continuous hypo event gets counted as 2 episodes
-        result.Episodes.SevereLow.Should().Be(1);
+        result.Episodes.VeryLow.Should().Be(1);
         result.Episodes.Low.Should().Be(1);
 
         // Total hypo "episodes" reported = 2, but clinically it was 1 event
-        var totalHypoEpisodes = result.Episodes.SevereLow + result.Episodes.Low;
+        var totalHypoEpisodes = result.Episodes.VeryLow + result.Episodes.Low;
         totalHypoEpisodes.Should().Be(2,
             "current implementation counts severity transitions as separate episodes — " +
             "consider whether a single continuous hypo event should be counted as 1 episode");
@@ -1332,11 +1335,11 @@ public class StatisticsServiceClinicalAccuracyTests
     #region Helper Methods
 
     private static GlucoseAnalytics CreateAnalyticsWithTIR(
-        double severeLow,
+        double veryLow,
         double low,
         double target,
         double high,
-        double severeHigh,
+        double veryHigh,
         double cv
     )
     {
@@ -1346,11 +1349,11 @@ public class StatisticsServiceClinicalAccuracyTests
             {
                 Percentages = new TimeInRangePercentages
                 {
-                    SevereLow = severeLow,
+                    VeryLow = veryLow,
                     Low = low,
                     Target = target,
                     High = high,
-                    SevereHigh = severeHigh,
+                    VeryHigh = veryHigh,
                 },
             },
             GlycemicVariability = new GlycemicVariability

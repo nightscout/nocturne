@@ -630,6 +630,7 @@ public class StatisticsController : ControllerBase
                     insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
                         filteredBoluses,
                         basalSpansList,
+                        filteredCarbs,
                         startDate,
                         endDate
                     );
@@ -888,8 +889,17 @@ public class StatisticsController : ControllerBase
                 count: 10000
             );
 
+            var carbs = await _carbIntakeRepository.GetAsync(
+                from: startMills,
+                to: endMills,
+                device: null,
+                source: null,
+                limit: 10000,
+                descending: false
+            );
+
             var result = _statisticsService.CalculateInsulinDeliveryStatistics(
-                boluses, basalSpans, startDate, endDate);
+                boluses, basalSpans, carbs, startDate, endDate);
             return Ok(result);
         }
         catch (Exception ex)
@@ -932,8 +942,40 @@ public class StatisticsController : ControllerBase
                 count: 10000
             );
 
+            var spansList = basalSpans.ToList();
+
+            // Fall back to profile-based scheduled rates when no StateSpans exist.
+            // This matches ChartDataService.BuildBasalSeriesFromStateSpans which also
+            // falls back to BuildBasalSeriesFromProfile, keeping both charts consistent.
+            if (spansList.Count == 0 && _profileService.HasData())
+            {
+                for (var day = startUtc.Date; day <= endUtc.Date; day = day.AddDays(1))
+                {
+                    for (int hour = 0; hour < 24; hour++)
+                    {
+                        var hourStart = new DateTimeOffset(day.AddHours(hour), TimeSpan.Zero);
+                        var hourMills = hourStart.ToUnixTimeMilliseconds();
+                        if (hourMills < startMills || hourMills >= endMills)
+                            continue;
+
+                        var rate = _profileService.GetBasalRate(hourMills);
+                        spansList.Add(new StateSpan
+                        {
+                            Category = StateSpanCategory.BasalDelivery,
+                            StartMills = hourMills,
+                            EndMills = hourMills + 3_600_000,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                ["rate"] = rate,
+                                ["origin"] = "Scheduled",
+                            },
+                        });
+                    }
+                }
+            }
+
             var result = _statisticsService.CalculateBasalAnalysis(
-                basalSpans,
+                spansList,
                 startUtc,
                 endUtc
             );

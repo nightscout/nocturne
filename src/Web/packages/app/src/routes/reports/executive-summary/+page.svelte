@@ -59,71 +59,50 @@
     )
   );
 
-  // Clinical assessment helpers
-  function getOverallAssessment(
-    tir: number,
-    cv: number,
-    lows: number
-  ): {
+  // Assessment level mapping from backend
+  function getAssessmentDisplay(level: string | undefined): {
     grade: string;
     label: string;
     description: string;
     color: string;
   } {
-    let score = 0;
-
-    // TIR scoring (max 40 points)
-    if (tir >= 70) score += 40;
-    else if (tir >= 60) score += 30;
-    else if (tir >= 50) score += 20;
-    else score += 10;
-
-    // CV scoring (max 30 points)
-    if (cv <= 33) score += 30;
-    else if (cv <= 36) score += 25;
-    else if (cv <= 40) score += 15;
-    else score += 5;
-
-    // Low avoidance scoring (max 30 points)
-    if (lows < 1) score += 30;
-    else if (lows < 4) score += 25;
-    else if (lows < 6) score += 15;
-    else score += 5;
-
-    if (score >= 90)
-      return {
-        grade: "A",
-        label: "Excellent",
-        description: "Outstanding glucose management!",
-        color: "text-green-600",
-      };
-    if (score >= 75)
-      return {
-        grade: "B",
-        label: "Good",
-        description: "Strong management with room for fine-tuning.",
-        color: "text-blue-600",
-      };
-    if (score >= 60)
-      return {
-        grade: "C",
-        label: "Fair",
-        description: "Making progress — let's find areas to improve.",
-        color: "text-yellow-600",
-      };
-    if (score >= 45)
-      return {
-        grade: "D",
-        label: "Needs Attention",
-        description: "Some areas need focus. Your care team can help.",
-        color: "text-orange-600",
-      };
-    return {
-      grade: "F",
-      label: "Critical",
-      description: "Please discuss with your healthcare provider soon.",
-      color: "text-red-600",
-    };
+    switch (level) {
+      case "excellent":
+        return {
+          grade: "A",
+          label: "Excellent",
+          description: "Outstanding glucose management!",
+          color: "text-green-600",
+        };
+      case "good":
+        return {
+          grade: "B",
+          label: "Good",
+          description: "Strong management with room for fine-tuning.",
+          color: "text-blue-600",
+        };
+      case "needsAttention":
+        return {
+          grade: "C",
+          label: "Needs Attention",
+          description: "Some areas need focus. Your care team can help.",
+          color: "text-orange-600",
+        };
+      case "needsSignificantImprovement":
+        return {
+          grade: "D",
+          label: "Needs Improvement",
+          description: "Please discuss with your healthcare provider soon.",
+          color: "text-red-600",
+        };
+      default:
+        return {
+          grade: "–",
+          label: "Pending",
+          description: "Calculating assessment...",
+          color: "text-gray-600",
+        };
+    }
   }
 
   function formatDuration(minutes: number): string {
@@ -159,12 +138,11 @@
       {@const variability = analysis?.glycemicVariability}
       {@const stats = analysis?.basicStats}
       {@const quality = analysis?.dataQuality}
-      {@const totalLows = (tir?.low ?? 0) + (tir?.severeLow ?? 0)}
-      {@const totalHighs = (tir?.high ?? 0) + (tir?.severeHigh ?? 0)}
-      {@const assessment = getOverallAssessment(
-        tir?.target ?? 0,
-        variability?.coefficientOfVariation ?? 40,
-        totalLows
+      {@const totalLows = (tir?.low ?? 0) + (tir?.veryLow ?? 0)}
+      {@const totalHighs = (tir?.high ?? 0) + (tir?.veryHigh ?? 0)}
+      {@const clinicalAssessment = analysis?.clinicalAssessment}
+      {@const assessment = getAssessmentDisplay(
+        clinicalAssessment?.overallAssessment
       )}
 
       <!-- Overall Grade Card - The Big Picture -->
@@ -290,7 +268,7 @@
                   <span class="text-red-600 font-medium">Low</span>
                   <span>
                     {formatDuration(
-                      ((durations?.low ?? 0) + (durations?.severeLow ?? 0)) /
+                      ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
                         Math.max(1, dayCount)
                     )}
                   </span>
@@ -299,7 +277,7 @@
                   <span class="text-orange-500 font-medium">High</span>
                   <span>
                     {formatDuration(
-                      ((durations?.high ?? 0) + (durations?.severeHigh ?? 0)) /
+                      ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
                         Math.max(1, dayCount)
                     )}
                   </span>
@@ -470,7 +448,7 @@
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                  <span>&lt;54: {tir?.severeLow?.toFixed(1) ?? 0}%</span>
+                  <span>&lt;54: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-red-300"></div>
@@ -486,7 +464,7 @@
                   <span>Low episodes:</span>
                   <span class="font-medium">
                     {(analysis.timeInRange.episodes.low ?? 0) +
-                      (analysis.timeInRange.episodes.severeLow ?? 0)}
+                      (analysis.timeInRange.episodes.veryLow ?? 0)}
                   </span>
                 </div>
               </div>
@@ -551,7 +529,7 @@
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-orange-600"></div>
-                  <span>&gt;250: {tir?.severeHigh?.toFixed(1) ?? 0}%</span>
+                  <span>&gt;250: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
             </div>

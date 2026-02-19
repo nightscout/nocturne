@@ -19,6 +19,7 @@
     getActiveInstances,
     getDefinitions,
     getInstanceHistory,
+    getInsulinDeliveryStatistics,
   } from "$api";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import {
@@ -87,6 +88,16 @@
 
   // Query for punch card data (calculations done on backend)
   const punchCardQuery = $derived(getPunchCardData(dateRangeInput));
+
+  // Query for insulin delivery statistics (TDD, carbs) from the statistics endpoint
+  const insulinStatsInput = $derived.by(() => {
+    const firstDay = new Date(currentYear, currentMonth, 1, 0, 0, 0, 0);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+    return { startDate: firstDay, endDate: lastDay };
+  });
+  const insulinStatsQuery = $derived(
+    getInsulinDeliveryStatistics(insulinStatsInput)
+  );
 
   // Queries for trackers
   const trackersQuery = $derived(getActiveInstances());
@@ -263,48 +274,24 @@
     goto(`/reports/day-in-review?date=${day.date}`);
   }
 
-  // Calculate month summary from backend data
+  // Month summary from backend-computed data
   const monthSummary = $derived.by(() => {
-    const days = Array.from(daysData.days.values());
-    const daysWithData = days.filter((d) => d.totalReadings > 0);
-    const dayCount = daysWithData.length;
-
-    const totals = days.reduce(
-      (acc, d) => ({
-        readings: acc.readings + d.totalReadings,
-        inRange: acc.inRange + d.inRangeCount,
-        low: acc.low + d.lowCount,
-        high: acc.high + d.highCount,
-        carbs: acc.carbs + d.totalCarbs,
-        insulin: acc.insulin + d.totalInsulin,
-        glucose: acc.glucose + (d.averageGlucose > 0 ? d.averageGlucose : 0),
-        glucoseDays: acc.glucoseDays + (d.averageGlucose > 0 ? 1 : 0),
-      }),
-      {
-        readings: 0,
-        inRange: 0,
-        low: 0,
-        high: 0,
-        carbs: 0,
-        insulin: 0,
-        glucose: 0,
-        glucoseDays: 0,
-      }
+    const currentData = punchCardQuery.current;
+    const monthData = currentData?.months?.find(
+      (m) => m.year === currentYear && m.month === currentMonth
     );
+    const summary = monthData?.summary;
+    const insulinStats = insulinStatsQuery.current;
 
     return {
-      ...totals,
-      dayCount,
-      avgCarbs: dayCount > 0 ? totals.carbs / dayCount : 0,
-      avgInsulin: dayCount > 0 ? totals.insulin / dayCount : 0,
-      avgGlucose:
-        totals.glucoseDays > 0 ? totals.glucose / totals.glucoseDays : 0,
-      inRangePercent:
-        totals.readings > 0 ? (totals.inRange / totals.readings) * 100 : 0,
-      lowPercent:
-        totals.readings > 0 ? (totals.low / totals.readings) * 100 : 0,
-      highPercent:
-        totals.readings > 0 ? (totals.high / totals.readings) * 100 : 0,
+      totalReadings: summary?.totalReadings ?? 0,
+      inRangePercent: summary?.inRangePercent ?? 0,
+      avgGlucose: summary?.avgGlucose ?? 0,
+      avgDailyCarbs:
+        insulinStats?.dayCount && insulinStats.dayCount > 0
+          ? (insulinStats.totalCarbs ?? 0) / insulinStats.dayCount
+          : 0,
+      tdd: insulinStats?.tdd ?? 0,
     };
   });
 
@@ -1076,7 +1063,7 @@
             </div>
 
             <!-- Month Summary -->
-            {#if monthSummary.readings > 0}
+            {#if monthSummary.totalReadings > 0}
               <div
                 class="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4"
               >
@@ -1097,7 +1084,7 @@
                 </div>
                 <div class="text-center">
                   <div class="text-2xl font-bold">
-                    {monthSummary.avgCarbs.toFixed(0)}g
+                    {monthSummary.avgDailyCarbs.toFixed(0)}g
                   </div>
                   <div class="text-sm text-muted-foreground">
                     Avg Daily Carbs
@@ -1105,10 +1092,10 @@
                 </div>
                 <div class="text-center">
                   <div class="text-2xl font-bold">
-                    {monthSummary.avgInsulin.toFixed(1)}U
+                    {monthSummary.tdd.toFixed(1)}U
                   </div>
                   <div class="text-sm text-muted-foreground">
-                    Avg Daily Insulin
+                    Avg TDD
                   </div>
                 </div>
               </div>

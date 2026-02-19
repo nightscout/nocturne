@@ -63,12 +63,17 @@ export function useDateParams(defaultDays = 7) {
   // Track initialization to prevent infinite loops
   let initialized = $state(false);
 
+  // Compute initial defaults eagerly so memoizedInput is valid before effects run (SSR)
+  const _initEnd = today(getLocalTimeZone());
+  const _initStart = _initEnd.subtract({ days: defaultDays - 1 });
+
   // Stable memoized date range input - only changes when actual values change
   // This prevents downstream $derived statements from recreating queries
+  // Initialized with computed defaults so SSR queries get valid date ranges
   let memoizedInput = $state<DateRangeInput>({
-    days: undefined,
-    from: undefined,
-    to: undefined,
+    days: defaultDays,
+    from: _initStart.toString(),
+    to: _initEnd.toString(),
   });
 
   // Auto-adjust to report's default if current params are defaults and differ
@@ -268,6 +273,12 @@ export function useDateParams(defaultDays = 7) {
       params.from = startDate.toString();
       params.to = endDate.toString();
       params.isDefault = true;
+      // Sync memoizedInput immediately so queries react without waiting for effects
+      memoizedInput = {
+        days: daysCount,
+        from: startDate.toString(),
+        to: endDate.toString(),
+      };
     },
 
     /**

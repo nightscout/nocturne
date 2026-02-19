@@ -791,7 +791,6 @@ msgstr ""
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "In Range"
 msgstr ""
@@ -807,7 +806,6 @@ msgstr ""
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
@@ -827,7 +825,6 @@ msgstr ""
 #: src/routes/profile/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/reports/executive-summary/+page.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
@@ -925,7 +922,7 @@ msgstr ""
 #. placeholder {0}: unspecifiedCarbs
 #. placeholder {0}: totalCarbs.toFixed(0)
 #. placeholder {0}: day.totalCarbs.toFixed(0)
-#. placeholder {0}: monthSummary.avgCarbs.toFixed(0)
+#. placeholder {0}: monthSummary.avgDailyCarbs.toFixed(0)
 #. placeholder {0}: food.carbs
 #. placeholder {0}: formatMacro(scaledCarbs)
 #. placeholder {0}: dayTotalCarbs
@@ -978,7 +975,7 @@ msgstr "Insuline :"
 #. placeholder {0}: formatInsulinDisplay(averages.avgTotalDaily)
 #. placeholder {0}: totalInsulin.toFixed(1)
 #. placeholder {0}: day.totalInsulin.toFixed(1)
-#. placeholder {0}: monthSummary.avgInsulin.toFixed(1)
+#. placeholder {0}: monthSummary.tdd.toFixed(1)
 #. placeholder {0}: dayTotalInsulin.toFixed(1)
 #. placeholder {0}: meal.correlatedBolus.insulin.toFixed(1)
 #. placeholder {0}: treatment.insulin.toFixed(2)
@@ -1337,7 +1334,6 @@ msgstr ""
 #: src/routes/compatibility/[id]/+page.svelte
 #: src/routes/dashboard/analyses/[id]/+page.svelte
 #: src/routes/reports/+page.svelte
-#: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 #: src/routes/settings/alarms/+page.svelte
 msgid "Critical"
@@ -3300,18 +3296,14 @@ msgstr ""
 msgid "Scheduled"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 msgid "Very High"
 msgstr ""
 
-#: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/reports/glucose-distribution/+page.svelte
 #: src/routes/settings/appearance/+page.svelte
 msgid "Very Low"
@@ -3728,6 +3720,7 @@ msgstr ""
 #~ msgid "Avg Bolus"
 #~ msgstr ""
 
+#: src/routes/calendar/+page.svelte
 #: src/routes/reports/insulin-delivery/+page.svelte
 msgid "Avg TDD"
 msgstr ""
@@ -3774,140 +3767,99 @@ msgstr ""
 msgid "No basal or bolus treatments found in this period"
 msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
 #: src/routes/reports/agp/+page.svelte
 msgid "Excellent Time in Range"
 msgstr ""
 
-#. placeholder {0}: tirTarget.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "You're spending {0}% of your time in range — that's above the recommended 70% target!"
-msgstr ""
+#~ msgid "You're spending {0}% of your time in range — that's above the recommended 70% target!"
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "TIR >70% is associated with reduced risk of diabetes complications (ADA Standards of Care 2024)."
-msgstr ""
+#~ msgid "TIR >70% is associated with reduced risk of diabetes complications (ADA Standards of Care 2024)."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Good Progress on Time in Range"
-msgstr ""
+#~ msgid "Good Progress on Time in Range"
+#~ msgstr ""
 
-#. placeholder {0}: tirTarget.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your TIR is {0}%. The goal is 70% or higher — you're making progress!"
-msgstr ""
+#~ msgid "Your TIR is {0}%. The goal is 70% or higher — you're making progress!"
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Each 5% improvement in TIR is clinically meaningful for reducing complications risk."
-msgstr ""
+#~ msgid "Each 5% improvement in TIR is clinically meaningful for reducing complications risk."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Time in Range Needs Attention"
-msgstr ""
+#~ msgid "Time in Range Needs Attention"
+#~ msgstr ""
 
-#. placeholder {0}: tirTarget.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your TIR is {0}%. Let's work together to find patterns and improve this number."
-msgstr ""
+#~ msgid "Your TIR is {0}%. Let's work together to find patterns and improve this number."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Consider reviewing insulin:carb ratios, correction factors, and meal timing with your care team."
-msgstr ""
+#~ msgid "Consider reviewing insulin:carb ratios, correction factors, and meal timing with your care team."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Frequent Low Blood Sugars"
-msgstr ""
+#~ msgid "Frequent Low Blood Sugars"
+#~ msgstr ""
 
-#. placeholder {0}: totalLows.toFixed(1)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "You're spending {0}% of time below range. The goal is less than 4%. Let's identify when these lows occur."
-msgstr ""
+#~ msgid "You're spending {0}% of time below range. The goal is less than 4%. Let's identify when these lows occur."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Time below range <54 mg/dL should be <1%. Review hypoglycemia patterns, especially overnight and post-exercise."
-msgstr ""
+#~ msgid "Time below range <54 mg/dL should be <1%. Review hypoglycemia patterns, especially overnight and post-exercise."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Minimal Low Blood Sugars"
-msgstr ""
+#~ msgid "Minimal Low Blood Sugars"
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Great job avoiding lows! You're spending very little time below range."
-msgstr ""
+#~ msgid "Great job avoiding lows! You're spending very little time below range."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Stable Glucose Levels"
-msgstr ""
+#~ msgid "Stable Glucose Levels"
+#~ msgstr ""
 
-#. placeholder {0}: cv.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your glucose variability (CV) is {0}% — that's nicely stable! Lower variability means fewer unexpected swings."
-msgstr ""
+#~ msgid "Your glucose variability (CV) is {0}% — that's nicely stable! Lower variability means fewer unexpected swings."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "CV ≤33% indicates stable glycemic control and is associated with reduced hypoglycemia risk."
-msgstr ""
+#~ msgid "CV ≤33% indicates stable glycemic control and is associated with reduced hypoglycemia risk."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Moderate Glucose Variability"
-msgstr ""
+#~ msgid "Moderate Glucose Variability"
+#~ msgstr ""
 
-#. placeholder {0}: cv.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your CV is {0}%. Some swings are normal, but there may be room to smooth things out."
-msgstr ""
+#~ msgid "Your CV is {0}%. Some swings are normal, but there may be room to smooth things out."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "CV between 33-36% is acceptable. Consider evaluating meal composition and timing."
-msgstr ""
+#~ msgid "CV between 33-36% is acceptable. Consider evaluating meal composition and timing."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "High Glucose Variability"
-msgstr ""
+#~ msgid "High Glucose Variability"
+#~ msgstr ""
 
-#. placeholder {0}: cv.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your glucose is swinging quite a bit (CV: {0}%). This can feel exhausting — let's find the causes."
-msgstr ""
+#~ msgid "Your glucose is swinging quite a bit (CV: {0}%). This can feel exhausting — let's find the causes."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "High CV (>36%) increases hypoglycemia risk and may indicate need for treatment optimization."
-msgstr ""
+#~ msgid "High CV (>36%) increases hypoglycemia risk and may indicate need for treatment optimization."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Excellent Estimated A1C"
-msgstr ""
+#~ msgid "Excellent Estimated A1C"
+#~ msgstr ""
 
-#. placeholder {0}: a1c.toFixed(1)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your estimated A1C of {0}% is below the typical target of 7%. Great management!"
-msgstr ""
+#~ msgid "Your estimated A1C of {0}% is below the typical target of 7%. Great management!"
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "A1C <7% reduces microvascular complication risk. Ensure this isn't at the expense of increased hypoglycemia."
-msgstr ""
+#~ msgid "A1C <7% reduces microvascular complication risk. Ensure this isn't at the expense of increased hypoglycemia."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Good A1C Estimate"
-msgstr ""
+#~ msgid "Good A1C Estimate"
+#~ msgstr ""
 
-#. placeholder {0}: a1c.toFixed(1)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Your estimated A1C is {0}%. You're near the common target range."
-msgstr ""
+#~ msgid "Your estimated A1C is {0}%. You're near the common target range."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Time Above Range"
-msgstr ""
+#~ msgid "Time Above Range"
+#~ msgstr ""
 
-#. placeholder {0}: totalHighs.toFixed(0)
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "You're spending {0}% of time above 180 mg/dL. Let's look at when highs occur most often."
-msgstr ""
+#~ msgid "You're spending {0}% of time above 180 mg/dL. Let's look at when highs occur most often."
+#~ msgstr ""
 
-#: src/lib/components/reports/ClinicalInsights.svelte
-msgid "Target is <25% time above range. Review post-meal patterns, correction dosing, and basal rates."
-msgstr ""
+#~ msgid "Target is <25% time above range. Review post-meal patterns, correction dosing, and basal rates."
+#~ msgstr ""
 
 #: src/lib/components/reports/ClinicalInsights.svelte
 msgid "<0/> What Your Data is Telling Us"
@@ -4004,12 +3956,12 @@ msgstr ""
 msgid "{0}% TTIR"
 msgstr ""
 
-#. placeholder {0}: (entry.analytics?.timeInRange?.percentages?.low ?? 0) + (entry.analytics?.timeInRange?.percentages?.severeLow ?? 0)
+#. placeholder {0}: (entry.analytics?.timeInRange?.percentages?.low ?? 0) + (entry.analytics?.timeInRange?.percentages?.veryLow ?? 0)
 #: src/lib/components/reports/DailySummaryTable.svelte
 msgid "{0}% Low"
 msgstr ""
 
-#. placeholder {0}: (entry.analytics?.timeInRange?.percentages?.high ?? 0) + (entry.analytics?.timeInRange?.percentages?.severeHigh ?? 0)
+#. placeholder {0}: (entry.analytics?.timeInRange?.percentages?.high ?? 0) + (entry.analytics?.timeInRange?.percentages?.veryHigh ?? 0)
 #: src/lib/components/reports/DailySummaryTable.svelte
 msgid "{0}% High"
 msgstr ""
@@ -4067,7 +4019,6 @@ msgstr ""
 
 #: src/lib/components/reports/GlucoseScoreCard.svelte
 #: src/routes/reports/+page.svelte
-#: src/routes/reports/executive-summary/+page.svelte
 msgid "Fair"
 msgstr ""
 
@@ -5221,6 +5172,7 @@ msgid "Alarm Sound"
 msgstr ""
 
 #: src/lib/components/settings/AlarmProfileDialog.svelte
+#: src/routes/reports/glucose-distribution/+page.svelte
 msgid "Hide"
 msgstr ""
 
@@ -8020,7 +7972,6 @@ msgid ""
 msgstr ""
 
 #: src/routes/reports/glucose-distribution/+page.svelte
-#: src/routes/reports/glucose-distribution/+page.svelte
 msgid "Tight Range"
 msgstr ""
 
@@ -8127,9 +8078,8 @@ msgstr ""
 msgid "Strong management with room for fine-tuning."
 msgstr ""
 
-#: src/routes/reports/executive-summary/+page.svelte
-msgid "Making progress — let's find areas to improve."
-msgstr ""
+#~ msgid "Making progress — let's find areas to improve."
+#~ msgstr ""
 
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Some areas need focus. Your care team can help."
@@ -10165,6 +10115,7 @@ msgid "Failed to cancel migration"
 msgstr ""
 
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/reports/executive-summary/+page.svelte
 #: src/routes/settings/migration/+page.svelte
 msgid "Pending"
 msgstr ""
@@ -11302,7 +11253,7 @@ msgstr ""
 msgid "Last 24h"
 msgstr ""
 
-#~ msgid "Severe Low: {0}%"
+#~ msgid "Very Low: {0}%"
 #~ msgstr ""
 
 #~ msgid "Low: {0}%"
@@ -11314,7 +11265,7 @@ msgstr ""
 #~ msgid "High: {0}%"
 #~ msgstr ""
 
-#~ msgid "Severe High: {0}%"
+#~ msgid "Very High: {0}%"
 #~ msgstr ""
 
 #. placeholder {0}: profile.name
@@ -12265,13 +12216,7 @@ msgstr ""
 #~ msgid "Last updated: {0}"
 #~ msgstr "Dernière mise à jour : {0}"
 
-#~ msgid "Severe Low"
-#~ msgstr ""
-
 #~ msgid "Target"
-#~ msgstr ""
-
-#~ msgid "Severe High"
 #~ msgstr ""
 
 #~ msgid "Label:"
@@ -13914,9 +13859,8 @@ msgstr ""
 msgid "Avg Daily Carbs"
 msgstr ""
 
-#: src/routes/calendar/+page.svelte
-msgid "Avg Daily Insulin"
-msgstr ""
+#~ msgid "Avg Daily Insulin"
+#~ msgstr ""
 
 #: src/routes/calendar/+page.svelte
 msgid "Green band = target range"
@@ -14543,6 +14487,7 @@ msgid "Visibility threshold"
 msgstr ""
 
 #: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/routes/reports/glucose-distribution/+page.svelte
 msgid "Show"
 msgstr ""
 
@@ -15786,16 +15731,16 @@ msgstr ""
 msgid "Failed to update record"
 msgstr ""
 
-#: src/routes/reports/basal-analysis/+page.svelte
-msgid "Error Loading Basal Analysis Data"
-msgstr ""
-
 #: src/lib/components/entries/CarbIntakeSection.svelte
 msgid "Foods"
 msgstr ""
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
 msgid "Link foods to this carb intake."
+msgstr ""
+
+#: src/routes/reports/basal-analysis/+page.svelte
+msgid "Error Loading Basal Analysis Data"
 msgstr ""
 
 #: src/routes/reports/basal-analysis/+page.svelte
@@ -15809,4 +15754,17 @@ msgstr ""
 msgid ""
 "Moderate temp basal activity — typical for automated\n"
 "insulin delivery systems."
+msgstr ""
+
+#. placeholder {0}: showTightRange ? "Hide" : "Show"
+#: src/routes/reports/glucose-distribution/+page.svelte
+msgid "{0} Tight Range"
+msgstr ""
+
+#: src/routes/reports/executive-summary/+page.svelte
+msgid "Needs Improvement"
+msgstr ""
+
+#: src/routes/reports/executive-summary/+page.svelte
+msgid "Calculating assessment..."
 msgstr ""

@@ -18,11 +18,11 @@ public class StatisticsService : IStatisticsService
         "Snack Bolus",
         "Bolus Wizard",
         "Combo Bolus",
-        "Bolus",           // Generic bolus
-        "SMB",             // Super Micro Bolus (from loop systems like AndroidAPS)
-        "e-Bolus",         // Extended bolus
-        "Extended Bolus",  // Extended bolus variant
-        "Dual Wave",       // Combo bolus with extended portion
+        "Bolus", // Generic bolus
+        "SMB", // Super Micro Bolus (from loop systems like AndroidAPS)
+        "e-Bolus", // Extended bolus
+        "Extended Bolus", // Extended bolus variant
+        "Dual Wave", // Combo bolus with extended portion
     };
 
     private static readonly IEnumerable<DistributionBin> DefaultDistributionBins = new[]
@@ -142,7 +142,7 @@ public class StatisticsService : IStatisticsService
             {
                 Value = 0,
                 MeanGlucose = 0,
-                Interpretation = "Insufficient data",
+                Interpretation = GlucoseManagementIndicatorLevel.NonDiabetic,
             };
         }
 
@@ -175,9 +175,9 @@ public class StatisticsService : IStatisticsService
         const double highWeight = 0.8;
         const double veryHighWeight = 1.6;
 
-        var hypoComponent = (veryLowWeight * percentages.SevereLow) + (lowWeight * percentages.Low);
+        var hypoComponent = (veryLowWeight * percentages.VeryLow) + (lowWeight * percentages.Low);
         var hyperComponent =
-            (veryHighWeight * percentages.SevereHigh) + (highWeight * percentages.High);
+            (veryHighWeight * percentages.VeryHigh) + (highWeight * percentages.High);
 
         var gri = hypoComponent + hyperComponent;
 
@@ -195,12 +195,12 @@ public class StatisticsService : IStatisticsService
 
         var interpretation = zone switch
         {
-            GRIZone.A => "Excellent glycemic control - lowest risk",
-            GRIZone.B => "Good glycemic control - low risk",
-            GRIZone.C => "Moderate glycemic control - moderate risk",
-            GRIZone.D => "Suboptimal glycemic control - high risk",
-            GRIZone.E => "Poor glycemic control - very high risk",
-            _ => "Unknown",
+            GRIZone.A => GlycomicRiskInterpretation.Excellent,
+            GRIZone.B => GlycomicRiskInterpretation.Good,
+            GRIZone.C => GlycomicRiskInterpretation.Moderate,
+            GRIZone.D => GlycomicRiskInterpretation.Suboptimal,
+            GRIZone.E => GlycomicRiskInterpretation.Poor,
+            _ => GlycomicRiskInterpretation.Unknown,
         };
 
         return new GlycemicRiskIndex
@@ -241,7 +241,7 @@ public class StatisticsService : IStatisticsService
         );
 
         // Time Below Range Assessment (maximum target - lower is better)
-        var totalTBR = tir.SevereLow + tir.Low;
+        var totalTBR = tir.VeryLow + tir.Low;
         assessment.TBRAssessment = AssessMaximumTarget(
             "Time Below Range",
             totalTBR,
@@ -251,12 +251,12 @@ public class StatisticsService : IStatisticsService
         // Very Low Assessment (maximum target)
         assessment.VeryLowAssessment = AssessMaximumTarget(
             "Time Very Low (<54)",
-            tir.SevereLow,
+            tir.VeryLow,
             targets.MaxTBRVeryLow
         );
 
         // Time Above Range Assessment (maximum target)
-        var totalTAR = tir.SevereHigh + tir.High;
+        var totalTAR = tir.VeryHigh + tir.High;
         assessment.TARAssessment = AssessMaximumTarget(
             "Time Above Range",
             totalTAR,
@@ -266,7 +266,7 @@ public class StatisticsService : IStatisticsService
         // Very High Assessment (maximum target)
         assessment.VeryHighAssessment = AssessMaximumTarget(
             "Time Very High (>250)",
-            tir.SevereHigh,
+            tir.VeryHigh,
             targets.MaxTARVeryHigh
         );
 
@@ -293,10 +293,10 @@ public class StatisticsService : IStatisticsService
         // Determine overall assessment
         assessment.OverallAssessment = assessment.TargetsMet switch
         {
-            6 => "Excellent",
-            >= 4 => "Good",
-            >= 2 => "Needs Attention",
-            _ => "Needs Significant Improvement",
+            6 => ClinicalAssessmentLevel.Excellent,
+            >= 4 => ClinicalAssessmentLevel.Good,
+            >= 2 => ClinicalAssessmentLevel.NeedsAttention,
+            _ => ClinicalAssessmentLevel.NeedsSignificantImprovement,
         };
 
         // Generate actionable insights
@@ -356,61 +356,129 @@ public class StatisticsService : IStatisticsService
     {
         // Strengths
         if (assessment.TIRAssessment.Status == TargetStatus.Met)
-            assessment.Strengths.Add(
-                $"Time in range is excellent at {tir.Target:F1}% (target: ≥{targets.TargetTIR}%)"
-            );
+            assessment.Strengths.Add(new LocalizedInsight
+            {
+                Key = InsightKey.TimeInRangeExcellent,
+                Context = new Dictionary<string, double>
+                {
+                    { "actual", Math.Round(tir.Target * 10) / 10 },
+                    { "target", targets.TargetTIR },
+                }
+            });
 
-        if (assessment.VeryLowAssessment.Status == TargetStatus.Met && tir.SevereLow == 0)
-            assessment.Strengths.Add("No severe hypoglycemia detected - great job staying safe!");
+        if (assessment.VeryLowAssessment.Status == TargetStatus.Met && tir.VeryLow == 0)
+            assessment.Strengths.Add(new LocalizedInsight
+            {
+                Key = InsightKey.NoSevereHypoglycemia,
+                Context = new(),
+            });
 
         if (assessment.CVAssessment.Status == TargetStatus.Met)
-            assessment.Strengths.Add($"Glucose variability is well-controlled at {cv:F1}% CV");
+            assessment.Strengths.Add(new LocalizedInsight
+            {
+                Key = InsightKey.VariabilityControlled,
+                Context = new Dictionary<string, double> { { "cv", Math.Round(cv * 10) / 10 } }
+            });
 
         // Priority areas for improvement
         if (assessment.VeryLowAssessment.Status == TargetStatus.NotMet)
         {
-            assessment.PriorityAreas.Add("Reducing severe hypoglycemia (<54 mg/dL)");
-            assessment.ActionableInsights.Add(
-                $"⚠️ Time very low is {tir.SevereLow:F1}% (target: <{targets.MaxTBRVeryLow}%). Review overnight basal rates and consider CGM alerts."
-            );
+            assessment.PriorityAreas.Add(new LocalizedInsight
+            {
+                Key = InsightKey.ReduceSevereHypoglycemia,
+                Context = new(),
+            });
+            assessment.ActionableInsights.Add(new LocalizedInsight
+            {
+                Key = InsightKey.TimeVeryLow,
+                Context = new Dictionary<string, double>
+                {
+                    { "actual", Math.Round(tir.VeryLow * 10) / 10 },
+                    { "target", targets.MaxTBRVeryLow },
+                }
+            });
         }
 
         if (assessment.TBRAssessment.Status == TargetStatus.NotMet)
         {
-            assessment.PriorityAreas.Add("Reducing overall hypoglycemia (<70 mg/dL)");
-            assessment.ActionableInsights.Add(
-                $"Time below range is {tir.SevereLow + tir.Low:F1}% (target: <{targets.MaxTBR}%). Consider adjusting correction factors or meal timing."
-            );
+            assessment.PriorityAreas.Add(new LocalizedInsight
+            {
+                Key = InsightKey.ReduceHypoglycemia,
+                Context = new(),
+            });
+            assessment.ActionableInsights.Add(new LocalizedInsight
+            {
+                Key = InsightKey.TimeBelowRange,
+                Context = new Dictionary<string, double>
+                {
+                    { "actual", Math.Round((tir.VeryLow + tir.Low) * 10) / 10 },
+                    { "target", targets.MaxTBR },
+                }
+            });
         }
 
         if (assessment.TIRAssessment.Status == TargetStatus.NotMet)
         {
-            assessment.PriorityAreas.Add("Increasing time in target range");
-            assessment.ActionableInsights.Add(
-                $"Time in range is {tir.Target:F1}% (target: ≥{targets.TargetTIR}%). Focus on post-meal management and consistent timing."
-            );
+            assessment.PriorityAreas.Add(new LocalizedInsight
+            {
+                Key = InsightKey.IncreaseTIR,
+                Context = new(),
+            });
+            assessment.ActionableInsights.Add(new LocalizedInsight
+            {
+                Key = InsightKey.TimeInRange,
+                Context = new Dictionary<string, double>
+                {
+                    { "actual", Math.Round(tir.Target * 10) / 10 },
+                    { "target", targets.TargetTIR },
+                }
+            });
         }
 
         if (assessment.VeryHighAssessment.Status == TargetStatus.NotMet)
         {
-            assessment.PriorityAreas.Add("Reducing severe hyperglycemia (>250 mg/dL)");
-            assessment.ActionableInsights.Add(
-                $"Time very high is {tir.SevereHigh:F1}% (target: <{targets.MaxTARVeryHigh}%). Review carb counting and correction doses."
-            );
+            assessment.PriorityAreas.Add(new LocalizedInsight
+            {
+                Key = InsightKey.ReduceSevereHyperglycemia,
+                Context = new(),
+            });
+            assessment.ActionableInsights.Add(new LocalizedInsight
+            {
+                Key = InsightKey.TimeVeryHigh,
+                Context = new Dictionary<string, double>
+                {
+                    { "actual", Math.Round(tir.VeryHigh * 10) / 10 },
+                    { "target", targets.MaxTARVeryHigh },
+                }
+            });
         }
 
         if (assessment.CVAssessment.Status == TargetStatus.NotMet)
         {
-            assessment.PriorityAreas.Add("Reducing glucose variability");
-            assessment.ActionableInsights.Add(
-                $"Glucose variability is {cv:F1}% (target: <{targets.TargetCV}%). Consider more consistent meal timing and composition."
-            );
+            assessment.PriorityAreas.Add(new LocalizedInsight
+            {
+                Key = InsightKey.ReduceVariability,
+                Context = new(),
+            });
+            assessment.ActionableInsights.Add(new LocalizedInsight
+            {
+                Key = InsightKey.Variability,
+                Context = new Dictionary<string, double>
+                {
+                    { "actual", Math.Round(cv * 10) / 10 },
+                    { "target", targets.TargetCV },
+                }
+            });
         }
 
         // If everything is good
         if (assessment.TargetsMet == assessment.TotalTargets)
         {
-            assessment.ActionableInsights.Add("🎉 All targets met! Keep up the excellent work.");
+            assessment.ActionableInsights.Add(new LocalizedInsight
+            {
+                Key = InsightKey.AllTargetsAchieved,
+                Context = new(),
+            });
         }
     }
 
@@ -706,9 +774,7 @@ public class StatisticsService : IStatisticsService
     /// <returns>Collection of glucose values in mg/dL</returns>
     public IEnumerable<double> ExtractGlucoseValues(IEnumerable<SensorGlucose> entries)
     {
-        return entries
-            .Select(entry => entry.Mgdl)
-            .Where(value => value > 0 && value < 600);
+        return entries.Select(entry => entry.Mgdl).Where(value => value > 0 && value < 600);
     }
 
     #endregion
@@ -737,9 +803,10 @@ public class StatisticsService : IStatisticsService
         }
 
         var mean = valuesList.Average();
-        var variance = valuesList.Count > 1
-            ? valuesList.Sum(v => Math.Pow(v - mean, 2)) / (valuesList.Count - 1)
-            : 0;
+        var variance =
+            valuesList.Count > 1
+                ? valuesList.Sum(v => Math.Pow(v - mean, 2)) / (valuesList.Count - 1)
+                : 0;
         var standardDeviation = Math.Sqrt(variance);
         var coefficientOfVariation = (standardDeviation / mean) * 100;
 
@@ -1133,10 +1200,7 @@ public class StatisticsService : IStatisticsService
     {
         thresholds ??= new GlycemicThresholds();
 
-        var entriesList = entries
-            .Where(e => e.Mgdl > 0)
-            .OrderBy(e => e.Mills)
-            .ToList();
+        var entriesList = entries.Where(e => e.Mgdl > 0).OrderBy(e => e.Mills).ToList();
 
         if (!entriesList.Any())
         {
@@ -1164,8 +1228,8 @@ public class StatisticsService : IStatisticsService
         }
 
         // Count readings in each range
-        var severeLowCount = glucoseValues.Count(v => v < thresholds.SevereLow);
-        var lowCount = glucoseValues.Count(v => v >= thresholds.SevereLow && v < thresholds.Low);
+        var veryLowCount = glucoseValues.Count(v => v < thresholds.VeryLow);
+        var lowCount = glucoseValues.Count(v => v >= thresholds.VeryLow && v < thresholds.Low);
         var targetCount = glucoseValues.Count(v =>
             v >= thresholds.TargetBottom && v <= thresholds.TargetTop
         );
@@ -1173,31 +1237,31 @@ public class StatisticsService : IStatisticsService
             v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop
         );
         var highCount = glucoseValues.Count(v =>
-            v > thresholds.TargetTop && v <= thresholds.SevereHigh
+            v > thresholds.TargetTop && v <= thresholds.VeryHigh
         );
-        var severeHighCount = glucoseValues.Count(v => v > thresholds.SevereHigh);
+        var veryHighCount = glucoseValues.Count(v => v > thresholds.VeryHigh);
 
         // Calculate percentages
         var percentages = new TimeInRangePercentages
         {
-            SevereLow = (double)severeLowCount / totalReadings * 100,
+            VeryLow = (double)veryLowCount / totalReadings * 100,
             Low = (double)lowCount / totalReadings * 100,
             Target = (double)targetCount / totalReadings * 100,
             TightTarget = (double)tightTargetCount / totalReadings * 100,
             High = (double)highCount / totalReadings * 100,
-            SevereHigh = (double)severeHighCount / totalReadings * 100,
+            VeryHigh = (double)veryHighCount / totalReadings * 100,
         };
 
         // Calculate durations (assuming 5-minute intervals)
         const int intervalMinutes = 5;
         var durations = new TimeInRangeDurations
         {
-            SevereLow = severeLowCount * intervalMinutes,
+            VeryLow = veryLowCount * intervalMinutes,
             Low = lowCount * intervalMinutes,
             Target = targetCount * intervalMinutes,
             TightTarget = tightTargetCount * intervalMinutes,
             High = highCount * intervalMinutes,
-            SevereHigh = severeHighCount * intervalMinutes,
+            VeryHigh = veryHighCount * intervalMinutes,
         };
 
         // Calculate episodes (simplified - consecutive readings in same range)
@@ -1205,7 +1269,9 @@ public class StatisticsService : IStatisticsService
 
         // Calculate per-range detailed statistics
         var lowValues = glucoseValues.Where(v => v < thresholds.Low).ToList();
-        var targetValues = glucoseValues.Where(v => v >= thresholds.TargetBottom && v <= thresholds.TargetTop).ToList();
+        var targetValues = glucoseValues
+            .Where(v => v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
+            .ToList();
         var highValues = glucoseValues.Where(v => v > thresholds.TargetTop).ToList();
 
         var rangeStats = new TimeInRangeDetailedStats
@@ -1227,7 +1293,11 @@ public class StatisticsService : IStatisticsService
     /// <summary>
     /// Calculate PeriodMetrics for a specific glucose range
     /// </summary>
-    private PeriodMetrics CalculateRangeMetrics(string rangeName, List<double> values, int totalReadings)
+    private PeriodMetrics CalculateRangeMetrics(
+        string rangeName,
+        List<double> values,
+        int totalReadings
+    )
     {
         if (values.Count == 0)
         {
@@ -1236,12 +1306,13 @@ public class StatisticsService : IStatisticsService
 
         var mean = values.Average();
         var sortedValues = values.OrderBy(v => v).ToList();
-        var median = sortedValues.Count % 2 == 0
-            ? (sortedValues[sortedValues.Count / 2 - 1] + sortedValues[sortedValues.Count / 2]) / 2
-            : sortedValues[sortedValues.Count / 2];
-        var variance = values.Count > 1
-            ? values.Sum(v => Math.Pow(v - mean, 2)) / (values.Count - 1)
-            : 0;
+        var median =
+            sortedValues.Count % 2 == 0
+                ? (sortedValues[sortedValues.Count / 2 - 1] + sortedValues[sortedValues.Count / 2])
+                    / 2
+                : sortedValues[sortedValues.Count / 2];
+        var variance =
+            values.Count > 1 ? values.Sum(v => Math.Pow(v - mean, 2)) / (values.Count - 1) : 0;
         var stdDev = Math.Sqrt(variance);
 
         return new PeriodMetrics
@@ -1273,12 +1344,12 @@ public class StatisticsService : IStatisticsService
         foreach (var value in glucoseValues)
         {
             string currentRange;
-            if (value < thresholds.SevereLow)
-                currentRange = "SevereLow";
+            if (value < thresholds.VeryLow)
+                currentRange = "VeryLow";
             else if (value < thresholds.Low)
                 currentRange = "Low";
-            else if (value > thresholds.SevereHigh)
-                currentRange = "SevereHigh";
+            else if (value > thresholds.VeryHigh)
+                currentRange = "VeryHigh";
             else if (value > thresholds.TargetTop)
                 currentRange = "High";
             else
@@ -1287,10 +1358,10 @@ public class StatisticsService : IStatisticsService
             if (
                 currentRange != lastRange
                 && (
-                    currentRange == "SevereLow"
+                    currentRange == "VeryLow"
                     || currentRange == "Low"
                     || currentRange == "High"
-                    || currentRange == "SevereHigh"
+                    || currentRange == "VeryHigh"
                 )
             )
             {
@@ -1300,10 +1371,10 @@ public class StatisticsService : IStatisticsService
             lastRange = currentRange;
         }
 
-        episodes.SevereLow = episodeCounts.GetValueOrDefault("SevereLow", 0);
+        episodes.VeryLow = episodeCounts.GetValueOrDefault("VeryLow", 0);
         episodes.Low = episodeCounts.GetValueOrDefault("Low", 0);
         episodes.High = episodeCounts.GetValueOrDefault("High", 0);
-        episodes.SevereHigh = episodeCounts.GetValueOrDefault("SevereHigh", 0);
+        episodes.VeryHigh = episodeCounts.GetValueOrDefault("VeryHigh", 0);
 
         return episodes;
     }
@@ -1413,7 +1484,9 @@ public class StatisticsService : IStatisticsService
                 var dateTimeOffset = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
                 if (entry.UtcOffset.HasValue)
                 {
-                    dateTimeOffset = dateTimeOffset.ToOffset(TimeSpan.FromMinutes(entry.UtcOffset.Value));
+                    dateTimeOffset = dateTimeOffset.ToOffset(
+                        TimeSpan.FromMinutes(entry.UtcOffset.Value)
+                    );
                 }
 
                 var hour = dateTimeOffset.Hour;
@@ -1478,8 +1551,7 @@ public class StatisticsService : IStatisticsService
         var normalCount = glucoseValues.Count(v => v >= 63 && v < 140);
         var aboveTargetCount = glucoseValues.Count(v => v >= 140 && v < 180);
         var highCount = glucoseValues.Count(v => v >= 180 && v < 200);
-        var veryHighCount = glucoseValues.Count(v => v >= 200 && v < 220);
-        var severeHighCount = glucoseValues.Count(v => v >= 220);
+        var veryHighCount = glucoseValues.Count(v => v >= 200);
 
         return new ExtendedTimeInRangePercentages
         {
@@ -1489,7 +1561,6 @@ public class StatisticsService : IStatisticsService
             AboveTarget = Math.Round((double)aboveTargetCount / total * 100, 1),
             High = Math.Round((double)highCount / total * 100, 1),
             VeryHigh = Math.Round((double)veryHighCount / total * 100, 1),
-            SevereHigh = Math.Round((double)severeHighCount / total * 100, 1),
         };
     }
 
@@ -1503,7 +1574,10 @@ public class StatisticsService : IStatisticsService
     /// <param name="boluses">Collection of boluses</param>
     /// <param name="carbIntakes">Collection of carb intakes</param>
     /// <returns>Treatment summary with totals and counts</returns>
-    public TreatmentSummary CalculateTreatmentSummary(IEnumerable<Bolus> boluses, IEnumerable<CarbIntake> carbIntakes)
+    public TreatmentSummary CalculateTreatmentSummary(
+        IEnumerable<Bolus> boluses,
+        IEnumerable<CarbIntake> carbIntakes
+    )
     {
         var summary = new TreatmentSummary
         {
@@ -1532,9 +1606,8 @@ public class StatisticsService : IStatisticsService
 
         // Calculate carb to insulin ratio
         var totalInsulin = summary.Totals.Insulin.Bolus + summary.Totals.Insulin.Basal;
-        summary.CarbToInsulinRatio = totalInsulin > 0
-            ? Math.Round(summary.Totals.Food.Carbs / totalInsulin * 10) / 10
-            : 0;
+        summary.CarbToInsulinRatio =
+            totalInsulin > 0 ? Math.Round(summary.Totals.Food.Carbs / totalInsulin * 10) / 10 : 0;
 
         return summary;
     }
@@ -1654,11 +1727,13 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     private InsulinDeliveryStatistics CalculateBolusDeliveryStatistics(
         IEnumerable<Bolus> boluses,
+        IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
         DateTime endDate
     )
     {
         var bolusList = boluses.ToList();
+        var carbList = carbIntakes.ToList();
 
         // Calculate day count (minimum 1 to avoid division by zero)
         var dayCount = Math.Max(1, (int)Math.Round((endDate - startDate).TotalDays));
@@ -1669,17 +1744,66 @@ public class StatisticsService : IStatisticsService
         double totalBolus = 0;
         int bolusCount = 0;
         int correctionBoluses = 0;
+        int mealBoluses = 0;
+        int carbBolusCount = 0;
+
+        // Build a set of bolus Mills that are within 15 minutes of a carb entry
+        // to classify meal vs correction boluses
+        const long mealWindowMs = 15 * 60 * 1000; // 15 minutes
+        var carbTimestamps = carbList.Select(c => c.Mills).ToList();
 
         foreach (var bolus in bolusList)
         {
-            if (bolus.Insulin <= 0) continue;
+            if (bolus.Insulin <= 0)
+                continue;
 
             totalBolus += bolus.Insulin;
             bolusCount++;
 
-            if (!bolus.Automatic)
+            // Check if this bolus is linked to a carb entry by CorrelationId or time proximity
+            bool isMealBolus = false;
+
+            if (
+                bolus.CorrelationId.HasValue
+                && carbList.Any(c => c.CorrelationId == bolus.CorrelationId)
+            )
+            {
+                isMealBolus = true;
+            }
+            else if (carbTimestamps.Any(ct => Math.Abs(bolus.Mills - ct) <= mealWindowMs))
+            {
+                isMealBolus = true;
+            }
+
+            if (isMealBolus)
+            {
+                mealBoluses++;
+                carbBolusCount++;
+            }
+            else if (!bolus.Automatic)
+            {
                 correctionBoluses++;
+            }
         }
+
+        // Calculate carb totals
+        double totalCarbs = carbList.Sum(c => c.Carbs);
+        int carbCount = carbList.Count;
+
+        // I:C ratio = grams carbs per unit bolus insulin used for meals
+        double icRatio =
+            mealBoluses > 0 && totalCarbs > 0
+                ? totalCarbs
+                    / bolusList
+                        .Where(b => b.Insulin > 0)
+                        .Where(b =>
+                            (
+                                b.CorrelationId.HasValue
+                                && carbList.Any(c => c.CorrelationId == b.CorrelationId)
+                            ) || carbTimestamps.Any(ct => Math.Abs(b.Mills - ct) <= mealWindowMs)
+                        )
+                        .Sum(b => b.Insulin)
+                : 0;
 
         // Without StateSpans, we can only report bolus data
         var bolusesPerDay = (double)bolusCount / dayCount;
@@ -1689,22 +1813,22 @@ public class StatisticsService : IStatisticsService
             TotalBolus = Math.Round(totalBolus * 100) / 100,
             TotalBasal = 0, // Basal requires StateSpans
             TotalInsulin = Math.Round(totalBolus * 100) / 100,
-            TotalCarbs = 0, // Carbs tracked separately via CarbIntake in v4
+            TotalCarbs = Math.Round(totalCarbs * 10) / 10,
             BolusCount = bolusCount,
             BasalCount = 0,
             BasalPercent = 0,
             BolusPercent = totalBolus > 0 ? 100 : 0,
             Tdd = Math.Round(totalBolus / dayCount * 10) / 10,
             AvgBolus = bolusCount > 0 ? Math.Round(totalBolus / bolusCount * 100) / 100 : 0,
-            MealBoluses = 0,
+            MealBoluses = mealBoluses,
             CorrectionBoluses = correctionBoluses,
-            IcRatio = 0,
+            IcRatio = Math.Round(icRatio * 10) / 10,
             BolusesPerDay = Math.Round(bolusesPerDay * 10) / 10,
             DayCount = dayCount,
             StartDate = startDate.ToString("yyyy-MM-dd"),
             EndDate = endDate.ToString("yyyy-MM-dd"),
-            CarbCount = 0,
-            CarbBolusCount = 0,
+            CarbCount = carbCount,
+            CarbBolusCount = carbBolusCount,
         };
     }
 
@@ -1720,7 +1844,7 @@ public class StatisticsService : IStatisticsService
         {
             System.Text.Json.JsonElement je => je.GetDouble(),
             double d => d,
-            _ => Convert.ToDouble(rateObj)
+            _ => Convert.ToDouble(rateObj),
         };
     }
 
@@ -1743,9 +1867,11 @@ public class StatisticsService : IStatisticsService
         double total = 0;
         foreach (var span in basalStateSpans)
         {
-            if (span.Category != StateSpanCategory.BasalDelivery) continue;
+            if (span.Category != StateSpanCategory.BasalDelivery)
+                continue;
             var insulin = GetStateSpanBasalInsulin(span);
-            if (insulin > 0) total += insulin;
+            if (insulin > 0)
+                total += insulin;
         }
         return total;
     }
@@ -1756,11 +1882,13 @@ public class StatisticsService : IStatisticsService
     public InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
         IEnumerable<Bolus> boluses,
         IEnumerable<StateSpan> basalStateSpans,
+        IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
-        DateTime endDate)
+        DateTime endDate
+    )
     {
-        // Start with bolus-based calculation
-        var stats = CalculateBolusDeliveryStatistics(boluses, startDate, endDate);
+        // Start with bolus-based calculation (includes carb stats)
+        var stats = CalculateBolusDeliveryStatistics(boluses, carbIntakes, startDate, endDate);
 
         // Replace basal with StateSpan-derived total
         var stateSpanBasal = SumBasalFromStateSpans(basalStateSpans);
@@ -1769,12 +1897,10 @@ public class StatisticsService : IStatisticsService
         stats.TotalBasal = Math.Round(stateSpanBasal * 100) / 100;
         stats.TotalInsulin = Math.Round(totalInsulin * 100) / 100;
         stats.Tdd = Math.Round(totalInsulin / Math.Max(1, stats.DayCount) * 10) / 10;
-        stats.BasalPercent = totalInsulin > 0
-            ? Math.Round(stateSpanBasal / totalInsulin * 100 * 10) / 10
-            : 0;
-        stats.BolusPercent = totalInsulin > 0
-            ? Math.Round(stats.TotalBolus / totalInsulin * 100 * 10) / 10
-            : 0;
+        stats.BasalPercent =
+            totalInsulin > 0 ? Math.Round(stateSpanBasal / totalInsulin * 100 * 10) / 10 : 0;
+        stats.BolusPercent =
+            totalInsulin > 0 ? Math.Round(stats.TotalBolus / totalInsulin * 100 * 10) / 10 : 0;
 
         return stats;
     }
@@ -1784,7 +1910,8 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     public DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
         IEnumerable<Bolus> boluses,
-        IEnumerable<StateSpan> basalStateSpans)
+        IEnumerable<StateSpan> basalStateSpans
+    )
     {
         var bolusList = boluses.ToList();
         var basalSpansList = basalStateSpans.ToList();
@@ -1793,7 +1920,8 @@ public class StatisticsService : IStatisticsService
         // Process boluses (all Bolus records are bolus insulin; basal comes from StateSpans)
         foreach (var bolus in bolusList)
         {
-            if (bolus.Insulin <= 0 || bolus.Mills <= 0) continue;
+            if (bolus.Insulin <= 0 || bolus.Mills <= 0)
+                continue;
 
             var date = DateTimeOffset.FromUnixTimeMilliseconds(bolus.Mills).DateTime;
             var dateKey = date.ToString("yyyy-MM-dd");
@@ -1807,10 +1935,12 @@ public class StatisticsService : IStatisticsService
         // Process basal StateSpans
         foreach (var span in basalSpansList)
         {
-            if (span.Category != StateSpanCategory.BasalDelivery) continue;
+            if (span.Category != StateSpanCategory.BasalDelivery)
+                continue;
 
             var basalInsulin = GetStateSpanBasalInsulin(span);
-            if (basalInsulin <= 0) continue;
+            if (basalInsulin <= 0)
+                continue;
 
             var spanDate = DateTimeOffset.FromUnixTimeMilliseconds(span.StartMills).DateTime;
             var dateKey = spanDate.ToString("yyyy-MM-dd");
@@ -1842,25 +1972,30 @@ public class StatisticsService : IStatisticsService
             var dateParsed = DateTime.Parse(dateKey);
             var displayDate = dateParsed.ToString("MMM d");
 
-            result.DailyData.Add(new DailyBasalBolusRatioData
-            {
-                Date = dateKey,
-                DisplayDate = displayDate,
-                Basal = Math.Round(basal * 100) / 100,
-                Bolus = Math.Round(bolus * 100) / 100,
-                Total = Math.Round(total * 100) / 100,
-                BasalPercent = Math.Round(basalPercent * 10) / 10,
-                BolusPercent = Math.Round(bolusPercent * 10) / 10,
-            });
+            result.DailyData.Add(
+                new DailyBasalBolusRatioData
+                {
+                    Date = dateKey,
+                    DisplayDate = displayDate,
+                    Basal = Math.Round(basal * 100) / 100,
+                    Bolus = Math.Round(bolus * 100) / 100,
+                    Total = Math.Round(total * 100) / 100,
+                    BasalPercent = Math.Round(basalPercent * 10) / 10,
+                    BolusPercent = Math.Round(bolusPercent * 10) / 10,
+                }
+            );
 
             totalBasal += basal;
             totalBolus += bolus;
         }
 
         var grandTotal = totalBasal + totalBolus;
-        result.AverageBasalPercent = grandTotal > 0 ? Math.Round((totalBasal / grandTotal) * 100 * 10) / 10 : 0;
-        result.AverageBolusPercent = grandTotal > 0 ? Math.Round((totalBolus / grandTotal) * 100 * 10) / 10 : 0;
-        result.AverageTdd = result.DayCount > 0 ? Math.Round((grandTotal / result.DayCount) * 10) / 10 : 0;
+        result.AverageBasalPercent =
+            grandTotal > 0 ? Math.Round((totalBasal / grandTotal) * 100 * 10) / 10 : 0;
+        result.AverageBolusPercent =
+            grandTotal > 0 ? Math.Round((totalBolus / grandTotal) * 100 * 10) / 10 : 0;
+        result.AverageTdd =
+            result.DayCount > 0 ? Math.Round((grandTotal / result.DayCount) * 10) / 10 : 0;
 
         return result;
     }
@@ -1871,9 +2006,12 @@ public class StatisticsService : IStatisticsService
     public BasalAnalysisResponse CalculateBasalAnalysis(
         IEnumerable<StateSpan> basalStateSpans,
         DateTime startDate,
-        DateTime endDate)
+        DateTime endDate
+    )
     {
-        var spansList = basalStateSpans.Where(s => s.Category == StateSpanCategory.BasalDelivery).ToList();
+        var spansList = basalStateSpans
+            .Where(s => s.Category == StateSpanCategory.BasalDelivery)
+            .ToList();
         var dayCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalDays));
 
         // Track stats
@@ -1908,7 +2046,7 @@ public class StatisticsService : IStatisticsService
                     {
                         System.Text.Json.JsonElement je => je.GetDouble(),
                         double d => d,
-                        _ => Convert.ToDouble(schedObj)
+                        _ => Convert.ToDouble(schedObj),
                     };
                 }
             }
@@ -1923,8 +2061,11 @@ public class StatisticsService : IStatisticsService
             hourlyRates[hour].Add(rate);
 
             // Track temp basals (non-scheduled origins)
-            if (origin != null && !origin.Equals("Scheduled", StringComparison.OrdinalIgnoreCase) &&
-                !origin.Equals("Inferred", StringComparison.OrdinalIgnoreCase))
+            if (
+                origin != null
+                && !origin.Equals("Scheduled", StringComparison.OrdinalIgnoreCase)
+                && !origin.Equals("Inferred", StringComparison.OrdinalIgnoreCase)
+            )
             {
                 tempBasalCount++;
 
@@ -1934,8 +2075,10 @@ public class StatisticsService : IStatisticsService
                 }
                 else if (scheduledRate.HasValue)
                 {
-                    if (rate > scheduledRate.Value) highTempCount++;
-                    else if (rate < scheduledRate.Value) lowTempCount++;
+                    if (rate > scheduledRate.Value)
+                        highTempCount++;
+                    else if (rate < scheduledRate.Value)
+                        lowTempCount++;
                 }
             }
         }
@@ -1964,24 +2107,33 @@ public class StatisticsService : IStatisticsService
             var hourRates = hourlyRates[hour];
             if (hourRates.Count > 0)
             {
-                hourlyPercentiles.Add(new HourlyBasalPercentileData
-                {
-                    Hour = hour,
-                    P10 = Math.Round(CalculatePercentile(hourRates, 10) * 100) / 100,
-                    P25 = Math.Round(CalculatePercentile(hourRates, 25) * 100) / 100,
-                    Median = Math.Round(CalculatePercentile(hourRates, 50) * 100) / 100,
-                    P75 = Math.Round(CalculatePercentile(hourRates, 75) * 100) / 100,
-                    P90 = Math.Round(CalculatePercentile(hourRates, 90) * 100) / 100,
-                    Count = hourRates.Count
-                });
+                hourlyPercentiles.Add(
+                    new HourlyBasalPercentileData
+                    {
+                        Hour = hour,
+                        P10 = Math.Round(CalculatePercentile(hourRates, 10) * 100) / 100,
+                        P25 = Math.Round(CalculatePercentile(hourRates, 25) * 100) / 100,
+                        Median = Math.Round(CalculatePercentile(hourRates, 50) * 100) / 100,
+                        P75 = Math.Round(CalculatePercentile(hourRates, 75) * 100) / 100,
+                        P90 = Math.Round(CalculatePercentile(hourRates, 90) * 100) / 100,
+                        Count = hourRates.Count,
+                    }
+                );
             }
             else
             {
-                hourlyPercentiles.Add(new HourlyBasalPercentileData
-                {
-                    Hour = hour,
-                    P10 = 0, P25 = 0, Median = 0, P75 = 0, P90 = 0, Count = 0
-                });
+                hourlyPercentiles.Add(
+                    new HourlyBasalPercentileData
+                    {
+                        Hour = hour,
+                        P10 = 0,
+                        P25 = 0,
+                        Median = 0,
+                        P75 = 0,
+                        P90 = 0,
+                        Count = 0,
+                    }
+                );
             }
         }
 
@@ -1992,7 +2144,7 @@ public class StatisticsService : IStatisticsService
             HourlyPercentiles = hourlyPercentiles,
             DayCount = dayCount,
             StartDate = startDate.ToString("yyyy-MM-dd"),
-            EndDate = endDate.ToString("yyyy-MM-dd")
+            EndDate = endDate.ToString("yyyy-MM-dd"),
         };
     }
 
@@ -2321,7 +2473,8 @@ public class StatisticsService : IStatisticsService
             .Where(e =>
                 e.EventType == DeviceEventType.SiteChange
                 || e.EventType == DeviceEventType.PodChange
-                || e.EventType == DeviceEventType.CannulaChange)
+                || e.EventType == DeviceEventType.CannulaChange
+            )
             .OrderBy(e => e.Mills)
             .ToList();
 
@@ -2339,7 +2492,7 @@ public class StatisticsService : IStatisticsService
             {
                 Entry = e,
                 Mills = e.Mills,
-                Glucose = e.Mgdl
+                Glucose = e.Mgdl,
             })
             .Where(e => e.Glucose > 0 && e.Glucose < 600) // Filter invalid readings
             .OrderBy(e => e.Mills)
@@ -2368,7 +2521,8 @@ public class StatisticsService : IStatisticsService
         foreach (var siteChange in siteChanges)
         {
             var changeTime = siteChange.Mills;
-            if (changeTime == 0) continue;
+            if (changeTime == 0)
+                continue;
 
             // Find glucose readings in the window around this site change
             var windowStart = changeTime - (minutesBefore * 60 * 1000); // Convert minutes to milliseconds
@@ -2383,11 +2537,14 @@ public class StatisticsService : IStatisticsService
                 var minutesFromChange = (entry.Mills - changeTime) / (60.0 * 1000.0);
 
                 // Find the appropriate bucket
-                var bucketMinutes = ((int)Math.Floor(minutesFromChange / bucketSizeMinutes)) * bucketSizeMinutes;
+                var bucketMinutes =
+                    ((int)Math.Floor(minutesFromChange / bucketSizeMinutes)) * bucketSizeMinutes;
 
                 // Clamp to valid range
-                if (bucketMinutes < -minutesBefore) bucketMinutes = -minutesBefore;
-                if (bucketMinutes >= minutesAfter) bucketMinutes = minutesAfter - bucketSizeMinutes;
+                if (bucketMinutes < -minutesBefore)
+                    bucketMinutes = -minutesBefore;
+                if (bucketMinutes >= minutesAfter)
+                    bucketMinutes = minutesAfter - bucketSizeMinutes;
 
                 if (buckets.ContainsKey(bucketMinutes))
                 {
@@ -2406,25 +2563,28 @@ public class StatisticsService : IStatisticsService
             var minutesFromChange = kvp.Key;
             var values = kvp.Value;
 
-            if (values.Count == 0) continue;
+            if (values.Count == 0)
+                continue;
 
             var sorted = values.OrderBy(v => v).ToList();
             var mean = values.Average();
             var variance = values.Sum(v => Math.Pow(v - mean, 2)) / values.Count;
             var stdDev = Math.Sqrt(variance);
 
-            dataPoints.Add(new SiteChangeImpactDataPoint
-            {
-                MinutesFromChange = minutesFromChange,
-                AverageGlucose = Math.Round(mean, 1),
-                MedianGlucose = Math.Round(CalculatePercentile(sorted, 50), 1),
-                StdDev = Math.Round(stdDev, 1),
-                Count = values.Count,
-                Percentile10 = Math.Round(CalculatePercentile(sorted, 10), 1),
-                Percentile25 = Math.Round(CalculatePercentile(sorted, 25), 1),
-                Percentile75 = Math.Round(CalculatePercentile(sorted, 75), 1),
-                Percentile90 = Math.Round(CalculatePercentile(sorted, 90), 1),
-            });
+            dataPoints.Add(
+                new SiteChangeImpactDataPoint
+                {
+                    MinutesFromChange = minutesFromChange,
+                    AverageGlucose = Math.Round(mean, 1),
+                    MedianGlucose = Math.Round(CalculatePercentile(sorted, 50), 1),
+                    StdDev = Math.Round(stdDev, 1),
+                    Count = values.Count,
+                    Percentile10 = Math.Round(CalculatePercentile(sorted, 10), 1),
+                    Percentile25 = Math.Round(CalculatePercentile(sorted, 25), 1),
+                    Percentile75 = Math.Round(CalculatePercentile(sorted, 75), 1),
+                    Percentile90 = Math.Round(CalculatePercentile(sorted, 90), 1),
+                }
+            );
 
             // Collect values for before/after summary
             if (minutesFromChange < 0)
@@ -2438,7 +2598,8 @@ public class StatisticsService : IStatisticsService
         }
 
         result.DataPoints = dataPoints;
-        result.HasSufficientData = dataPoints.Count >= 10 && beforeValues.Count >= 50 && afterValues.Count >= 50;
+        result.HasSufficientData =
+            dataPoints.Count >= 10 && beforeValues.Count >= 50 && afterValues.Count >= 50;
 
         if (!result.HasSufficientData)
         {
@@ -2452,12 +2613,18 @@ public class StatisticsService : IStatisticsService
             var avgAfter = afterValues.Average();
 
             // Calculate time in range
-            var tirBefore = (double)beforeValues.Count(v => v >= 70 && v <= 180) / beforeValues.Count * 100;
-            var tirAfter = (double)afterValues.Count(v => v >= 70 && v <= 180) / afterValues.Count * 100;
+            var tirBefore =
+                (double)beforeValues.Count(v => v >= 70 && v <= 180) / beforeValues.Count * 100;
+            var tirAfter =
+                (double)afterValues.Count(v => v >= 70 && v <= 180) / afterValues.Count * 100;
 
             // Calculate CV (coefficient of variation)
-            var stdDevBefore = Math.Sqrt(beforeValues.Sum(v => Math.Pow(v - avgBefore, 2)) / beforeValues.Count);
-            var stdDevAfter = Math.Sqrt(afterValues.Sum(v => Math.Pow(v - avgAfter, 2)) / afterValues.Count);
+            var stdDevBefore = Math.Sqrt(
+                beforeValues.Sum(v => Math.Pow(v - avgBefore, 2)) / beforeValues.Count
+            );
+            var stdDevAfter = Math.Sqrt(
+                afterValues.Sum(v => Math.Pow(v - avgAfter, 2)) / afterValues.Count
+            );
             var cvBefore = avgBefore > 0 ? (stdDevBefore / avgBefore) * 100 : 0;
             var cvAfter = avgAfter > 0 ? (stdDevAfter / avgAfter) * 100 : 0;
 
@@ -2465,9 +2632,8 @@ public class StatisticsService : IStatisticsService
             {
                 AvgGlucoseBeforeChange = Math.Round(avgBefore, 1),
                 AvgGlucoseAfterChange = Math.Round(avgAfter, 1),
-                PercentImprovement = avgBefore > 0
-                    ? Math.Round((avgBefore - avgAfter) / avgBefore * 100, 1)
-                    : 0,
+                PercentImprovement =
+                    avgBefore > 0 ? Math.Round((avgBefore - avgAfter) / avgBefore * 100, 1) : 0,
                 TimeInRangeBeforeChange = Math.Round(tirBefore, 1),
                 TimeInRangeAfterChange = Math.Round(tirAfter, 1),
                 CvBeforeChange = Math.Round(cvBefore, 1),
@@ -2480,4 +2646,3 @@ public class StatisticsService : IStatisticsService
 
     #endregion
 }
-

@@ -20,11 +20,12 @@ public class OpenApsService : IOpenApsService
     private const int LevelUrgent = 2;
     // Constants from legacy implementation
     private const int RECENT_HOURS = 6; // CHECKME: Legacy uses dia*2, defaulting to 6 hours for compatibility
-    private const string DEFAULT_PRED_IOB_COLOR = "#1e88e5";
-    private const string DEFAULT_PRED_COB_COLOR = "#FB8C00";
-    private const string DEFAULT_PRED_ACOB_COLOR = "#FB8C00";
-    private const string DEFAULT_PRED_ZT_COLOR = "#00d2d2";
-    private const string DEFAULT_PRED_UAM_COLOR = "#c9bd60";
+    // Forecast point colors (rendered on frontend, defined in nocturne-theme.css)
+    private const string PRED_IOB_COLOR = "#1e88e5";
+    private const string PRED_COB_COLOR = "#FB8C00";
+    private const string PRED_ACOB_COLOR = "#FB8C00";
+    private const string PRED_ZT_COLOR = "#00d2d2";
+    private const string PRED_UAM_COLOR = "#c9bd60";
 
     public OpenApsService(ILogger<OpenApsService> logger)
     {
@@ -81,11 +82,6 @@ public class OpenApsService : IOpenApsService
             Warn = GetIntSetting(settings, "warn", 30),
             Urgent = GetIntSetting(settings, "urgent", 60),
             EnableAlerts = GetBoolSetting(settings, "enableAlerts", false),
-            PredIobColor = GetStringSetting(settings, "predIobColor", DEFAULT_PRED_IOB_COLOR),
-            PredCobColor = GetStringSetting(settings, "predCobColor", DEFAULT_PRED_COB_COLOR),
-            PredAcobColor = GetStringSetting(settings, "predAcobColor", DEFAULT_PRED_ACOB_COLOR),
-            PredZtColor = GetStringSetting(settings, "predZtColor", DEFAULT_PRED_ZT_COLOR),
-            PredUamColor = GetStringSetting(settings, "predUamColor", DEFAULT_PRED_UAM_COLOR),
             ColorPredictionLines = colorPredictionLines,
         };
     }
@@ -434,14 +430,14 @@ public class OpenApsService : IOpenApsService
         if (predictionData.Iob != null)
         {
             points.AddRange(
-                CreateForecastPoints(predictionData.Iob, offset, 0, "IOB", preferences.PredIobColor)
+                CreateForecastPoints(predictionData.Iob, offset, 0, "IOB", PRED_IOB_COLOR)
             );
         }
 
         if (predictionData.Zt != null)
         {
             points.AddRange(
-                CreateForecastPoints(predictionData.Zt, offset, 0, "ZT", preferences.PredZtColor)
+                CreateForecastPoints(predictionData.Zt, offset, 0, "ZT", PRED_ZT_COLOR)
             );
         }
 
@@ -453,7 +449,7 @@ public class OpenApsService : IOpenApsService
                     offset,
                     0,
                     "aCOB",
-                    preferences.PredAcobColor
+                    PRED_ACOB_COLOR
                 )
             );
         }
@@ -461,14 +457,14 @@ public class OpenApsService : IOpenApsService
         if (predictionData.Cob != null)
         {
             points.AddRange(
-                CreateForecastPoints(predictionData.Cob, offset, 0, "COB", preferences.PredCobColor)
+                CreateForecastPoints(predictionData.Cob, offset, 0, "COB", PRED_COB_COLOR)
             );
         }
 
         if (predictionData.Uam != null)
         {
             points.AddRange(
-                CreateForecastPoints(predictionData.Uam, offset, 0, "UAM", preferences.PredUamColor)
+                CreateForecastPoints(predictionData.Uam, offset, 0, "UAM", PRED_UAM_COLOR)
             );
         }
 

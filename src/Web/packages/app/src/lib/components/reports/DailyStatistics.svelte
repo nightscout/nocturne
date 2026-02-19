@@ -55,14 +55,14 @@
     <div class="text-gray-600 text-xs">Low Events</div>
     <div class="font-semibold text-red-600">
       {(dayData.analytics?.timeInRange?.percentages?.low ?? 0) +
-        (dayData.analytics?.timeInRange?.percentages?.severeLow ?? 0)}%
+        (dayData.analytics?.timeInRange?.percentages?.veryLow ?? 0)}%
     </div>
   </div>
   <div class="bg-gray-50 p-3 rounded">
     <div class="text-gray-600 text-xs">High Events</div>
     <div class="font-semibold text-orange-600">
       {(dayData.analytics?.timeInRange?.percentages?.high ?? 0) +
-        (dayData.analytics?.timeInRange?.percentages?.severeHigh ?? 0)}%
+        (dayData.analytics?.timeInRange?.percentages?.veryHigh ?? 0)}%
     </div>
   </div>
 </div>

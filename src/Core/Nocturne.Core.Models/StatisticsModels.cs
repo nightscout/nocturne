@@ -172,9 +172,9 @@ public class GlycemicVariability
 public class GlycemicThresholds
 {
     /// <summary>
-    /// Threshold for severe low glucose (default: 54 mg/dL)
+    /// Threshold for very low glucose (default: 54 mg/dL)
     /// </summary>
-    public double SevereLow { get; set; } = 54;
+    public double VeryLow { get; set; } = 54;
 
     /// <summary>
     /// Threshold for low glucose (default: 70 mg/dL)
@@ -207,9 +207,9 @@ public class GlycemicThresholds
     public double High { get; set; } = 180;
 
     /// <summary>
-    /// Threshold for severe high glucose (default: 250 mg/dL)
+    /// Threshold for very high glucose (default: 250 mg/dL)
     /// </summary>
-    public double SevereHigh { get; set; } = 250;
+    public double VeryHigh { get; set; } = 250;
 }
 
 /// <summary>
@@ -265,9 +265,9 @@ public class TimeInRangeDetailedStats
 public class TimeInRangePercentages
 {
     /// <summary>
-    /// Percentage of time in severe low range (less than 54 mg/dL)
+    /// Percentage of time in very low range (less than 54 mg/dL)
     /// </summary>
-    public double SevereLow { get; set; }
+    public double VeryLow { get; set; }
 
     /// <summary>
     /// Percentage of time in low range (54-70 mg/dL)
@@ -290,9 +290,9 @@ public class TimeInRangePercentages
     public double High { get; set; }
 
     /// <summary>
-    /// Percentage of time in severe high range (greater than 250 mg/dL)
+    /// Percentage of time in very high range (greater than 250 mg/dL)
     /// </summary>
-    public double SevereHigh { get; set; }
+    public double VeryHigh { get; set; }
 }
 
 /// <summary>
@@ -326,14 +326,9 @@ public class ExtendedTimeInRangePercentages
     public double High { get; set; }
 
     /// <summary>
-    /// Percentage of time in very high range (200-220 mg/dL)
+    /// Percentage of time in very high range (200+ mg/dL)
     /// </summary>
     public double VeryHigh { get; set; }
-
-    /// <summary>
-    /// Percentage of time in severe high range (greater than 220 mg/dL)
-    /// </summary>
-    public double SevereHigh { get; set; }
 }
 
 /// <summary>
@@ -342,9 +337,9 @@ public class ExtendedTimeInRangePercentages
 public class TimeInRangeDurations
 {
     /// <summary>
-    /// Duration in severe low range (minutes)
+    /// Duration in very low range (minutes)
     /// </summary>
-    public double SevereLow { get; set; }
+    public double VeryLow { get; set; }
 
     /// <summary>
     /// Duration in low range (minutes)
@@ -367,9 +362,9 @@ public class TimeInRangeDurations
     public double High { get; set; }
 
     /// <summary>
-    /// Duration in severe high range (minutes)
+    /// Duration in very high range (minutes)
     /// </summary>
-    public double SevereHigh { get; set; }
+    public double VeryHigh { get; set; }
 }
 
 /// <summary>
@@ -378,9 +373,9 @@ public class TimeInRangeDurations
 public class TimeInRangeEpisodes
 {
     /// <summary>
-    /// Number of severe low episodes
+    /// Number of very low episodes
     /// </summary>
-    public int SevereLow { get; set; }
+    public int VeryLow { get; set; }
 
     /// <summary>
     /// Number of low episodes
@@ -393,9 +388,9 @@ public class TimeInRangeEpisodes
     public int High { get; set; }
 
     /// <summary>
-    /// Number of severe high episodes
+    /// Number of very high episodes
     /// </summary>
-    public int SevereHigh { get; set; }
+    public int VeryHigh { get; set; }
 }
 
 /// <summary>
@@ -755,6 +750,11 @@ public class GlucoseAnalytics
     /// Time period of the analysis
     /// </summary>
     public AnalysisTime Time { get; set; } = new();
+
+    /// <summary>
+    /// Clinical assessment with insights, strengths, and priority areas
+    /// </summary>
+    public ClinicalTargetAssessment? ClinicalAssessment { get; set; }
 }
 
 /// <summary>
@@ -1025,7 +1025,7 @@ public class GlucoseManagementIndicator
     public double MeanGlucose { get; set; }
 
     /// <summary>Interpretation of the GMI value</summary>
-    public string Interpretation { get; set; } = string.Empty;
+    public GlucoseManagementIndicatorLevel Interpretation { get; set; }
 
     /// <summary>Reliability assessment for this GMI calculation</summary>
     public StatisticReliability? Reliability { get; set; }
@@ -1033,16 +1033,16 @@ public class GlucoseManagementIndicator
     /// <summary>
     /// GMI interpretation categories based on ADA Standards
     /// </summary>
-    public static string GetInterpretation(double gmi)
+    public static GlucoseManagementIndicatorLevel GetInterpretation(double gmi)
     {
         return gmi switch
         {
-            < 5.7 => "Non-diabetic range",
-            < 6.5 => "Prediabetes range",
-            < 7.0 => "Well-controlled diabetes",
-            < 8.0 => "Moderate control",
-            < 9.0 => "Suboptimal control",
-            _ => "Poor control - intervention recommended",
+            < 5.7 => GlucoseManagementIndicatorLevel.NonDiabetic,
+            < 6.5 => GlucoseManagementIndicatorLevel.Prediabetes,
+            < 7.0 => GlucoseManagementIndicatorLevel.WellControlled,
+            < 8.0 => GlucoseManagementIndicatorLevel.ModerateControl,
+            < 9.0 => GlucoseManagementIndicatorLevel.SuboptimalControl,
+            _ => GlucoseManagementIndicatorLevel.PoorControl,
         };
     }
 }
@@ -1067,7 +1067,7 @@ public class GlycemicRiskIndex
     public GRIZone Zone { get; set; }
 
     /// <summary>Interpretation of the GRI score</summary>
-    public string Interpretation { get; set; } = string.Empty;
+    public GlycomicRiskInterpretation Interpretation { get; set; }
 }
 
 /// <summary>
@@ -1568,6 +1568,18 @@ public class TargetAssessment
 }
 
 /// <summary>
+/// Localized insight with key and context data for frontend formatting
+/// </summary>
+public class LocalizedInsight
+{
+    /// <summary>The insight key for frontend localization</summary>
+    public InsightKey Key { get; set; }
+
+    /// <summary>Context data for message formatting (e.g., actual values, targets)</summary>
+    public Dictionary<string, double> Context { get; set; } = new();
+}
+
+/// <summary>
 /// Comprehensive clinical target assessment
 /// </summary>
 public class ClinicalTargetAssessment
@@ -1603,16 +1615,16 @@ public class ClinicalTargetAssessment
     public int TotalTargets { get; set; }
 
     /// <summary>Overall assessment category</summary>
-    public string OverallAssessment { get; set; } = string.Empty;
+    public ClinicalAssessmentLevel OverallAssessment { get; set; }
 
-    /// <summary>List of actionable insights/recommendations</summary>
-    public List<string> ActionableInsights { get; set; } = new();
+    /// <summary>List of actionable insights/recommendations with localization keys and context</summary>
+    public List<LocalizedInsight> ActionableInsights { get; set; } = new();
 
-    /// <summary>Priority areas for improvement</summary>
-    public List<string> PriorityAreas { get; set; } = new();
+    /// <summary>Priority areas for improvement with localization keys and context</summary>
+    public List<LocalizedInsight> PriorityAreas { get; set; } = new();
 
-    /// <summary>Strengths/achievements to acknowledge</summary>
-    public List<string> Strengths { get; set; } = new();
+    /// <summary>Strengths/achievements to acknowledge with localization keys and context</summary>
+    public List<LocalizedInsight> Strengths { get; set; } = new();
 }
 
 /// <summary>
@@ -1647,6 +1659,9 @@ public class DataSufficiencyAssessment
     /// <summary>Longest data gap in hours</summary>
     public double LongestGapHours { get; set; }
 
+    /// <summary>Data sufficiency status (use this for localization on frontend)</summary>
+    public DataSufficiencyStatus Status { get; set; } = DataSufficiencyStatus.Sufficient;
+
     /// <summary>Warning message if data is insufficient</summary>
     public string WarningMessage { get; set; } = string.Empty;
 
@@ -1678,7 +1693,7 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
     public HyperglycemiaAnalysis HyperglycemiaAnalysis { get; set; } = new();
 
     /// <summary>Clinical target assessment</summary>
-    public ClinicalTargetAssessment ClinicalAssessment { get; set; } = new();
+    public new ClinicalTargetAssessment ClinicalAssessment { get; set; } = new();
 
     /// <summary>Data sufficiency assessment</summary>
     public DataSufficiencyAssessment DataSufficiency { get; set; } = new();

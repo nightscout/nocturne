@@ -48,10 +48,10 @@
 
     {#if hasTirData}
       {@const inRange = percentages?.target ?? 0}
-      {@const severeLow = percentages?.severeLow ?? 0}
+      {@const veryLow = percentages?.veryLow ?? 0}
       {@const low = percentages?.low ?? 0}
       {@const high = percentages?.high ?? 0}
-      {@const severeHigh = percentages?.severeHigh ?? 0}
+      {@const veryHigh = percentages?.veryHigh ?? 0}
 
       <!-- Comparison data: compare today vs 90-day, or 90-day vs itself (no comparison) -->
       {@const comparisonTir = showAverage ? null : (tir90?.percentages?.target ?? null)}
@@ -110,10 +110,10 @@
       <!-- Low/High summary -->
       <div class="flex justify-between text-xs text-muted-foreground mt-1">
         <span style="color: var(--glucose-low);">
-          ↓ {(severeLow + low).toFixed(0)}%
+          ↓ {(veryLow + low).toFixed(0)}%
         </span>
         <span style="color: var(--glucose-high);">
-          ↑ {(high + severeHigh).toFixed(0)}%
+          ↑ {(high + veryHigh).toFixed(0)}%
         </span>
       </div>
       <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />

@@ -19,6 +19,8 @@ namespace Nocturne.API.Controllers.V4;
 [ClientPropertyName("foodsV4")]
 public class FoodsController : ControllerBase
 {
+    private const string DefaultUserId = "00000000-0000-0000-0000-000000000001";
+
     private readonly NocturneDbContext _context;
     private readonly IUserFoodFavoriteService _favoriteService;
 
@@ -36,11 +38,7 @@ public class FoodsController : ControllerBase
     [Authorize]
     public async Task<ActionResult<Food[]>> GetFavorites()
     {
-        var userId = HttpContext.GetSubjectIdString();
-        if (string.IsNullOrEmpty(userId))
-        {
-            return Forbid();
-        }
+        var userId = ResolveUserId();
 
         var favorites = await _favoriteService.GetFavoritesAsync(
             userId,
@@ -58,11 +56,7 @@ public class FoodsController : ControllerBase
     [Authorize]
     public async Task<ActionResult> AddFavorite(string foodId)
     {
-        var userId = HttpContext.GetSubjectIdString();
-        if (string.IsNullOrEmpty(userId))
-        {
-            return Forbid();
-        }
+        var userId = ResolveUserId();
 
         var food = await ResolveFoodEntityAsync(foodId, HttpContext.RequestAborted);
         if (food == null)
@@ -87,11 +81,7 @@ public class FoodsController : ControllerBase
     [Authorize]
     public async Task<ActionResult> RemoveFavorite(string foodId)
     {
-        var userId = HttpContext.GetSubjectIdString();
-        if (string.IsNullOrEmpty(userId))
-        {
-            return Forbid();
-        }
+        var userId = ResolveUserId();
 
         var food = await ResolveFoodEntityAsync(foodId, HttpContext.RequestAborted);
         if (food == null)
@@ -116,11 +106,7 @@ public class FoodsController : ControllerBase
     [Authorize]
     public async Task<ActionResult<Food[]>> GetRecentFoods([FromQuery] int limit = 20)
     {
-        var userId = HttpContext.GetSubjectIdString();
-        if (string.IsNullOrEmpty(userId))
-        {
-            return Forbid();
-        }
+        var userId = ResolveUserId();
 
         var foods = await _favoriteService.GetRecentFoodsAsync(
             userId,
@@ -129,6 +115,11 @@ public class FoodsController : ControllerBase
         );
 
         return Ok(foods.ToArray());
+    }
+
+    private string ResolveUserId()
+    {
+        return HttpContext.GetSubjectIdString() ?? DefaultUserId;
     }
 
     private async Task<FoodEntity?> ResolveFoodEntityAsync(

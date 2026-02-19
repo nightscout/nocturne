@@ -280,10 +280,10 @@ public class AlarmVisualSettings
     public bool ScreenFlash { get; set; }
 
     /// <summary>
-    /// Color to use for screen flash (hex format)
+    /// Color to use for screen flash (hex format or CSS variable)
     /// </summary>
     [JsonPropertyName("flashColor")]
-    public string FlashColor { get; set; } = "#ff0000";
+    public string FlashColor { get; set; } = "";
 
     /// <summary>
     /// Flash frequency in milliseconds

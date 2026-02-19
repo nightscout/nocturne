@@ -23,6 +23,7 @@
   import { scaleTime, scaleLinear } from "d3-scale";
   import {
     getPredictions,
+    getPredictionStatus,
     type PredictionData,
   } from "$api/predictions.remote";
   import { getChartData } from "$api/chart-data.remote";
@@ -119,6 +120,7 @@
   // ===== STATE =====
   let predictionData = $state<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
+  let predictionServiceAvailable = $state(true);
   let serverChartData = $state<TransformedChartData | null>(
     initialChartData ?? null
   );
@@ -189,6 +191,9 @@
   const lookbackHours = $derived(
     defaultFocusHours ?? glucoseChartLookback.current
   );
+  const effectiveShowPredictions = $derived(
+    showPredictions && predictionServiceAvailable
+  );
 
   function normalizeDate(
     date: Date | string | undefined,
@@ -219,7 +224,7 @@
 
   const displayDateRangeWithPredictions = $derived({
     from: displayDateRange.from,
-    to: showPredictions
+    to: effectiveShowPredictions
       ? new Date(
           displayDateRange.to.getTime() + predictionMinutes.current * 60 * 1000
         )
@@ -246,7 +251,7 @@
         serverChartData.glucoseData.length - 1
       ]?.time?.getTime() ?? 0;
     if (
-      !showPredictions ||
+      !effectiveShowPredictions ||
       !enabled ||
       !serverChartData?.glucoseData?.length ||
       latestEntryMills === 0
@@ -352,13 +357,36 @@
     };
   });
 
+  // Check prediction service availability on mount
+  $effect(() => {
+    if (!isBrowser) return;
+
+    let cancelled = false;
+    getPredictionStatus()
+      .then((status) => {
+        if (!cancelled) {
+          predictionServiceAvailable = status.available;
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn("Failed to check prediction service status:", err);
+          predictionServiceAvailable = false;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
   // Prediction and chart domains
   const predictionHours = $derived(predictionMinutes.current / 60);
 
   const fullXDomain = $derived({
     from: fullDataRange.from,
     to:
-      showPredictions && predictionData
+      effectiveShowPredictions && predictionData
         ? new Date(
             fullDataRange.to.getTime() + predictionHours * 60 * 60 * 1000
           )
@@ -369,7 +397,7 @@
     from: brushXDomain?.[0] ?? displayDateRange.from,
     to:
       brushXDomain?.[1] ??
-      (showPredictions && predictionData
+      (effectiveShowPredictions && predictionData
         ? new Date(
             displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
           )
@@ -714,7 +742,9 @@
         Math.abs(marker.time.getTime() - time.getTime()) <
         TREATMENT_PROXIMITY_MS
       ) {
-        const entry = realtimeStore.findEntryByTreatmentId(marker.treatmentId ?? "");
+        const entry = realtimeStore.findEntryByTreatmentId(
+          marker.treatmentId ?? ""
+        );
         if (entry && entry.data.id && !seen.has(entry.data.id)) {
           seen.add(entry.data.id);
           nearby.push(entry);
@@ -727,7 +757,9 @@
         Math.abs(marker.time.getTime() - time.getTime()) <
         TREATMENT_PROXIMITY_MS
       ) {
-        const entry = realtimeStore.findEntryByTreatmentId(marker.treatmentId ?? "");
+        const entry = realtimeStore.findEntryByTreatmentId(
+          marker.treatmentId ?? ""
+        );
         if (entry && entry.data.id && !seen.has(entry.data.id)) {
           seen.add(entry.data.id);
           nearby.push(entry);
@@ -935,7 +967,7 @@
           {highThreshold}
           {lowThreshold}
           contextWidth={context.width}
-          {showPredictions}
+          showPredictions={effectiveShowPredictions}
           {predictionData}
           predictionEnabled={predictionEnabled.current}
           predictionDisplayMode={predictionDisplayMode.current}
@@ -1116,7 +1148,7 @@
 
         <div class="flex items-center gap-2">
           <PredictionSettings
-            {showPredictions}
+            showPredictions={effectiveShowPredictions}
             predictionMode={predictionModeValue}
             onPredictionModeChange={handlePredictionModeChange}
           />
@@ -1135,7 +1167,7 @@
       <!-- Mini Overview Chart -->
       {#if glucoseData.length > 0}
         {@const miniPredictionData =
-          showPredictions && predictionData?.curves?.main
+          effectiveShowPredictions && predictionData?.curves?.main
             ? predictionData.curves.main.map((p) => ({
                 time: new Date(p.timestamp),
                 value: Number(bg(p.value)),
@@ -1155,7 +1187,8 @@
           lowThreshold={Number(lowThreshold)}
           onSelectionChange={(domain) => handleMiniChartBrush(domain)}
           predictionData={miniPredictionData}
-          showPredictions={showPredictions && predictionEnabled.current}
+          showPredictions={effectiveShowPredictions &&
+            predictionEnabled.current}
         />
       {/if}
 

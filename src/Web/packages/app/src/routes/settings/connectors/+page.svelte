@@ -3,13 +3,13 @@
   import {
     deleteDemoData as deleteDemoDataRemote,
     deleteDataSourceData as deleteDataSourceDataRemote,
+    getConnectorStatuses,
   } from "$api/services.remote";
   import {
     getServicesOverview,
     getUploaderSetup,
     getConnectorCapabilities,
   } from "$api/generated/services.generated.remote";
-  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
   import {
     startDeduplicationJob,
     getJobStatus as getDeduplicationJobStatus,

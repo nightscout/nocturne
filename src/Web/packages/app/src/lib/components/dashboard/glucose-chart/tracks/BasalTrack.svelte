@@ -95,6 +95,22 @@
       segments.push(currentSegment);
     }
 
+    // Add closing points so curveStepAfter renders the last step of each segment.
+    // Without this, a segment with a single point (e.g. a temp basal immediately
+    // followed by a suspended period) produces no visible area.
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const lastPoint = seg.points[seg.points.length - 1];
+      const nextSegFirstPoint = segments[i + 1]?.points[0];
+
+      if (nextSegFirstPoint && lastPoint.timestamp !== nextSegFirstPoint.timestamp) {
+        seg.points.push({
+          ...lastPoint,
+          timestamp: nextSegFirstPoint.timestamp,
+        });
+      }
+    }
+
     return segments;
   });
 

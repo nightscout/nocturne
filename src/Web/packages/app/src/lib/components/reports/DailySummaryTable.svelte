@@ -88,17 +88,17 @@
               <div class="text-xs text-gray-500">
                 ({thresholds.targetBottom}-{thresholds.tightTargetTop} mg/dL)
               </div>
-              {#if (entry.analytics?.timeInRange?.percentages?.low ?? 0) + (entry.analytics?.timeInRange?.percentages?.severeLow ?? 0) > 0}
+              {#if (entry.analytics?.timeInRange?.percentages?.low ?? 0) + (entry.analytics?.timeInRange?.percentages?.veryLow ?? 0) > 0}
                 <div class="text-red-600">
                   {(entry.analytics?.timeInRange?.percentages?.low ?? 0) +
-                    (entry.analytics?.timeInRange?.percentages?.severeLow ??
+                    (entry.analytics?.timeInRange?.percentages?.veryLow ??
                       0)}% Low
                 </div>
               {/if}
-              {#if (entry.analytics?.timeInRange?.percentages?.high ?? 0) + (entry.analytics?.timeInRange?.percentages?.severeHigh ?? 0) > 0}
+              {#if (entry.analytics?.timeInRange?.percentages?.high ?? 0) + (entry.analytics?.timeInRange?.percentages?.veryHigh ?? 0) > 0}
                 <div class="text-orange-600">
                   {(entry.analytics?.timeInRange?.percentages?.high ?? 0) +
-                    (entry.analytics?.timeInRange?.percentages?.severeHigh ??
+                    (entry.analytics?.timeInRange?.percentages?.veryHigh ??
                       0)}% High
                 </div>
               {/if}

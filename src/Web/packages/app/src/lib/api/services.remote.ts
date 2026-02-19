@@ -2,10 +2,22 @@
  * Remote functions for services management
  * Custom error handling variants that return error objects instead of throwing
  */
-import { getRequestEvent, command } from '$app/server';
+import { getRequestEvent, command, query } from '$app/server';
+import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getServicesOverview } from '$api/generated/services.generated.remote';
-import { getStatus as getConnectorStatuses } from '$api/generated/connectorStatus.generated.remote';
+
+/** Gets the current status and metrics for all registered connectors */
+export const getConnectorStatuses = query(async () => {
+	const { locals } = getRequestEvent();
+	const { apiClient } = locals;
+	try {
+		return await apiClient.connectorStatus.getStatus();
+	} catch (err) {
+		console.error('Error in connectorStatus.getStatus:', err);
+		throw error(500, 'Failed to get status');
+	}
+});
 
 /**
  * Delete demo data

@@ -123,6 +123,7 @@ public interface IStatisticsService
     InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
         IEnumerable<Bolus> boluses,
         IEnumerable<StateSpan> basalStateSpans,
+        IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
         DateTime endDate
     );

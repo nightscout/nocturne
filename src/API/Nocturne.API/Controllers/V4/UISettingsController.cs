@@ -781,7 +781,6 @@ public class UISettingsController : ControllerBase
                     Visual = new AlarmVisualSettings
                     {
                         ScreenFlash = true,
-                        FlashColor = "#ff0000",
                         PersistentBanner = true,
                         WakeScreen = true,
                     },

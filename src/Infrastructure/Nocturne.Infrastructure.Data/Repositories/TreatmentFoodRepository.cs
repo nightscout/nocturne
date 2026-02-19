@@ -146,23 +146,27 @@ public class TreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var recentFoods = await _context
+        var recentFoodIds = await _context
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .Where(tf => tf.FoodId != null)
-            .Join(
-                _context.Foods.AsNoTracking(),
-                tf => tf.FoodId,
-                f => f.Id,
-                (tf, f) => new { tf, f }
-            )
-            .GroupBy(x => x.f.Id)
-            .Select(g => new { Food = g.First().f, LastUsed = g.Max(x => x.tf.SysCreatedAt) })
+            .GroupBy(tf => tf.FoodId)
+            .Select(g => new { FoodId = g.Key!.Value, LastUsed = g.Max(tf => tf.SysCreatedAt) })
             .OrderByDescending(x => x.LastUsed)
             .Take(limit)
-            .Select(x => x.Food)
             .ToListAsync(cancellationToken);
 
-        return recentFoods;
+        var ids = recentFoodIds.Select(x => x.FoodId).ToList();
+
+        var foods = await _context.Foods
+            .AsNoTracking()
+            .Where(f => ids.Contains(f.Id))
+            .ToListAsync(cancellationToken);
+
+        var foodLookup = foods.ToDictionary(f => f.Id);
+        return recentFoodIds
+            .Where(x => foodLookup.ContainsKey(x.FoodId))
+            .Select(x => foodLookup[x.FoodId])
+            .ToList();
     }
 }

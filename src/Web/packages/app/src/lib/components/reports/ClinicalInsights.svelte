@@ -64,14 +64,14 @@
     Pill,
   } from "lucide-svelte";
   import type { GlucoseAnalytics } from "$lib/api";
+  import {
+    formatInsight,
+    getInsightTypeFromKey,
+    type FormattedInsight,
+  } from "$lib/utils/insight-localization";
 
-  interface Insight {
-    type: NonNullable<InsightType>;
-    category: "pattern" | "treatment" | "lifestyle" | "trend";
-    title: string;
-    description: string;
+  interface Insight extends FormattedInsight {
     clinicalNote?: string;
-    priority: number;
   }
 
   interface Props {
@@ -96,147 +96,44 @@
     trend: TrendingUp,
   };
 
-  // Generate insights based on analysis data
+  // Use backend insights - backend is always the source of truth
   const insights = $derived.by(() => {
     const result: Insight[] = [];
-    const tir = analysis?.timeInRange?.percentages;
-    const variability = analysis?.glycemicVariability;
 
-    if (!tir || !variability) return result;
+    if (!analysis?.clinicalAssessment) return result;
 
-    const tirTarget = tir.target ?? 0;
+    const assessment = analysis.clinicalAssessment;
+    let priority = 1;
 
-    // Time in Range insights
-    if (tirTarget >= 70) {
-      result.push({
-        type: "success",
-        category: "pattern",
-        title: "Excellent Time in Range",
-        description: `You're spending ${tirTarget.toFixed(0)}% of your time in range — that's above the recommended 70% target!`,
-        clinicalNote:
-          "TIR >70% is associated with reduced risk of diabetes complications (ADA Standards of Care 2024).",
-        priority: 1,
-      });
-    } else if (tirTarget >= 50) {
-      result.push({
-        type: "info",
-        category: "pattern",
-        title: "Good Progress on Time in Range",
-        description: `Your TIR is ${tirTarget.toFixed(0)}%. The goal is 70% or higher — you're making progress!`,
-        clinicalNote:
-          "Each 5% improvement in TIR is clinically meaningful for reducing complications risk.",
-        priority: 2,
-      });
-    } else {
-      result.push({
-        type: "action",
-        category: "pattern",
-        title: "Time in Range Needs Attention",
-        description: `Your TIR is ${tirTarget.toFixed(0)}%. Let's work together to find patterns and improve this number.`,
-        clinicalNote:
-          "Consider reviewing insulin:carb ratios, correction factors, and meal timing with your care team.",
-        priority: 1,
+    // Add strengths
+    if (assessment.strengths?.length) {
+      assessment.strengths.forEach((strength) => {
+        const formattedInsight = formatInsight(strength, "success", "pattern", priority);
+        result.push(formattedInsight);
+        priority++;
       });
     }
 
-    // Low blood sugar insights
-    const totalLows = (tir.low ?? 0) + (tir.severeLow ?? 0);
-    if (totalLows > 4) {
-      result.push({
-        type: "warning",
-        category: "pattern",
-        title: "Frequent Low Blood Sugars",
-        description: `You're spending ${totalLows.toFixed(1)}% of time below range. The goal is less than 4%. Let's identify when these lows occur.`,
-        clinicalNote:
-          "Time below range <54 mg/dL should be <1%. Review hypoglycemia patterns, especially overnight and post-exercise.",
-        priority: 1,
-      });
-    } else if (totalLows < 1) {
-      result.push({
-        type: "success",
-        category: "pattern",
-        title: "Minimal Low Blood Sugars",
-        description:
-          "Great job avoiding lows! You're spending very little time below range.",
-        priority: 3,
+    // Add priority areas
+    if (assessment.priorityAreas?.length) {
+      assessment.priorityAreas.forEach((area) => {
+        const type = getInsightTypeFromKey(area.key ?? "", "priority");
+        const formattedInsight = formatInsight(area, type, "pattern", priority);
+        result.push(formattedInsight);
+        priority++;
       });
     }
 
-    // Variability insights
-    if (variability.coefficientOfVariation) {
-      const cv = variability.coefficientOfVariation;
-      if (cv <= 33) {
-        result.push({
-          type: "success",
-          category: "pattern",
-          title: "Stable Glucose Levels",
-          description: `Your glucose variability (CV) is ${cv.toFixed(0)}% — that's nicely stable! Lower variability means fewer unexpected swings.`,
-          clinicalNote:
-            "CV ≤33% indicates stable glycemic control and is associated with reduced hypoglycemia risk.",
-          priority: 2,
-        });
-      } else if (cv <= 40) {
-        result.push({
-          type: "info",
-          category: "pattern",
-          title: "Moderate Glucose Variability",
-          description: `Your CV is ${cv.toFixed(0)}%. Some swings are normal, but there may be room to smooth things out.`,
-          clinicalNote:
-            "CV between 33-36% is acceptable. Consider evaluating meal composition and timing.",
-          priority: 3,
-        });
-      } else {
-        result.push({
-          type: "action",
-          category: "pattern",
-          title: "High Glucose Variability",
-          description: `Your glucose is swinging quite a bit (CV: ${cv.toFixed(0)}%). This can feel exhausting — let's find the causes.`,
-          clinicalNote:
-            "High CV (>36%) increases hypoglycemia risk and may indicate need for treatment optimization.",
-          priority: 2,
-        });
-      }
-    }
-
-    // HbA1c insights
-    if (variability.estimatedA1c) {
-      const a1c = variability.estimatedA1c;
-      if (a1c < 7.0) {
-        result.push({
-          type: "success",
-          category: "trend",
-          title: "Excellent Estimated A1C",
-          description: `Your estimated A1C of ${a1c.toFixed(1)}% is below the typical target of 7%. Great management!`,
-          clinicalNote:
-            "A1C <7% reduces microvascular complication risk. Ensure this isn't at the expense of increased hypoglycemia.",
-          priority: 2,
-        });
-      } else if (a1c <= 7.5) {
-        result.push({
-          type: "info",
-          category: "trend",
-          title: "Good A1C Estimate",
-          description: `Your estimated A1C is ${a1c.toFixed(1)}%. You're near the common target range.`,
-          priority: 3,
-        });
-      }
-    }
-
-    // High blood sugar insights
-    const totalHighs = (tir.high ?? 0) + (tir.severeHigh ?? 0);
-    if (totalHighs > 25) {
-      result.push({
-        type: "action",
-        category: "pattern",
-        title: "Time Above Range",
-        description: `You're spending ${totalHighs.toFixed(0)}% of time above 180 mg/dL. Let's look at when highs occur most often.`,
-        clinicalNote:
-          "Target is <25% time above range. Review post-meal patterns, correction dosing, and basal rates.",
-        priority: 2,
+    // Add actionable insights
+    if (assessment.actionableInsights?.length) {
+      assessment.actionableInsights.forEach((action) => {
+        const type = getInsightTypeFromKey(action.key ?? "", "actionable");
+        const formattedInsight = formatInsight(action, type, "pattern", priority);
+        result.push(formattedInsight);
+        priority++;
       });
     }
 
-    // Sort by priority and limit
     return result.sort((a, b) => a.priority - b.priority).slice(0, maxInsights);
   });
 </script>

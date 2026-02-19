@@ -12,14 +12,14 @@ export const DEFAULT_THRESHOLDS: GlycemicThresholds = {
   tightTargetBottom: 80,
   tightTargetTop: 120,
   high: 180,
-  severeLow: 40,
-  severeHigh: 250,
+  veryLow: 40,
+  veryHigh: 250,
 };
 
 export const chartConfig = {
-  severeLow: {
-    threshold: DEFAULT_THRESHOLDS.severeLow,
-    label: "Severe Low",
+  veryLow: {
+    threshold: DEFAULT_THRESHOLDS.veryLow,
+    label: "Very Low",
     color: "var(--glucose-very-low)",
   },
   low: {
@@ -37,9 +37,9 @@ export const chartConfig = {
     label: "High",
     color: "var(--glucose-high)",
   },
-  severeHigh: {
-    threshold: DEFAULT_THRESHOLDS.severeHigh,
-    label: "Severe High",
+  veryHigh: {
+    threshold: DEFAULT_THRESHOLDS.veryHigh,
+    label: "Very High",
     color: "var(--glucose-very-high)",
   },
 };

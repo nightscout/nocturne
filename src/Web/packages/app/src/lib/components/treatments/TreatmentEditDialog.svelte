@@ -200,13 +200,13 @@
   };
 
   let activeCategory = $derived(
-    activeRecord ? ENTRY_CATEGORIES[activeRecord.kind] : null,
+    activeRecord ? ENTRY_CATEGORIES[activeRecord.kind] : null
   );
   let activeStyle = $derived(
-    activeRecord ? getEntryStyle(activeRecord.kind) : null,
+    activeRecord ? getEntryStyle(activeRecord.kind) : null
   );
   let ActiveKindIcon = $derived(
-    activeRecord ? kindIcon[activeRecord.kind] : null,
+    activeRecord ? kindIcon[activeRecord.kind] : null
   );
 
   function handleSubmit() {
@@ -302,17 +302,40 @@
     return formatDateForInput(new Date(mills).toISOString());
   }
 
-  const bolusTypeOptions: BolusType[] = ["Normal", "Square", "Dual"] as BolusType[];
-  const glucoseTypeOptions: GlucoseType[] = ["Finger", "Sensor"] as GlucoseType[];
+  const bolusTypeOptions: BolusType[] = [
+    "Normal",
+    "Square",
+    "Dual",
+  ] as BolusType[];
+  const glucoseTypeOptions: GlucoseType[] = [
+    "Finger",
+    "Sensor",
+  ] as GlucoseType[];
   const deviceEventTypeOptions: DeviceEventType[] = [
-    "SensorStart", "SensorChange", "SensorStop", "SiteChange",
-    "InsulinChange", "PumpBatteryChange", "PodChange", "ReservoirChange",
-    "CannulaChange", "TransmitterSensorInsert", "PodActivated", "PodDeactivated",
-    "PumpSuspend", "PumpResume", "Priming", "TubePriming", "NeedlePriming",
-    "Rewind", "DateChanged", "TimeChanged", "BolusMaxChanged",
-    "BasalMaxChanged", "ProfileSwitch",
+    "SensorStart",
+    "SensorChange",
+    "SensorStop",
+    "SiteChange",
+    "InsulinChange",
+    "PumpBatteryChange",
+    "PodChange",
+    "ReservoirChange",
+    "CannulaChange",
+    "TransmitterSensorInsert",
+    "PodActivated",
+    "PodDeactivated",
+    "PumpSuspend",
+    "PumpResume",
+    "Priming",
+    "TubePriming",
+    "NeedlePriming",
+    "Rewind",
+    "DateChanged",
+    "TimeChanged",
+    "BolusMaxChanged",
+    "BasalMaxChanged",
+    "ProfileSwitch",
   ] as DeviceEventType[];
-
 </script>
 
 <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
@@ -399,10 +422,12 @@
                 type="single"
                 value={bolusForm.bolusType ?? ""}
                 onValueChange={(v) => {
-                  bolusForm.bolusType = v as BolusType || undefined;
+                  bolusForm.bolusType = (v as BolusType) || undefined;
                 }}
               >
-                <Select.Trigger>{bolusForm.bolusType || "Select..."}</Select.Trigger>
+                <Select.Trigger>
+                  {bolusForm.bolusType || "Select..."}
+                </Select.Trigger>
                 <Select.Content>
                   {#each bolusTypeOptions as opt}
                     <Select.Item value={opt}>{opt}</Select.Item>
@@ -421,7 +446,7 @@
                 step="0.05"
                 min="0"
                 bind:value={bolusForm.programmed}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
             <div class="space-y-2">
@@ -432,7 +457,7 @@
                 step="0.05"
                 min="0"
                 bind:value={bolusForm.delivered}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
             <div class="space-y-2">
@@ -443,7 +468,7 @@
                 step="1"
                 min="0"
                 bind:value={bolusForm.duration}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
           </div>
@@ -478,7 +503,7 @@
             </div>
           </div>
 
-        <!-- Carbs form -->
+          <!-- Carbs form -->
         {:else if activeRecord.kind === "carbs"}
           <div class="grid grid-cols-3 gap-4">
             <div class="space-y-2">
@@ -502,7 +527,7 @@
                 step="1"
                 min="0"
                 bind:value={carbsForm.protein}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
             <div class="space-y-2">
@@ -513,7 +538,7 @@
                 step="1"
                 min="0"
                 bind:value={carbsForm.fat}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
           </div>
@@ -536,7 +561,7 @@
                 step="1"
                 min="0"
                 bind:value={carbsForm.absorptionTime}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
             <div class="space-y-2">
@@ -546,12 +571,12 @@
                 type="number"
                 step="1"
                 bind:value={carbsForm.carbTime}
-                placeholder="\u2014"
+                placeholder={"\u2014"}
               />
             </div>
           </div>
 
-        <!-- BG Check form -->
+          <!-- BG Check form -->
         {:else if activeRecord.kind === "bgCheck"}
           <div class="space-y-2">
             <Label for="glucose" class="flex items-center gap-1.5">
@@ -574,7 +599,7 @@
                 type="single"
                 value={bgCheckForm.glucoseType ?? ""}
                 onValueChange={(v) => {
-                  bgCheckForm.glucoseType = v as GlucoseType || undefined;
+                  bgCheckForm.glucoseType = (v as GlucoseType) || undefined;
                 }}
               >
                 <Select.Trigger>
@@ -593,7 +618,7 @@
                 type="single"
                 value={bgCheckForm.units ?? ""}
                 onValueChange={(v) => {
-                  bgCheckForm.units = v as GlucoseUnit || undefined;
+                  bgCheckForm.units = (v as GlucoseUnit) || undefined;
                 }}
               >
                 <Select.Trigger>
@@ -611,7 +636,7 @@
             </div>
           </div>
 
-        <!-- Note form -->
+          <!-- Note form -->
         {:else if activeRecord.kind === "note"}
           <div class="space-y-2">
             <Label for="text" class="flex items-center gap-1.5">
@@ -648,7 +673,7 @@
             </Label>
           </div>
 
-        <!-- Device Event form -->
+          <!-- Device Event form -->
         {:else if activeRecord.kind === "deviceEvent"}
           <div class="space-y-2">
             <Label class="flex items-center gap-1.5">
@@ -659,7 +684,7 @@
               type="single"
               value={deviceEventForm.eventType ?? ""}
               onValueChange={(v) => {
-                deviceEventForm.eventType = v as DeviceEventType || undefined;
+                deviceEventForm.eventType = (v as DeviceEventType) || undefined;
               }}
             >
               <Select.Trigger>

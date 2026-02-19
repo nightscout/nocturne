@@ -76,8 +76,12 @@
   }
 
   const queryParams = $derived({
-    from: dateRange.from ? new Date(dateRange.from).getTime() : undefined,
-    to: dateRange.to ? new Date(dateRange.to).getTime() : undefined,
+    from: dateRange.from
+      ? new Date(dateRange.from + "T00:00:00").getTime()
+      : undefined,
+    to: dateRange.to
+      ? new Date(dateRange.to + "T00:00:00").getTime() + 86_400_000
+      : undefined,
     attributed: filterMode === "unattributed" ? false : undefined,
   });
 

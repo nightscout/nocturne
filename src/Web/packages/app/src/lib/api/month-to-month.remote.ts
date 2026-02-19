@@ -70,6 +70,14 @@ export const getPunchCardData = query(punchCardSchema, async ({
     maxInsulin: number;
     maxCarbInsulinDiff: number;
     totalReadings: number;
+    summary: {
+      dayCount: number;
+      totalReadings: number;
+      inRangePercent: number;
+      lowPercent: number;
+      highPercent: number;
+      avgGlucose: number;
+    } | null;
   }>();
 
   const currentDate = new Date(startDate);
@@ -90,6 +98,7 @@ export const getPunchCardData = query(punchCardSchema, async ({
         maxInsulin: 0,
         maxCarbInsulinDiff: 0,
         totalReadings: 0,
+        summary: null,
       });
     }
 
@@ -125,12 +134,12 @@ export const getPunchCardData = query(punchCardSchema, async ({
 
     const percentages = tirMetrics?.percentages;
     const inRangePercent = percentages?.target ?? 0;
-    const lowPercent = (percentages?.severeLow ?? 0) + (percentages?.low ?? 0);
-    const highPercent = (percentages?.severeHigh ?? 0) + (percentages?.high ?? 0);
+    const lowPercent = (percentages?.veryLow ?? 0) + (percentages?.low ?? 0);
+    const highPercent = (percentages?.veryHigh ?? 0) + (percentages?.high ?? 0);
 
     const durations = tirMetrics?.durations;
-    const totalMinutes = (durations?.severeLow ?? 0) + (durations?.low ?? 0) +
-      (durations?.target ?? 0) + (durations?.high ?? 0) + (durations?.severeHigh ?? 0);
+    const totalMinutes = (durations?.veryLow ?? 0) + (durations?.low ?? 0) +
+      (durations?.target ?? 0) + (durations?.high ?? 0) + (durations?.veryHigh ?? 0);
     const totalReadings = Math.round(totalMinutes / 5);
 
     const inRangeCount = Math.round((inRangePercent / 100) * totalReadings);
@@ -189,6 +198,37 @@ export const getPunchCardData = query(punchCardSchema, async ({
     if (a.year !== b.year) return a.year - b.year;
     return a.month - b.month;
   });
+
+  // Compute month-level summaries server-side so the frontend doesn't need to aggregate
+  for (const month of months) {
+    const daysWithData = month.days.filter((d) => d.totalReadings > 0);
+    let totalInRange = 0;
+    let totalLow = 0;
+    let totalHigh = 0;
+    let totalReadings = 0;
+    let glucoseSum = 0;
+    let glucoseDays = 0;
+
+    for (const d of daysWithData) {
+      totalInRange += d.inRangeCount;
+      totalLow += d.lowCount;
+      totalHigh += d.highCount;
+      totalReadings += d.totalReadings;
+      if (d.averageGlucose > 0) {
+        glucoseSum += d.averageGlucose;
+        glucoseDays++;
+      }
+    }
+
+    month.summary = {
+      dayCount: daysWithData.length,
+      totalReadings,
+      inRangePercent: totalReadings > 0 ? (totalInRange / totalReadings) * 100 : 0,
+      lowPercent: totalReadings > 0 ? (totalLow / totalReadings) * 100 : 0,
+      highPercent: totalReadings > 0 ? (totalHigh / totalReadings) * 100 : 0,
+      avgGlucose: glucoseDays > 0 ? glucoseSum / glucoseDays : 0,
+    };
+  }
 
   let globalMaxCarbs = 0;
   let globalMaxInsulin = 0;

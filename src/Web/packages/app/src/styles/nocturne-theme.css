@@ -3,10 +3,18 @@
 :root {
   /* Glucose Levels */
   --glucose-in-range: oklch(0.6 0.118 184.704);
+  --glucose-tight-range: oklch(0.72 0.16 150);
   --glucose-low: oklch(0.646 0.222 41.116);
   --glucose-very-low: oklch(0.577 0.245 27.325);
-  --glucose-high: #7928ca;
-  --glucose-very-high: #ff0080;
+  --glucose-high: oklch(0.65 0.18 270);
+  --glucose-very-high: oklch(0.55 0.25 15);
+
+  /* OpenAPS Prediction Lines */
+  --pred-iob: oklch(0.6 0.18 258);       /* blue, was #1e88e5 */
+  --pred-cob: oklch(0.7 0.18 50);        /* orange, was #FB8C00 */
+  --pred-acob: oklch(0.7 0.18 50);       /* orange, was #FB8C00 */
+  --pred-zt: oklch(0.75 0.15 195);       /* teal, was #00d2d2 */
+  --pred-uam: oklch(0.75 0.12 85);       /* yellow-green, was #c9bd60 */
 
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);
@@ -77,10 +85,18 @@
 @theme inline {
   /* Glucose Levels */
   --color-glucose-in-range: var(--glucose-in-range);
+  --color-glucose-tight-range: var(--glucose-tight-range);
   --color-glucose-low: var(--glucose-low);
   --color-glucose-very-low: var(--glucose-very-low);
   --color-glucose-high: var(--glucose-high);
   --color-glucose-very-high: var(--glucose-very-high);
+
+  /* OpenAPS Prediction Lines */
+  --color-pred-iob: var(--pred-iob);
+  --color-pred-cob: var(--pred-cob);
+  --color-pred-acob: var(--pred-acob);
+  --color-pred-zt: var(--pred-zt);
+  --color-pred-uam: var(--pred-uam);
 
   /* Insulin Types */
   --color-insulin: var(--insulin);

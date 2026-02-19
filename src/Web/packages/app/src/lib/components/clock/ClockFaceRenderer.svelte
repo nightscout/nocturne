@@ -79,13 +79,19 @@
     });
   }
 
+  // Resolve CSS variable to its computed value
+  function resolveCssVar(name: string): string {
+    if (!browser) return "#000000"; // fallback for SSR
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
   // Get BG color based on value
   function getBgColor(bg: number): string {
-    if (bg < 70) return "#ef4444";
-    if (bg < 80) return "#eab308";
-    if (bg > 250) return "#ef4444";
-    if (bg > 180) return "#f97316";
-    return "#22c55e";
+    if (bg < 70) return resolveCssVar("--glucose-very-low");
+    if (bg < 80) return resolveCssVar("--glucose-low");
+    if (bg > 250) return resolveCssVar("--glucose-very-high");
+    if (bg > 180) return resolveCssVar("--glucose-high");
+    return resolveCssVar("--glucose-in-range");
   }
 
   // Get rotation degrees for Lucide arrow based on direction
@@ -232,14 +238,14 @@
 
   // Preview background style
   const bgStyle = $derived.by(() => {
-    if (!config?.settings) return "background-color: #0a0a0a;";
+    if (!config?.settings) return "background-color: var(--background);";
     if (config.settings.backgroundImage) {
       return `background-image: url(${config.settings.backgroundImage}); background-size: cover; background-position: center;`;
     }
     if (config.settings.bgColor) {
       return `background-color: ${getBgColor(currentBG)};`;
     }
-    return "background-color: #0a0a0a;";
+    return "background-color: var(--background);";
   });
 
   const overlayOpacity = $derived(
@@ -286,7 +292,7 @@
         <svg class="h-1/2 w-4/5 opacity-30" viewBox="0 0 100 40" preserveAspectRatio="none">
           <polyline
             fill="none"
-            stroke="#22c55e"
+            stroke="var(--glucose-in-range)"
             stroke-width="1.5"
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -336,7 +342,7 @@
                   <svg class="h-3/4 w-4/5 opacity-40" viewBox="0 0 100 40" preserveAspectRatio="none">
                     <polyline
                       fill="none"
-                      stroke="#22c55e"
+                      stroke="var(--glucose-in-range)"
                       stroke-width="1.5"
                       stroke-linecap="round"
                       stroke-linejoin="round"

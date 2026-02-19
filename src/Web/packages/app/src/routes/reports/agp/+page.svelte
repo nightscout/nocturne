@@ -202,14 +202,14 @@
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold text-red-500">
-          {((tir.low ?? 0) + (tir.severeLow ?? 0)).toFixed(1)}%
+          {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Below Range</div>
         <div class="text-[10px] text-red-500">Target: &lt;4%</div>
       </Card>
       <Card class="p-4 text-center">
         <div class="text-3xl font-bold text-orange-500">
-          {((tir.high ?? 0) + (tir.severeHigh ?? 0)).toFixed(1)}%
+          {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
         </div>
         <div class="text-xs text-muted-foreground">Above Range</div>
         <div class="text-[10px] text-orange-500">Target: &lt;25%</div>
@@ -332,7 +332,7 @@
           </div>
 
           <!-- Low Risk -->
-          {@const totalLows = (tir.low ?? 0) + (tir.severeLow ?? 0)}
+          {@const totalLows = (tir.low ?? 0) + (tir.veryLow ?? 0)}
           <div class="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
             {#if totalLows < 1}
               <CheckCircle2 class="w-5 h-5 text-green-600 shrink-0 mt-0.5" />

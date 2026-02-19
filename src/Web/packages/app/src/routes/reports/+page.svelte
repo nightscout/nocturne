@@ -495,7 +495,7 @@
                     <div
                       class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
                     >
-                      {((tir?.low ?? 0) + (tir?.severeLow ?? 0)).toFixed(1)}
+                      {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}
                       <span class="text-lg font-normal text-muted-foreground">
                         %
                       </span>

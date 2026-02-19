@@ -20,8 +20,8 @@
   ] as const;
 
   // Get shared date params from context (set by reports layout)
-  // Default: 14 days is ideal for week-to-week comparison (2 full weeks)
-  const reportsParams = requireDateParamsContext(14);
+  // Default: 7 days (today + last 6 days = 1 full week)
+  const reportsParams = requireDateParamsContext(7);
 
   // Create resource with automatic layout registration
   const reportsResource = contextResource(
@@ -62,8 +62,9 @@
       const bucket = Math.round(minutesInDay / 5) * 5;
 
       if (!timeMap.has(bucket)) {
-        // Create a date for x-axis (Jan 1, 2000 + time)
-        const time = new Date(2000, 0, 1, Math.floor(bucket / 60), bucket % 60);
+        // Create a date for x-axis (today's date + time-of-day)
+        const now = new Date();
+        const time = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(bucket / 60), bucket % 60);
         timeMap.set(bucket, { time });
       }
 
