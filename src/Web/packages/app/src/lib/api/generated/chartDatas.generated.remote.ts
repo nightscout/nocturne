@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Get complete dashboard chart data in a single call.
@@ -15,6 +15,9 @@ export const getDashboardChartData = query(z.object({ startTime: z.number().opti
   try {
     return await apiClient.chartData.getDashboardChartData(params?.startTime, params?.endTime, params?.intervalMinutes);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in chartData.getDashboardChartData:', err);
     throw error(500, 'Failed to get dashboard chart data');
   }

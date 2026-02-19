@@ -167,9 +167,9 @@ export class FoodState {
 		}
 	}
 
-	async deleteFood(food: FoodRecord) {
+	async deleteFood(food: FoodRecord, attributionMode: 'clear' | 'remove' = 'clear') {
 		try {
-			const result = await deleteFoodRemote(food._id!);
+			const result = await deleteFoodRemote({ id: food._id!, attributionMode });
 
 			if (result.success) {
 				this.foodList = this.foodList.filter((f) => f._id !== food._id);

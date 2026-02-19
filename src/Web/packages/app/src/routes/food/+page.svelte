@@ -11,6 +11,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Plus } from "lucide-svelte";
   import type { Food } from "$lib/api";
+  import FoodDeleteDialog from "./FoodDeleteDialog.svelte";
+  import { getFoodAttributionCount } from "$api/generated/foods.generated.remote";
 
   // Create store with empty initial data - setContext must be called synchronously
   const foodState = new FoodState({
@@ -22,6 +24,12 @@
 
   // Dialog state
   let showAddFoodDialog = $state(false);
+
+  // Delete dialog state
+  let showDeleteDialog = $state(false);
+  let deleteTarget = $state<FoodRecord | null>(null);
+  let deleteAttributionCount = $state(0);
+  let isDeleting = $state(false);
 
   // Fetch food data asynchronously and update the store
   onMount(async () => {
@@ -95,6 +103,34 @@
     }
     foodState.categories[category][subcategory] = true;
   }
+
+  async function handleDeleteRequest(food: FoodRecord) {
+    deleteTarget = food;
+    deleteAttributionCount = 0;
+    showDeleteDialog = true;
+
+    // Fetch attribution count in background
+    if (food._id) {
+      try {
+        const result = await getFoodAttributionCount(food._id);
+        deleteAttributionCount = result?.count ?? 0;
+      } catch {
+        // If we can't get the count, show 0 (simple confirmation)
+      }
+    }
+  }
+
+  async function handleDeleteConfirm(mode: "clear" | "remove") {
+    if (!deleteTarget) return;
+    isDeleting = true;
+    try {
+      await foodState.deleteFood(deleteTarget, mode);
+      showDeleteDialog = false;
+      deleteTarget = null;
+    } finally {
+      isDeleting = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -119,7 +155,7 @@
     <div class="text-center py-8">Loading food database...</div>
   {:else}
     <!-- Food Database Section -->
-    <FoodList {handleFoodDragStart} {handleFoodDragEnd} />
+    <FoodList {handleFoodDragStart} {handleFoodDragEnd} onDeleteRequest={handleDeleteRequest} />
 
     <!-- Food Record Editor -->
     <FoodEditor />
@@ -136,4 +172,13 @@
   onSave={handleFoodSaved}
   onCategoryCreate={handleCategoryCreate}
   onSubcategoryCreate={handleSubcategoryCreate}
+/>
+
+<FoodDeleteDialog
+  bind:open={showDeleteDialog}
+  food={deleteTarget}
+  attributionCount={deleteAttributionCount}
+  isLoading={isDeleting}
+  onClose={() => { showDeleteDialog = false; deleteTarget = null; }}
+  onConfirm={handleDeleteConfirm}
 />

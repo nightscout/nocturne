@@ -34,6 +34,7 @@ import {
   FoodClient,
   FoodsClient,
   GlucoseClient,
+  HeartRateClient,
   InsulinClient,
   IobClient,
   LastModifiedClient,
@@ -57,6 +58,7 @@ import {
   StateSpansClient,
   StatisticsClient,
   StatusClient,
+  StepCountClient,
   SystemEventsClient,
   TimeQueryClient,
   TrackerAlertsClient,
@@ -106,6 +108,7 @@ export class ApiClient {
   public readonly food: FoodClient;
   public readonly foodsV4: FoodsClient;
   public readonly glucose: GlucoseClient;
+  public readonly heartRate: HeartRateClient;
   public readonly insulin: InsulinClient;
   public readonly iob: IobClient;
   public readonly lastModified: LastModifiedClient;
@@ -129,6 +132,7 @@ export class ApiClient {
   public readonly stateSpans: StateSpansClient;
   public readonly statistics: StatisticsClient;
   public readonly status: StatusClient;
+  public readonly stepCount: StepCountClient;
   public readonly systemEvents: SystemEventsClient;
   public readonly timeQuery: TimeQueryClient;
   public readonly trackerAlerts: TrackerAlertsClient;
@@ -178,6 +182,7 @@ export class ApiClient {
     this.food = new FoodClient(apiBaseUrl, http);
     this.foodsV4 = new FoodsClient(apiBaseUrl, http);
     this.glucose = new GlucoseClient(apiBaseUrl, http);
+    this.heartRate = new HeartRateClient(apiBaseUrl, http);
     this.insulin = new InsulinClient(apiBaseUrl, http);
     this.iob = new IobClient(apiBaseUrl, http);
     this.lastModified = new LastModifiedClient(apiBaseUrl, http);
@@ -201,6 +206,7 @@ export class ApiClient {
     this.stateSpans = new StateSpansClient(apiBaseUrl, http);
     this.statistics = new StatisticsClient(apiBaseUrl, http);
     this.status = new StatusClient(apiBaseUrl, http);
+    this.stepCount = new StepCountClient(apiBaseUrl, http);
     this.systemEvents = new SystemEventsClient(apiBaseUrl, http);
     this.timeQuery = new TimeQueryClient(apiBaseUrl, http);
     this.trackerAlerts = new TrackerAlertsClient(apiBaseUrl, http);

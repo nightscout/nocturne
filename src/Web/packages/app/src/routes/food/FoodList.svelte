@@ -23,9 +23,10 @@
   interface Props {
     handleFoodDragStart: (event: DragEvent, food: FoodRecord) => void;
     handleFoodDragEnd: (event: DragEvent) => void;
+    onDeleteRequest: (food: FoodRecord) => void;
   }
 
-  let { handleFoodDragStart, handleFoodDragEnd }: Props = $props();
+  let { handleFoodDragStart, handleFoodDragEnd, onDeleteRequest }: Props = $props();
 
   const foodStore = getFoodState();
 </script>
@@ -73,7 +74,7 @@
                   <Button
                     variant="ghost"
                     size="sm"
-                    onclick={() => foodStore.deleteFood(food)}
+                    onclick={() => onDeleteRequest(food)}
                     title="Delete food"
                   >
                     <Trash2 class="h-3 w-3" />

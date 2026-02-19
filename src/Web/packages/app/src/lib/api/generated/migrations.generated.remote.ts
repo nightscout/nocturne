@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { TestMigrationConnectionRequestSchema, StartMigrationRequestSchema } from '$lib/api/generated/schemas';
 import { type TestMigrationConnectionRequest, type StartMigrationRequest } from '$api';
@@ -16,6 +16,9 @@ export const testConnection = command(TestMigrationConnectionRequestSchema, asyn
     const result = await apiClient.migration.testConnection(request as TestMigrationConnectionRequest);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.testConnection:', err);
     throw error(500, 'Failed to test connection');
   }
@@ -29,6 +32,9 @@ export const startMigration = command(StartMigrationRequestSchema, async (reques
     const result = await apiClient.migration.startMigration(request as StartMigrationRequest);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.startMigration:', err);
     throw error(500, 'Failed to start migration');
   }
@@ -41,6 +47,9 @@ export const getStatus = query(z.string(), async (jobId) => {
   try {
     return await apiClient.migration.getStatus(jobId);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.getStatus:', err);
     throw error(500, 'Failed to get status');
   }
@@ -54,6 +63,9 @@ export const cancelMigration = command(z.string(), async (jobId) => {
     await apiClient.migration.cancelMigration(jobId);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.cancelMigration:', err);
     throw error(500, 'Failed to cancel migration');
   }
@@ -66,6 +78,9 @@ export const getHistory = query(async () => {
   try {
     return await apiClient.migration.getHistory();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.getHistory:', err);
     throw error(500, 'Failed to get history');
   }
@@ -78,6 +93,9 @@ export const getPendingConfig = query(async () => {
   try {
     return await apiClient.migration.getPendingConfig();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.getPendingConfig:', err);
     throw error(500, 'Failed to get pending config');
   }
@@ -90,6 +108,9 @@ export const getSources = query(async () => {
   try {
     return await apiClient.migration.getSources();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.getSources:', err);
     throw error(500, 'Failed to get sources');
   }

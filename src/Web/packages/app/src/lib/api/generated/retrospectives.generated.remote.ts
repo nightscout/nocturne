@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Get retrospective data at a specific point in time
@@ -14,6 +14,9 @@ export const getRetrospectiveData = query(z.object({ time: z.number().optional()
   try {
     return await apiClient.retrospective.getRetrospectiveData(params?.time);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in retrospective.getRetrospectiveData:', err);
     throw error(500, 'Failed to get retrospective data');
   }
@@ -27,6 +30,9 @@ export const getRetrospectiveTimeline = query(z.object({ date: z.string().option
   try {
     return await apiClient.retrospective.getRetrospectiveTimeline(params?.date, params?.intervalMinutes);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in retrospective.getRetrospectiveTimeline:', err);
     throw error(500, 'Failed to get retrospective timeline');
   }
@@ -40,6 +46,9 @@ export const getBasalTimeline = query(z.object({ date: z.string().optional(), in
   try {
     return await apiClient.retrospective.getBasalTimeline(params?.date, params?.intervalMinutes);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in retrospective.getBasalTimeline:', err);
     throw error(500, 'Failed to get basal timeline');
   }

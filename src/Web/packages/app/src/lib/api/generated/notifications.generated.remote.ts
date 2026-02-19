@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Get all active notifications for the current user */
@@ -13,6 +13,9 @@ export const getNotifications = query(async () => {
   try {
     return await apiClient.notifications.getNotifications();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in notifications.getNotifications:', err);
     throw error(500, 'Failed to get notifications');
   }
@@ -29,6 +32,9 @@ export const executeAction = command(z.object({ id: z.string(), actionId: z.stri
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in notifications.executeAction:', err);
     throw error(500, 'Failed to execute action');
   }
@@ -45,6 +51,9 @@ export const dismissNotification = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in notifications.dismissNotification:', err);
     throw error(500, 'Failed to dismiss notification');
   }

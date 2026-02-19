@@ -39,6 +39,8 @@
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { cn } from "$lib/utils";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { deleteCarbIntakeFood } from "$api/treatment-foods.remote";
 
   let dateRange = $state<{ from?: string; to?: string }>({});
   let filterMode = $state<"all" | "unattributed">("all");
@@ -70,6 +72,11 @@
   // Meal match review dialog state
   let showReviewDialog = $state(false);
   let reviewMatch = $state<SuggestedMealMatch | null>(null);
+
+  // Unlink food confirmation state
+  let showUnlinkConfirm = $state(false);
+  let unlinkTarget = $state<{ meal: MealCarbIntake; food: TreatmentFood } | null>(null);
+  let isUnlinking = $state(false);
 
   function handleDateChange(params: { from?: string; to?: string }) {
     dateRange = { from: params.from, to: params.to };
@@ -313,6 +320,34 @@
         ?.filter((f) => f.id !== entryId)
         .reduce((sum, f) => sum + (f.carbs ?? 0), 0) ?? 0;
     return Math.round((totalCarbs - otherAttributedCarbs) * 10) / 10;
+  }
+
+  function confirmUnlinkFood(meal: MealCarbIntake, food: TreatmentFood) {
+    unlinkTarget = { meal, food };
+    showUnlinkConfirm = true;
+  }
+
+  async function handleUnlinkFood() {
+    if (!unlinkTarget) return;
+    const { meal, food } = unlinkTarget;
+    if (!meal.carbIntake?.id || !food.id) return;
+
+    isUnlinking = true;
+    try {
+      await deleteCarbIntakeFood({
+        carbIntakeId: meal.carbIntake.id,
+        entryId: food.id,
+      });
+      toast.success("Food unlinked");
+      showUnlinkConfirm = false;
+      unlinkTarget = null;
+      mealsQuery.refresh();
+    } catch (err) {
+      console.error("Unlink food error:", err);
+      toast.error("Failed to unlink food");
+    } finally {
+      isUnlinking = false;
+    }
   }
 
   async function handleFoodEntrySaved() {
@@ -901,19 +936,32 @@
                               class="grid gap-2 md:grid-cols-2 lg:grid-cols-3"
                             >
                               {#each meal.foods ?? [] as food}
-                                <button
-                                  type="button"
-                                  onclick={() => openEditFoodEntry(meal, food)}
-                                  class="rounded-lg border bg-card p-3 text-sm text-left hover:bg-accent/50 transition-colors cursor-pointer"
-                                >
-                                  <div class="font-medium">
-                                    {food.foodName ?? food.note ?? "Other"}
-                                  </div>
-                                  <FoodEntryDetails
-                                    {food}
-                                    class="text-muted-foreground"
-                                  />
-                                </button>
+                                <div class="rounded-lg border bg-card p-3 text-sm transition-colors group relative hover:bg-accent/50">
+                                  <button
+                                    type="button"
+                                    onclick={() => openEditFoodEntry(meal, food)}
+                                    class="w-full text-left cursor-pointer"
+                                  >
+                                    <div class="font-medium pr-6">
+                                      {food.foodName ?? food.note ?? "Other"}
+                                    </div>
+                                    <FoodEntryDetails
+                                      {food}
+                                      class="text-muted-foreground"
+                                    />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onclick={(e) => {
+                                      e.stopPropagation();
+                                      confirmUnlinkFood(meal, food);
+                                    }}
+                                    class="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                                    title="Unlink food"
+                                  >
+                                    <X class="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
                               {/each}
                             </div>
                           </div>
@@ -983,3 +1031,25 @@
   match={reviewMatch}
   onComplete={handleReviewComplete}
 />
+
+<AlertDialog.Root bind:open={showUnlinkConfirm}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Unlink food</AlertDialog.Title>
+      <AlertDialog.Description>
+        Remove "{unlinkTarget?.food.foodName ?? unlinkTarget?.food.note ?? 'this food'}" from this meal? The food will remain in your database.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel
+        disabled={isUnlinking}
+        onclick={() => { showUnlinkConfirm = false; unlinkTarget = null; }}
+      >
+        Cancel
+      </AlertDialog.Cancel>
+      <Button variant="destructive" disabled={isUnlinking} onclick={handleUnlinkFood}>
+        {isUnlinking ? "Removing..." : "Remove"}
+      </Button>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

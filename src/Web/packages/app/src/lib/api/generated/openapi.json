@@ -6124,6 +6124,102 @@
         "x-client-property": "foodsV4"
       }
     },
+    "/api/v4/foods/{foodId}/attribution-count": {
+      "get": {
+        "tags": [
+          "V4 Foods"
+        ],
+        "summary": "Get how many meal attributions reference a specific food.",
+        "operationId": "Foods_GetFoodAttributionCount",
+        "parameters": [
+          {
+            "name": "foodId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoodAttributionCount"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query",
+        "x-client-property": "foodsV4"
+      }
+    },
+    "/api/v4/foods/{foodId}": {
+      "delete": {
+        "tags": [
+          "V4 Foods"
+        ],
+        "summary": "Delete a food from the database, handling any meal attributions that reference it.",
+        "operationId": "Foods_DeleteFood",
+        "parameters": [
+          {
+            "name": "foodId",
+            "in": "path",
+            "required": true,
+            "description": "The food ID to delete.",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "attributionMode",
+            "in": "query",
+            "description": "How to handle existing attributions: \"clear\" (default) sets them to Other, \"remove\" deletes them.",
+            "schema": {
+              "type": "string",
+              "default": "clear"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetFavorites",
+          "GetRecentFoods"
+        ],
+        "x-client-property": "foodsV4"
+      }
+    },
     "/api/v4/glucose/sensor": {
       "get": {
         "tags": [
@@ -28457,6 +28553,19 @@
           },
           "analysis": {
             "$ref": "#/components/schemas/DiscrepancyAnalysisDto"
+          }
+        }
+      },
+      "FoodAttributionCount": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "foodId": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

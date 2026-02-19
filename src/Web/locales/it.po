@@ -202,6 +202,7 @@ msgstr ""
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/routes/clock/+page.svelte
+#: src/routes/food/FoodDeleteDialog.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -10941,6 +10942,7 @@ msgid "Your real health data (if any) is not affected"
 msgstr ""
 
 #: src/lib/components/entries/EntryEditDialog.svelte
+#: src/routes/food/FoodDeleteDialog.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
@@ -15815,4 +15817,49 @@ msgstr ""
 
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Calculating assessment..."
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "<0/> Delete Food"
+msgstr ""
+
+#. placeholder {0}: attributionCount
+#. placeholder {1}: attributionCount !== 1 ? "s" : ""
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "This food is used in {0} meal attribution{1}. Choose how to handle them."
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Are you sure you want to delete this food? This action cannot be undone."
+msgstr ""
+
+#. placeholder {0}: food.carbs
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "{0}g carbs <0/>"
+msgstr ""
+
+#. placeholder {0}: attributionCount
+#. placeholder {1}: attributionCount !== 1 ? "s" : ""
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "What should happen to the {0} attribution{1}?"
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Set to \"Other\""
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Keep the attributions but remove the food link."
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Remove attributions"
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Delete the attribution entries entirely."
+msgstr ""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Delete Food"
 msgstr ""

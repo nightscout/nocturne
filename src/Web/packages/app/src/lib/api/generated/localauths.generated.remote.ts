@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { SetTemporaryPasswordRequestSchema } from '$lib/api/generated/schemas';
 import { type SetTemporaryPasswordRequest } from '$api';
@@ -15,6 +15,9 @@ export const getPendingPasswordResets = query(async () => {
   try {
     return await apiClient.localAuth.getPendingPasswordResets();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in localAuth.getPendingPasswordResets:', err);
     throw error(500, 'Failed to get pending password resets');
   }
@@ -31,6 +34,9 @@ export const setTemporaryPassword = command(SetTemporaryPasswordRequestSchema, a
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in localAuth.setTemporaryPassword:', err);
     throw error(500, 'Failed to set temporary password');
   }
@@ -47,6 +53,9 @@ export const handlePasswordReset = command(z.string(), async (requestId) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in localAuth.handlePasswordReset:', err);
     throw error(500, 'Failed to handle password reset');
   }

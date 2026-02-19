@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { BGCheckSchema, NoteSchema, DeviceEventSchema } from '$lib/api/generated/schemas';
 import { type BGCheck, type Note, type DeviceEvent } from '$api';
@@ -15,6 +15,9 @@ export const getBGChecks = query(z.object({ from: z.number().optional(), to: z.n
   try {
     return await apiClient.observations.getBGChecks(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.getBGChecks:', err);
     throw error(500, 'Failed to get b g checks');
   }
@@ -31,6 +34,9 @@ export const createBGCheck = command(BGCheckSchema, async (request) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.createBGCheck:', err);
     throw error(500, 'Failed to create b g check');
   }
@@ -43,6 +49,9 @@ export const getBGCheckById = query(z.string(), async (id) => {
   try {
     return await apiClient.observations.getBGCheckById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.getBGCheckById:', err);
     throw error(500, 'Failed to get b g check by id');
   }
@@ -60,6 +69,9 @@ export const updateBGCheck = command(z.object({ id: z.string(), request: BGCheck
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.updateBGCheck:', err);
     throw error(500, 'Failed to update b g check');
   }
@@ -76,6 +88,9 @@ export const deleteBGCheck = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.deleteBGCheck:', err);
     throw error(500, 'Failed to delete b g check');
   }
@@ -88,6 +103,9 @@ export const getNotes = query(z.object({ from: z.number().optional(), to: z.numb
   try {
     return await apiClient.observations.getNotes(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.getNotes:', err);
     throw error(500, 'Failed to get notes');
   }
@@ -104,6 +122,9 @@ export const createNote = command(NoteSchema, async (request) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.createNote:', err);
     throw error(500, 'Failed to create note');
   }
@@ -116,6 +137,9 @@ export const getNoteById = query(z.string(), async (id) => {
   try {
     return await apiClient.observations.getNoteById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.getNoteById:', err);
     throw error(500, 'Failed to get note by id');
   }
@@ -133,6 +157,9 @@ export const updateNote = command(z.object({ id: z.string(), request: NoteSchema
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.updateNote:', err);
     throw error(500, 'Failed to update note');
   }
@@ -149,6 +176,9 @@ export const deleteNote = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.deleteNote:', err);
     throw error(500, 'Failed to delete note');
   }
@@ -161,6 +191,9 @@ export const getDeviceEvents = query(z.object({ from: z.number().optional(), to:
   try {
     return await apiClient.observations.getDeviceEvents(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.getDeviceEvents:', err);
     throw error(500, 'Failed to get device events');
   }
@@ -177,6 +210,9 @@ export const createDeviceEvent = command(DeviceEventSchema, async (request) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.createDeviceEvent:', err);
     throw error(500, 'Failed to create device event');
   }
@@ -189,6 +225,9 @@ export const getDeviceEventById = query(z.string(), async (id) => {
   try {
     return await apiClient.observations.getDeviceEventById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.getDeviceEventById:', err);
     throw error(500, 'Failed to get device event by id');
   }
@@ -206,6 +245,9 @@ export const updateDeviceEvent = command(z.object({ id: z.string(), request: Dev
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.updateDeviceEvent:', err);
     throw error(500, 'Failed to update device event');
   }
@@ -222,6 +264,9 @@ export const deleteDeviceEvent = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in observations.deleteDeviceEvent:', err);
     throw error(500, 'Failed to delete device event');
   }

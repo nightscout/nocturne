@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Logout and revoke the session */
@@ -14,6 +14,9 @@ export const logout = command(z.object({ providerId: z.string().optional() }).op
     const result = await apiClient.oidc.logout(params?.providerId);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidc.logout:', err);
     throw error(500, 'Failed to logout');
   }

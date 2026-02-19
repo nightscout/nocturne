@@ -198,6 +198,7 @@ msgstr "Reason for this treatment"
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/routes/clock/+page.svelte
+#: src/routes/food/FoodDeleteDialog.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/reports/treatments/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -10822,6 +10823,7 @@ msgid "Your real health data (if any) is not affected"
 msgstr "Your real health data (if any) is not affected"
 
 #: src/lib/components/entries/EntryEditDialog.svelte
+#: src/routes/food/FoodDeleteDialog.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 msgid "<0/> Deleting..."
@@ -13730,3 +13732,48 @@ msgstr "Needs Improvement"
 #: src/routes/reports/executive-summary/+page.svelte
 msgid "Calculating assessment..."
 msgstr "Calculating assessment..."
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "<0/> Delete Food"
+msgstr "<0/> Delete Food"
+
+#. placeholder {0}: attributionCount
+#. placeholder {1}: attributionCount !== 1 ? "s" : ""
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "This food is used in {0} meal attribution{1}. Choose how to handle them."
+msgstr "This food is used in {0} meal attribution{1}. Choose how to handle them."
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Are you sure you want to delete this food? This action cannot be undone."
+msgstr "Are you sure you want to delete this food? This action cannot be undone."
+
+#. placeholder {0}: food.carbs
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "{0}g carbs <0/>"
+msgstr "{0}g carbs <0/>"
+
+#. placeholder {0}: attributionCount
+#. placeholder {1}: attributionCount !== 1 ? "s" : ""
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "What should happen to the {0} attribution{1}?"
+msgstr "What should happen to the {0} attribution{1}?"
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Set to \"Other\""
+msgstr "Set to \"Other\""
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Keep the attributions but remove the food link."
+msgstr "Keep the attributions but remove the food link."
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Remove attributions"
+msgstr "Remove attributions"
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Delete the attribution entries entirely."
+msgstr "Delete the attribution entries entirely."
+
+#: src/routes/food/FoodDeleteDialog.svelte
+msgid "Delete Food"
+msgstr "Delete Food"

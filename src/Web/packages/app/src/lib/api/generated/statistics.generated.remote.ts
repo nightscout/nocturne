@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { TimeInRangeRequestSchema, SensorGlucoseSchema } from '$lib/api/generated/schemas';
 import { type TimeInRangeRequest, type SensorGlucose } from '$api';
@@ -15,6 +15,9 @@ export const calculateTimeInRange = query(TimeInRangeRequestSchema, async (reque
   try {
     return await apiClient.statistics.calculateTimeInRange(request as TimeInRangeRequest);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in statistics.calculateTimeInRange:', err);
     throw error(500, 'Failed to calculate time in range');
   }
@@ -27,6 +30,9 @@ export const calculateAveragedStats = query(z.array(SensorGlucoseSchema), async 
   try {
     return await apiClient.statistics.calculateAveragedStats(request as SensorGlucose[]);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in statistics.calculateAveragedStats:', err);
     throw error(500, 'Failed to calculate averaged stats');
   }
@@ -40,6 +46,9 @@ export const getMultiPeriodStatistics = query(async () => {
   try {
     return await apiClient.statistics.getMultiPeriodStatistics();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in statistics.getMultiPeriodStatistics:', err);
     throw error(500, 'Failed to get multi period statistics');
   }
@@ -52,6 +61,9 @@ export const getDailyBasalBolusRatios = query(z.object({ startDate: z.coerce.dat
   try {
     return await apiClient.statistics.getDailyBasalBolusRatios(params?.startDate, params?.endDate);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in statistics.getDailyBasalBolusRatios:', err);
     throw error(500, 'Failed to get daily basal bolus ratios');
   }
@@ -64,6 +76,9 @@ export const getInsulinDeliveryStatistics = query(z.object({ startDate: z.coerce
   try {
     return await apiClient.statistics.getInsulinDeliveryStatistics(params?.startDate, params?.endDate);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in statistics.getInsulinDeliveryStatistics:', err);
     throw error(500, 'Failed to get insulin delivery statistics');
   }
@@ -76,6 +91,9 @@ export const getBasalAnalysis = query(z.object({ startDate: z.coerce.date().opti
   try {
     return await apiClient.statistics.getBasalAnalysis(params?.startDate, params?.endDate);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in statistics.getBasalAnalysis:', err);
     throw error(500, 'Failed to get basal analysis');
   }

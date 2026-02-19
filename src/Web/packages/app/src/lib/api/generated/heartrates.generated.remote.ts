@@ -6,33 +6,32 @@ import { getRequestEvent, query } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
-/** Get glucose predictions based on current data.
-Returns predicted glucose values for the next 4 hours in 5-minute intervals. */
-export const getPredictions = query(z.object({ profileId: z.string().optional() }).optional(), async (params) => {
+/** Get heart rate records with optional pagination */
+export const getHeartRates = query(z.object({ count: z.number().optional(), skip: z.number().optional() }).optional(), async (params) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    return await apiClient.predictions.getPredictions(params?.profileId);
+    return await apiClient.heartRate.getHeartRates(params?.count, params?.skip);
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in predictions.getPredictions:', err);
-    throw error(500, 'Failed to get predictions');
+    console.error('Error in heartRate.getHeartRates:', err);
+    throw error(500, 'Failed to get heart rates');
   }
 });
 
-/** Check the status of the prediction service. */
-export const getStatus = query(async () => {
+/** Get a specific heart rate record by ID */
+export const getHeartRate = query(z.string(), async (id) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   try {
-    return await apiClient.predictions.getStatus();
+    return await apiClient.heartRate.getHeartRate(id);
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in predictions.getStatus:', err);
-    throw error(500, 'Failed to get status');
+    console.error('Error in heartRate.getHeartRate:', err);
+    throw error(500, 'Failed to get heart rate');
   }
 });

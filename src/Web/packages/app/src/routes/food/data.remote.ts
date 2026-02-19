@@ -113,20 +113,27 @@ export const updateFood = command(FoodSchema, async (food) => {
 });
 
 /**
- * Delete a food record by ID
+ * Delete a food record by ID via V4 endpoint with attribution handling.
+ * NOTE: Generated version is broken (missing foodId parameter in codegen), so kept here.
  */
-export const deleteFood = command(z.string(), async (id) => {
-	const { locals } = getRequestEvent();
-	const { apiClient } = locals;
+export const deleteFood = command(
+	z.object({
+		id: z.string(),
+		attributionMode: z.enum(['clear', 'remove']).optional(),
+	}),
+	async ({ id, attributionMode }) => {
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
 
-	try {
-		await apiClient.food.deleteFood2(id);
-		return { success: true };
-	} catch (err) {
-		console.error('Error deleting food:', err);
-		return { success: false, error: 'Failed to delete food' };
+		try {
+			await apiClient.foodsV4.deleteFood(id, attributionMode);
+			return { success: true };
+		} catch (err) {
+			console.error('Error deleting food:', err);
+			return { success: false, error: 'Failed to delete food' };
+		}
 	}
-});
+);
 
 /**
  * Create a new quickpick record

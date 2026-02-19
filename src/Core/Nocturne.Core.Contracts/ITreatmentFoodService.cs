@@ -43,4 +43,19 @@ public interface ITreatmentFoodService
     /// Delete a food breakdown entry.
     /// </summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Count how many food attribution entries reference a specific food.
+    /// </summary>
+    Task<int> CountByFoodIdAsync(Guid foodId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clear food references for a specific food (set FoodId to null), keeping entries as "Other".
+    /// </summary>
+    Task<int> ClearFoodReferencesByFoodIdAsync(Guid foodId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete all food attribution entries that reference a specific food.
+    /// </summary>
+    Task<int> DeleteByFoodIdAsync(Guid foodId, CancellationToken cancellationToken = default);
 }

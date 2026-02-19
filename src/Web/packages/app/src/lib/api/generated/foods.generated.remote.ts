@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Get current user's favorite foods. */
@@ -13,6 +13,9 @@ export const getFavorites = query(async () => {
   try {
     return await apiClient.foodsV4.getFavorites();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.getFavorites:', err);
     throw error(500, 'Failed to get favorites');
   }
@@ -29,6 +32,9 @@ export const addFavorite = command(z.string(), async (foodId) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.addFavorite:', err);
     throw error(500, 'Failed to add favorite');
   }
@@ -45,6 +51,9 @@ export const removeFavorite = command(z.string(), async (foodId) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.removeFavorite:', err);
     throw error(500, 'Failed to remove favorite');
   }
@@ -57,7 +66,45 @@ export const getRecentFoods = query(z.object({ limit: z.number().optional() }).o
   try {
     return await apiClient.foodsV4.getRecentFoods(params?.limit);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.getRecentFoods:', err);
     throw error(500, 'Failed to get recent foods');
+  }
+});
+
+/** Get how many meal attributions reference a specific food. */
+export const getFoodAttributionCount = query(z.string(), async (foodId) => {
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
+  try {
+    return await apiClient.foodsV4.getFoodAttributionCount(foodId);
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in foodsV4.getFoodAttributionCount:', err);
+    throw error(500, 'Failed to get food attribution count');
+  }
+});
+
+/** Delete a food from the database, handling any meal attributions that reference it. */
+export const deleteFood = command(z.object({ attributionMode: z.string().optional() }).optional(), async (params) => {
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
+  try {
+    await apiClient.foodsV4.deleteFood(params?.attributionMode);
+    await Promise.all([
+      getFavorites(undefined).refresh(),
+      getRecentFoods(undefined).refresh()
+    ]);
+    return { success: true };
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in foodsV4.deleteFood:', err);
+    throw error(500, 'Failed to delete food');
   }
 });

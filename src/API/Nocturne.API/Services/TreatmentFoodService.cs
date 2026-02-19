@@ -99,4 +99,24 @@ public class TreatmentFoodService : ITreatmentFoodService
         _logger.LogDebug("Deleting food entry {EntryId}", id);
         return await _treatmentFoodRepository.DeleteAsync(id, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public async Task<int> CountByFoodIdAsync(Guid foodId, CancellationToken cancellationToken = default)
+    {
+        return await _treatmentFoodRepository.CountByFoodIdAsync(foodId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ClearFoodReferencesByFoodIdAsync(Guid foodId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Clearing food references for food {FoodId}", foodId);
+        return await _treatmentFoodRepository.ClearFoodReferencesByFoodIdAsync(foodId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteByFoodIdAsync(Guid foodId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Deleting all attribution entries for food {FoodId}", foodId);
+        return await _treatmentFoodRepository.DeleteByFoodIdAsync(foodId, cancellationToken);
+    }
 }

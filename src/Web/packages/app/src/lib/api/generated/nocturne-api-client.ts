@@ -7872,6 +7872,101 @@ export class FoodsClient {
         }
         return Promise.resolve<Food[]>(null as any);
     }
+
+    /**
+     * Get how many meal attributions reference a specific food.
+     */
+    getFoodAttributionCount(foodId: string, signal?: AbortSignal): Promise<FoodAttributionCount> {
+        let url_ = this.baseUrl + "/api/v4/foods/{foodId}/attribution-count";
+        if (foodId === undefined || foodId === null)
+            throw new globalThis.Error("The parameter 'foodId' must be defined.");
+        url_ = url_.replace("{foodId}", encodeURIComponent("" + foodId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetFoodAttributionCount(_response);
+        });
+    }
+
+    protected processGetFoodAttributionCount(response: Response): Promise<FoodAttributionCount> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as FoodAttributionCount;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FoodAttributionCount>(null as any);
+    }
+
+    /**
+     * Delete a food from the database, handling any meal attributions that reference it.
+     * @param foodId The food ID to delete.
+     * @param attributionMode (optional) How to handle existing attributions: "clear" (default) sets them to Other, "remove" deletes them.
+     */
+    deleteFood(foodId: string, attributionMode?: string | undefined, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/foods/{foodId}?";
+        if (foodId === undefined || foodId === null)
+            throw new globalThis.Error("The parameter 'foodId' must be defined.");
+        url_ = url_.replace("{foodId}", encodeURIComponent("" + foodId));
+        if (attributionMode === null)
+            throw new globalThis.Error("The parameter 'attributionMode' cannot be null.");
+        else if (attributionMode !== undefined)
+            url_ += "attributionMode=" + encodeURIComponent("" + attributionMode) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDeleteFood(_response);
+        });
+    }
+
+    protected processDeleteFood(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
 }
 
 export class GlucoseClient {
@@ -24475,6 +24570,11 @@ export interface ForwardedDiscrepancyDto {
     sourceId?: string;
     receivedAt?: Date;
     analysis?: DiscrepancyAnalysisDto;
+}
+
+export interface FoodAttributionCount {
+    foodId?: string;
+    count?: number;
 }
 
 export interface PaginatedResponseOfSensorGlucose {

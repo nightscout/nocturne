@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Get APS snapshots with optional filtering */
@@ -13,6 +13,9 @@ export const getApsSnapshots = query(z.object({ from: z.number().optional(), to:
   try {
     return await apiClient.deviceStatus.getApsSnapshots(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deviceStatus.getApsSnapshots:', err);
     throw error(500, 'Failed to get aps snapshots');
   }
@@ -25,6 +28,9 @@ export const getApsSnapshotById = query(z.string(), async (id) => {
   try {
     return await apiClient.deviceStatus.getApsSnapshotById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deviceStatus.getApsSnapshotById:', err);
     throw error(500, 'Failed to get aps snapshot by id');
   }
@@ -37,6 +43,9 @@ export const getPumpSnapshots = query(z.object({ from: z.number().optional(), to
   try {
     return await apiClient.deviceStatus.getPumpSnapshots(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deviceStatus.getPumpSnapshots:', err);
     throw error(500, 'Failed to get pump snapshots');
   }
@@ -49,6 +58,9 @@ export const getPumpSnapshotById = query(z.string(), async (id) => {
   try {
     return await apiClient.deviceStatus.getPumpSnapshotById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deviceStatus.getPumpSnapshotById:', err);
     throw error(500, 'Failed to get pump snapshot by id');
   }
@@ -61,6 +73,9 @@ export const getUploaderSnapshots = query(z.object({ from: z.number().optional()
   try {
     return await apiClient.deviceStatus.getUploaderSnapshots(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deviceStatus.getUploaderSnapshots:', err);
     throw error(500, 'Failed to get uploader snapshots');
   }
@@ -73,6 +88,9 @@ export const getUploaderSnapshotById = query(z.string(), async (id) => {
   try {
     return await apiClient.deviceStatus.getUploaderSnapshotById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deviceStatus.getUploaderSnapshotById:', err);
     throw error(500, 'Failed to get uploader snapshot by id');
   }

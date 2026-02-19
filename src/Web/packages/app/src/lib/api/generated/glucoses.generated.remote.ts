@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { SensorGlucoseSchema, MeterGlucoseSchema, CalibrationSchema } from '$lib/api/generated/schemas';
 import { type SensorGlucose, type MeterGlucose, type Calibration } from '$api';
@@ -15,6 +15,9 @@ export const getSensorGlucose = query(z.object({ from: z.number().optional(), to
   try {
     return await apiClient.glucose.getSensorGlucose(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.getSensorGlucose:', err);
     throw error(500, 'Failed to get sensor glucose');
   }
@@ -31,6 +34,9 @@ export const createSensorGlucose = command(SensorGlucoseSchema, async (request) 
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.createSensorGlucose:', err);
     throw error(500, 'Failed to create sensor glucose');
   }
@@ -43,6 +49,9 @@ export const getSensorGlucoseById = query(z.string(), async (id) => {
   try {
     return await apiClient.glucose.getSensorGlucoseById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.getSensorGlucoseById:', err);
     throw error(500, 'Failed to get sensor glucose by id');
   }
@@ -60,6 +69,9 @@ export const updateSensorGlucose = command(z.object({ id: z.string(), request: S
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.updateSensorGlucose:', err);
     throw error(500, 'Failed to update sensor glucose');
   }
@@ -76,6 +88,9 @@ export const deleteSensorGlucose = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.deleteSensorGlucose:', err);
     throw error(500, 'Failed to delete sensor glucose');
   }
@@ -88,6 +103,9 @@ export const getMeterGlucose = query(z.object({ from: z.number().optional(), to:
   try {
     return await apiClient.glucose.getMeterGlucose(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.getMeterGlucose:', err);
     throw error(500, 'Failed to get meter glucose');
   }
@@ -104,6 +122,9 @@ export const createMeterGlucose = command(MeterGlucoseSchema, async (request) =>
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.createMeterGlucose:', err);
     throw error(500, 'Failed to create meter glucose');
   }
@@ -116,6 +137,9 @@ export const getMeterGlucoseById = query(z.string(), async (id) => {
   try {
     return await apiClient.glucose.getMeterGlucoseById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.getMeterGlucoseById:', err);
     throw error(500, 'Failed to get meter glucose by id');
   }
@@ -133,6 +157,9 @@ export const updateMeterGlucose = command(z.object({ id: z.string(), request: Me
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.updateMeterGlucose:', err);
     throw error(500, 'Failed to update meter glucose');
   }
@@ -149,6 +176,9 @@ export const deleteMeterGlucose = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.deleteMeterGlucose:', err);
     throw error(500, 'Failed to delete meter glucose');
   }
@@ -161,6 +191,9 @@ export const getCalibrations = query(z.object({ from: z.number().optional(), to:
   try {
     return await apiClient.glucose.getCalibrations(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.getCalibrations:', err);
     throw error(500, 'Failed to get calibrations');
   }
@@ -177,6 +210,9 @@ export const createCalibration = command(CalibrationSchema, async (request) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.createCalibration:', err);
     throw error(500, 'Failed to create calibration');
   }
@@ -189,6 +225,9 @@ export const getCalibrationById = query(z.string(), async (id) => {
   try {
     return await apiClient.glucose.getCalibrationById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.getCalibrationById:', err);
     throw error(500, 'Failed to get calibration by id');
   }
@@ -206,6 +245,9 @@ export const updateCalibration = command(z.object({ id: z.string(), request: Cal
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.updateCalibration:', err);
     throw error(500, 'Failed to update calibration');
   }
@@ -222,6 +264,9 @@ export const deleteCalibration = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in glucose.deleteCalibration:', err);
     throw error(500, 'Failed to delete calibration');
   }

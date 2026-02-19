@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 
 /** Gets the current status and metrics for all registered connectors */
 export const getStatus = query(async () => {
@@ -12,6 +12,9 @@ export const getStatus = query(async () => {
   try {
     return await apiClient.connectorStatus.getStatus();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in connectorStatus.getStatus:', err);
     throw error(500, 'Failed to get status');
   }

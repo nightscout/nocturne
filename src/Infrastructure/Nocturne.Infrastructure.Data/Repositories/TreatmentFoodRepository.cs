@@ -139,6 +139,51 @@ public class TreatmentFoodRepository
     }
 
     /// <summary>
+    /// Count how many food attribution entries reference a specific food.
+    /// </summary>
+    public async Task<int> CountByFoodIdAsync(
+        Guid foodId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await _context
+            .Set<TreatmentFoodEntity>()
+            .AsNoTracking()
+            .CountAsync(tf => tf.FoodId == foodId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Clear food references for a specific food (set FoodId to null), keeping the attribution entries as "Other".
+    /// </summary>
+    public async Task<int> ClearFoodReferencesByFoodIdAsync(
+        Guid foodId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await _context
+            .Set<TreatmentFoodEntity>()
+            .Where(tf => tf.FoodId == foodId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(tf => tf.FoodId, (Guid?)null),
+                cancellationToken
+            );
+    }
+
+    /// <summary>
+    /// Delete all food attribution entries that reference a specific food.
+    /// </summary>
+    public async Task<int> DeleteByFoodIdAsync(
+        Guid foodId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await _context
+            .Set<TreatmentFoodEntity>()
+            .Where(tf => tf.FoodId == foodId)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Get recently used foods ordered by last usage.
     /// </summary>
     public async Task<IReadOnlyList<FoodEntity>> GetRecentFoodsAsync(

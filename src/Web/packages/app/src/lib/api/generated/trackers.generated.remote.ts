@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { CreateTrackerDefinitionRequestSchema, UpdateTrackerDefinitionRequestSchema, StartTrackerInstanceRequestSchema, CompleteTrackerInstanceRequestSchema, AckTrackerRequestSchema, CreateTrackerPresetRequestSchema, ApplyPresetRequestSchema } from '$lib/api/generated/schemas';
 import { TrackerCategory, type CreateTrackerDefinitionRequest, type UpdateTrackerDefinitionRequest, type StartTrackerInstanceRequest, type CompleteTrackerInstanceRequest, type AckTrackerRequest, type CreateTrackerPresetRequest, type ApplyPresetRequest } from '$api';
@@ -16,6 +16,9 @@ export const getDefinitions = query(z.object({ category: z.enum(TrackerCategory)
   try {
     return await apiClient.trackers.getDefinitions(params?.category);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.getDefinitions:', err);
     throw error(500, 'Failed to get definitions');
   }
@@ -32,6 +35,9 @@ export const createDefinition = command(CreateTrackerDefinitionRequestSchema, as
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.createDefinition:', err);
     throw error(500, 'Failed to create definition');
   }
@@ -44,6 +50,9 @@ export const getDefinition = query(z.string(), async (id) => {
   try {
     return await apiClient.trackers.getDefinition(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.getDefinition:', err);
     throw error(500, 'Failed to get definition');
   }
@@ -61,6 +70,9 @@ export const updateDefinition = command(z.object({ id: z.string(), request: Upda
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.updateDefinition:', err);
     throw error(500, 'Failed to update definition');
   }
@@ -77,6 +89,9 @@ export const deleteDefinition = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.deleteDefinition:', err);
     throw error(500, 'Failed to delete definition');
   }
@@ -89,6 +104,9 @@ export const getActiveInstances = query(async () => {
   try {
     return await apiClient.trackers.getActiveInstances();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.getActiveInstances:', err);
     throw error(500, 'Failed to get active instances');
   }
@@ -105,6 +123,9 @@ export const startInstance = command(StartTrackerInstanceRequestSchema, async (r
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.startInstance:', err);
     throw error(500, 'Failed to start instance');
   }
@@ -117,6 +138,9 @@ export const getInstanceHistory = query(z.object({ limit: z.number().optional() 
   try {
     return await apiClient.trackers.getInstanceHistory(params?.limit);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.getInstanceHistory:', err);
     throw error(500, 'Failed to get instance history');
   }
@@ -129,6 +153,9 @@ export const getUpcomingInstances = query(z.object({ from: z.coerce.date().optio
   try {
     return await apiClient.trackers.getUpcomingInstances(params?.from, params?.to);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.getUpcomingInstances:', err);
     throw error(500, 'Failed to get upcoming instances');
   }
@@ -146,6 +173,9 @@ export const completeInstance = command(z.object({ id: z.string(), request: Comp
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.completeInstance:', err);
     throw error(500, 'Failed to complete instance');
   }
@@ -162,6 +192,9 @@ export const ackInstance = command(z.object({ id: z.string(), request: AckTracke
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.ackInstance:', err);
     throw error(500, 'Failed to ack instance');
   }
@@ -178,6 +211,9 @@ export const deleteInstance = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.deleteInstance:', err);
     throw error(500, 'Failed to delete instance');
   }
@@ -190,6 +226,9 @@ export const getPresets = query(async () => {
   try {
     return await apiClient.trackers.getPresets();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.getPresets:', err);
     throw error(500, 'Failed to get presets');
   }
@@ -206,6 +245,9 @@ export const createPreset = command(CreateTrackerPresetRequestSchema, async (req
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.createPreset:', err);
     throw error(500, 'Failed to create preset');
   }
@@ -222,6 +264,9 @@ export const applyPreset = command(z.object({ id: z.string(), request: ApplyPres
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.applyPreset:', err);
     throw error(500, 'Failed to apply preset');
   }
@@ -238,6 +283,9 @@ export const deletePreset = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.deletePreset:', err);
     throw error(500, 'Failed to delete preset');
   }

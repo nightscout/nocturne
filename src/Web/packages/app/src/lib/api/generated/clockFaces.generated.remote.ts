@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { UpdateClockFaceRequestSchema, CreateClockFaceRequestSchema } from '$lib/api/generated/schemas';
 import { type UpdateClockFaceRequest, type CreateClockFaceRequest } from '$api';
@@ -15,6 +15,9 @@ export const getById = query(z.string(), async (id) => {
   try {
     return await apiClient.clockFaces.getById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in clockFaces.getById:', err);
     throw error(500, 'Failed to get by id');
   }
@@ -32,6 +35,9 @@ export const update = command(z.object({ id: z.string(), request: UpdateClockFac
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in clockFaces.update:', err);
     throw error(500, 'Failed to update');
   }
@@ -48,6 +54,9 @@ export const remove = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in clockFaces.delete:', err);
     throw error(500, 'Failed to remove');
   }
@@ -60,6 +69,9 @@ export const list = query(async () => {
   try {
     return await apiClient.clockFaces.list();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in clockFaces.list:', err);
     throw error(500, 'Failed to list');
   }
@@ -76,6 +88,9 @@ export const create = command(CreateClockFaceRequestSchema, async (request) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in clockFaces.create:', err);
     throw error(500, 'Failed to create');
   }

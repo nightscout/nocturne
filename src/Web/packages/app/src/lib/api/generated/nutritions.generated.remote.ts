@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query, command } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { CarbIntakeSchema, CarbIntakeFoodRequestSchema } from '$lib/api/generated/schemas';
 import { type CarbIntake, type CarbIntakeFoodRequest } from '$api';
@@ -15,6 +15,9 @@ export const getCarbIntakes = query(z.object({ from: z.number().optional(), to: 
   try {
     return await apiClient.nutrition.getCarbIntakes(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getCarbIntakes:', err);
     throw error(500, 'Failed to get carb intakes');
   }
@@ -31,6 +34,9 @@ export const createCarbIntake = command(CarbIntakeSchema, async (request) => {
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.createCarbIntake:', err);
     throw error(500, 'Failed to create carb intake');
   }
@@ -43,6 +49,9 @@ export const getCarbIntakeById = query(z.string(), async (id) => {
   try {
     return await apiClient.nutrition.getCarbIntakeById(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getCarbIntakeById:', err);
     throw error(500, 'Failed to get carb intake by id');
   }
@@ -60,6 +69,9 @@ export const updateCarbIntake = command(z.object({ id: z.string(), request: Carb
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.updateCarbIntake:', err);
     throw error(500, 'Failed to update carb intake');
   }
@@ -76,6 +88,9 @@ export const deleteCarbIntake = command(z.string(), async (id) => {
     ]);
     return { success: true };
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.deleteCarbIntake:', err);
     throw error(500, 'Failed to delete carb intake');
   }
@@ -88,6 +103,9 @@ export const getCarbIntakeFoods = query(z.string(), async (id) => {
   try {
     return await apiClient.nutrition.getCarbIntakeFoods(id);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getCarbIntakeFoods:', err);
     throw error(500, 'Failed to get carb intake foods');
   }
@@ -104,6 +122,9 @@ export const addCarbIntakeFood = command(z.object({ id: z.string(), request: Car
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.addCarbIntakeFood:', err);
     throw error(500, 'Failed to add carb intake food');
   }
@@ -120,6 +141,9 @@ export const updateCarbIntakeFood = command(z.object({ id: z.string(), foodEntry
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.updateCarbIntakeFood:', err);
     throw error(500, 'Failed to update carb intake food');
   }
@@ -136,6 +160,9 @@ export const deleteCarbIntakeFood = command(z.object({ id: z.string(), foodEntry
     ]);
     return result;
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.deleteCarbIntakeFood:', err);
     throw error(500, 'Failed to delete carb intake food');
   }
@@ -148,6 +175,9 @@ export const getMeals = query(z.object({ from: z.number().optional(), to: z.numb
   try {
     return await apiClient.nutrition.getMeals(params?.from, params?.to, params?.attributed);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getMeals:', err);
     throw error(500, 'Failed to get meals');
   }

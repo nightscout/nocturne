@@ -52,6 +52,18 @@ public class UserFoodFavorite
 }
 
 /// <summary>
+/// Response model for how many meal attributions reference a specific food.
+/// </summary>
+public class FoodAttributionCount
+{
+    [JsonPropertyName("foodId")]
+    public string FoodId { get; set; } = string.Empty;
+
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+}
+
+/// <summary>
 /// Aggregated food breakdown for a carb intake record.
 /// </summary>
 [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]

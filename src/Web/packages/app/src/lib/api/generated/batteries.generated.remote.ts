@@ -3,7 +3,7 @@
 // Source: openapi.json
 
 import { getRequestEvent, query } from '$app/server';
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 /** Get the current battery status for all tracked devices */
@@ -13,6 +13,9 @@ export const getCurrentBatteryStatus = query(z.object({ recentMinutes: z.number(
   try {
     return await apiClient.battery.getCurrentBatteryStatus(params?.recentMinutes);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in battery.getCurrentBatteryStatus:', err);
     throw error(500, 'Failed to get current battery status');
   }
@@ -25,6 +28,9 @@ export const getBatteryReadings = query(z.object({ device: z.string().optional()
   try {
     return await apiClient.battery.getBatteryReadings(params?.device, params?.from, params?.to);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in battery.getBatteryReadings:', err);
     throw error(500, 'Failed to get battery readings');
   }
@@ -37,6 +43,9 @@ export const getBatteryStatistics = query(z.object({ device: z.string().optional
   try {
     return await apiClient.battery.getBatteryStatistics(params?.device, params?.from, params?.to);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in battery.getBatteryStatistics:', err);
     throw error(500, 'Failed to get battery statistics');
   }
@@ -49,6 +58,9 @@ export const getChargeCycles = query(z.object({ device: z.string().optional(), f
   try {
     return await apiClient.battery.getChargeCycles(params?.device, params?.from, params?.to, params?.limit);
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in battery.getChargeCycles:', err);
     throw error(500, 'Failed to get charge cycles');
   }
@@ -61,6 +73,9 @@ export const getKnownDevices = query(async () => {
   try {
     return await apiClient.battery.getKnownDevices();
   } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in battery.getKnownDevices:', err);
     throw error(500, 'Failed to get known devices');
   }
