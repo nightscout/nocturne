@@ -21,7 +21,7 @@ export const getDeviceInfo = query(
     const { apiClient } = locals;
 
     try {
-      return await apiClient.oauth.getDeviceInfo(userCode);
+      return await apiClient.oAuth.getDeviceInfo(userCode);
     } catch (err) {
       console.error("Error looking up device code:", err);
       throw error(400, "Invalid or expired device code");
@@ -41,7 +41,7 @@ export const getClientInfo = query(
     const { apiClient } = locals;
 
     try {
-      return await apiClient.oauth.getClientInfo(clientId);
+      return await apiClient.oAuth.getClientInfo(clientId);
     } catch (err) {
       console.error("Error fetching client info:", err);
       // Return a default unknown client info if fetch fails
@@ -75,7 +75,7 @@ export const approveDevice = command(
     }
 
     try {
-      await apiClient.oauth.deviceApprove(userCode, true);
+      await apiClient.oAuth.deviceApprove(userCode, true);
       return { success: true };
     } catch (err) {
       console.error("Error approving device:", err);
@@ -100,7 +100,7 @@ export const denyDevice = command(
     }
 
     try {
-      await apiClient.oauth.deviceApprove(userCode, false);
+      await apiClient.oAuth.deviceApprove(userCode, false);
       return { denied: true };
     } catch (err) {
       console.error("Error denying device:", err);
@@ -132,7 +132,7 @@ export const lookupDeviceForm = form(deviceLookupSchema, async (data, issue) => 
   const { apiClient } = event.locals;
 
   try {
-    const deviceInfo = await apiClient.oauth.getDeviceInfo(data.user_code);
+    const deviceInfo = await apiClient.oAuth.getDeviceInfo(data.user_code);
     return {
       deviceInfo: {
         userCode: deviceInfo.userCode ?? data.user_code,

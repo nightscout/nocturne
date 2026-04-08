@@ -231,7 +231,6 @@ msgstr ""
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/tenants/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/setup/+page.svelte
@@ -9156,9 +9155,8 @@ msgstr ""
 #~ msgid "<0/> Tokens"
 #~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Password Resets <1/>"
-msgstr ""
+#~ msgid "<0/> Password Resets <1/>"
+#~ msgstr ""
 
 #~ msgid "Subjects"
 #~ msgstr ""
@@ -9251,35 +9249,26 @@ msgstr ""
 #~ msgid "<0/> Copy Token"
 #~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Pending Password Resets"
-msgstr ""
+#~ msgid "Pending Password Resets"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Review password reset requests and provide temporary access."
-msgstr ""
+#~ msgid "Review password reset requests and provide temporary access."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "No pending password reset requests"
-msgstr ""
+#~ msgid "No pending password reset requests"
+#~ msgstr ""
 
-#. placeholder {0}: request.requestedFromIp
-#: src/routes/settings/admin/+page.svelte
-msgid "IP: {0}"
-msgstr ""
+#~ msgid "IP: {0}"
+#~ msgstr ""
 
-#. placeholder {0}: formatDate(request.createdAt)
-#: src/routes/settings/admin/+page.svelte
-msgid "Requested: {0} <0/>"
-msgstr ""
+#~ msgid "Requested: {0} <0/>"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Set Password"
-msgstr ""
+#~ msgid "Set Password"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Generate Link"
-msgstr ""
+#~ msgid "Generate Link"
+#~ msgstr ""
 
 #~ msgid "New Subject"
 #~ msgstr ""
@@ -9382,12 +9371,10 @@ msgstr ""
 #~ msgstr ""
 
 #: src/routes/settings/admin/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/support/+page.svelte
 msgid "<0/> Copied!"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/support/+page.svelte
 msgid "<0/> Copy to Clipboard"
@@ -9406,7 +9393,6 @@ msgstr ""
 #: src/lib/components/ui/dialog/dialog-content.svelte
 #: src/lib/components/ui/sheet/sheet-content.svelte
 #: src/routes/settings/admin/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -9419,42 +9405,33 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Set Temporary Password"
-msgstr ""
+#~ msgid "Set Temporary Password"
+#~ msgstr ""
 
-#. placeholder {0}: selectedResetRequest?.email
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"Set a temporary password for {0}. They will be\n"
-"required to change it on next login."
-msgstr ""
+#~ msgid ""
+#~ "Set a temporary password for {0}. They will be\n"
+#~ "required to change it on next login."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Temporary Password"
-msgstr ""
+#~ msgid "Temporary Password"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Leave empty for no password"
-msgstr ""
+#~ msgid "Leave empty for no password"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"Leave empty to allow login with no password. The user must set a new\n"
-"password on their next login."
-msgstr ""
+#~ msgid ""
+#~ "Leave empty to allow login with no password. The user must set a new\n"
+#~ "password on their next login."
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Set Password"
-msgstr ""
+#~ msgid "<0/> Set Password"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Password Reset Link"
-msgstr ""
+#~ msgid "Password Reset Link"
+#~ msgstr ""
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Share this link securely with the user."
-msgstr ""
+#~ msgid "Share this link securely with the user."
+#~ msgstr ""
 
 #~ msgid "Alarms - Settings - Nocturne"
 #~ msgstr ""

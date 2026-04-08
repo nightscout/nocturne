@@ -1149,7 +1149,6 @@ msgstr "Delete the attribution entries entirely."
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/tenants/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/setup/+page.svelte
@@ -10702,9 +10701,8 @@ msgstr "Administration"
 #~ msgid "<0/> Tokens"
 #~ msgstr "<0/> Tokens"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Password Resets <1/>"
-msgstr "<0/> Password Resets <1/>"
+#~ msgid "<0/> Password Resets <1/>"
+#~ msgstr "<0/> Password Resets <1/>"
 
 #~ msgid "Subjects"
 #~ msgstr "Subjects"
@@ -10795,35 +10793,26 @@ msgstr "{0} permission{1}"
 #~ msgid "<0/> Copy Token"
 #~ msgstr "<0/> Copy Token"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Pending Password Resets"
-msgstr "Pending Password Resets"
+#~ msgid "Pending Password Resets"
+#~ msgstr "Pending Password Resets"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Review password reset requests and provide temporary access."
-msgstr "Review password reset requests and provide temporary access."
+#~ msgid "Review password reset requests and provide temporary access."
+#~ msgstr "Review password reset requests and provide temporary access."
 
-#: src/routes/settings/admin/+page.svelte
-msgid "No pending password reset requests"
-msgstr "No pending password reset requests"
+#~ msgid "No pending password reset requests"
+#~ msgstr "No pending password reset requests"
 
-#. placeholder {0}: request.requestedFromIp
-#: src/routes/settings/admin/+page.svelte
-msgid "IP: {0}"
-msgstr "IP: {0}"
+#~ msgid "IP: {0}"
+#~ msgstr "IP: {0}"
 
-#. placeholder {0}: formatDate(request.createdAt)
-#: src/routes/settings/admin/+page.svelte
-msgid "Requested: {0} <0/>"
-msgstr "Requested: {0} <0/>"
+#~ msgid "Requested: {0} <0/>"
+#~ msgstr "Requested: {0} <0/>"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Set Password"
-msgstr "Set Password"
+#~ msgid "Set Password"
+#~ msgstr "Set Password"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Generate Link"
-msgstr "Generate Link"
+#~ msgid "Generate Link"
+#~ msgstr "Generate Link"
 
 #~ msgid "New Subject"
 #~ msgstr "New Subject"
@@ -10941,12 +10930,10 @@ msgstr "Selected Permissions ({0})"
 #~ msgstr "Use this token to authenticate API requests."
 
 #: src/routes/settings/admin/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/support/+page.svelte
 msgid "<0/> Copied!"
 msgstr "<0/> Copied!"
 
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/support/+page.svelte
 msgid "<0/> Copy to Clipboard"
@@ -10965,7 +10952,6 @@ msgstr "<0/> Copy to Clipboard"
 #: src/lib/components/ui/dialog/dialog-content.svelte
 #: src/lib/components/ui/sheet/sheet-content.svelte
 #: src/routes/settings/admin/+page.svelte
-#: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -10974,46 +10960,37 @@ msgstr "<0/> Copy to Clipboard"
 msgid "Close"
 msgstr "Close"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Set Temporary Password"
-msgstr "Set Temporary Password"
+#~ msgid "Set Temporary Password"
+#~ msgstr "Set Temporary Password"
 
-#. placeholder {0}: selectedResetRequest?.email
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"Set a temporary password for {0}. They will be\n"
-"required to change it on next login."
-msgstr ""
-"Set a temporary password for {0}. They will be\n"
-"required to change it on next login."
+#~ msgid ""
+#~ "Set a temporary password for {0}. They will be\n"
+#~ "required to change it on next login."
+#~ msgstr ""
+#~ "Set a temporary password for {0}. They will be\n"
+#~ "required to change it on next login."
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Temporary Password"
-msgstr "Temporary Password"
+#~ msgid "Temporary Password"
+#~ msgstr "Temporary Password"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Leave empty for no password"
-msgstr "Leave empty for no password"
+#~ msgid "Leave empty for no password"
+#~ msgstr "Leave empty for no password"
 
-#: src/routes/settings/admin/+page.svelte
-msgid ""
-"Leave empty to allow login with no password. The user must set a new\n"
-"password on their next login."
-msgstr ""
-"Leave empty to allow login with no password. The user must set a new\n"
-"password on their next login."
+#~ msgid ""
+#~ "Leave empty to allow login with no password. The user must set a new\n"
+#~ "password on their next login."
+#~ msgstr ""
+#~ "Leave empty to allow login with no password. The user must set a new\n"
+#~ "password on their next login."
 
-#: src/routes/settings/admin/+page.svelte
-msgid "<0/> Set Password"
-msgstr "<0/> Set Password"
+#~ msgid "<0/> Set Password"
+#~ msgstr "<0/> Set Password"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Password Reset Link"
-msgstr "Password Reset Link"
+#~ msgid "Password Reset Link"
+#~ msgstr "Password Reset Link"
 
-#: src/routes/settings/admin/+page.svelte
-msgid "Share this link securely with the user."
-msgstr "Share this link securely with the user."
+#~ msgid "Share this link securely with the user."
+#~ msgstr "Share this link securely with the user."
 
 #: src/routes/settings/data-quality/+page.svelte
 msgid "Data Quality - Settings - Nocturne"

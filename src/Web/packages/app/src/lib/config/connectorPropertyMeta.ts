@@ -214,6 +214,33 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
     description: 'Number of days of historical data to retrieve',
     category: 'Sync',
   },
+  // OAuth and Webhooks
+  AccessToken: {
+    label: 'Access Token',
+    description: 'OAuth access token for the service',
+    category: 'Credentials',
+  },
+  WebhookEnabled: {
+    label: 'Webhook Enabled',
+    description: 'Enable real-time updates via webhooks',
+    category: 'Sync',
+  },
+  WebhookSecret: {
+    label: 'Webhook Secret',
+    description: 'Secret key for validating webhook requests',
+    category: 'Credentials',
+  },
+  // Write-back
+  WriteBackEnabled: {
+    label: 'Enable Write-back',
+    description: 'Allow writing data back to the source service',
+    category: 'Advanced',
+  },
+  WriteBackBatchSize: {
+    label: 'Write-back Batch Size',
+    description: 'Number of records to write back per batch',
+    category: 'Advanced',
+  },
 };
 
 /**

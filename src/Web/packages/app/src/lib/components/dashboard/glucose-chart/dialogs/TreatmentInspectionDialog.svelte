@@ -7,7 +7,7 @@
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import type { PredictionData } from "$api/predictions.remote";
   import type { BolusCalculation } from "$lib/api";
-  import { CalculationType2 } from "$lib/api";
+  import { CalculationType } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import { getAll as getBolusCalculations } from "$lib/api/generated/bolusCalculations.generated.remote";
@@ -108,11 +108,11 @@
   const calcTypeBadgeClass = $derived.by(() => {
     if (!bolusCalc?.calculationType) return "";
     switch (bolusCalc.calculationType) {
-      case CalculationType2.Suggested:
+      case CalculationType.Suggested:
         return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-      case CalculationType2.Manual:
+      case CalculationType.Manual:
         return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-      case CalculationType2.Automatic:
+      case CalculationType.Automatic:
         return "bg-green-500/20 text-green-400 border-green-500/30";
       default:
         return "bg-muted text-muted-foreground border-border";

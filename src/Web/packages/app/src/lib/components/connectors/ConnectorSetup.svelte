@@ -168,7 +168,7 @@
     isLoading = true;
     error = null;
     try {
-      servicesOverview = await getServicesOverview();
+      servicesOverview = (await getServicesOverview()) as ServicesOverview;
     } catch (e) {
       error =
         e instanceof Error ? e.message : "Failed to load available connectors";

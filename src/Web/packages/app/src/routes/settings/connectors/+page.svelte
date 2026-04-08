@@ -207,7 +207,7 @@
     try {
       const result = await getApiSecretStatus();
       if (result) {
-        apiSecretStatus = result;
+        apiSecretStatus = { hasSecret: result.hasSecret ?? false };
         canManageApiSecret = true;
       }
     } catch {

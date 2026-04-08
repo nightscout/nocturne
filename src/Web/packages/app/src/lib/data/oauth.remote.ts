@@ -18,7 +18,7 @@ export const getGrants = query(async () => {
   const { apiClient } = locals;
 
   try {
-    const response = await apiClient.oauth.getGrants();
+    const response = await apiClient.oAuth.getGrants();
     return response.grants ?? [];
   } catch (err) {
     console.error("Error loading grants:", err);
@@ -42,7 +42,7 @@ export const revokeGrant = command(
     const { apiClient } = locals;
 
     try {
-      await apiClient.oauth.deleteGrant(grantId);
+      await apiClient.oAuth.deleteGrant(grantId);
       await getGrants().refresh();
       return { success: true };
     } catch (err) {
@@ -66,7 +66,7 @@ export const updateGrant = command(
     const { apiClient } = locals;
 
     try {
-      await apiClient.oauth.updateGrant(grantId, {
+      await apiClient.oAuth.updateGrant(grantId, {
         label: label || undefined,
         scopes,
       });

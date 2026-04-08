@@ -58,9 +58,9 @@ export const getTenantRoles = query(async () => {
   const roleMap = new Map<string, { id: string; slug: string; name: string }>();
   for (const m of members) {
     for (const r of m.roles ?? []) {
-      if (r.id && r.slug) {
-        roleMap.set(r.id, {
-          id: r.id,
+      if (r.roleId && r.slug) {
+        roleMap.set(r.roleId, {
+          id: r.roleId,
           slug: r.slug ?? "",
           name: r.name ?? "",
         });

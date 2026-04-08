@@ -26,14 +26,13 @@ export async function checkOnboarding(
   try {
     const completedSteps: string[] = [];
 
-    // Query all 5 required checks in parallel using the v4 endpoints
-    const [patientRecord, devices, insulins, profileSummary, members] =
+    // Query all 4 required checks in parallel using the v4 endpoints
+    const [patientRecord, devices, insulins, profileSummary] =
       await Promise.all([
         apiClient.patientRecord.getPatientRecord().catch(() => null),
         apiClient.patientRecord.getDevices().catch(() => null),
         apiClient.patientRecord.getInsulins().catch(() => null),
         apiClient.profile.getProfileSummary().catch(() => null),
-        apiClient.memberInvites.getMembers().catch(() => null),
       ]);
 
     // 1. Patient: has a diabetes type set

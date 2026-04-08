@@ -17,7 +17,8 @@ import type {
   ServicesSettings,
   DataQualitySettings,
   SecuritySettings,
-} from "$lib/api/api-client";
+  ConnectedService,
+} from "$lib/api";
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
 import {
   createDefaultUserAlarmConfiguration,
@@ -317,7 +318,7 @@ export class SettingsStore {
   removeConnectedService(id: string): void {
     if (this.services?.connectedServices) {
       this.services.connectedServices = this.services.connectedServices.filter(
-        s => s.id !== id
+        (s: ConnectedService) => s.id !== id
       );
       this.markChanged();
     }
@@ -325,7 +326,7 @@ export class SettingsStore {
 
   syncService(id: string): void {
     if (this.services?.connectedServices) {
-      const service = this.services.connectedServices.find(s => s.id === id);
+      const service = this.services.connectedServices.find((s: ConnectedService) => s.id === id);
       if (service) {
         service.status = "syncing";
         // Simulate sync completion
