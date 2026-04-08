@@ -92,12 +92,17 @@ class Program
         var instanceKey = builder.AddParameter(
             ServiceNames.Parameters.InstanceKey, secret: true);
 
-        var discordBotToken    = builder.AddParameter("discord-bot-token",    secret: true);
-        var telegramBotToken   = builder.AddParameter("telegram-bot-token",   secret: true);
-        var slackBotToken      = builder.AddParameter("slack-bot-token",      secret: true);
-        var slackSigningSecret = builder.AddParameter("slack-signing-secret", secret: true);
-        var whatsappAccessToken = builder.AddParameter("whatsapp-access-token", secret: true);
-        var whatsappVerifyToken = builder.AddParameter("whatsapp-verify-token", secret: true);
+        var discordBotToken      = builder.AddParameter("discord-bot-token",      secret: true);
+        var discordPublicKey     = builder.AddParameter("discord-public-key",     secret: false);
+        var discordApplicationId = builder.AddParameter("discord-application-id", secret: false);
+        var telegramBotToken          = builder.AddParameter("telegram-bot-token",          secret: true);
+        var telegramWebhookSecretToken = builder.AddParameter("telegram-webhook-secret-token", secret: true);
+        var slackBotToken             = builder.AddParameter("slack-bot-token",             secret: true);
+        var slackSigningSecret        = builder.AddParameter("slack-signing-secret",        secret: true);
+        var whatsappAccessToken       = builder.AddParameter("whatsapp-access-token",       secret: true);
+        var whatsappVerifyToken       = builder.AddParameter("whatsapp-verify-token",       secret: true);
+        var whatsappAppSecret         = builder.AddParameter("whatsapp-app-secret",         secret: true);
+        var whatsappPhoneNumberId     = builder.AddParameter("whatsapp-phone-number-id",    secret: false);
 
         // ------------------------------------------------------------------
         // Nocturne API
@@ -155,12 +160,17 @@ class Program
                 .WithEnvironment("PUBLIC_API_URL",   api.GetEndpoint("api"))
                 .WithEnvironment("NOCTURNE_API_URL", api.GetEndpoint("api"))
                 .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey)
-                .WithEnvironment("DISCORD_BOT_TOKEN",     discordBotToken)
-                .WithEnvironment("TELEGRAM_BOT_TOKEN",    telegramBotToken)
-                .WithEnvironment("SLACK_BOT_TOKEN",       slackBotToken)
-                .WithEnvironment("SLACK_SIGNING_SECRET",  slackSigningSecret)
-                .WithEnvironment("WHATSAPP_ACCESS_TOKEN", whatsappAccessToken)
-                .WithEnvironment("WHATSAPP_VERIFY_TOKEN", whatsappVerifyToken);
+                .WithEnvironment("DISCORD_BOT_TOKEN",      discordBotToken)
+                .WithEnvironment("DISCORD_PUBLIC_KEY",     discordPublicKey)
+                .WithEnvironment("DISCORD_APPLICATION_ID", discordApplicationId)
+                .WithEnvironment("TELEGRAM_BOT_TOKEN",             telegramBotToken)
+                .WithEnvironment("TELEGRAM_WEBHOOK_SECRET_TOKEN",  telegramWebhookSecretToken)
+                .WithEnvironment("SLACK_BOT_TOKEN",                slackBotToken)
+                .WithEnvironment("SLACK_SIGNING_SECRET",           slackSigningSecret)
+                .WithEnvironment("WHATSAPP_ACCESS_TOKEN",          whatsappAccessToken)
+                .WithEnvironment("WHATSAPP_VERIFY_TOKEN",          whatsappVerifyToken)
+                .WithEnvironment("WHATSAPP_APP_SECRET",            whatsappAppSecret)
+                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID",       whatsappPhoneNumberId);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
             // OTEL_EXPORTER_OTLP_ENDPOINT is injected by Aspire automatically.
         }
