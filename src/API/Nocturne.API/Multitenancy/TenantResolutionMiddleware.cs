@@ -50,14 +50,26 @@ public class TenantResolutionMiddleware
         var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
                    ?? context.Request.Host.Host;
         var slug = ExtractSubdomain(host);
+        var path = context.Request.Path.Value ?? "";
+        var isTenantlessAllowedPath = TenantlessAllowedPaths.Any(
+            p => path.Equals(p, StringComparison.OrdinalIgnoreCase));
+
+        // Tenantless-allowed paths on the apex (no slug) operate across tenants
+        // and must not fall through to the IsDefault tenant — otherwise any
+        // deployment with a default tenant blocks cross-tenant endpoints like
+        // /api/v4/chat-identity/directory/pending-links behind TenantSetupMiddleware.
+        if (slug == null && isTenantlessAllowedPath)
+        {
+            await _next(context);
+            return;
+        }
 
         var tenantContext = await ResolveTenantAsync(context.RequestServices, slug);
 
         if (tenantContext == null)
         {
             // Allow tenantless paths through without a resolved tenant
-            var path = context.Request.Path.Value ?? "";
-            if (TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)))
+            if (isTenantlessAllowedPath)
             {
                 await _next(context);
                 return;

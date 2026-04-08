@@ -604,6 +604,27 @@ public class TenantIsolationTests
     }
 
     [Fact]
+    public async Task TenantResolutionMiddleware_TenantlessAllowedPath_NoSubdomain_SkipsDefaultTenantFallback()
+    {
+        // Regression: cross-tenant endpoints (e.g. bot pending-link creation)
+        // hit the apex with no slug. They must NOT resolve to the IsDefault
+        // tenant — otherwise TenantSetupMiddleware blocks them with 503
+        // setup_required when the default tenant has no passkey credentials.
+        var defaultId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        var nextCalled = false;
+        var middleware = CreateMiddlewareWithNext(
+            _ => { nextCalled = true; return Task.CompletedTask; },
+            tenants: new[] { ("default", defaultId, true, true) });
+
+        var context = CreateMiddlewareHttpContext("nocturnecgm.com");
+        context.Request.Path = "/api/v4/chat-identity/directory/pending-links";
+        await middleware.InvokeAsync(context);
+
+        nextCalled.Should().BeTrue();
+        context.Items.ContainsKey("TenantContext").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task TenantResolutionMiddleware_BaseDomainWithPort_NoSubdomain_ResolvesDefault()
     {
         var defaultId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
