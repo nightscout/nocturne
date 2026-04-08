@@ -1,4 +1,4 @@
-import { createBot, AlertDeliveryHandler, type BotOptions } from "@nocturne/bot";
+import { createBot, registerAllCommands, AlertDeliveryHandler, type BotOptions } from "@nocturne/bot";
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
 import { env } from "$env/dynamic/private";
 
@@ -21,6 +21,10 @@ export function getBot(): Bot {
 			postgresUrl: process.env["ConnectionStrings__nocturne-postgres"] ?? "",
 		};
 		botInstance = createBot(options);
+		// No dedicated public-URL env var exists yet; fall back to SvelteKit's
+		// ORIGIN (set in adapter-node configs). If empty, the /connect command
+		// will produce a relative authorize link.
+		registerAllCommands(botInstance, env.ORIGIN ?? "");
 	}
 	return botInstance;
 }
