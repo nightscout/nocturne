@@ -13,6 +13,8 @@ const storage = new AsyncLocalStorage<BotRequestStore>();
  * through async-task inheritance, so handlers that run detached from the
  * original call (as the Discord adapter does) still see it correctly.
  */
+export function runWithApi<T>(api: BotApiClient, fn: () => Promise<T>): Promise<T>;
+export function runWithApi<T>(api: BotApiClient, fn: () => T): T;
 export function runWithApi<T>(api: BotApiClient, fn: () => T | Promise<T>): T | Promise<T> {
   return storage.run({ api }, fn);
 }
