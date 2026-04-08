@@ -15,7 +15,10 @@ export function getBot(): Bot {
 				telegram: !!env.TELEGRAM_BOT_TOKEN,
 				whatsapp: !!env.WHATSAPP_ACCESS_TOKEN,
 			},
-			postgresUrl: env.ConnectionStrings__nocturne_postgres ?? "",
+			// Aspire injects the connection string with a hyphen (matching the
+			// resource name), which is not a valid JS identifier, so we can't
+			// access it via $env/dynamic/private. Read it from process.env.
+			postgresUrl: process.env["ConnectionStrings__nocturne-postgres"] ?? "",
 		};
 		botInstance = createBot(options);
 	}
