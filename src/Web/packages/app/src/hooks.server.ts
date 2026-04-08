@@ -174,13 +174,17 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
 
   const pathname = event.url.pathname;
 
-  // Skip the status probe entirely for static assets and for pages that ARE
-  // the setup/recovery/auth destinations — probing those would cause infinite
-  // redirect loops (503 → redirect to setup → probe → 503 → redirect …).
+  // Skip the status probe entirely for static assets, for pages that ARE
+  // the setup/recovery/auth destinations (probing those would cause infinite
+  // redirect loops), and for external webhook/bot endpoints that must respond
+  // regardless of setup state — third-party services like Discord cannot
+  // follow HTML redirects and will treat any non-2xx as a hard failure.
   const skipProbe =
     STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/settings/setup") ||
-    pathname.startsWith("/auth");
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api/v4/webhooks") ||
+    pathname.startsWith("/api/v4/bot");
 
   if (skipProbe) {
     return resolve(event);
