@@ -1,12 +1,13 @@
 import type { Chat } from "chat";
-import type { BotApiClient } from "../types.js";
 import { createLogger } from "../lib/logger.js";
+import { getApi } from "../lib/request-context.js";
 
 const logger = createLogger();
 
-export function registerAlertCommands(bot: Chat, api: BotApiClient) {
+export function registerAlertCommands(bot: Chat) {
   bot.onAction("ack_alert", async (event) => {
     try {
+      const api = getApi();
       await api.alerts.acknowledge({ acknowledgedBy: event.user.fullName ?? "Unknown" });
       await event.thread?.post("All alerts acknowledged.");
     } catch (err) {

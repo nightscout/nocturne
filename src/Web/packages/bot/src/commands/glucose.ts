@@ -1,13 +1,14 @@
 import type { Chat } from "chat";
-import type { BotApiClient } from "../types.js";
 import { GlucoseCard } from "../cards/glucose.js";
 import { createLogger } from "../lib/logger.js";
+import { getApi } from "../lib/request-context.js";
 
 const logger = createLogger();
 
-export function registerGlucoseCommands(bot: Chat, api: BotApiClient) {
+export function registerGlucoseCommands(bot: Chat) {
   const handleBg = async (channel: { post(msg: any): Promise<any> }) => {
     try {
+      const api = getApi();
       const result = await api.sensorGlucose.getAll(undefined, undefined, 1);
       const readings = result.data ?? [];
 
