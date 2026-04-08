@@ -4,6 +4,7 @@ export { AlertCard, AcknowledgedCard, ResolvedCard } from "./cards/alert.js";
 export { GlucoseCard } from "./cards/glucose.js";
 export { registerAllCommands } from "./commands/index.js";
 export { createStateToken, resolveStateToken } from "./lib/state-tokens.js";
+export { runWithApi, getApi } from "./lib/request-context.js";
 export { formatGlucose, trendArrow, TREND_ARROWS } from "./lib/format.js";
 export type {
   BotApiClient,
