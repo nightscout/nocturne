@@ -15,10 +15,17 @@ export function getBot(): Bot {
 				telegram: !!env.TELEGRAM_BOT_TOKEN,
 				whatsapp: !!env.WHATSAPP_ACCESS_TOKEN,
 			},
-			// Aspire injects the connection string with a hyphen (matching the
-			// resource name), which is not a valid JS identifier, so we can't
-			// access it via $env/dynamic/private. Read it from process.env.
-			postgresUrl: process.env["ConnectionStrings__nocturne-postgres"] ?? "",
+			// The bot adapter expects a postgresql:// URL, not the .NET-style
+			// ConnectionStrings__nocturne-postgres value Aspire injects (which
+			// is Host=...;Port=...;Database=... key/value format and causes
+			// the pg client to resolve literal strings like "base" as hostnames).
+			// Aspire also injects NOCTURNE_POSTGRES_URI in standard URL form,
+			// which is what we want. Fall back to DATABASE_URL for non-Aspire
+			// deployments.
+			postgresUrl:
+				process.env.NOCTURNE_POSTGRES_URI ??
+				process.env.DATABASE_URL ??
+				"",
 		};
 		botInstance = createBot(options);
 		// No dedicated public-URL env var exists yet; fall back to SvelteKit's
