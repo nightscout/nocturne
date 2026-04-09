@@ -16,10 +16,10 @@
     </p>
 
     <div class="p-4 rounded-lg border border-amber-500/30 bg-amber-500/5 text-sm text-foreground mb-8">
-        <p class="font-medium mb-1">Two non-privileged roles are required</p>
+        <p class="font-medium mb-1">Three non-privileged roles are required</p>
         <p class="text-muted-foreground">
             Nocturne enforces Row Level Security on every medical-data table. RLS is only meaningful
-            when the runtime connection cannot bypass it, so Nocturne requires two separate roles:
+            when the runtime connection cannot bypass it, so Nocturne requires three separate roles:
         </p>
         <ul class="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
             <li>
@@ -28,7 +28,13 @@
             </li>
             <li>
                 <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_app</code> —
-                runtime connection. Cannot bypass RLS and has no DDL privileges.
+                runtime connection for the .NET API. Cannot bypass RLS and has no DDL privileges.
+            </li>
+            <li>
+                <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_web</code> —
+                used by the SvelteKit web app's bot framework to store chat-platform state. Owns
+                only its own <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">chat_state_*</code>
+                tables (not tenant-scoped, no PHI).
             </li>
         </ul>
     </div>
@@ -43,7 +49,7 @@
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">docs/postgres/</code>.
         </li>
         <li>
-            Edit the file and replace the two
+            Edit the file and replace the three
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">REPLACE_ME</code>
             passwords with strong values from your secrets manager.
         </li>
@@ -52,7 +58,7 @@
             <pre class="mt-2 p-3 rounded-lg bg-muted/50 border border-border/60 text-sm overflow-x-auto"><code>psql -U &lt;superuser&gt; -d &lt;nocturne-database&gt; -f bootstrap-roles.sql</code></pre>
         </li>
         <li>
-            Set two connection strings in Nocturne's environment:
+            Set three connection strings in Nocturne's environment:
             <ul class="list-disc pl-5 mt-2 space-y-1">
                 <li>
                     <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">ConnectionStrings__nocturne-postgres</code>
@@ -61,6 +67,12 @@
                 <li>
                     <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">ConnectionStrings__nocturne-postgres-migrator</code>
                     — use the <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_migrator</code> role.
+                </li>
+                <li>
+                    <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">NOCTURNE_POSTGRES_URI</code>
+                    — a <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">postgresql://</code>
+                    URL for the <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_web</code>
+                    role (consumed by the SvelteKit bot state adapter).
                 </li>
             </ul>
         </li>

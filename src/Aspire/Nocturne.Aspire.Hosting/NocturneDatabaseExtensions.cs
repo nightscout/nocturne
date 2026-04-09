@@ -19,6 +19,41 @@ public static class NocturneDatabaseExtensions
     public const string MigratorConnectionStringName = "nocturne-postgres-migrator";
 
     /// <summary>
+    /// Injects a NOCTURNE_POSTGRES_URI environment variable on the target
+    /// resource using the nocturne_web PostgreSQL role. The SvelteKit web
+    /// app's bot framework (@chat-adapter/state-pg) needs a postgresql://
+    /// URL (it cannot parse the .NET key/value form) and connects as a
+    /// least-privileged role that owns only its own chat_state_* tables.
+    /// </summary>
+    public static IResourceBuilder<T> WithNocturneWebDatabase<T>(
+        this IResourceBuilder<T> resource,
+        IResourceBuilder<PostgresServerResource> postgres,
+        string databaseName,
+        IResourceBuilder<ParameterResource> webPassword)
+        where T : IResourceWithEnvironment
+    {
+        var endpoint = postgres.Resource.PrimaryEndpoint;
+
+        var uri = ReferenceExpression.Create(
+            $"postgresql://nocturne_web:{webPassword.Resource}@{endpoint.Property(EndpointProperty.Host)}:{endpoint.Property(EndpointProperty.Port)}/{databaseName}");
+
+        return resource.WithEnvironment("NOCTURNE_POSTGRES_URI", uri);
+    }
+
+    /// <summary>
+    /// Injects NOCTURNE_POSTGRES_URI for bring-your-own PostgreSQL setups.
+    /// The operator provides a postgresql:// URL pointing at the
+    /// nocturne_web role created by docs/postgres/bootstrap-roles.sql.
+    /// </summary>
+    public static IResourceBuilder<T> WithNocturneWebRemoteDatabase<T>(
+        this IResourceBuilder<T> resource,
+        string webUri)
+        where T : IResourceWithEnvironment
+    {
+        return resource.WithEnvironment("NOCTURNE_POSTGRES_URI", webUri);
+    }
+
+    /// <summary>
     /// Injects two ConnectionStrings__ environment variables on the target
     /// resource, one per PostgreSQL role. Host and Port are pulled from the
     /// managed Postgres container's primary endpoint.

@@ -13,6 +13,20 @@
 --                      disable or alter RLS policies. Has NOBYPASSRLS, so
 --                      tenant_isolation policies are always enforced.
 --
+--   nocturne_web       Used by the SvelteKit web app's bot framework to
+--                      store chat-platform state in `chat_state_*` tables
+--                      (subscriptions, locks, cache, lists) created on
+--                      first run by `@chat-adapter/state-pg`. These tables
+--                      are intentionally NOT tenant-scoped and NOT covered
+--                      by RLS: they are keyed by chat-platform identifiers
+--                      (Discord user ID, Telegram chat ID, etc.) and hold
+--                      no PHI. PHI is only ever fetched over HTTP through
+--                      the Nocturne API, which enforces RLS server-side.
+--                      The role still has NOBYPASSRLS as defense in depth,
+--                      so if a bug ever caused it to SELECT a tenant table,
+--                      the unset `app.current_tenant_id` GUC would make the
+--                      query return zero rows.
+--
 -- Run this file ONCE per database, as a PostgreSQL superuser, BEFORE
 -- starting Nocturne for the first time. Aspire and the self-hosted
 -- docker-compose bundle run an equivalent script automatically via the
@@ -41,10 +55,12 @@ DO $$
 DECLARE
     migrator_password text := 'REPLACE_ME_MIGRATOR_PASSWORD';
     app_password text := 'REPLACE_ME_APP_PASSWORD';
+    web_password text := 'REPLACE_ME_WEB_PASSWORD';
     current_db text := current_database();
 BEGIN
     IF migrator_password = 'REPLACE_ME_MIGRATOR_PASSWORD'
-       OR app_password = 'REPLACE_ME_APP_PASSWORD' THEN
+       OR app_password = 'REPLACE_ME_APP_PASSWORD'
+       OR web_password = 'REPLACE_ME_WEB_PASSWORD' THEN
         RAISE EXCEPTION
             'You must edit bootstrap-roles.sql and replace the REPLACE_ME passwords before running it.';
     END IF;
@@ -71,6 +87,20 @@ BEGIN
             app_password);
     END IF;
 
+    -- nocturne_web: SvelteKit web app's bot-framework state storage.
+    -- Needs CREATE on schema public so @chat-adapter/state-pg can create
+    -- its `chat_state_*` tables on first run. Those tables are not
+    -- tenant-scoped and are owned by nocturne_web, not nocturne_migrator.
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nocturne_web') THEN
+        EXECUTE format(
+            'CREATE ROLE nocturne_web LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD %L',
+            web_password);
+    ELSE
+        EXECUTE format(
+            'ALTER ROLE nocturne_web LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD %L',
+            web_password);
+    END IF;
+
     -- Hand ownership of the current database and the public schema to the
     -- migrator so it can run DDL. If the database already has tables owned
     -- by a different user, run REASSIGN OWNED BY <that user> TO nocturne_migrator
@@ -81,6 +111,12 @@ BEGIN
     -- Runtime role needs to connect and use the schema, but nothing more.
     EXECUTE format('GRANT CONNECT ON DATABASE %I TO nocturne_app', current_db);
     EXECUTE 'GRANT USAGE ON SCHEMA public TO nocturne_app';
+
+    -- Web role needs CREATE on public so the bot state adapter can create
+    -- its `chat_state_*` tables on first run. It will own those tables; the
+    -- migrator does not touch them.
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO nocturne_web', current_db);
+    EXECUTE 'GRANT USAGE, CREATE ON SCHEMA public TO nocturne_web';
 
     -- Default privileges: any object created by nocturne_migrator in schema
     -- public automatically grants CRUD to nocturne_app. This is scoped with

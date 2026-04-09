@@ -47,8 +47,10 @@ class Program
         IResourceBuilder<PostgresDatabaseResource>? managedDatabase = null;
         IResourceBuilder<ParameterResource>? postgresAppPassword = null;
         IResourceBuilder<ParameterResource>? postgresMigratorPassword = null;
+        IResourceBuilder<ParameterResource>? postgresWebPassword = null;
         string? remoteAppConnectionString = null;
         string? remoteMigratorConnectionString = null;
+        string? remoteWebUri = null;
         var dbName = builder.Configuration["Parameters:postgres-database"]
             ?? ServiceNames.Defaults.PostgresDatabase;
 
@@ -68,6 +70,8 @@ class Program
                 ServiceNames.Parameters.PostgresMigratorPassword, secret: true);
             postgresAppPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresAppPassword, secret: true);
+            postgresWebPassword = builder.AddParameter(
+                ServiceNames.Parameters.PostgresWebPassword, secret: true);
 
             // Container init lives in docs/postgres/container-init. Only
             // 00-init.sh is mounted into /docker-entrypoint-initdb.d so the
@@ -93,7 +97,8 @@ class Program
                 // is a no-op once the database already exists.
                 .WithEnvironment("POSTGRES_DB", dbName)
                 .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", postgresMigratorPassword)
-                .WithEnvironment("NOCTURNE_APP_PASSWORD", postgresAppPassword);
+                .WithEnvironment("NOCTURNE_APP_PASSWORD", postgresAppPassword)
+                .WithEnvironment("NOCTURNE_WEB_PASSWORD", postgresWebPassword);
 
             if (builder.Environment.IsDevelopment())
             {
@@ -108,6 +113,7 @@ class Program
             postgresPassword.WithParentRelationship(postgres);
             postgresMigratorPassword.WithParentRelationship(postgres);
             postgresAppPassword.WithParentRelationship(postgres);
+            postgresWebPassword.WithParentRelationship(postgres);
         }
         else
         {
@@ -115,15 +121,19 @@ class Program
                 ServiceNames.PostgreSql);
             remoteMigratorConnectionString = builder.Configuration.GetConnectionString(
                 $"{ServiceNames.PostgreSql}-migrator");
+            remoteWebUri = builder.Configuration.GetConnectionString(
+                $"{ServiceNames.PostgreSql}-web");
 
             if (string.IsNullOrWhiteSpace(remoteAppConnectionString)
-                || string.IsNullOrWhiteSpace(remoteMigratorConnectionString))
+                || string.IsNullOrWhiteSpace(remoteMigratorConnectionString)
+                || string.IsNullOrWhiteSpace(remoteWebUri))
             {
                 throw new InvalidOperationException(
-                    $"Remote database enabled but both connection strings must be provided: " +
-                    $"'ConnectionStrings:{ServiceNames.PostgreSql}' (runtime app role) and " +
-                    $"'ConnectionStrings:{ServiceNames.PostgreSql}-migrator' (schema migrator role). " +
-                    "See docs/postgres/bootstrap-roles.sql to create the two roles.");
+                    $"Remote database enabled but three connection strings must be provided: " +
+                    $"'ConnectionStrings:{ServiceNames.PostgreSql}' (runtime app role), " +
+                    $"'ConnectionStrings:{ServiceNames.PostgreSql}-migrator' (schema migrator role), and " +
+                    $"'ConnectionStrings:{ServiceNames.PostgreSql}-web' (web bot-state role, postgresql:// URL). " +
+                    "See docs/postgres/bootstrap-roles.sql to create the three roles.");
             }
         }
 
@@ -274,6 +284,14 @@ class Program
                 .WithReference(bridge);
 
             ConfigureWebEnvironment(viteWeb);
+            if (postgresServer != null && postgresWebPassword != null)
+            {
+                viteWeb.WithNocturneWebDatabase(postgresServer, dbName, postgresWebPassword);
+            }
+            else if (remoteWebUri != null)
+            {
+                viteWeb.WithNocturneWebRemoteDatabase(remoteWebUri);
+            }
             bridge.WithParentRelationship(viteWeb);
             instanceKey.WithParentRelationship(viteWeb);
             web = viteWeb;
@@ -288,6 +306,14 @@ class Program
                 .WithRemoteImageTag("latest");
 
             ConfigureWebEnvironment(dockerWeb);
+            if (postgresServer != null && postgresWebPassword != null)
+            {
+                dockerWeb.WithNocturneWebDatabase(postgresServer, dbName, postgresWebPassword);
+            }
+            else if (remoteWebUri != null)
+            {
+                dockerWeb.WithNocturneWebRemoteDatabase(remoteWebUri);
+            }
             instanceKey.WithParentRelationship(dockerWeb);
             web = dockerWeb;
         }

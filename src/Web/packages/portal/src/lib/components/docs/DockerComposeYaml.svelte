@@ -16,6 +16,7 @@
       POSTGRES_PASSWORD: "\${POSTGRES_PASSWORD}"
       NOCTURNE_MIGRATOR_PASSWORD: "\${NOCTURNE_MIGRATOR_PASSWORD}"
       NOCTURNE_APP_PASSWORD: "\${NOCTURNE_APP_PASSWORD}"
+      NOCTURNE_WEB_PASSWORD: "\${NOCTURNE_WEB_PASSWORD}"
     expose:
       - "5432"
     volumes:
@@ -76,6 +77,7 @@ volumes:
       POSTGRES_PASSWORD: "\${POSTGRES_PASSWORD}"
       NOCTURNE_MIGRATOR_PASSWORD: "\${NOCTURNE_MIGRATOR_PASSWORD}"
       NOCTURNE_APP_PASSWORD: "\${NOCTURNE_APP_PASSWORD}"
+      NOCTURNE_WEB_PASSWORD: "\${NOCTURNE_WEB_PASSWORD}"
     expose:
       - "5432"
     volumes:
@@ -171,14 +173,17 @@ volumes:
 
     const envTemplate = `# Core settings
 # Bootstrap superuser — only used by the Postgres image at first start to
-# create nocturne_migrator and nocturne_app via the bundled pg-init/00-init.sh.
+# create nocturne_migrator, nocturne_app, and nocturne_web via the bundled
+# pg-init/00-init.sh.
 POSTGRES_USERNAME=nocturne_bootstrap
 POSTGRES_PASSWORD=change-me-bootstrap-password
 # Nocturne runtime roles. The migrator owns the schema and runs migrations;
 # the app role runs at request time with NOBYPASSRLS so Row Level Security
-# enforces tenant isolation. Do not reuse the bootstrap password here.
+# enforces tenant isolation; the web role owns the SvelteKit bot framework's
+# chat_state_* tables. Do not reuse the bootstrap password here.
 NOCTURNE_MIGRATOR_PASSWORD=change-me-migrator-password
 NOCTURNE_APP_PASSWORD=change-me-app-password
+NOCTURNE_WEB_PASSWORD=change-me-web-password
 INSTANCE_KEY=change-me-min-12-characters
 NOCTURNE_API_PORT=8443
 NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne-api:latest
@@ -202,13 +207,16 @@ LIBRELINKUP_REGION=eu`;
 
 <div class="space-y-6 mb-8">
     <div class="p-4 rounded-lg border border-amber-500/30 bg-amber-500/5 text-sm text-foreground">
-        <p class="font-medium mb-1">Two-role PostgreSQL setup</p>
+        <p class="font-medium mb-1">Three-role PostgreSQL setup</p>
         <p class="text-muted-foreground">
-            Nocturne uses two separate PostgreSQL users for defense-in-depth against PHI leakage.
+            Nocturne uses three separate PostgreSQL users for defense-in-depth against PHI leakage.
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_migrator</code> runs schema
             migrations; <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_app</code> runs at
-            request time with no DDL privileges and cannot bypass Row Level Security. The init script
-            mounted at <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">./pg-init</code> creates both
+            request time with no DDL privileges and cannot bypass Row Level Security;
+            <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">nocturne_web</code> owns the
+            SvelteKit bot framework's <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">chat_state_*</code>
+            tables. The init script mounted at
+            <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">./pg-init</code> creates all three
             roles at first container start. Do not consolidate them.
         </p>
     </div>

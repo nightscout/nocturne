@@ -428,19 +428,22 @@ public class DockerComposeGenerator
             values[portEnvVar] = "8080";
         }
 
-        // Database configuration. Nocturne uses two non-privileged roles
-        // (nocturne_migrator + nocturne_app) for RLS defense in depth. The
-        // Postgres container's init script (docs/postgres/00-init.sh, copied
-        // into the compose bundle) creates both roles at first start using
-        // the NOCTURNE_MIGRATOR_PASSWORD and NOCTURNE_APP_PASSWORD env vars.
+        // Database configuration. Nocturne uses three non-privileged roles
+        // (nocturne_migrator + nocturne_app + nocturne_web) for RLS defense
+        // in depth. The Postgres container's init script
+        // (docs/postgres/container-init/00-init.sh, copied into the compose
+        // bundle) creates all three at first start using the
+        // NOCTURNE_MIGRATOR_PASSWORD, NOCTURNE_APP_PASSWORD, and
+        // NOCTURNE_WEB_PASSWORD env vars.
         if (request.Postgres.UseContainer)
         {
             var bootstrapPassword = GenerateSecurePassword();
             var migratorPassword = GenerateSecurePassword();
             var appPassword = GenerateSecurePassword();
+            var webPassword = GenerateSecurePassword();
 
             // Bootstrap superuser — only used by the Postgres image to create
-            // nocturne_migrator and nocturne_app at first container start.
+            // the non-privileged roles at first container start.
             values["POSTGRES_USERNAME"] = "nocturne_bootstrap";
             values["POSTGRES_PASSWORD"] = bootstrapPassword;
 
@@ -448,22 +451,29 @@ public class DockerComposeGenerator
             // services via the connection strings below.
             values["NOCTURNE_MIGRATOR_PASSWORD"] = migratorPassword;
             values["NOCTURNE_APP_PASSWORD"] = appPassword;
+            values["NOCTURNE_WEB_PASSWORD"] = webPassword;
 
             values["NOCTURNE_POSTGRES"] =
                 $"Host=nocturne-postgres-server;Port=5432;Username=nocturne_app;Password={appPassword};Database=nocturne";
             values["NOCTURNE_POSTGRES_MIGRATOR"] =
                 $"Host=nocturne-postgres-server;Port=5432;Username=nocturne_migrator;Password={migratorPassword};Database=nocturne";
+            // Web uses the standard postgresql:// URL form — the SvelteKit
+            // bot state adapter (@chat-adapter/state-pg) cannot parse .NET
+            // key/value connection strings.
+            values["NOCTURNE_POSTGRES_URI"] =
+                $"postgresql://nocturne_web:{webPassword}@nocturne-postgres-server:5432/nocturne";
         }
         else if (!string.IsNullOrEmpty(request.Postgres.ConnectionString))
         {
             values["NOCTURNE_POSTGRES"] = request.Postgres.ConnectionString;
             // Bring-your-own Postgres: the operator must also provide a
-            // migrator connection string (using the nocturne_migrator role
-            // created via docs/postgres/bootstrap-roles.sql). The portal UI
-            // currently only collects a single connection string, so leave a
-            // placeholder the operator will see before deploying.
+            // migrator connection string and a web URI (for the nocturne_web
+            // role created via docs/postgres/bootstrap-roles.sql). The
+            // portal UI currently only collects a single connection string.
             values["NOCTURNE_POSTGRES_MIGRATOR"] =
                 "# TODO: set to a nocturne_migrator connection string. See /docs/installation/byo-postgres";
+            values["NOCTURNE_POSTGRES_URI"] =
+                "# TODO: set to a postgresql:// URL for the nocturne_web role. See /docs/installation/byo-postgres";
         }
 
         // API Secret - generate if not provided
@@ -541,16 +551,21 @@ public class DockerComposeGenerator
             var bootstrapPassword = GenerateSecurePassword();
             var migratorPassword = GenerateSecurePassword();
             var appPassword = GenerateSecurePassword();
+            var webPassword = GenerateSecurePassword();
             sb.AppendLine("# PostgreSQL Configuration");
             sb.AppendLine("POSTGRES_USERNAME=nocturne_bootstrap");
             sb.AppendLine($"POSTGRES_PASSWORD={bootstrapPassword}");
             sb.AppendLine($"NOCTURNE_MIGRATOR_PASSWORD={migratorPassword}");
             sb.AppendLine($"NOCTURNE_APP_PASSWORD={appPassword}");
+            sb.AppendLine($"NOCTURNE_WEB_PASSWORD={webPassword}");
             sb.AppendLine(
                 $"NOCTURNE_POSTGRES=Host=nocturne-postgres-server;Port=5432;Username=nocturne_app;Password={appPassword};Database=nocturne"
             );
             sb.AppendLine(
                 $"NOCTURNE_POSTGRES_MIGRATOR=Host=nocturne-postgres-server;Port=5432;Username=nocturne_migrator;Password={migratorPassword};Database=nocturne"
+            );
+            sb.AppendLine(
+                $"NOCTURNE_POSTGRES_URI=postgresql://nocturne_web:{webPassword}@nocturne-postgres-server:5432/nocturne"
             );
         }
         else
@@ -561,6 +576,10 @@ public class DockerComposeGenerator
                 "# TODO: set to a nocturne_migrator connection string. See /docs/installation/byo-postgres"
             );
             sb.AppendLine("NOCTURNE_POSTGRES_MIGRATOR=");
+            sb.AppendLine(
+                "# TODO: set to a postgresql:// URL for the nocturne_web role. See /docs/installation/byo-postgres"
+            );
+            sb.AppendLine("NOCTURNE_POSTGRES_URI=");
         }
         sb.AppendLine();
 

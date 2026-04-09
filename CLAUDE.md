@@ -133,6 +133,13 @@ Two roles are used:
 
 - `nocturne_migrator` — owns the schema, runs migrations. NOSUPERUSER NOBYPASSRLS.
 - `nocturne_app` — runtime DbContext pool. Owns nothing. NOSUPERUSER NOBYPASSRLS.
+- `nocturne_web` — SvelteKit web app's bot-framework state (`chat_state_*`
+  tables created on first run by `@chat-adapter/state-pg`). Owns only those
+  tables. NOSUPERUSER NOBYPASSRLS. The `chat_state_*` tables are
+  intentionally NOT tenant-scoped and NOT covered by RLS — they're keyed by
+  chat-platform IDs (Discord user ID, Telegram chat ID, etc.) and hold no
+  PHI. PHI is only ever fetched over HTTP through the Nocturne API, which
+  enforces RLS server-side. NOBYPASSRLS on the role is defense in depth.
 
 FORCE ROW LEVEL SECURITY is enabled on every tenant-scoped table, so even
 the migrator obeys policies. **Data migrations cannot SELECT or UPDATE

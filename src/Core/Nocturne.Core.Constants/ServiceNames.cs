@@ -37,6 +37,7 @@ public static class ServiceNames
         public const string PostgresPassword = "postgres-password";
         public const string PostgresMigratorPassword = "postgres-migrator-password";
         public const string PostgresAppPassword = "postgres-app-password";
+        public const string PostgresWebPassword = "postgres-web-password";
         public const string InstanceKey = "instance-key";
     }
 
