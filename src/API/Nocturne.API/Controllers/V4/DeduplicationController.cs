@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models;
 
@@ -13,6 +14,7 @@ namespace Nocturne.API.Controllers.V4;
 [Route("api/v4/admin/deduplication")]
 [Produces("application/json")]
 [Tags("V4 Deduplication")]
+[AllowDuringSetup]
 public class DeduplicationController : ControllerBase
 {
     private readonly IDeduplicationService _deduplicationService;

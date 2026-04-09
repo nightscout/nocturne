@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -64,6 +65,7 @@ public class MyTenantsController : ControllerBase
 
     [HttpGet("validate-slug")]
     [AllowAnonymous]
+    [AllowDuringSetup]
     [RemoteQuery]
     [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ValidateSlug([FromQuery] string slug, CancellationToken ct)

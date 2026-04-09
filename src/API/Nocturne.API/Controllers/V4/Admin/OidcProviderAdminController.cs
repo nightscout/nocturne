@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -14,6 +15,7 @@ namespace Nocturne.API.Controllers.V4.Admin;
 [Route("api/v4/admin/oidc-providers")]
 [Produces("application/json")]
 [Authorize(Roles = "platform_admin")]
+[AllowDuringSetup]
 public class OidcProviderAdminController : ControllerBase
 {
     private readonly IOidcProviderService _providerService;

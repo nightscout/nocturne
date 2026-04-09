@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Core.Constants;
@@ -17,6 +18,7 @@ namespace Nocturne.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Tags("Metadata")]
+[AllowDuringSetup]
 public class MetadataController : ControllerBase
 {
     /// <summary>

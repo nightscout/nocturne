@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts;
@@ -58,6 +59,7 @@ public class OidcController : ControllerBase
     /// <returns>List of enabled providers</returns>
     [HttpGet("providers")]
     [AllowAnonymous]
+    [AllowDuringSetup]
     [ProducesResponseType(typeof(List<OidcProviderInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<OidcProviderInfo>>> GetProviders()
     {
@@ -85,6 +87,7 @@ public class OidcController : ControllerBase
     /// <returns>Redirect to OIDC provider</returns>
     [HttpGet("login")]
     [AllowAnonymous]
+    [AllowDuringSetup]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Login(
@@ -130,6 +133,7 @@ public class OidcController : ControllerBase
     /// <returns>Redirect to return URL with session cookie set</returns>
     [HttpGet("callback")]
     [AllowAnonymous]
+    [AllowDuringSetup]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Callback(

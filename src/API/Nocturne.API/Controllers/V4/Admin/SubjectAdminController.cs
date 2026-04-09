@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Controllers.V4.Admin;
@@ -10,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.Admin;
 [Produces("application/json")]
 [Authorize(Roles = "platform_admin")]
 [Tags("Subject Admin")]
+[AllowDuringSetup]
 public class SubjectAdminController : ControllerBase
 {
     private readonly NocturneDbContext _db;

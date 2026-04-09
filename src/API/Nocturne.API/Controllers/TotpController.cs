@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts;
@@ -21,6 +22,7 @@ namespace Nocturne.API.Controllers;
 [ApiController]
 [Route("api/auth/totp")]
 [Tags("Totp")]
+[AllowDuringSetup]
 public class TotpController : ControllerBase
 {
     private readonly ITotpService _totpService;

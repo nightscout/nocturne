@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.V4;
 
 namespace Nocturne.API.Controllers.V4;
@@ -13,6 +14,7 @@ namespace Nocturne.API.Controllers.V4;
 [RequireAdmin]
 [Produces("application/json")]
 [Tags("V4 Admin")]
+[AllowDuringSetup]
 public class BackfillController : ControllerBase
 {
     private readonly V4BackfillService _backfillService;

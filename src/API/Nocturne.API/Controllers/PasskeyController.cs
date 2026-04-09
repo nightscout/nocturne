@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -23,6 +24,7 @@ namespace Nocturne.API.Controllers;
 [ApiController]
 [Route("api/auth/passkey")]
 [Tags("Passkey")]
+[AllowDuringSetup]
 public class PasskeyController : ControllerBase
 {
     private const string RecoveryCookieName = ".Nocturne.RecoverySession";
