@@ -21,6 +21,7 @@ public class TenantSetupMiddleware
     private static readonly string[] AllowedPrefixes =
     [
         "/api/admin/",
+        "/api/v4/admin/",
         "/api/auth/passkey/",
         "/api/auth/totp/",
         "/api/metadata",
@@ -29,6 +30,7 @@ public class TenantSetupMiddleware
     private static readonly string[] AllowedPaths =
     [
         "/api/admin/tenants/validate-slug",
+        "/api/v4/admin/tenants/validate-slug",
         "/api/v4/me/tenants/validate-slug",
     ];
 

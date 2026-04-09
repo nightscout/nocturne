@@ -136,6 +136,8 @@ public class TenantSetupMiddlewareTests : IDisposable
     [InlineData("/api/auth/totp/setup")]
     [InlineData("/api/metadata")]
     [InlineData("/api/admin/tenants/validate-slug")]
+    [InlineData("/api/v4/admin/tenants/validate-slug")]
+    [InlineData("/api/v4/admin/tenants/provision")]
     [InlineData("/api/v4/me/tenants/validate-slug")]
     public async Task AllowListPaths_AreNotBlocked_EvenWithNoCredentials(string path)
     {

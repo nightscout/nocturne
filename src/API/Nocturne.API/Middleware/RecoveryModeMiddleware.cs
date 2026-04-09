@@ -58,6 +58,7 @@ public class RecoveryModeMiddleware
             path.StartsWith("/api/auth/totp/", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/api/metadata", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/api/admin/tenants/validate-slug", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/api/v4/admin/tenants/validate-slug", StringComparison.OrdinalIgnoreCase) ||
             path.Equals("/api/v4/me/tenants/validate-slug", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);

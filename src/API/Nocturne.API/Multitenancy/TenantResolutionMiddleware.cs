@@ -38,9 +38,22 @@ public class TenantResolutionMiddleware
     [
         "/api/v4/me/tenants/validate-slug",
         "/api/admin/tenants/validate-slug",
+        "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
+    ];
+
+    /// <summary>
+    /// Prefixes that are cross-tenant by design and must never be gated on
+    /// a resolved tenant. Admin tenant management (create, provision, member
+    /// management) operates on arbitrary tenants by ID and cannot rely on
+    /// subdomain resolution.
+    /// </summary>
+    private static readonly string[] TenantlessAllowedPrefixes =
+    [
+        "/api/admin/tenants",
+        "/api/v4/admin/tenants",
     ];
 
     public async Task InvokeAsync(HttpContext context)
@@ -51,8 +64,9 @@ public class TenantResolutionMiddleware
                    ?? context.Request.Host.Host;
         var slug = ExtractSubdomain(host);
         var path = context.Request.Path.Value ?? "";
-        var isTenantlessAllowedPath = TenantlessAllowedPaths.Any(
-            p => path.Equals(p, StringComparison.OrdinalIgnoreCase));
+        var isTenantlessAllowedPath =
+            TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
+            TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
         // Tenantless-allowed paths on the apex (no slug) operate across tenants
         // and must not fall through to the IsDefault tenant — otherwise any
