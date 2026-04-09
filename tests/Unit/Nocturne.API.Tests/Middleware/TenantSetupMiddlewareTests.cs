@@ -1,10 +1,13 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
@@ -327,6 +330,57 @@ public class TenantSetupMiddlewareTests : IDisposable
 
         var nextCalled = false;
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert
+        nextCalled.Should().BeTrue();
+    }
+
+    private static Endpoint CreateEndpoint(params object[] metadata)
+        => new(
+            requestDelegate: _ => Task.CompletedTask,
+            metadata: new EndpointMetadataCollection(metadata),
+            displayName: "test-endpoint");
+
+    [Fact]
+    public async Task WhenEndpointHasAllowDuringSetupAttribute_CallsNext_EvenWithNoCredentials()
+    {
+        // Arrange — no credentials, but endpoint is marked [AllowDuringSetup]
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+        ctx.SetEndpoint(CreateEndpoint(new AllowDuringSetupAttribute()));
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert
+        nextCalled.Should().BeTrue();
+        ctx.Response.StatusCode.Should().NotBe(503);
+    }
+
+    [Fact]
+    public async Task WhenEndpointWithoutAttribute_AndNoCredentials_Blocks()
+    {
+        // Arrange — endpoint has no metadata, tenant has no credentials
+        var (mw, ctx) = Build();
+        ctx.SetEndpoint(CreateEndpoint());
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert
+        ctx.Response.StatusCode.Should().Be(503);
+    }
+
+    [Fact]
+    public async Task WhenNoEndpointMatched_AndNotApiPath_CallsNext()
+    {
+        // Arrange — no endpoint (e.g. static file), non-API path
+        var nextCalled = false;
+        var (mw, ctx) = Build(path: "/favicon.ico", onNext: () => nextCalled = true);
+        // (no SetEndpoint call)
 
         // Act
         await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
