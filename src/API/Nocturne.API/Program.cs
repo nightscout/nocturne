@@ -235,6 +235,11 @@ app.UseStatusCodePages();
 app.UseResponseCaching();
 app.UseCors();
 
+// Explicit UseRouting so TenantSetupMiddleware and RecoveryModeMiddleware can
+// read endpoint metadata (e.g. [AllowDuringSetup]). Minimal hosting would
+// insert this automatically but we make it explicit for clarity.
+app.UseRouting();
+
 // Add JSON extension middleware to handle .json suffixes for legacy compatibility
 app.UseMiddleware<JsonExtensionMiddleware>();
 
