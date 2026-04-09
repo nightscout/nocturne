@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Nocturne.API.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 
@@ -51,19 +52,16 @@ public class RecoveryModeMiddleware
             return;
         }
 
-        var path = context.Request.Path.Value ?? "";
-
-        // Allow passkey, TOTP, metadata, and slug validation endpoints
-        if (path.StartsWith("/api/auth/passkey/", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/api/auth/totp/", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/api/metadata", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/api/admin/tenants/validate-slug", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/api/v4/admin/tenants/validate-slug", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/api/v4/me/tenants/validate-slug", StringComparison.OrdinalIgnoreCase))
+        // Endpoints marked [AllowDuringSetup] are the bootstrap endpoints and
+        // should always be reachable during recovery mode.
+        var endpoint = context.GetEndpoint();
+        if (endpoint?.Metadata.GetMetadata<AllowDuringSetupAttribute>() is not null)
         {
             await _next(context);
             return;
         }
+
+        var path = context.Request.Path.Value ?? "";
 
         // Block other API endpoints with a clear message
         if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
