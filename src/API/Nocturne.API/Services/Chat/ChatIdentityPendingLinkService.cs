@@ -67,28 +67,36 @@ public sealed class ChatIdentityPendingLinkService(
     public async Task<ChatIdentityPendingLinkEntity?> TryConsumeAsync(string token, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        var row = await db.ChatIdentityPendingLinks
-            .FirstOrDefaultAsync(p => p.Token == token, ct);
-
-        if (row is null || row.ExpiresAt < DateTime.UtcNow)
+        // NpgsqlRetryingExecutionStrategy requires user-initiated transactions
+        // to be wrapped in strategy.ExecuteAsync so the entire block can be
+        // retried as a unit on transient failures.
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await tx.RollbackAsync(ct);
-            return null;
-        }
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        db.ChatIdentityPendingLinks.Remove(row);
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            var row = await db.ChatIdentityPendingLinks
+                .FirstOrDefaultAsync(p => p.Token == token, ct);
 
-        logger.LogInformation(
-            "Consumed pending link token for {Platform}:{PlatformUserId} source={Source}",
-            row.Platform,
-            row.PlatformUserId,
-            row.Source);
+            if (row is null || row.ExpiresAt < DateTime.UtcNow)
+            {
+                await tx.RollbackAsync(ct);
+                return null;
+            }
 
-        return row;
+            db.ChatIdentityPendingLinks.Remove(row);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            logger.LogInformation(
+                "Consumed pending link token for {Platform}:{PlatformUserId} source={Source}",
+                row.Platform,
+                row.PlatformUserId,
+                row.Source);
+
+            return row;
+        });
     }
 
     // TODO(v1.1): wire CleanupExpiredAsync into a scheduled IHostedService.

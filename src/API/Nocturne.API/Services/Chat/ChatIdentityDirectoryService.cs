@@ -116,18 +116,25 @@ public sealed class ChatIdentityDirectoryService(
         var target = await db.ChatIdentityDirectory.FirstOrDefaultAsync(d => d.Id == linkId, ct)
             ?? throw new InvalidOperationException($"Chat identity directory link {linkId} not found");
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // NpgsqlRetryingExecutionStrategy requires user-initiated transactions
+        // to be wrapped in strategy.ExecuteAsync so the entire block can be
+        // retried as a unit on transient failures.
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        await db.ChatIdentityDirectory
-            .Where(d => d.Platform == target.Platform
-                        && d.PlatformUserId == target.PlatformUserId
-                        && d.Id != target.Id
-                        && d.IsDefault)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.IsDefault, false), ct);
+            await db.ChatIdentityDirectory
+                .Where(d => d.Platform == target.Platform
+                            && d.PlatformUserId == target.PlatformUserId
+                            && d.Id != target.Id
+                            && d.IsDefault)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.IsDefault, false), ct);
 
-        target.IsDefault = true;
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            target.IsDefault = true;
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        });
 
         logger.LogInformation(
             "Set chat identity directory link {LinkId} as default for {Platform}:{PlatformUserId}",
