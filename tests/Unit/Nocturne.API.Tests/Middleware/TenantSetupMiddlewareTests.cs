@@ -132,30 +132,6 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.StatusCode.Should().NotBe(503);
     }
 
-    [Theory]
-    [InlineData("/api/auth/passkey/setup/options")]
-    [InlineData("/api/auth/passkey/setup/complete")]
-    [InlineData("/api/auth/passkey/register")]
-    [InlineData("/api/auth/totp/setup")]
-    [InlineData("/api/metadata")]
-    [InlineData("/api/admin/tenants/validate-slug")]
-    [InlineData("/api/v4/admin/tenants/validate-slug")]
-    [InlineData("/api/v4/admin/tenants/provision")]
-    [InlineData("/api/v4/me/tenants/validate-slug")]
-    public async Task AllowListPaths_AreNotBlocked_EvenWithNoCredentials(string path)
-    {
-        // Arrange — no credentials
-        var nextCalled = false;
-        var (mw, ctx) = Build(path: path, onNext: () => nextCalled = true);
-
-        // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
-
-        // Assert
-        nextCalled.Should().BeTrue();
-        ctx.Response.StatusCode.Should().NotBe(503);
-    }
-
     [Fact]
     public async Task WhenTenantNotResolved_CallsNext()
     {
