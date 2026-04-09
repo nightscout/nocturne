@@ -56,6 +56,14 @@ public class InstanceKeyHandler : IAuthHandler
             SubjectName = "instance-service",
             Permissions = ["*"],
             Roles = ["admin"],
+            // The instance key is the highest-trust service credential in
+            // the system (shared only with trusted in-cluster services). It
+            // already skips tenant membership checks and grants permission
+            // wildcard, so it must also carry platform_admin so that cross-
+            // tenant admin endpoints (e.g. /api/v4/admin/tenants/provision)
+            // are callable by provisioners. Without this, external admin
+            // calls authenticated via X-Instance-Key get 403 Forbidden.
+            IsPlatformAdmin = true,
         }));
     }
 }
