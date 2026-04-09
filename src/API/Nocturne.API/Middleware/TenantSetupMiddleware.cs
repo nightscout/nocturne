@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 
@@ -17,22 +18,6 @@ public class TenantSetupMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantSetupMiddleware> _logger;
-
-    private static readonly string[] AllowedPrefixes =
-    [
-        "/api/admin/",
-        "/api/v4/admin/",
-        "/api/auth/passkey/",
-        "/api/auth/totp/",
-        "/api/metadata",
-    ];
-
-    private static readonly string[] AllowedPaths =
-    [
-        "/api/admin/tenants/validate-slug",
-        "/api/v4/admin/tenants/validate-slug",
-        "/api/v4/me/tenants/validate-slug",
-    ];
 
     public TenantSetupMiddleware(
         RequestDelegate next,
@@ -54,17 +39,18 @@ public class TenantSetupMiddleware
             return;
         }
 
-        var path = context.Request.Path.Value ?? "";
-
-        // Allow passkey, TOTP, admin, metadata, and slug validation paths
-        if (AllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
-            AllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        // Endpoints marked [AllowDuringSetup] bypass both the setup check and the
+        // recovery check — these are the bootstrap endpoints (passkey/TOTP setup,
+        // OIDC bootstrap login, admin provisioning, metadata).
+        var endpoint = context.GetEndpoint();
+        if (endpoint?.Metadata.GetMetadata<AllowDuringSetupAttribute>() is not null)
         {
             await _next(context);
             return;
         }
 
-        // Only block API paths
+        // Only block API paths; static files and non-API endpoints pass through.
+        var path = context.Request.Path.Value ?? "";
         if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);
