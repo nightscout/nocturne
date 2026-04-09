@@ -428,6 +428,25 @@ jobs:
             release/.env.example
             release/aspire-manifest.json
 
+  # Notify the nocturne-cloud repo that fresh :latest images are available so
+  # it can pull & restart the nocturne-api / nocturne-web services on the VPS.
+  notify-nocturne-cloud:
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    steps:
+      - name: Dispatch redeploy to nocturne-cloud
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.NOCTURNE_CLOUD_DISPATCH_TOKEN }}
+          repository: ryceg/nocturne-cloud
+          event-type: nocturne-images-published
+          client-payload: |
+            {
+              "sha": "${{ github.sha }}",
+              "ref": "${{ github.ref }}"
+            }
+
   publish-glucose-chart:
     needs: [build-and-push]
     runs-on: ubuntu-latest
@@ -443,8 +462,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@nightscout'
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@nightscout"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: src/Web
