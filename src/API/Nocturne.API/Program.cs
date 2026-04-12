@@ -259,6 +259,9 @@ app.UseMiddleware<JsonExtensionMiddleware>();
 // Block most API traffic when recovery mode is active (orphaned subjects detected)
 app.UseMiddleware<RecoveryModeMiddleware>();
 
+// Redirect OIDC callbacks from apex to the originating tenant subdomain
+app.UseMiddleware<OidcCallbackRedirectMiddleware>();
+
 // Resolve tenant from subdomain (must run before authentication)
 app.UseMiddleware<TenantResolutionMiddleware>();
 
