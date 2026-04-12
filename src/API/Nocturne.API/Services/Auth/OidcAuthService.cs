@@ -480,7 +480,7 @@ public class OidcAuthService : IOidcAuthService
 
     /// <inheritdoc />
     public async Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
-        Guid providerId, Guid subjectId, string? returnUrl = null)
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null)
     {
         var provider =
             await _providerService.GetProviderByIdAsync(providerId)
@@ -500,6 +500,7 @@ public class OidcAuthService : IOidcAuthService
             ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
             Intent = "link",
             SubjectId = subjectId,
+            TenantSlug = tenantSlug,
         };
 
         return await BuildAuthorizationUrlAsync(provider, stateData, returnUrl, callbackPath: LinkCallbackPath);

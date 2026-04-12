@@ -74,7 +74,7 @@ public interface IOidcAuthService
     Task<Guid?> ValidateSessionAsync(string refreshToken);
 
     Task<OidcAuthorizationRequest> GenerateLinkAuthorizationUrlAsync(
-        Guid providerId, Guid subjectId, string? returnUrl = null);
+        Guid providerId, Guid subjectId, string? returnUrl = null, string? tenantSlug = null);
 
     Task<OidcLinkResult> HandleLinkCallbackAsync(
         string code, string state, string expectedState,
