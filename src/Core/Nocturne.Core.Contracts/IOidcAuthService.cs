@@ -18,7 +18,8 @@ public interface IOidcAuthService
     Task<OidcAuthorizationRequest> GenerateAuthorizationUrlAsync(
         Guid? providerId,
         string? returnUrl = null,
-        string? state = null
+        string? state = null,
+        string? tenantSlug = null
     );
 
     /// <summary>

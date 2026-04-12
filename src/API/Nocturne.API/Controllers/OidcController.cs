@@ -104,7 +104,8 @@ public class OidcController : ControllerBase
 
         try
         {
-            var authRequest = await _authService.GenerateAuthorizationUrlAsync(provider, returnUrl);
+            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var authRequest = await _authService.GenerateAuthorizationUrlAsync(provider, returnUrl, tenantSlug: tenantSlug);
 
             // Store state in a secure cookie for verification on callback
             SetStateCookie(authRequest.State, authRequest.ExpiresAt);

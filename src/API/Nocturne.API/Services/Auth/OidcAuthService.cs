@@ -52,7 +52,8 @@ public class OidcAuthService : IOidcAuthService
     public async Task<OidcAuthorizationRequest> GenerateAuthorizationUrlAsync(
         Guid? providerId,
         string? returnUrl = null,
-        string? state = null
+        string? state = null,
+        string? tenantSlug = null
     )
     {
         OidcProvider provider;
@@ -92,6 +93,7 @@ public class OidcAuthService : IOidcAuthService
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
             Intent = "login",
+            TenantSlug = tenantSlug,
         };
 
         return await BuildAuthorizationUrlAsync(provider, stateData, returnUrl, state);
