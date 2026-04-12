@@ -782,6 +782,7 @@ public class OidcAuthService : IOidcAuthService
         public DateTimeOffset ExpiresAt { get; set; }
         public string Intent { get; set; } = "login";
         public Guid? SubjectId { get; set; }
+        public string? TenantSlug { get; set; }
     }
 
     /// <summary>
