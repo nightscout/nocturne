@@ -54,7 +54,10 @@ const authHandle: Handle = async ({ event, resolve }) => {
   }
 
   try {
-    // Create a temporary API client with auth tokens for session validation
+    // Create a temporary API client with auth tokens for session validation.
+    // `responseCookies` lets the client forward any auth-cookie rotations
+    // performed by the API (via SessionCookieHandler auto-refresh) back to
+    // the browser, so rotated refresh tokens don't silently disappear.
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
     const hostHeader = event.request.headers.get("host");
     const apiClient = createServerApiClient(apiBaseUrl, fetch, {
@@ -62,6 +65,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
       refreshToken,
       hashedInstanceKey: getHashedInstanceKey(),
       extraHeaders: hostHeader ? { "X-Forwarded-Host": hostHeader } : undefined,
+      responseCookies: event.cookies,
     });
 
     // Validate session with the API using the typed client
@@ -280,12 +284,16 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     extraHeaders["X-Forwarded-Host"] = originalHost;
   }
 
-  // Create API client with SvelteKit's fetch, auth headers, and both tokens
+  // Create API client with SvelteKit's fetch, auth headers, and both tokens.
+  // `responseCookies` lets any token rotation performed by the backend's
+  // session middleware (during remote function / load function calls) flow
+  // back to the browser as Set-Cookie on the outgoing SvelteKit response.
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
     hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders,
+    responseCookies: event.cookies,
   });
 
   return resolve(event);
