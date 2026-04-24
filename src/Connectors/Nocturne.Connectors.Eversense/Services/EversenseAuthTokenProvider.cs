@@ -63,7 +63,7 @@ public class EversenseAuthTokenProvider(
         var authBaseUrl = _config.Server.ToUpperInvariant() switch
         {
             "US" => EversenseConstants.Servers.UsAuth,
-            _ => EversenseConstants.Servers.UsAuth
+            _ => throw new ArgumentOutOfRangeException(nameof(_config.Server), _config.Server, "Unsupported Eversense server region")
         };
 
         var formContent = new FormUrlEncodedContent(new Dictionary<string, string>

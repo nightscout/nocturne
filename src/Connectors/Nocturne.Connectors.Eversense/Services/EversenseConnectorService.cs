@@ -163,7 +163,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         EversenseConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var patients = await FetchPatientListAsync(cancellationToken);
+        var patients = await FetchPatientListAsync(config, cancellationToken);
         if (patients == null || patients.Count == 0)
         {
             _logger.LogWarning("[{ConnectorSource}] No patients returned from Eversense API", ConnectorSource);
@@ -193,6 +193,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
     ///     Calls the Eversense data API to retrieve the following-patient list with current glucose values.
     /// </summary>
     private async Task<List<EversensePatientDatum>?> FetchPatientListAsync(
+        EversenseConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
         var token = await _tokenProvider.GetValidTokenAsync();
@@ -203,13 +204,15 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             return null;
         }
 
-        var url = $"{EversenseConstants.Servers.UsData}{EversenseConstants.Endpoints.GetFollowingPatientList}";
+        var dataBaseUrl = GetDataBaseUrl(config.Server);
+        var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingPatientList}";
 
         var result = await ExecuteWithRetryAsync(
             async () =>
             {
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                var response = await _httpClient.GetAsync(url, cancellationToken);
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var response = await _httpClient.SendAsync(request, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -236,4 +239,10 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
         return result;
     }
+
+    private static string GetDataBaseUrl(string server) => server.ToUpperInvariant() switch
+    {
+        "US" => EversenseConstants.Servers.UsData,
+        _ => throw new ArgumentOutOfRangeException(nameof(server), server, "Unsupported Eversense server region")
+    };
 }

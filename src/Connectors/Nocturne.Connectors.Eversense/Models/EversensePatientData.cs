@@ -5,7 +5,7 @@ namespace Nocturne.Connectors.Eversense.Models;
 public class EversensePatientDatum
 {
     [JsonPropertyName("CurrentGlucose")]
-    public int CurrentGlucose { get; set; }
+    public double CurrentGlucose { get; set; }
 
     [JsonPropertyName("GlucoseTrend")]
     public int GlucoseTrend { get; set; }
