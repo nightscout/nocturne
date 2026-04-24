@@ -97,6 +97,11 @@ public static class DataSources
     /// </summary>
     public const string HomeAssistantConnector = "home-assistant-connector";
 
+    /// <summary>
+    /// Data fetched from Eversense Now follower API via the Eversense connector.
+    /// </summary>
+    public const string EversenseConnector = "eversense-connector";
+
     // ============================================================================
     // Manual Entry Sources
     // ============================================================================
@@ -217,7 +222,8 @@ public static class DataSources
                 or NightscoutConnector
                 or TidepoolConnector
                 or TConnectSyncConnector
-                or HomeAssistantConnector;
+                or HomeAssistantConnector
+                or EversenseConnector;
     }
 
     /// <summary>
