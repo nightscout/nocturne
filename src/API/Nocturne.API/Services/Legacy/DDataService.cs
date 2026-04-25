@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
@@ -21,7 +22,7 @@ public class DDataService : IDDataService
     private readonly IProfileRepository _profiles;
     private readonly IDeviceStatusRepository _deviceStatuses;
     private readonly IFoodRepository _food;
-    private readonly IActivityRepository _activities;
+    private readonly IActivityService _activities;
     private readonly ILogger<DDataService> _logger;
 
     // Device type fields that should be considered for recent device status
@@ -43,7 +44,7 @@ public class DDataService : IDDataService
         IProfileRepository profiles,
         IDeviceStatusRepository deviceStatuses,
         IFoodRepository food,
-        IActivityRepository activities,
+        IActivityService activities,
         ILogger<DDataService> logger)
     {
         _store = store;
@@ -754,6 +755,7 @@ public class DDataService : IDDataService
         try
         {
             var activities = await _activities.GetActivitiesAsync(
+                find: null,
                 count: 1000,
                 skip: 0,
                 cancellationToken: cancellationToken

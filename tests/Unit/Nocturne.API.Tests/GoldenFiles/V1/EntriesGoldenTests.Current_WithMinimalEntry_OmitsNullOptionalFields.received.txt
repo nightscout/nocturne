@@ -1,5 +1,5 @@
 ﻿{
-  StatusCode: 404,
+  StatusCode: 500,
   ContentType: application/problem+json; charset=utf-8,
-  Body: {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId": "{scrubbed}"}
+  Body: {"type":"https://tools.ietf.org/html/rfc9110#section-15.6.1","title":"An error occurred while processing your request.","status":500,"traceId": "{scrubbed}"}
 }

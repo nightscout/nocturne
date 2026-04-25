@@ -14,7 +14,6 @@ export * from './foods.generated.remote';
 export { getFoodEntry, acceptMatch, dismissMatch } from './mealMatchings.generated.remote';
 // './notes.generated.remote' - all exports collide, import directly
 export * from './nutritions.generated.remote';
-export * from './treatments.generated.remote';
 export { getSuggestion, deleteSuggestion, acceptSuggestion, dismissSuggestion, triggerDetection } from './compressionLows.generated.remote';
 export * from './deduplications.generated.remote';
 export { testConnection, startMigration, startFromConnector, cancelMigration, getHistory, getPendingConfig, getSources } from './migrations.generated.remote';
@@ -34,6 +33,7 @@ export * from './notifications.generated.remote';
 export * from './trackers.generated.remote';
 export * from './chatIdentities.generated.remote';
 // './connectedApps.generated.remote' - all exports collide, import directly
+export * from './guestLinks.generated.remote';
 export * from './linkedPlatforms.generated.remote';
 export * from './memberInvites.generated.remote';
 export * from './myPermissions.generated.remote';

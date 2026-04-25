@@ -10,8 +10,8 @@ import {
   AlertsClient,
   AnalyticsClient,
   ApsSnapshotClient,
+  AuditClient,
   AvatarClient,
-  BackfillClient,
   BatteryClient,
   BGCheckClient,
   BodyWeightClient,
@@ -40,6 +40,7 @@ import {
   DirectGrantClient,
   DiscrepancyClient,
   FoodsClient,
+  GuestLinkClient,
   HeartRateClient,
   HomeAssistantWebhookClient,
   InsulinCatalogClient,
@@ -84,7 +85,6 @@ import {
   TotpClient,
   TrackerAlertsClient,
   TrackersClient,
-  TreatmentsClient,
   UISettingsClient,
   UploaderSnapshotClient,
   UserPreferencesClient,
@@ -104,8 +104,8 @@ export class ApiClient {
   public readonly alerts: AlertsClient;
   public readonly analytics: AnalyticsClient;
   public readonly apsSnapshot: ApsSnapshotClient;
+  public readonly audit: AuditClient;
   public readonly avatar: AvatarClient;
-  public readonly backfill: BackfillClient;
   public readonly battery: BatteryClient;
   public readonly bGCheck: BGCheckClient;
   public readonly bodyWeight: BodyWeightClient;
@@ -134,6 +134,7 @@ export class ApiClient {
   public readonly directGrant: DirectGrantClient;
   public readonly discrepancy: DiscrepancyClient;
   public readonly foodsV4: FoodsClient;
+  public readonly guestLink: GuestLinkClient;
   public readonly heartRate: HeartRateClient;
   public readonly homeAssistantWebhook: HomeAssistantWebhookClient;
   public readonly insulinCatalog: InsulinCatalogClient;
@@ -178,7 +179,6 @@ export class ApiClient {
   public readonly totp: TotpClient;
   public readonly trackerAlerts: TrackerAlertsClient;
   public readonly trackers: TrackersClient;
-  public readonly treatments: TreatmentsClient;
   public readonly uiSettings: UISettingsClient;
   public readonly uploaderSnapshot: UploaderSnapshotClient;
   public readonly userPreferences: UserPreferencesClient;
@@ -198,8 +198,8 @@ export class ApiClient {
     this.alerts = new AlertsClient(apiBaseUrl, http);
     this.analytics = new AnalyticsClient(apiBaseUrl, http);
     this.apsSnapshot = new ApsSnapshotClient(apiBaseUrl, http);
+    this.audit = new AuditClient(apiBaseUrl, http);
     this.avatar = new AvatarClient(apiBaseUrl, http);
-    this.backfill = new BackfillClient(apiBaseUrl, http);
     this.battery = new BatteryClient(apiBaseUrl, http);
     this.bGCheck = new BGCheckClient(apiBaseUrl, http);
     this.bodyWeight = new BodyWeightClient(apiBaseUrl, http);
@@ -228,6 +228,7 @@ export class ApiClient {
     this.directGrant = new DirectGrantClient(apiBaseUrl, http);
     this.discrepancy = new DiscrepancyClient(apiBaseUrl, http);
     this.foodsV4 = new FoodsClient(apiBaseUrl, http);
+    this.guestLink = new GuestLinkClient(apiBaseUrl, http);
     this.heartRate = new HeartRateClient(apiBaseUrl, http);
     this.homeAssistantWebhook = new HomeAssistantWebhookClient(apiBaseUrl, http);
     this.insulinCatalog = new InsulinCatalogClient(apiBaseUrl, http);
@@ -272,7 +273,6 @@ export class ApiClient {
     this.totp = new TotpClient(apiBaseUrl, http);
     this.trackerAlerts = new TrackerAlertsClient(apiBaseUrl, http);
     this.trackers = new TrackersClient(apiBaseUrl, http);
-    this.treatments = new TreatmentsClient(apiBaseUrl, http);
     this.uiSettings = new UISettingsClient(apiBaseUrl, http);
     this.uploaderSnapshot = new UploaderSnapshotClient(apiBaseUrl, http);
     this.userPreferences = new UserPreferencesClient(apiBaseUrl, http);

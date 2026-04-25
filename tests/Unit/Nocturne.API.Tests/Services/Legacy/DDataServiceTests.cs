@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -21,7 +22,7 @@ public class DDataServiceTests
     private readonly Mock<IProfileRepository> _mockProfileRepository;
     private readonly Mock<IDeviceStatusRepository> _mockDeviceStatusRepository;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
-    private readonly Mock<IActivityRepository> _mockActivityRepository;
+    private readonly Mock<IActivityService> _mockActivityService;
     private readonly Mock<ILogger<DDataService>> _mockLogger;
     private readonly DDataService _ddataService;
 
@@ -32,7 +33,7 @@ public class DDataServiceTests
         _mockProfileRepository = new Mock<IProfileRepository>();
         _mockDeviceStatusRepository = new Mock<IDeviceStatusRepository>();
         _mockFoodRepository = new Mock<IFoodRepository>();
-        _mockActivityRepository = new Mock<IActivityRepository>();
+        _mockActivityService = new Mock<IActivityService>();
         _mockLogger = new Mock<ILogger<DDataService>>();
         _ddataService = new DDataService(
             _mockEntryStore.Object,
@@ -40,7 +41,7 @@ public class DDataServiceTests
             _mockProfileRepository.Object,
             _mockDeviceStatusRepository.Object,
             _mockFoodRepository.Object,
-            _mockActivityRepository.Object,
+            _mockActivityService.Object,
             _mockLogger.Object
         );
     }
@@ -82,11 +83,12 @@ public class DDataServiceTests
         _mockFoodRepository
             .Setup(x => x.GetFoodAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Food>());
-        _mockActivityRepository
+        _mockActivityService
             .Setup(x =>
                 x.GetActivitiesAsync(
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<int?>(),
+                    It.IsAny<int?>(),
                     It.IsAny<CancellationToken>()
                 )
             )

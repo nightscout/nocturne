@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Xunit;
@@ -22,7 +23,7 @@ public class CountControllerTests
     private readonly Mock<IDeviceStatusRepository> _mockDeviceStatusRepository;
     private readonly Mock<IProfileRepository> _mockProfileRepository;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
-    private readonly Mock<IActivityRepository> _mockActivityRepository;
+    private readonly Mock<IActivityService> _mockActivityService;
     private readonly Mock<ILogger<CountController>> _mockLogger;
     private readonly CountController _controller;
 
@@ -33,7 +34,7 @@ public class CountControllerTests
         _mockDeviceStatusRepository = new Mock<IDeviceStatusRepository>();
         _mockProfileRepository = new Mock<IProfileRepository>();
         _mockFoodRepository = new Mock<IFoodRepository>();
-        _mockActivityRepository = new Mock<IActivityRepository>();
+        _mockActivityService = new Mock<IActivityService>();
         _mockLogger = new Mock<ILogger<CountController>>();
 
         _controller = new CountController(
@@ -42,7 +43,7 @@ public class CountControllerTests
             _mockDeviceStatusRepository.Object,
             _mockProfileRepository.Object,
             _mockFoodRepository.Object,
-            _mockActivityRepository.Object,
+            _mockActivityService.Object,
             _mockLogger.Object
         );
 

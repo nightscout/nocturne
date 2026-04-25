@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 
@@ -15,7 +16,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IDeviceStatusRepository"/>
 /// <seealso cref="IProfileRepository"/>
 /// <seealso cref="IFoodRepository"/>
-/// <seealso cref="IActivityRepository"/>
+/// <seealso cref="IActivityService"/>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class CountController : ControllerBase
@@ -25,7 +26,7 @@ public class CountController : ControllerBase
     private readonly IDeviceStatusRepository _deviceStatusRepository;
     private readonly IProfileRepository _profileRepository;
     private readonly IFoodRepository _foodRepository;
-    private readonly IActivityRepository _activityRepository;
+    private readonly IActivityService _activityService;
     private readonly ILogger<CountController> _logger;
 
     /// <summary>
@@ -36,7 +37,7 @@ public class CountController : ControllerBase
     /// <param name="deviceStatusRepository">Repository for device status records.</param>
     /// <param name="profileRepository">Repository for profile records.</param>
     /// <param name="foodRepository">Repository for food records.</param>
-    /// <param name="activityRepository">Repository for activity records.</param>
+    /// <param name="activityService">Service for activity operations.</param>
     /// <param name="logger">Logger instance.</param>
     public CountController(
         IEntryStore entryStore,
@@ -44,7 +45,7 @@ public class CountController : ControllerBase
         IDeviceStatusRepository deviceStatusRepository,
         IProfileRepository profileRepository,
         IFoodRepository foodRepository,
-        IActivityRepository activityRepository,
+        IActivityService activityService,
         ILogger<CountController> logger
     )
     {
@@ -53,7 +54,7 @@ public class CountController : ControllerBase
         _deviceStatusRepository = deviceStatusRepository;
         _profileRepository = profileRepository;
         _foodRepository = foodRepository;
-        _activityRepository = activityRepository;
+        _activityService = activityService;
         _logger = logger;
     }
 
@@ -213,7 +214,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _activityRepository.CountActivitiesAsync(find, cancellationToken);
+            var count = await _activityService.CountActivitiesAsync(find, cancellationToken);
 
             _logger.LogDebug("Found {Count} activity entries matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -311,7 +312,7 @@ public class CountController : ControllerBase
                     count = await _foodRepository.CountFoodAsync(find, type, cancellationToken);
                     break;
                 case "activity":
-                    count = await _activityRepository.CountActivitiesAsync(find, cancellationToken);
+                    count = await _activityService.CountActivitiesAsync(find, cancellationToken);
                     break;
                 default:
                     // This shouldn't happen due to validation above, but just in case

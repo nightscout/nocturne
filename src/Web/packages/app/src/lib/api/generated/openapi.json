@@ -2908,355 +2908,6 @@
         "x-remote-type": "query"
       }
     },
-    "/api/v4/treatments": {
-      "get": {
-        "tags": [
-          "Treatments"
-        ],
-        "summary": "Get treatments with optional filtering and pagination.\nUnlike V1-V3 endpoints, this does NOT include StateSpan-derived basal data.\nFor basal delivery, query /api/v4/state-spans?category=BasalDelivery instead.",
-        "operationId": "Treatments_GetTreatments",
-        "parameters": [
-          {
-            "name": "eventType",
-            "in": "query",
-            "description": "Optional filter by event type",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 1
-          },
-          {
-            "name": "count",
-            "in": "query",
-            "description": "Maximum number of treatments to return (default: 100)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 100
-            },
-            "x-position": 2
-          },
-          {
-            "name": "skip",
-            "in": "query",
-            "description": "Number of treatments to skip for pagination (default: 0)",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            },
-            "x-position": 3
-          },
-          {
-            "name": "find",
-            "x-originalName": "findQuery",
-            "in": "query",
-            "description": "Optional MongoDB-style query filter for advanced filtering",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 4
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of treatments ordered by most recent first",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Treatment"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      },
-      "post": {
-        "tags": [
-          "Treatments"
-        ],
-        "summary": "Create a treatment with tracker integration.\nIf the treatment's event type matches a tracker's trigger event types,\nthe tracker instance will be automatically started/restarted.",
-        "operationId": "Treatments_CreateTreatment",
-        "requestBody": {
-          "x-name": "treatment",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Treatment"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Treatment"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetTreatments"
-        ]
-      }
-    },
-    "/api/v4/treatments/bulk": {
-      "post": {
-        "tags": [
-          "Treatments"
-        ],
-        "summary": "Create multiple treatments with tracker integration.",
-        "operationId": "Treatments_CreateTreatments",
-        "requestBody": {
-          "x-name": "treatments",
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Treatment"
-                }
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Treatment"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetTreatments"
-        ]
-      }
-    },
-    "/api/v4/treatments/{id}": {
-      "get": {
-        "tags": [
-          "Treatments"
-        ],
-        "summary": "Get a specific treatment by ID",
-        "operationId": "Treatments_GetTreatment",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Treatment"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      },
-      "put": {
-        "tags": [
-          "Treatments"
-        ],
-        "summary": "Update an existing treatment by ID",
-        "operationId": "Treatments_UpdateTreatment",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "treatment",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Treatment"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Treatment"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetTreatments",
-          "GetTreatment"
-        ]
-      },
-      "delete": {
-        "tags": [
-          "Treatments"
-        ],
-        "summary": "Delete a treatment by ID",
-        "operationId": "Treatments_DeleteTreatment",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetTreatments"
-        ]
-      }
-    },
-    "/api/v4/admin/backfill": {
-      "post": {
-        "tags": [
-          "Backfill"
-        ],
-        "summary": "Triggers a backfill operation to reprocess all legacy entries and treatments into V4 granular tables.\nOnly one backfill may run at a time; concurrent calls return 409 Conflict.",
-        "operationId": "Backfill_TriggerBackfill",
-        "responses": {
-          "200": {
-            "description": "BackfillResult with processed counts on success;\n409 if already running; 500 on internal error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BackfillResult"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": ""
-          }
-        }
-      }
-    },
     "/api/v4/compression-lows/suggestions": {
       "get": {
         "tags": [
@@ -11094,6 +10745,166 @@
         "x-remote-invalidates": [
           "List"
         ]
+      }
+    },
+    "/api/v4/guest-links": {
+      "post": {
+        "tags": [
+          "Guest Link"
+        ],
+        "summary": "Create a new guest link for temporary read-only data sharing.",
+        "operationId": "GuestLink_CreateGuestLink",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGuestLinkRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLinkCreationResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      },
+      "get": {
+        "tags": [
+          "Guest Link"
+        ],
+        "summary": "List guest links for the current user's effective subject.",
+        "operationId": "GuestLink_GetGuestLinks",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GuestLinkInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/guest-links/{grantId}": {
+      "delete": {
+        "tags": [
+          "Guest Link"
+        ],
+        "summary": "Revoke an active guest link.",
+        "operationId": "GuestLink_RevokeGuestLink",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetGuestLinks"
+        ]
+      }
+    },
+    "/api/v4/guest-links/activate": {
+      "post": {
+        "tags": [
+          "Guest Link"
+        ],
+        "summary": "Activate a guest link by code and receive a session cookie.",
+        "operationId": "GuestLink_ActivateGuestLink",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateGuestLinkRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivateGuestLinkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivateGuestLinkResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v4/chat-identity/linked-platforms": {
@@ -22773,11 +22584,6 @@
           "status": {
             "$ref": "#/components/schemas/ConnectorFoodEntryStatus"
           },
-          "matchedTreatmentId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
           "resolvedAt": {
             "type": "string",
             "format": "date-time",
@@ -23725,6 +23531,311 @@
           }
         }
       },
+      "CompressionLowSuggestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CompressionLowStatus"
+          },
+          "nightOf": {
+            "type": "string",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reviewedAt": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "stateSpanId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "lowestGlucose": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dropRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "recoveryMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "CompressionLowStatus": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Pending",
+          "Accepted",
+          "Dismissed"
+        ],
+        "enum": [
+          "Pending",
+          "Accepted",
+          "Dismissed"
+        ]
+      },
+      "CompressionLowSuggestionWithEntries": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "suggestion": {
+            "$ref": "#/components/schemas/CompressionLowSuggestion"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            }
+          },
+          "treatments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Treatment"
+            }
+          }
+        }
+      },
+      "Entry": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProcessableDocumentBase"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "_id": {
+                "type": "string",
+                "nullable": true
+              },
+              "mills": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "dateString": {
+                "type": "string",
+                "nullable": true
+              },
+              "mgdl": {
+                "type": "number",
+                "format": "double"
+              },
+              "mbg": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "mmol": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "sgv": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "direction": {
+                "type": "string",
+                "nullable": true
+              },
+              "trend": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "trendRate": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "isCalibration": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string"
+              },
+              "device": {
+                "type": "string",
+                "nullable": true
+              },
+              "notes": {
+                "type": "string",
+                "nullable": true
+              },
+              "delta": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "scaled": {
+                "nullable": true
+              },
+              "sysTime": {
+                "type": "string",
+                "nullable": true
+              },
+              "utcOffset": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "noise": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "filtered": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "unfiltered": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "rssi": {
+                "type": "integer",
+                "format": "int32",
+                "nullable": true
+              },
+              "slope": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "intercept": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "scale": {
+                "type": "number",
+                "format": "double",
+                "nullable": true
+              },
+              "created_at": {
+                "type": "string",
+                "nullable": true
+              },
+              "modified_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "data_source": {
+                "type": "string",
+                "nullable": true
+              },
+              "meta": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": {}
+              },
+              "canonicalId": {
+                "type": "string",
+                "format": "guid",
+                "nullable": true
+              },
+              "sources": {
+                "type": "array",
+                "nullable": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "app": {
+                "type": "string",
+                "nullable": true
+              },
+              "units": {
+                "type": "string",
+                "nullable": true
+              },
+              "isValid": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "isReadOnly": {
+                "type": "boolean",
+                "nullable": true
+              },
+              "identifier": {
+                "type": "string",
+                "nullable": true
+              },
+              "srvModified": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "srvCreated": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              },
+              "subject": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "ProcessableDocumentBase": {
+        "type": "object",
+        "x-abstract": true,
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcOffset": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
       "Treatment": {
         "allOf": [
           {
@@ -24237,343 +24348,6 @@
             "format": "int32"
           }
         }
-      },
-      "ProcessableDocumentBase": {
-        "type": "object",
-        "x-abstract": true,
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "nullable": true
-          },
-          "mills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "utcOffset": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        }
-      },
-      "BackfillResult": {
-        "type": "object",
-        "description": "Result of a V4 backfill operation",
-        "additionalProperties": false,
-        "properties": {
-          "entriesProcessed": {
-            "type": "integer",
-            "description": "Number of entries successfully decomposed into v4 records",
-            "format": "int64"
-          },
-          "entriesFailed": {
-            "type": "integer",
-            "description": "Number of entries that failed decomposition",
-            "format": "int64"
-          },
-          "treatmentsProcessed": {
-            "type": "integer",
-            "description": "Number of treatments successfully decomposed into v4 records",
-            "format": "int64"
-          },
-          "treatmentsFailed": {
-            "type": "integer",
-            "description": "Number of treatments that failed decomposition",
-            "format": "int64"
-          },
-          "treatmentsSkipped": {
-            "type": "integer",
-            "description": "Number of treatments skipped (temp basals, profile switches)",
-            "format": "int64"
-          }
-        }
-      },
-      "CompressionLowSuggestion": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "startMills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "endMills": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "confidence": {
-            "type": "number",
-            "format": "double"
-          },
-          "status": {
-            "$ref": "#/components/schemas/CompressionLowStatus"
-          },
-          "nightOf": {
-            "type": "string",
-            "format": "date"
-          },
-          "createdAt": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "reviewedAt": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
-          },
-          "stateSpanId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "lowestGlucose": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "dropRate": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "recoveryMinutes": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        }
-      },
-      "CompressionLowStatus": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Pending",
-          "Accepted",
-          "Dismissed"
-        ],
-        "enum": [
-          "Pending",
-          "Accepted",
-          "Dismissed"
-        ]
-      },
-      "CompressionLowSuggestionWithEntries": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "suggestion": {
-            "$ref": "#/components/schemas/CompressionLowSuggestion"
-          },
-          "entries": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Entry"
-            }
-          },
-          "treatments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Treatment"
-            }
-          }
-        }
-      },
-      "Entry": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ProcessableDocumentBase"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "_id": {
-                "type": "string",
-                "nullable": true
-              },
-              "mills": {
-                "type": "integer",
-                "format": "int64"
-              },
-              "dateString": {
-                "type": "string",
-                "nullable": true
-              },
-              "mgdl": {
-                "type": "number",
-                "format": "double"
-              },
-              "mbg": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "mmol": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "sgv": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "direction": {
-                "type": "string",
-                "nullable": true
-              },
-              "trend": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "trendRate": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "isCalibration": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string"
-              },
-              "device": {
-                "type": "string",
-                "nullable": true
-              },
-              "notes": {
-                "type": "string",
-                "nullable": true
-              },
-              "delta": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "scaled": {
-                "nullable": true
-              },
-              "sysTime": {
-                "type": "string",
-                "nullable": true
-              },
-              "utcOffset": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "noise": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "filtered": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "unfiltered": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "rssi": {
-                "type": "integer",
-                "format": "int32",
-                "nullable": true
-              },
-              "slope": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "intercept": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "scale": {
-                "type": "number",
-                "format": "double",
-                "nullable": true
-              },
-              "created_at": {
-                "type": "string",
-                "nullable": true
-              },
-              "modified_at": {
-                "type": "string",
-                "format": "date-time",
-                "nullable": true
-              },
-              "data_source": {
-                "type": "string",
-                "nullable": true
-              },
-              "meta": {
-                "type": "object",
-                "nullable": true,
-                "additionalProperties": {}
-              },
-              "canonicalId": {
-                "type": "string",
-                "format": "guid",
-                "nullable": true
-              },
-              "sources": {
-                "type": "array",
-                "nullable": true,
-                "items": {
-                  "type": "string"
-                }
-              },
-              "app": {
-                "type": "string",
-                "nullable": true
-              },
-              "units": {
-                "type": "string",
-                "nullable": true
-              },
-              "isValid": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "isReadOnly": {
-                "type": "boolean",
-                "nullable": true
-              },
-              "identifier": {
-                "type": "string",
-                "nullable": true
-              },
-              "srvModified": {
-                "type": "integer",
-                "format": "int64",
-                "nullable": true
-              },
-              "srvCreated": {
-                "type": "integer",
-                "format": "int64",
-                "nullable": true
-              },
-              "subject": {
-                "type": "string",
-                "nullable": true
-              }
-            }
-          }
-        ]
       },
       "StateSpan": {
         "type": "object",
@@ -31535,6 +31309,132 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          }
+        }
+      },
+      "GuestLinkCreationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "fullUrl": {
+            "type": "string"
+          },
+          "info": {
+            "$ref": "#/components/schemas/GuestLinkInfo"
+          }
+        }
+      },
+      "GuestLinkInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "dataOwnerSubjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "createdBySubjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "activatedIp": {
+            "type": "string",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/GuestLinkStatus"
+          }
+        }
+      },
+      "GuestLinkStatus": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Pending",
+          "Active",
+          "Expired",
+          "Revoked"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "CreateGuestLinkRequest": {
+        "type": "object",
+        "description": "Request body for creating a guest link.",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ActivateGuestLinkResponse": {
+        "type": "object",
+        "description": "Response from guest link activation.",
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ActivateGuestLinkRequest": {
+        "type": "object",
+        "description": "Request body for activating a guest link.",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
           }
         }
       },

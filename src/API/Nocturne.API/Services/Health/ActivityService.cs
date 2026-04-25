@@ -361,4 +361,50 @@ public class ActivityService : IActivityService
             throw;
         }
     }
+
+    /// <inheritdoc />
+    public async Task<long> CountActivitiesAsync(
+        string? find = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            _logger.LogDebug("Counting activity records with find: {Find}", find);
+
+            // Count from each decomposed source and sum
+            var stateSpanTask = _stateSpanService.GetActivitiesAsync(
+                type: find,
+                count: int.MaxValue,
+                skip: 0,
+                cancellationToken: cancellationToken
+            );
+
+            var heartRateTask = _heartRateService.GetHeartRatesAsync(
+                count: int.MaxValue,
+                skip: 0,
+                cancellationToken: cancellationToken
+            );
+
+            var stepCountTask = _stepCountService.GetStepCountsAsync(
+                count: int.MaxValue,
+                skip: 0,
+                cancellationToken: cancellationToken
+            );
+
+            await Task.WhenAll(stateSpanTask, heartRateTask, stepCountTask);
+
+            var total = stateSpanTask.Result.Count()
+                + heartRateTask.Result.Count()
+                + stepCountTask.Result.Count();
+
+            _logger.LogDebug("Counted {Total} activity records", total);
+            return total;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error counting activity records");
+            throw;
+        }
+    }
 }
