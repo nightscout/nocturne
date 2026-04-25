@@ -43,7 +43,6 @@ public class CacheWarmingService : ICacheWarmingService
     private readonly ICacheService _cacheService;
     private readonly IEntryStore _store;
     private readonly ITreatmentService _treatments;
-    private readonly IProfileRepository _profiles;
     private readonly ISettingsRepository _settings;
     private readonly CacheConfiguration _config;
     private readonly ILogger<CacheWarmingService> _logger;
@@ -52,7 +51,6 @@ public class CacheWarmingService : ICacheWarmingService
         ICacheService cacheService,
         IEntryStore store,
         ITreatmentService treatments,
-        IProfileRepository profiles,
         ISettingsRepository settings,
         IOptions<CacheConfiguration> config,
         ILogger<CacheWarmingService> logger
@@ -61,7 +59,6 @@ public class CacheWarmingService : ICacheWarmingService
         _cacheService = cacheService;
         _store = store;
         _treatments = treatments;
-        _profiles = profiles;
         _settings = settings;
         _config = config.Value;
         _logger = logger;
@@ -87,9 +84,6 @@ public class CacheWarmingService : ICacheWarmingService
 
             // Warm recent treatments cache
             tasks.Add(WarmRecentTreatmentsAsync(userId, cancellationToken));
-
-            // Warm user profile cache
-            tasks.Add(WarmUserProfileAsync(userId, cancellationToken));
 
             await Task.WhenAll(tasks);
 
@@ -280,39 +274,6 @@ public class CacheWarmingService : ICacheWarmingService
                 "Failed to warm recent treatments cache for user: {UserId}",
                 userId
             );
-        }
-    }
-
-    private async Task WarmUserProfileAsync(string userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var cacheKey = CacheKeyBuilder.BuildProfilesKey(userId);
-            var existsInCache = await _cacheService.ExistsAsync(cacheKey, cancellationToken);
-
-            if (!existsInCache)
-            {
-                var profiles = await _profiles.GetProfilesAsync(
-                    count: 10,
-                    skip: 0,
-                    cancellationToken: cancellationToken
-                );
-                if (profiles.Any())
-                {
-                    await _cacheService.SetAsync(
-                        cacheKey,
-                        profiles.ToList(),
-                        TimeSpan.FromSeconds(CacheConstants.Defaults.ProfileTimestampExpirationSeconds),
-                        cancellationToken
-                    );
-
-                    _logger.LogDebug("Warmed user profile cache for user: {UserId}", userId);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to warm user profile cache for user: {UserId}", userId);
         }
     }
 
