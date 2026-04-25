@@ -54,6 +54,15 @@ public interface ITherapySettingsRepository : IV4Repository<TherapySettings>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<TherapySettings>> GetByProfileNameAsync(string profileName, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the most recent <see cref="TherapySettings"/> record for the given profile name
+    /// that was active at-or-before the specified timestamp.
+    /// </summary>
+    /// <param name="profileName">The profile name to filter by.</param>
+    /// <param name="timestamp">The point-in-time to query against.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<TherapySettings?> GetActiveAtAsync(string profileName, DateTime timestamp, CancellationToken ct = default);
+
     /// <summary>Persist a new <see cref="TherapySettings"/> record and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>

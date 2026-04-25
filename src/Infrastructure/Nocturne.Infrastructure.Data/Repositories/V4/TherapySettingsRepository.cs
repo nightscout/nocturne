@@ -106,6 +106,25 @@ public class TherapySettingsRepository : ITherapySettingsRepository
     }
 
     /// <summary>
+    /// Gets the most recent therapy settings for a profile that was active at-or-before the given timestamp.
+    /// </summary>
+    /// <param name="profileName">The name of the profile.</param>
+    /// <param name="timestamp">The point-in-time to query against.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching therapy settings, or null if none found.</returns>
+    public async Task<TherapySettings?> GetActiveAtAsync(
+        string profileName, DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.TherapySettings
+            .AsNoTracking()
+            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+
+        return entity is null ? null : TherapySettingsMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
     /// Creates a new therapy settings record.
     /// </summary>
     /// <param name="model">The therapy settings to create.</param>
