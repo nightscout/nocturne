@@ -115,18 +115,6 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     }
 
     /// <summary>
-    /// Seed profile entities directly into the SQLite database.
-    /// </summary>
-    protected async Task SeedProfiles(params ProfileEntity[] profiles)
-    {
-        using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        db.Profiles.AddRange(profiles);
-        await db.SaveChangesAsync();
-    }
-
-    /// <summary>
     /// POST JSON to an endpoint and return the response.
     /// </summary>
     protected async Task<HttpResponseMessage> PostJsonAsync(string url, object payload)

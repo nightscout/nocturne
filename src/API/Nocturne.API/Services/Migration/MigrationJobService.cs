@@ -681,37 +681,24 @@ internal class MigrationJob
             UpdateCollectionProgress(collectionName, profiles.Length, 0, 0, false);
             UpdateOverallProgress();
 
+            using var scope = _serviceProvider.CreateScope();
+            var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
+
             foreach (var profile in profiles)
             {
                 ct.ThrowIfCancellationRequested();
 
                 try
                 {
-                    var mills = profile.Mills;
-
-                    var exists = await dbContext.Profiles.AnyAsync(
-                        p => p.Mills == mills && p.DefaultProfile == (profile.DefaultProfile ?? "Default"),
-                        ct
-                    );
-
-                    if (!exists)
+                    if (string.IsNullOrEmpty(profile.Id))
                     {
-                        dbContext.Profiles.Add(
-                            new Infrastructure.Data.Entities.ProfileEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                DefaultProfile = profile.DefaultProfile ?? "Default",
-                                StartDate = profile.StartDate ?? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                                Mills = mills,
-                                CreatedAt = profile.CreatedAt,
-                                Units = profile.Units ?? "mg/dl",
-                                StoreJson = profile.Store != null ? System.Text.Json.JsonSerializer.Serialize(profile.Store) : "{}",
-                                EnteredBy = profile.EnteredBy,
-                                LoopSettingsJson = profile.LoopSettings != null ? System.Text.Json.JsonSerializer.Serialize(profile.LoopSettings) : null,
-                            }
-                        );
+                        profile.Id = Guid.CreateVersion7().ToString();
                     }
+
+                    await decomposer.DecomposeAsync(profile, ct);
                     totalMigrated++;
+                    UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, false);
+                    UpdateOverallProgress();
                 }
                 catch
                 {
@@ -719,7 +706,6 @@ internal class MigrationJob
                 }
             }
 
-            await dbContext.SaveChangesAsync(ct);
             UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, true);
             UpdateOverallProgress();
         }
@@ -1031,33 +1017,35 @@ internal class MigrationJob
             : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var defaultProfile = doc.Contains("defaultProfile") ? doc["defaultProfile"].AsString : "Default";
-
         var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Profiles.AnyAsync(
-            p =>
-                (originalId != null && p.OriginalId == originalId)
-                || (p.Mills == mills && p.DefaultProfile == defaultProfile),
-            ct
-        );
 
-        if (exists)
-            return;
+        // Build a domain Profile and decompose into V4 records
+        var storeJson = doc.Contains("store") ? doc["store"].ToJson() : "{}";
+        var store = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, ProfileData>>(storeJson)
+            ?? new Dictionary<string, ProfileData>();
 
-        var entity = new Infrastructure.Data.Entities.ProfileEntity
+        LoopProfileSettings? loopSettings = null;
+        if (doc.Contains("loopSettings"))
         {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
+            loopSettings = System.Text.Json.JsonSerializer.Deserialize<LoopProfileSettings>(doc["loopSettings"].ToJson());
+        }
+
+        var profile = new Profile
+        {
+            Id = originalId ?? Guid.CreateVersion7().ToString(),
             DefaultProfile = defaultProfile,
             StartDate = doc.Contains("startDate") ? doc["startDate"].AsString : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = mills,
             CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
             Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",
-            StoreJson = doc.Contains("store") ? doc["store"].ToJson() : "{}",
+            Store = store,
             EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
-            LoopSettingsJson = doc.Contains("loopSettings") ? doc["loopSettings"].ToJson() : null,
+            LoopSettings = loopSettings,
         };
 
-        dbContext.Profiles.Add(entity);
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
+        await decomposer.DecomposeAsync(profile, ct);
     }
 
     private async Task TransformFoodAsync(

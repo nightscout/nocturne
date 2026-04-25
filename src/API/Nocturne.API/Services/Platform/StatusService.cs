@@ -527,9 +527,9 @@ public class StatusService : IStatusService
             return timestamps.Where(d => d.HasValue).Max();
         });
 
-        var profileTask = LastModifiedAsync(ctx => ctx.Profiles.AsNoTracking()
-            .OrderByDescending(p => p.UpdatedAtPg)
-            .Select(p => (DateTime?)p.UpdatedAtPg)
+        var profileTask = LastModifiedAsync(ctx => ctx.TherapySettings.AsNoTracking()
+            .OrderByDescending(t => t.SysUpdatedAt)
+            .Select(t => (DateTime?)t.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
         var deviceStatusTask = LastModifiedAsync(ctx => ctx.DeviceStatuses.AsNoTracking()

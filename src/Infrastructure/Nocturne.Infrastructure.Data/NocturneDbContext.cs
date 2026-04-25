@@ -67,11 +67,6 @@ public class NocturneDbContext : DbContext
     public DbSet<SettingsEntity> Settings { get; set; }
 
     /// <summary>
-    /// Gets or sets the Profiles table for user profiles
-    /// </summary>
-    public DbSet<ProfileEntity> Profiles { get; set; }
-
-    /// <summary>
     /// Gets or sets the StepCounts table for xDrip step count / PebbleMovement records
     /// </summary>
     public DbSet<StepCountEntity> StepCounts { get; set; }
@@ -668,28 +663,6 @@ public class NocturneDbContext : DbContext
             .Entity<SettingsEntity>()
             .HasIndex(s => s.SysCreatedAt)
             .HasDatabaseName("ix_settings_sys_created_at");
-
-        // Profile indexes - optimized for common queries
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .HasIndex(p => p.Mills)
-            .HasDatabaseName("ix_profiles_mills")
-            .IsDescending(); // Most recent first
-
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .HasIndex(p => p.DefaultProfile)
-            .HasDatabaseName("ix_profiles_default_profile");
-
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .HasIndex(p => p.Units)
-            .HasDatabaseName("ix_profiles_units");
-
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .HasIndex(p => p.CreatedAtPg)
-            .HasDatabaseName("ix_profiles_sys_created_at");
 
         // StepCount indexes - optimized for time-range graph queries
         modelBuilder
@@ -1804,10 +1777,6 @@ public class NocturneDbContext : DbContext
             .Property(s => s.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
-            .Entity<ProfileEntity>()
-            .Property(p => p.Id)
-            .HasValueGenerator<GuidV7ValueGenerator>();
-        modelBuilder
             .Entity<StepCountEntity>()
             .Property(s => s.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
@@ -2243,26 +2212,6 @@ public class NocturneDbContext : DbContext
 
         // Settings defaults
         modelBuilder.Entity<SettingsEntity>().Property(s => s.IsActive).HasDefaultValue(true);
-
-        // Profile defaults
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .Property(p => p.DefaultProfile)
-            .HasDefaultValue("Default");
-        modelBuilder.Entity<ProfileEntity>().Property(p => p.Units).HasDefaultValue("mg/dl");
-        modelBuilder.Entity<ProfileEntity>().Property(p => p.StoreJson).HasDefaultValue("{}");
-
-        // Profile automatic timestamps
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .Property(p => p.CreatedAtPg)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
-            .Entity<ProfileEntity>()
-            .Property(p => p.UpdatedAtPg)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
 
         // Configure DeviceStatus JSON fields with default empty objects
         foreach (
@@ -2940,14 +2889,6 @@ public class NocturneDbContext : DbContext
                     heartRateEntity.SysCreatedAt = utcNow;
                 }
                 heartRateEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ProfileEntity profileEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    profileEntity.CreatedAtPg = utcNow;
-                }
-                profileEntity.UpdatedAtPg = utcNow;
             }
 // Auth entities
             else if (entry.Entity is RefreshTokenEntity refreshTokenEntity)

@@ -1,33 +1,33 @@
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Profiles;
 
 /// <summary>
-/// Write-only domain service for profile data operations. Persists profiles via
-/// the profile repository, applies write side-effects via <see cref="IWriteSideEffects"/>
-/// (cache invalidation, V4 decomposition), and broadcasts changes via
-/// <see cref="IDataEventSink{T}"/>.
+/// Write-only domain service for profile data operations. Decomposes profiles directly
+/// into V4 granular records via <see cref="IProfileDecomposer"/>, applies cache
+/// invalidation and broadcasting via <see cref="IWriteSideEffects"/>, and notifies
+/// listeners via <see cref="IDataEventSink{T}"/>.
 /// </summary>
 /// <seealso cref="IProfileWriteService"/>
 public class ProfileWriteService : IProfileWriteService
 {
-    private readonly IProfileRepository _profiles;
+    private readonly IProfileDecomposer _decomposer;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<Profile> _events;
     private readonly ILogger<ProfileWriteService> _logger;
     private const string CollectionName = "profiles";
 
     public ProfileWriteService(
-        IProfileRepository profiles,
+        IProfileDecomposer decomposer,
         IWriteSideEffects sideEffects,
         IDataEventSink<Profile> events,
         ILogger<ProfileWriteService> logger
     )
     {
-        _profiles = profiles;
+        _decomposer = decomposer;
         _sideEffects = sideEffects;
         _events = events;
         _logger = logger;
@@ -39,20 +39,28 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        var createdProfiles = await _profiles.CreateProfilesAsync(
-            profiles,
-            cancellationToken
-        );
+        var profileList = profiles.ToList();
+
+        foreach (var profile in profileList)
+        {
+            // Assign an ID if not already set
+            if (string.IsNullOrEmpty(profile.Id))
+            {
+                profile.Id = Guid.CreateVersion7().ToString();
+            }
+
+            await _decomposer.DecomposeAsync(profile, cancellationToken);
+        }
 
         await _sideEffects.OnCreatedAsync(
             CollectionName,
-            createdProfiles.ToList(),
+            profileList,
             cancellationToken: cancellationToken
         );
 
-        await _events.OnCreatedAsync(createdProfiles.ToList(), cancellationToken);
+        await _events.OnCreatedAsync(profileList, cancellationToken);
 
-        return createdProfiles;
+        return profileList;
     }
 
     /// <inheritdoc />
@@ -62,24 +70,20 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        var updatedProfile = await _profiles.UpdateProfileAsync(
-            id,
+        // Ensure the profile has the correct ID for decomposition
+        profile.Id = id;
+
+        await _decomposer.DecomposeAsync(profile, cancellationToken);
+
+        await _sideEffects.OnUpdatedAsync(
+            CollectionName,
             profile,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
-        if (updatedProfile != null)
-        {
-            await _sideEffects.OnUpdatedAsync(
-                CollectionName,
-                updatedProfile,
-                cancellationToken: cancellationToken
-            );
+        await _events.OnUpdatedAsync(profile, cancellationToken);
 
-            await _events.OnUpdatedAsync(updatedProfile, cancellationToken);
-        }
-
-        return updatedProfile;
+        return profile;
     }
 
     /// <inheritdoc />
@@ -88,21 +92,19 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        var profileToDelete = await _profiles.GetProfileByIdAsync(id, cancellationToken);
+        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
 
-        var deleted = await _profiles.DeleteProfileAsync(id, cancellationToken);
-
-        if (deleted)
+        if (deleted > 0)
         {
-            await _sideEffects.OnDeletedAsync(
+            await _sideEffects.OnDeletedAsync<Profile>(
                 CollectionName,
-                profileToDelete,
+                null,
                 cancellationToken: cancellationToken
             );
 
-            await _events.OnDeletedAsync(profileToDelete, cancellationToken);
+            await _events.OnDeletedAsync(null, cancellationToken);
         }
 
-        return deleted;
+        return deleted > 0;
     }
 }

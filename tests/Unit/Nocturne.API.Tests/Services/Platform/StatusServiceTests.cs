@@ -751,14 +751,13 @@ public class StatusServiceTests
             }
         );
 
-        context.Profiles.Add(
-            new ProfileEntity
+        context.TherapySettings.Add(
+            new Nocturne.Infrastructure.Data.Entities.V4.TherapySettingsEntity
             {
                 Id = Guid.CreateVersion7(),
-                Mills = baseMills,
-                DefaultProfile = "Default",
-                Units = "mg/dl",
-                UpdatedAtPg = now.AddHours(-1),
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(baseMills).UtcDateTime,
+                ProfileName = "Default",
+                SysUpdatedAt = now.AddHours(-1),
             }
         );
 
