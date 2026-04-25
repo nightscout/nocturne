@@ -196,7 +196,7 @@ internal sealed class IobCobComputeStage(
 
             var cobResult =
                 relevantCobTreatments.Count > 0
-                    ? cobService.CobTotal(relevantCobTreatments, deviceStatuses, null, t, null)
+                    ? cobService.CobTotal(relevantCobTreatments, deviceStatuses, t, null)
                     : new CobResult { Cob = 0 };
 
             var cob = cobResult.Cob;

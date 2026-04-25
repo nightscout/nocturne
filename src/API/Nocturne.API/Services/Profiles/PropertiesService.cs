@@ -333,7 +333,7 @@ public class PropertiesService : IPropertiesService
 
             // Use full COB calculation service - NO SIMPLIFICATIONS
             _logger.LogDebug("SetCobProperties: Calling COB service");
-            var cobResult = _cobService.CobTotal(treatments, deviceStatus, null, now);
+            var cobResult = _cobService.CobTotal(treatments, deviceStatus, now);
             _logger.LogDebug("SetCobProperties: COB service returned result, is null: {IsNull}", cobResult == null);
 
             if (cobResult == null)

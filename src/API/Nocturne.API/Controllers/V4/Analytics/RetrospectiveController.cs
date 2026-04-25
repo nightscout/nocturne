@@ -128,7 +128,6 @@ public class RetrospectiveController : ControllerBase
             var cobResult = _cobService.CobTotal(
                 treatmentList,
                 deviceStatusList,
-                null,
                 time
             );
             // Get glucose at the specified time (interpolated)
@@ -268,7 +267,6 @@ public class RetrospectiveController : ControllerBase
                 var cobResult = _cobService.FromTreatments(
                     relevantTreatments,
                     deviceStatusList,
-                    null,
                     pointTime
                 );
                 // Get glucose at this time

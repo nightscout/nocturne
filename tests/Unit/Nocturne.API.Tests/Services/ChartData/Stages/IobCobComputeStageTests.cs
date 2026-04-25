@@ -5,7 +5,6 @@ using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
-using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -79,7 +78,7 @@ public class IobCobComputeStageTests
             .Returns(new IobResult { BasalIob = 0.5 });
 
         _mockCobService
-            .Setup(s => s.CobTotal(It.IsAny<List<Treatment>>(), It.IsAny<List<DeviceStatus>>(), It.IsAny<IProfileService?>(), It.IsAny<long>(), It.IsAny<string?>()))
+            .Setup(s => s.CobTotal(It.IsAny<List<Treatment>>(), It.IsAny<List<DeviceStatus>>(), It.IsAny<long>(), It.IsAny<string?>()))
             .Returns(new CobResult { Cob = 20.0 });
 
         var context = new ChartDataContext
@@ -138,7 +137,7 @@ public class IobCobComputeStageTests
             Times.Never
         );
         _mockCobService.Verify(
-            s => s.CobTotal(It.IsAny<List<Treatment>>(), It.IsAny<List<DeviceStatus>>(), It.IsAny<IProfileService?>(), It.IsAny<long>(), It.IsAny<string?>()),
+            s => s.CobTotal(It.IsAny<List<Treatment>>(), It.IsAny<List<DeviceStatus>>(), It.IsAny<long>(), It.IsAny<string?>()),
             Times.Never
         );
 

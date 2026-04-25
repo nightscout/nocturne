@@ -90,7 +90,6 @@ public class RetrospectiveControllerTests
             .Setup(s => s.CobTotal(
                 It.IsAny<List<Treatment>>(),
                 It.IsAny<List<DeviceStatus>>(),
-                It.IsAny<IProfileService?>(),
                 It.IsAny<long?>(),
                 It.IsAny<string?>()))
             .Returns(new CobResult());
