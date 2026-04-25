@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Constants;
@@ -44,6 +45,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     private readonly IStateSpanService _stateSpanService;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDeviceService _deviceService;
+    private readonly IProfileDecomposer _profileDecomposer;
     private readonly ILogger<TreatmentDecomposer> _logger;
 
     /// <summary>
@@ -67,6 +69,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     /// <param name="stateSpanService">Service used to upsert state spans for TempBasal, ProfileSwitch, Override, and TemporaryTarget treatments.</param>
     /// <param name="treatmentFoodService">Service for preserving legacy <see cref="Treatment.FoodType"/> as a <see cref="TreatmentFood"/> entry.</param>
     /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
+    /// <param name="profileDecomposer">Decomposes inline profile JSON from profile switch treatments into V4 schedule records.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public TreatmentDecomposer(
         NocturneDbContext dbContext,
@@ -80,6 +83,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         IStateSpanService stateSpanService,
         ITreatmentFoodService treatmentFoodService,
         IDeviceService deviceService,
+        IProfileDecomposer profileDecomposer,
         ILogger<TreatmentDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -93,6 +97,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _stateSpanService = stateSpanService;
         _treatmentFoodService = treatmentFoodService;
         _deviceService = deviceService;
+        _profileDecomposer = profileDecomposer;
         _logger = logger;
     }
 
@@ -524,6 +529,42 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
         result.CreatedRecords.Add(upserted);
         _logger.LogDebug("Delegated ProfileSwitch treatment {LegacyId} to IStateSpanService", treatment.Id);
+
+        // If the treatment carries inline profile JSON, decompose it into V4 schedule records
+        if (!string.IsNullOrEmpty(treatment.ProfileJson))
+        {
+            try
+            {
+                var profileData = JsonSerializer.Deserialize<ProfileData>(treatment.ProfileJson);
+                if (profileData != null)
+                {
+                    var syntheticStoreName = $"{treatment.Profile ?? "Default"}@@@@@{treatment.Mills}";
+                    var syntheticProfile = new Profile
+                    {
+                        Id = treatment.Id,
+                        Mills = treatment.Mills,
+                        DefaultProfile = syntheticStoreName,
+                        EnteredBy = treatment.EnteredBy,
+                        Store = { [syntheticStoreName] = profileData }
+                    };
+
+                    var profileResult = await _profileDecomposer.DecomposeAsync(syntheticProfile, ct);
+                    result.CreatedRecords.AddRange(profileResult.CreatedRecords);
+                    result.UpdatedRecords.AddRange(profileResult.UpdatedRecords);
+
+                    _logger.LogDebug(
+                        "Decomposed inline ProfileJson from treatment {LegacyId} into {Count} V4 records",
+                        treatment.Id,
+                        profileResult.CreatedRecords.Count + profileResult.UpdatedRecords.Count);
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to deserialize ProfileJson from treatment {LegacyId}, skipping profile decomposition",
+                    treatment.Id);
+            }
+        }
     }
 
     private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)

@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -43,6 +44,8 @@ public class TreatmentDecomposerNotesTests : IDisposable
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
+        var profileDecomposerMock = new Mock<IProfileDecomposer>();
+
         _decomposer = new TreatmentDecomposer(
             _context,
             bolusRepo, tempBasalRepoMock.Object,
@@ -50,6 +53,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             stateSpanServiceMock.Object,
             treatmentFoodServiceMock.Object,
             deviceServiceMock.Object,
+            profileDecomposerMock.Object,
             NullLogger<TreatmentDecomposer>.Instance);
     }
 
