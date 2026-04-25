@@ -81,7 +81,6 @@ public class RetrospectiveControllerTests
             .Setup(s => s.CalculateTotal(
                 It.IsAny<List<Treatment>>(),
                 It.IsAny<List<DeviceStatus>>(),
-                It.IsAny<IProfileService?>(),
                 It.IsAny<long?>(),
                 It.IsAny<string?>(),
                 It.IsAny<List<TempBasal>?>()))

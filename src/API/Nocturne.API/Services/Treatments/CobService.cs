@@ -318,7 +318,6 @@ public class CobService : ICobService
                             .CalculateTotal(
                                 treatments ?? new List<Treatment>(),
                                 deviceStatus ?? new List<DeviceStatus>(),
-                                profile,
                                 lastDecayedBy,
                                 specProfile
                             )
@@ -328,7 +327,6 @@ public class CobService : ICobService
                             .CalculateTotal(
                                 treatments ?? new List<Treatment>(),
                                 deviceStatus ?? new List<DeviceStatus>(),
-                                profile,
                                 cCalc.DecayedBy.ToUnixTimeMilliseconds(),
                                 specProfile
                             )

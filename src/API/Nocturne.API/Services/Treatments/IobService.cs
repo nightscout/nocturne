@@ -1,4 +1,4 @@
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -20,10 +20,13 @@ namespace Nocturne.API.Services.Treatments;
 /// when available, enabling accurate multi-insulin calculations.
 /// </remarks>
 /// <seealso cref="IIobService"/>
-/// <seealso cref="IProfileService"/>
 /// <seealso cref="CobService"/>
 /// <seealso cref="TreatmentService"/>
-public class IobService : IIobService
+public class IobService(
+    ITherapySettingsResolver therapySettings,
+    ISensitivityResolver sensitivity,
+    IBasalRateResolver basalRate
+) : IIobService
 {
     // Constants from legacy implementation
     private const long RECENCY_THRESHOLD = 30 * 60 * 1000; // 30 minutes in milliseconds
@@ -41,17 +44,9 @@ public class IobService : IIobService
     /// treatment-based IOB is used. V4 <see cref="TempBasal"/> basal IOB is always merged
     /// into the treatment result regardless of source priority.
     /// </remarks>
-    /// <param name="treatments">Bolus and temp basal treatments.</param>
-    /// <param name="deviceStatus">Device status entries from Loop, OpenAPS, or pump.</param>
-    /// <param name="profile">Optional profile service for DIA, sensitivity, and basal rate lookups.</param>
-    /// <param name="time">Unix millisecond timestamp; defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <param name="tempBasals">Optional V4 temp basal records for parallel basal IOB calculation.</param>
-    /// <returns>An <see cref="IobResult"/> containing the computed IOB, basal IOB, activity, and display strings.</returns>
     public IobResult CalculateTotal(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null,
         List<TempBasal>? tempBasals = null
@@ -65,13 +60,13 @@ public class IobService : IIobService
         // Calculate IOB from treatments (Care Portal entries)
         var treatmentResult =
             treatments?.Any() == true
-                ? FromTreatments(treatments, profile, currentTime, specProfile)
+                ? FromTreatments(treatments, currentTime, specProfile)
                 : new IobResult();
 
         // Calculate basal IOB from V4 TempBasal records (parallel path to legacy treatment-based basal IOB)
         var tempBasalResult =
             tempBasals?.Any() == true
-                ? FromTempBasals(tempBasals, profile, currentTime, specProfile)
+                ? FromTempBasals(tempBasals, currentTime, specProfile)
                 : new IobResult();
 
         // Merge V4 TempBasal basal IOB into the treatment result
@@ -114,9 +109,6 @@ public class IobService : IIobService
     /// Get the most recent IOB from <see cref="DeviceStatus"/> entries with prioritization.
     /// Exact implementation of legacy lastIOBDeviceStatus function.
     /// </summary>
-    /// <param name="deviceStatus">The device status entries to search.</param>
-    /// <param name="time">Unix millisecond timestamp for recency filtering.</param>
-    /// <returns>The most recent <see cref="IobResult"/>, with Loop sources prioritized over others.</returns>
     public IobResult LastIobDeviceStatus(List<DeviceStatus> deviceStatus, long time)
     {
         if (deviceStatus?.Any() != true)
@@ -155,8 +147,6 @@ public class IobService : IIobService
     /// Extract IOB from a single <see cref="DeviceStatus"/> entry.
     /// Priority: Loop > OpenAPS > Pump (MM Connect).
     /// </summary>
-    /// <param name="deviceStatusEntry">The device status entry to extract IOB from.</param>
-    /// <returns>An <see cref="IobResult"/> with source attribution, or an empty result if no IOB data found.</returns>
     public IobResult FromDeviceStatus(DeviceStatus deviceStatusEntry)
     {
         // Highest priority: Loop IOB
@@ -236,17 +226,9 @@ public class IobService : IIobService
 
     /// <summary>
     /// Calculate IOB from <see cref="Treatment"/> records (Care Portal entries) with exact legacy algorithm.
-    /// Sums bolus IOB from treatments with <see cref="Treatment.Insulin"/> and basal IOB from
-    /// temp basal treatments, using <see cref="CalcTreatment"/> and <see cref="CalcBasalTreatment"/>.
     /// </summary>
-    /// <param name="treatments">The treatments to calculate IOB from.</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA and sensitivity lookups.</param>
-    /// <param name="time">Unix millisecond timestamp; defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns>An <see cref="IobResult"/> with aggregated bolus IOB, basal IOB, and activity.</returns>
     public IobResult FromTreatments(
         List<Treatment> treatments,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     )
@@ -275,7 +257,7 @@ public class IobService : IIobService
                 // Calculate bolus IOB from treatments with insulin
                 if (treatment.Insulin.HasValue && treatment.Insulin.Value > 0)
                 {
-                    var contribution = CalcTreatment(treatment, profile, currentTime, specProfile);
+                    var contribution = CalcTreatment(treatment, currentTime, specProfile);
 
                     if (contribution.IobContrib > 0)
                     {
@@ -289,7 +271,7 @@ public class IobService : IIobService
                 // Calculate basal IOB from temp basal treatments
                 if (treatment.EventType == "Temp Basal" && treatment.Duration.HasValue)
                 {
-                    var basalIob = CalcBasalTreatment(treatment, profile, currentTime, specProfile);
+                    var basalIob = CalcBasalTreatment(treatment, currentTime, specProfile);
                     totalBasalIob += basalIob.IobContrib;
                     totalActivity += basalIob.ActivityContrib;
                 }
@@ -308,18 +290,10 @@ public class IobService : IIobService
 
     /// <summary>
     /// Calculate IOB contribution from a single <see cref="Treatment"/> using the exact legacy
-    /// two-phase insulin curve. Uses <see cref="TreatmentInsulinContext.Dia"/> and
-    /// <see cref="TreatmentInsulinContext.Peak"/> when available on the treatment,
-    /// otherwise falls back to <see cref="IProfileService.GetDIA"/>.
+    /// two-phase insulin curve.
     /// </summary>
-    /// <param name="treatment">The treatment to calculate IOB for.</param>
-    /// <param name="profile">Optional profile service for DIA/sensitivity lookups.</param>
-    /// <param name="time">Unix millisecond timestamp; defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns>An <see cref="IobContribution"/> with the IOB and activity contributions.</returns>
     public IobContribution CalcTreatment(
         Treatment treatment,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     )
@@ -333,11 +307,10 @@ public class IobService : IIobService
 
         // Per-treatment insulin context takes priority over profile DIA/peak
         var dia = treatment.InsulinContext?.Dia
-            ?? profile?.GetDIA(currentTime, specProfile)
-            ?? DEFAULT_DIA;
+            ?? therapySettings.GetDIAAsync(currentTime, specProfile).GetAwaiter().GetResult();
         var peak = treatment.InsulinContext?.Peak
             ?? PEAK_MINUTES;
-        var sens = profile?.GetSensitivity(currentTime, specProfile) ?? 50.0;
+        var sens = sensitivity.GetSensitivityAsync(currentTime, specProfile).GetAwaiter().GetResult();
 
         // Exact legacy algorithm constants
         var scaleFactor = SCALE_FACTOR_BASE / dia;
@@ -383,19 +356,10 @@ public class IobService : IIobService
     }
 
     /// <summary>
-    /// Calculate basal IOB contribution from a temp basal <see cref="Treatment"/> using simplified
-    /// linear decay over the DIA period. Only processes treatments with
-    /// <see cref="Treatment.EventType"/> of <c>"Temp Basal"</c> and non-null
-    /// <see cref="Treatment.Duration"/> and <see cref="Treatment.Absolute"/>.
+    /// Calculate basal IOB contribution from a temp basal <see cref="Treatment"/>.
     /// </summary>
-    /// <param name="treatment">The temp basal treatment.</param>
-    /// <param name="profile">Optional profile service for DIA and basal rate lookups.</param>
-    /// <param name="time">Unix millisecond timestamp; defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns>An <see cref="IobContribution"/> with the basal IOB contribution.</returns>
     public IobContribution CalcBasalTreatment(
         Treatment treatment,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     )
@@ -410,34 +374,30 @@ public class IobService : IIobService
         }
 
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var dia = profile?.GetDIA(currentTime, specProfile) ?? DEFAULT_DIA;
-        var basalRate = profile?.GetBasalRate(currentTime, specProfile) ?? 1.0;
+        var dia = therapySettings.GetDIAAsync(currentTime, specProfile).GetAwaiter().GetResult();
+        var basalRateValue = basalRate.GetBasalRateAsync(currentTime, specProfile).GetAwaiter().GetResult();
 
         var treatmentStart = treatment.Mills;
-        var treatmentEnd = treatmentStart + (treatment.Duration.Value * 60 * 1000); // Duration in minutes to milliseconds
+        var treatmentEnd = treatmentStart + (treatment.Duration.Value * 60 * 1000);
 
-        // Only calculate if current time is after treatment start
         if (currentTime <= treatmentStart)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        // Calculate effective insulin delivered so far
         var effectiveEnd = Math.Min(currentTime, treatmentEnd);
-        var durationActual = (effectiveEnd - treatmentStart) / 1000.0 / 60.0; // minutes
+        var durationActual = (effectiveEnd - treatmentStart) / 1000.0 / 60.0;
         var tempRate = treatment.Absolute.Value;
-        var excessInsulin = Math.Max(0, (tempRate - basalRate) * (durationActual / 60.0)); // excess insulin in units
+        var excessInsulin = Math.Max(0, (tempRate - basalRateValue) * (durationActual / 60.0));
 
         if (excessInsulin <= 0)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        // Use simplified decay similar to bolus IOB but with different parameters for basal
         var minAgo = (currentTime - treatmentStart) / 1000.0 / 60.0;
         var diaMinutes = dia * 60.0;
 
-        // Simple linear decay over DIA period
         if (minAgo < diaMinutes)
         {
             var decayFactor = Math.Max(0, 1.0 - (minAgo / diaMinutes));
@@ -446,7 +406,7 @@ public class IobService : IIobService
             return new IobContribution
             {
                 IobContrib = RoundToThreeDecimals(basalIob),
-                ActivityContrib = 0, // Simplified - no activity calculation for basal
+                ActivityContrib = 0,
             };
         }
 
@@ -455,64 +415,44 @@ public class IobService : IIobService
 
     /// <summary>
     /// Calculate basal IOB contribution from a V4 <see cref="TempBasal"/> record.
-    /// Uses the same simplified linear decay algorithm as <see cref="CalcBasalTreatment"/>
-    /// but operates on the typed <see cref="TempBasal"/> model instead of legacy <see cref="Treatment"/> objects.
     /// </summary>
-    /// <remarks>
-    /// For <see cref="TempBasalOrigin.Suspended"/> records, the rate is treated as zero (pump was suspended).
-    /// Uses <see cref="TempBasal.ScheduledRate"/> when available, otherwise falls back to
-    /// <see cref="IProfileService.GetBasalRate"/>.
-    /// </remarks>
-    /// <param name="tempBasal">The V4 temp basal record.</param>
-    /// <param name="profile">Optional profile service for DIA and basal rate lookups.</param>
-    /// <param name="time">Unix millisecond timestamp; defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns>An <see cref="IobContribution"/> with the basal IOB contribution.</returns>
     public IobContribution CalcTempBasalIob(
         TempBasal tempBasal,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     )
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Cannot calculate IOB for a temp basal with no end time (still active has no known duration)
         if (!tempBasal.EndMills.HasValue)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        var dia = profile?.GetDIA(currentTime, specProfile) ?? DEFAULT_DIA;
+        var dia = therapySettings.GetDIAAsync(currentTime, specProfile).GetAwaiter().GetResult();
 
-        // Use ScheduledRate from the TempBasal if available, otherwise fall back to profile lookup
         var scheduledBasalRate = tempBasal.ScheduledRate
-            ?? profile?.GetBasalRate(tempBasal.StartMills, specProfile)
-            ?? 1.0;
+            ?? basalRate.GetBasalRateAsync(tempBasal.StartMills, specProfile).GetAwaiter().GetResult();
 
         var treatmentStart = tempBasal.StartMills;
         var treatmentEnd = tempBasal.EndMills.Value;
 
-        // Only calculate if current time is after treatment start
         if (currentTime <= treatmentStart)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        // Calculate effective insulin delivered so far
         var effectiveEnd = Math.Min(currentTime, treatmentEnd);
-        var durationActual = (effectiveEnd - treatmentStart) / 1000.0 / 60.0; // minutes
+        var durationActual = (effectiveEnd - treatmentStart) / 1000.0 / 60.0;
 
-        // For Suspended origin, rate is 0 (pump was suspended)
         var rate = tempBasal.Origin == TempBasalOrigin.Suspended ? 0 : tempBasal.Rate;
-        var excessInsulin = Math.Max(0, (rate - scheduledBasalRate) * (durationActual / 60.0)); // excess insulin in units
+        var excessInsulin = Math.Max(0, (rate - scheduledBasalRate) * (durationActual / 60.0));
 
         if (excessInsulin <= 0)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        // Simple linear decay over DIA period — identical to CalcBasalTreatment
         var minAgo = (currentTime - treatmentStart) / 1000.0 / 60.0;
         var diaMinutes = dia * 60.0;
 
@@ -524,7 +464,7 @@ public class IobService : IIobService
             return new IobContribution
             {
                 IobContrib = RoundToThreeDecimals(basalIob),
-                ActivityContrib = 0, // Simplified — no activity calculation for basal
+                ActivityContrib = 0,
             };
         }
 
@@ -533,17 +473,9 @@ public class IobService : IIobService
 
     /// <summary>
     /// Calculate aggregated basal IOB from a list of V4 <see cref="TempBasal"/> records.
-    /// Parallel path to the temp basal loop in <see cref="FromTreatments"/>, operating on
-    /// typed <see cref="TempBasal"/> records instead of legacy <see cref="Treatment"/> objects.
     /// </summary>
-    /// <param name="tempBasals">The V4 temp basal records.</param>
-    /// <param name="profile">Optional profile service for DIA and basal rate lookups.</param>
-    /// <param name="time">Unix millisecond timestamp; defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns>An <see cref="IobResult"/> with basal IOB only (bolus IOB is always zero).</returns>
     public IobResult FromTempBasals(
         List<TempBasal> tempBasals,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     )
@@ -567,7 +499,7 @@ public class IobService : IIobService
         {
             if (tempBasal.StartMills <= currentTime)
             {
-                var contribution = CalcTempBasalIob(tempBasal, profile, currentTime, specProfile);
+                var contribution = CalcTempBasalIob(tempBasal, currentTime, specProfile);
                 totalBasalIob += contribution.IobContrib;
                 totalActivity += contribution.ActivityContrib;
             }
@@ -584,9 +516,6 @@ public class IobService : IIobService
 
     #region Helper Methods
 
-    /// <summary>
-    /// Add display formatting to IOB result - exact legacy implementation
-    /// </summary>
     private static IobResult AddDisplay(IobResult iob)
     {
         if (IsEmpty(iob) || iob.Iob <= 0)
@@ -601,41 +530,26 @@ public class IobService : IIobService
         return iob;
     }
 
-    /// <summary>
-    /// Check if IOB result is empty
-    /// </summary>
     private static bool IsEmpty(IobResult? iob)
     {
         return iob == null || (iob.Iob <= 0 && !iob.BasalIob.HasValue && !iob.Activity.HasValue);
     }
 
-    /// <summary>
-    /// Round to three decimal places with exact legacy precision
-    /// </summary>
     private static double RoundToThreeDecimals(double num)
     {
         return Math.Round(num + double.Epsilon, 3);
     }
 
-    /// <summary>
-    /// Type guard for Loop IOB data
-    /// </summary>
     private static bool HasLoopIob(DeviceStatus deviceStatus)
     {
         return deviceStatus.Loop?.Iob != null;
     }
 
-    /// <summary>
-    /// Type guard for OpenAPS IOB data
-    /// </summary>
     private static bool HasOpenApsIob(DeviceStatus deviceStatus)
     {
         return deviceStatus.OpenAps?.Iob != null;
     }
 
-    /// <summary>
-    /// Type guard for Pump IOB data
-    /// </summary>
     private static bool HasPumpIob(DeviceStatus deviceStatus)
     {
         return deviceStatus.Pump?.Iob != null;

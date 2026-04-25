@@ -1,4 +1,3 @@
-using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -11,13 +10,12 @@ namespace Nocturne.Core.Contracts.Treatments;
 /// <remarks>
 /// IOB is aggregated from three sources: bolus <see cref="Treatment"/> records, V4 <see cref="TempBasal"/>
 /// records, and <see cref="DeviceStatus"/> entries (which carry loop-reported IOB).
-/// The service uses the <see cref="IProfileService"/> to resolve DIA and insulin curves at each timestamp.
+/// Profile data (DIA, sensitivity, basal rate) is resolved via constructor-injected V4 resolvers.
 /// </remarks>
 /// <seealso cref="Treatment"/>
 /// <seealso cref="DeviceStatus"/>
 /// <seealso cref="TempBasal"/>
 /// <seealso cref="IobResult"/>
-/// <seealso cref="IProfileService"/>
 public interface IIobService
 {
     /// <summary>
@@ -25,7 +23,6 @@ public interface IIobService
     /// </summary>
     /// <param name="treatments">Bolus <see cref="Treatment"/> records.</param>
     /// <param name="deviceStatus"><see cref="DeviceStatus"/> entries (may contain loop-reported IOB).</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA and insulin curve lookups.</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name to use.</param>
     /// <param name="tempBasals">Optional V4 <see cref="TempBasal"/> records.</param>
@@ -33,7 +30,6 @@ public interface IIobService
     IobResult CalculateTotal(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null,
         List<TempBasal>? tempBasals = null
@@ -43,13 +39,11 @@ public interface IIobService
     /// Calculate IOB from bolus <see cref="Treatment"/> records only.
     /// </summary>
     /// <param name="treatments">Bolus <see cref="Treatment"/> records.</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA lookups.</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name.</param>
     /// <returns><see cref="IobResult"/> from treatments.</returns>
     IobResult FromTreatments(
         List<Treatment> treatments,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     );
@@ -58,13 +52,11 @@ public interface IIobService
     /// Calculate IOB from V4 <see cref="TempBasal"/> records only.
     /// </summary>
     /// <param name="tempBasals">V4 <see cref="TempBasal"/> records.</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA and scheduled basal lookups.</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name.</param>
     /// <returns><see cref="IobResult"/> from temp basals.</returns>
     IobResult FromTempBasals(
         List<TempBasal> tempBasals,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     );
@@ -88,13 +80,11 @@ public interface IIobService
     /// Calculate IOB contribution from a single bolus <see cref="Treatment"/>.
     /// </summary>
     /// <param name="treatment">A bolus <see cref="Treatment"/>.</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA lookups.</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name.</param>
     /// <returns><see cref="IobContribution"/> from this treatment.</returns>
     IobContribution CalcTreatment(
         Treatment treatment,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     );
@@ -103,13 +93,11 @@ public interface IIobService
     /// Calculate IOB contribution from a single basal <see cref="Treatment"/> (legacy format).
     /// </summary>
     /// <param name="treatment">A basal <see cref="Treatment"/>.</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA and scheduled basal lookups.</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name.</param>
     /// <returns><see cref="IobContribution"/> from this basal treatment.</returns>
     IobContribution CalcBasalTreatment(
         Treatment treatment,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     );
@@ -118,13 +106,11 @@ public interface IIobService
     /// Calculate IOB contribution from a single V4 <see cref="TempBasal"/>.
     /// </summary>
     /// <param name="tempBasal">A V4 <see cref="TempBasal"/> record.</param>
-    /// <param name="profile">Optional <see cref="IProfileService"/> for DIA and scheduled basal lookups.</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name.</param>
     /// <returns><see cref="IobContribution"/> from this temp basal.</returns>
     IobContribution CalcTempBasalIob(
         TempBasal tempBasal,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     );

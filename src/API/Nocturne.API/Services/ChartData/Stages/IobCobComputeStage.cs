@@ -4,7 +4,6 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -157,10 +156,6 @@ internal sealed class IobCobComputeStage(
         // Pre-filter treatments with carbs for COB calculations
         var carbTreatments = treatments.Where(t => t.Carbs.HasValue && t.Carbs.Value > 0).ToList();
 
-        // IOB/COB services still accept IProfileService — pass null since profile data
-        // is resolved internally by those services after their own migration (Tasks 19-20).
-        IProfileService? profile = null;
-
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
             // Filter to only treatments that could still have active IOB at time t
@@ -171,7 +166,7 @@ internal sealed class IobCobComputeStage(
 
             var iobResult =
                 relevantIobTreatments.Count > 0
-                    ? iobService.FromTreatments(relevantIobTreatments, profile, t, null)
+                    ? iobService.FromTreatments(relevantIobTreatments, t, null)
                     : new IobResult { Iob = 0 };
 
             // Calculate basal IOB from V4 TempBasal records
@@ -184,7 +179,7 @@ internal sealed class IobCobComputeStage(
 
                 if (relevantTempBasals.Count > 0)
                 {
-                    var basalResult = iobService.FromTempBasals(relevantTempBasals, profile, t, null);
+                    var basalResult = iobService.FromTempBasals(relevantTempBasals, t, null);
                     basalIob = basalResult.BasalIob ?? 0;
                 }
             }
@@ -201,7 +196,7 @@ internal sealed class IobCobComputeStage(
 
             var cobResult =
                 relevantCobTreatments.Count > 0
-                    ? cobService.CobTotal(relevantCobTreatments, deviceStatuses, profile, t, null)
+                    ? cobService.CobTotal(relevantCobTreatments, deviceStatuses, null, t, null)
                     : new CobResult { Cob = 0 };
 
             var cob = cobResult.Cob;

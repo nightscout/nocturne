@@ -122,14 +122,13 @@ public class RetrospectiveController : ControllerBase
             var iobResult = _iobService.CalculateTotal(
                 treatmentList,
                 deviceStatusList,
-                _profileService,
                 time
             );
             // Calculate COB at the specified time
             var cobResult = _cobService.CobTotal(
                 treatmentList,
                 deviceStatusList,
-                _profileService,
+                null,
                 time
             );
             // Get glucose at the specified time (interpolated)
@@ -263,14 +262,13 @@ public class RetrospectiveController : ControllerBase
                 // Calculate IOB
                 var iobResult = _iobService.FromTreatments(
                     relevantTreatments,
-                    _profileService,
                     pointTime
                 );
                 // Calculate COB
                 var cobResult = _cobService.FromTreatments(
                     relevantTreatments,
                     deviceStatusList,
-                    _profileService,
+                    null,
                     pointTime
                 );
                 // Get glucose at this time

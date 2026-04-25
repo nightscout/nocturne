@@ -71,11 +71,11 @@ public class IobCobComputeStageTests
         };
 
         _mockIobService
-            .Setup(s => s.FromTreatments(It.IsAny<List<Treatment>>(), It.IsAny<IProfileService?>(), It.IsAny<long>(), It.IsAny<string?>()))
+            .Setup(s => s.FromTreatments(It.IsAny<List<Treatment>>(), It.IsAny<long>(), It.IsAny<string?>()))
             .Returns(new IobResult { Iob = 2.0 });
 
         _mockIobService
-            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<IProfileService?>(), It.IsAny<long>(), It.IsAny<string?>()))
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<string?>()))
             .Returns(new IobResult { BasalIob = 0.5 });
 
         _mockCobService
@@ -134,7 +134,7 @@ public class IobCobComputeStageTests
 
         // Assert — IOB/COB services should never be called with no treatments
         _mockIobService.Verify(
-            s => s.FromTreatments(It.IsAny<List<Treatment>>(), It.IsAny<IProfileService?>(), It.IsAny<long>(), It.IsAny<string?>()),
+            s => s.FromTreatments(It.IsAny<List<Treatment>>(), It.IsAny<long>(), It.IsAny<string?>()),
             Times.Never
         );
         _mockCobService.Verify(

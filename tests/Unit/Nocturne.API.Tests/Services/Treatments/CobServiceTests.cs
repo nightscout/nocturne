@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Oref;
@@ -24,7 +25,7 @@ public class CobServiceTests
     public CobServiceTests()
     {
         var logger = new Mock<ILogger<Nocturne.API.Services.Treatments.CobService>>();
-        IIobService iobService = OrefService.IsAvailable() ? new OrefIobAdapter() : new IobService();
+        IIobService iobService = OrefService.IsAvailable() ? new OrefIobAdapter() : CreateDefaultIobService();
         _cobService = new Nocturne.API.Services.Treatments.CobService(logger.Object, iobService);
         _testProfile = new TestCobProfile();
     }
@@ -606,19 +607,42 @@ public class CobServiceTests
     #endregion
     #region Helper Methods and Test Profile
 
+    private static IobService CreateDefaultIobService()
+    {
+        var therapySettings = new Mock<ITherapySettingsResolver>();
+        therapySettings.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(3.0);
+        var sensitivity = new Mock<ISensitivityResolver>();
+        sensitivity.Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(50.0);
+        var basalRate = new Mock<IBasalRateResolver>();
+        basalRate.Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(1.0);
+        return new IobService(therapySettings.Object, sensitivity.Object, basalRate.Object);
+    }
+
     private sealed class OrefIobAdapter : IIobService
     {
+        // Default profile values for Oref calculations
+        private const double DefaultDia = 3.0;
+        private const double DefaultSens = 50.0;
+        private const double DefaultCarbRatio = 18.0;
+        private const double DefaultBasalRate = 1.0;
+
         public IobResult CalculateTotal(
             List<Treatment> treatments,
             List<DeviceStatus> deviceStatus,
-            IProfileService? profile = null,
             long? time = null,
             string? specProfile = null,
             List<Nocturne.Core.Models.V4.TempBasal>? tempBasals = null
         )
         {
             var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var orefProfile = BuildProfile(profile, currentTime, specProfile);
+            var orefProfile = new OrefModels.OrefProfile
+            {
+                Dia = DefaultDia,
+                Sens = DefaultSens,
+                CarbRatio = DefaultCarbRatio,
+                CurrentBasal = DefaultBasalRate,
+                Curve = "bilinear",
+            };
             var orefTreatments = BuildTreatments(treatments);
 
             var iobData = OrefService.CalculateIob(
@@ -632,23 +656,21 @@ public class CobServiceTests
                 return new IobResult { Iob = 0.0, Activity = 0.0, Source = "Care Portal" };
             }
 
-            var sensitivity = profile?.GetSensitivity(currentTime, specProfile) ?? 0.0;
             return new IobResult
             {
                 Iob = iobData.Iob,
-                Activity = iobData.Activity * sensitivity,
+                Activity = iobData.Activity * DefaultSens,
                 Source = "Care Portal",
             };
         }
 
         public IobResult FromTreatments(
             List<Treatment> treatments,
-            IProfileService? profile = null,
             long? time = null,
             string? specProfile = null
         )
         {
-            return CalculateTotal(treatments, new List<DeviceStatus>(), profile, time, specProfile);
+            return CalculateTotal(treatments, new List<DeviceStatus>(), time, specProfile);
         }
 
         public IobResult FromDeviceStatus(DeviceStatus deviceStatusEntry) => new();
@@ -657,7 +679,6 @@ public class CobServiceTests
 
         public IobContribution CalcTreatment(
             Treatment treatment,
-            IProfileService? profile = null,
             long? time = null,
             string? specProfile = null
         )
@@ -667,7 +688,6 @@ public class CobServiceTests
 
         public IobContribution CalcBasalTreatment(
             Treatment treatment,
-            IProfileService? profile = null,
             long? time = null,
             string? specProfile = null
         )
@@ -677,7 +697,6 @@ public class CobServiceTests
 
         public IobContribution CalcTempBasalIob(
             Nocturne.Core.Models.V4.TempBasal tempBasal,
-            IProfileService? profile = null,
             long? time = null,
             string? specProfile = null
         )
@@ -687,28 +706,11 @@ public class CobServiceTests
 
         public IobResult FromTempBasals(
             List<Nocturne.Core.Models.V4.TempBasal> tempBasals,
-            IProfileService? profile = null,
             long? time = null,
             string? specProfile = null
         )
         {
             return new IobResult();
-        }
-
-        private static OrefModels.OrefProfile BuildProfile(
-            IProfileService? profile,
-            long time,
-            string? specProfile
-        )
-        {
-            return new OrefModels.OrefProfile
-            {
-                Dia = profile?.GetDIA(time, specProfile) ?? 3.0,
-                Sens = profile?.GetSensitivity(time, specProfile) ?? 0.0,
-                CarbRatio = profile?.GetCarbRatio(time, specProfile) ?? 10.0,
-                CurrentBasal = profile?.GetBasalRate(time, specProfile) ?? 0.0,
-                Curve = "bilinear",
-            };
         }
 
         private static List<OrefModels.OrefTreatment> BuildTreatments(IEnumerable<Treatment> treatments)

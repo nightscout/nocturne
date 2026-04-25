@@ -97,7 +97,6 @@ public class Phase3CalculationCacheTests
         var result = await cachedIobService.CalculateTotalAsync(
             treatments,
             deviceStatus,
-            null,
             timestamp,
             cancellationToken: CancellationToken.None
         );

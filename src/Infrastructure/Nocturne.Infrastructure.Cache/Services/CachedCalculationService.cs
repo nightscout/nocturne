@@ -46,7 +46,6 @@ public interface ICachedIobService
     Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null,
         CancellationToken cancellationToken = default
@@ -61,7 +60,6 @@ public interface ICachedIobService
     IobResult CalculateTotal(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     );
@@ -94,7 +92,6 @@ public class CachedIobService : ICachedIobService
     public async Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null,
         CancellationToken cancellationToken = default
@@ -106,7 +103,7 @@ public class CachedIobService : ICachedIobService
         if (string.IsNullOrEmpty(userId))
         {
             // No user ID available, skip caching
-            return _iobService.CalculateTotal(treatments, deviceStatus, profile, time, specProfile);
+            return _iobService.CalculateTotal(treatments, deviceStatus, time, specProfile);
         }
 
         var cacheKey = CacheKeyBuilder.BuildIobCalculationKey(userId, timestamp);
@@ -116,7 +113,7 @@ public class CachedIobService : ICachedIobService
             cacheKey,
             () =>
                 Task.FromResult(
-                    _iobService.CalculateTotal(treatments, deviceStatus, profile, time, specProfile)
+                    _iobService.CalculateTotal(treatments, deviceStatus, time, specProfile)
                 ),
             expiration,
             cancellationToken
@@ -127,12 +124,11 @@ public class CachedIobService : ICachedIobService
     public IobResult CalculateTotal(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null
     )
     {
-        return CalculateTotalAsync(treatments, deviceStatus, profile, time, specProfile)
+        return CalculateTotalAsync(treatments, deviceStatus, time, specProfile)
             .GetAwaiter()
             .GetResult();
     }

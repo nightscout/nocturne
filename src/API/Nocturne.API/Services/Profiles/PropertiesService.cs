@@ -287,7 +287,6 @@ public class PropertiesService : IPropertiesService
             var iobResult = _iobService.CalculateTotal(
                 treatments,
                 deviceStatus,
-                profile: null,
                 now
             );
 
