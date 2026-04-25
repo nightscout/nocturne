@@ -7,7 +7,7 @@ using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -23,7 +23,7 @@ public class RetrospectiveControllerTests
     private readonly Mock<IEntryService> _entryServiceMock = new();
     private readonly Mock<ITreatmentService> _treatmentServiceMock = new();
     private readonly Mock<IDeviceStatusService> _deviceStatusServiceMock = new();
-    private readonly Mock<IProfileService> _profileServiceMock = new();
+    private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
     private readonly Mock<ILogger<RetrospectiveController>> _loggerMock = new();
 
     private RetrospectiveController CreateController()
@@ -34,7 +34,7 @@ public class RetrospectiveControllerTests
             _entryServiceMock.Object,
             _treatmentServiceMock.Object,
             _deviceStatusServiceMock.Object,
-            _profileServiceMock.Object,
+            _basalRateResolverMock.Object,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -94,9 +94,9 @@ public class RetrospectiveControllerTests
                 It.IsAny<string?>()))
             .Returns(new CobResult());
 
-        _profileServiceMock
-            .Setup(s => s.GetBasalRate(It.IsAny<long>()))
-            .Returns(0.8);
+        _basalRateResolverMock
+            .Setup(s => s.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0.8);
 
         var controller = CreateController();
 

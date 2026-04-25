@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 
@@ -14,7 +15,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IEntryStore"/>
 /// <seealso cref="ITreatmentStore"/>
 /// <seealso cref="IDeviceStatusRepository"/>
-/// <seealso cref="IProfileRepository"/>
+/// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IActivityService"/>
 [ApiController]
@@ -24,7 +25,7 @@ public class CountController : ControllerBase
     private readonly IEntryStore _entryStore;
     private readonly ITreatmentStore _treatmentStore;
     private readonly IDeviceStatusRepository _deviceStatusRepository;
-    private readonly IProfileRepository _profileRepository;
+    private readonly IProfileProjectionService _profileProjectionService;
     private readonly IFoodRepository _foodRepository;
     private readonly IActivityService _activityService;
     private readonly ILogger<CountController> _logger;
@@ -35,7 +36,7 @@ public class CountController : ControllerBase
     /// <param name="entryStore">Store for glucose entry records.</param>
     /// <param name="treatmentStore">Store for treatment records.</param>
     /// <param name="deviceStatusRepository">Repository for device status records.</param>
-    /// <param name="profileRepository">Repository for profile records.</param>
+    /// <param name="profileProjectionService">Service for profile projection and counting.</param>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="activityService">Service for activity operations.</param>
     /// <param name="logger">Logger instance.</param>
@@ -43,7 +44,7 @@ public class CountController : ControllerBase
         IEntryStore entryStore,
         ITreatmentStore treatmentStore,
         IDeviceStatusRepository deviceStatusRepository,
-        IProfileRepository profileRepository,
+        IProfileProjectionService profileProjectionService,
         IFoodRepository foodRepository,
         IActivityService activityService,
         ILogger<CountController> logger
@@ -52,7 +53,7 @@ public class CountController : ControllerBase
         _entryStore = entryStore;
         _treatmentStore = treatmentStore;
         _deviceStatusRepository = deviceStatusRepository;
-        _profileRepository = profileRepository;
+        _profileProjectionService = profileProjectionService;
         _foodRepository = foodRepository;
         _activityService = activityService;
         _logger = logger;
@@ -306,7 +307,7 @@ public class CountController : ControllerBase
                     );
                     break;
                 case "profile":
-                    count = await _profileRepository.CountProfilesAsync(find, cancellationToken);
+                    count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);
                     break;
                 case "food":
                     count = await _foodRepository.CountFoodAsync(find, type, cancellationToken);

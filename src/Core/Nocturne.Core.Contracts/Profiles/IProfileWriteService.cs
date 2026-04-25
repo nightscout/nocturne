@@ -4,8 +4,7 @@ namespace Nocturne.Core.Contracts.Profiles;
 
 /// <summary>
 /// Write-only domain service for profile data operations. Persists profiles, applies write
-/// side-effects (cache invalidation, V4 decomposition), and broadcasts changes. Read operations
-/// remain on <see cref="IProfileDataService"/> until Phase 4 migration completes.
+/// side-effects (cache invalidation, V4 decomposition), and broadcasts changes.
 /// </summary>
 public interface IProfileWriteService
 {

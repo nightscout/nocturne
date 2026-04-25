@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 [Trait("Category", "Unit")]
 public class MetadataPublisherTests
 {
-    private readonly Mock<IProfileDataService> _mockProfileDataService;
+    private readonly Mock<IProfileWriteService> _mockProfileDataService;
     private readonly Mock<IFoodService> _mockFoodService;
     private readonly Mock<IConnectorFoodEntryService> _mockConnectorFoodEntryService;
     private readonly Mock<IActivityService> _mockActivityService;
@@ -28,7 +28,7 @@ public class MetadataPublisherTests
 
     public MetadataPublisherTests()
     {
-        _mockProfileDataService = new Mock<IProfileDataService>();
+        _mockProfileDataService = new Mock<IProfileWriteService>();
         _mockFoodService = new Mock<IFoodService>();
         _mockConnectorFoodEntryService = new Mock<IConnectorFoodEntryService>();
         _mockActivityService = new Mock<IActivityService>();

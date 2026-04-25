@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -21,7 +22,7 @@ public class CompressionLowService : ICompressionLowService
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
     private readonly IInAppNotificationService _notificationService;
-    private readonly IProfileDataService _profileDataService;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IUISettingsService _uiSettingsService;
     private readonly ILogger<CompressionLowService> _logger;
 
@@ -31,7 +32,7 @@ public class CompressionLowService : ICompressionLowService
         IEntryService entryService,
         ITreatmentService treatmentService,
         IInAppNotificationService notificationService,
-        IProfileDataService profileDataService,
+        ITherapySettingsResolver therapySettingsResolver,
         IUISettingsService uiSettingsService,
         ILogger<CompressionLowService> logger)
     {
@@ -40,7 +41,7 @@ public class CompressionLowService : ICompressionLowService
         _entryService = entryService;
         _treatmentService = treatmentService;
         _notificationService = notificationService;
-        _profileDataService = profileDataService;
+        _therapySettingsResolver = therapySettingsResolver;
         _uiSettingsService = uiSettingsService;
         _logger = logger;
     }
@@ -241,11 +242,7 @@ public class CompressionLowService : ICompressionLowService
     {
         try
         {
-            var approximateNightTime = nightOf.ToDateTime(new TimeOnly(2, 0));
-            var approximateMills = new DateTimeOffset(approximateNightTime, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-            var profile = await _profileDataService.GetProfileAtTimestampAsync(approximateMills, cancellationToken);
-            var timezoneId = profile?.Store?.Values.FirstOrDefault()?.Timezone;
+            var timezoneId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
             return ResolveTimeZone(timezoneId);
         }
         catch (Exception ex)

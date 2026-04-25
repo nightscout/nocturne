@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -117,7 +118,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
 
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
-                var profileDataService = scope.ServiceProvider.GetRequiredService<IProfileDataService>();
+                var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
                 var entryService = scope.ServiceProvider.GetRequiredService<IEntryService>();
 
                 var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
@@ -125,7 +126,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var wakeTimeHour = sleepSchedule.WakeTimeHour;
                 var lastNightGuess = DateOnly.FromDateTime(nowUtc.AddDays(-1));
                 var userTimeZone = ResolveTimeZone(sleepSchedule.Timezone)
-                    ?? await GetUserTimeZoneFromProfileAsync(profileDataService, cancellationToken)
+                    ?? await GetUserTimeZoneFromProfileAsync(therapySettingsResolver, cancellationToken)
                     ?? await InferTimeZoneFromEntriesAsync(entryService, lastNightGuess, cancellationToken)
                     ?? TimeZoneInfo.Utc;
 
@@ -183,13 +184,13 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
 
                 // Determine "last night" in the user's local timezone
-                var profileDataService = scope.ServiceProvider.GetRequiredService<IProfileDataService>();
+                var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
                 var entryService = scope.ServiceProvider.GetRequiredService<IEntryService>();
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
                 var lastNightGuess = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
                 var userTimeZone = ResolveTimeZone(settings.DataQuality.SleepSchedule.Timezone)
-                    ?? await GetUserTimeZoneFromProfileAsync(profileDataService, cancellationToken)
+                    ?? await GetUserTimeZoneFromProfileAsync(therapySettingsResolver, cancellationToken)
                     ?? await InferTimeZoneFromEntriesAsync(entryService, lastNightGuess, cancellationToken)
                     ?? TimeZoneInfo.Utc;
                 var detectionTimeLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, userTimeZone);
@@ -219,7 +220,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         using var scope = _serviceProvider.CreateScope();
 
         // When called from an HTTP endpoint, the tenant context lives in the request scope.
-        // Propagate it to the new scope so tenant-scoped services (EntryService, ProfileDataService, etc.) work.
+        // Propagate it to the new scope so tenant-scoped services (EntryService, etc.) work.
         var httpContextAccessor = scope.ServiceProvider.GetService<IHttpContextAccessor>();
         var requestTenantAccessor = httpContextAccessor?.HttpContext?.RequestServices.GetService<ITenantAccessor>();
         if (requestTenantAccessor is { IsResolved: true, Context: not null })
@@ -240,7 +241,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         var entryService = scopedProvider.GetRequiredService<IEntryService>();
         var treatmentService = scopedProvider.GetRequiredService<ITreatmentService>();
         var notificationService = scopedProvider.GetRequiredService<IInAppNotificationService>();
-        var profileDataService = scopedProvider.GetRequiredService<IProfileDataService>();
+        var therapySettingsResolver = scopedProvider.GetRequiredService<ITherapySettingsResolver>();
         var uiSettingsService = scopedProvider.GetRequiredService<IUISettingsService>();
         var tenantAccessor = scopedProvider.GetRequiredService<ITenantAccessor>();
 
@@ -267,7 +268,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         // Get user's timezone: prefer UI settings, fall back to profile,
         // then infer from entry UTC offsets, then UTC
         var userTimeZone = ResolveTimeZone(sleepSchedule.Timezone)
-            ?? await GetUserTimeZoneFromProfileAsync(profileDataService, nightOf, cancellationToken)
+            ?? await GetUserTimeZoneFromProfileAsync(therapySettingsResolver, nightOf, cancellationToken)
             ?? await InferTimeZoneFromEntriesAsync(entryService, nightOf, cancellationToken)
             ?? TimeZoneInfo.Utc;
 
@@ -616,21 +617,19 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
     }
 
     /// <summary>
-    /// Reads the user's timezone from the Nightscout profile active at the current UTC time.
-    /// Returns <see langword="null"/> when the profile has no timezone set.
+    /// Reads the user's timezone from the therapy settings.
+    /// Returns <see langword="null"/> when no timezone is configured.
     /// </summary>
-    /// <param name="profileDataService">Service used to look up the active profile.</param>
+    /// <param name="therapySettingsResolver">Resolver used to look up the timezone.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The user's <see cref="TimeZoneInfo"/>, or <see langword="null"/>.</returns>
     private async Task<TimeZoneInfo?> GetUserTimeZoneFromProfileAsync(
-        IProfileDataService profileDataService,
+        ITherapySettingsResolver therapySettingsResolver,
         CancellationToken cancellationToken)
     {
         try
         {
-            var profile = await profileDataService.GetProfileAtTimestampAsync(
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cancellationToken);
-            var timezoneId = profile?.Store?.Values.FirstOrDefault()?.Timezone;
+            var timezoneId = await therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
             return ResolveTimeZone(timezoneId);
         }
         catch (Exception ex)
@@ -641,25 +640,21 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
     }
 
     /// <summary>
-    /// Reads the user's timezone from the Nightscout profile active at approximately 02:00 UTC
-    /// during the specified night. Returns <see langword="null"/> when no timezone is found.
+    /// Reads the user's timezone from the therapy settings.
+    /// Returns <see langword="null"/> when no timezone is configured.
     /// </summary>
-    /// <param name="profileDataService">Service used to look up the active profile.</param>
-    /// <param name="nightOf">The local calendar date whose overnight profile should be queried.</param>
+    /// <param name="therapySettingsResolver">Resolver used to look up the timezone.</param>
+    /// <param name="nightOf">The local calendar date (unused, kept for overload compatibility).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The user's <see cref="TimeZoneInfo"/>, or <see langword="null"/>.</returns>
     private async Task<TimeZoneInfo?> GetUserTimeZoneFromProfileAsync(
-        IProfileDataService profileDataService,
+        ITherapySettingsResolver therapySettingsResolver,
         DateOnly nightOf,
         CancellationToken cancellationToken)
     {
         try
         {
-            var approximateNightTime = nightOf.ToDateTime(new TimeOnly(2, 0));
-            var approximateMills = new DateTimeOffset(approximateNightTime, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-            var profile = await profileDataService.GetProfileAtTimestampAsync(approximateMills, cancellationToken);
-            var timezoneId = profile?.Store?.Values.FirstOrDefault()?.Timezone;
+            var timezoneId = await therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
             return ResolveTimeZone(timezoneId);
         }
         catch (Exception ex)

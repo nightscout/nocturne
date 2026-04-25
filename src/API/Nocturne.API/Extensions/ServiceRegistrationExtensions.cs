@@ -28,6 +28,8 @@ using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.NotificationTemplates;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
+using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
@@ -120,7 +122,6 @@ public static class ServiceRegistrationExtensions
         }
 
         services.AddScoped<ICobService, CobService>();
-        services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IAr2Service, Ar2Service>();
         services.AddScoped<IBolusWizardService, BolusWizardService>();
 
@@ -395,8 +396,15 @@ public static class ServiceRegistrationExtensions
                 [sp.GetRequiredService<NightscoutDeviceStatusWriteBackSink>()],
                 sp.GetService<ILogger<CompositeDataEventSink<DeviceStatus>>>()));
         services.AddScoped<IBatteryService, BatteryService>();
-        services.AddScoped<IProfileDataService, ProfileDataService>();
         services.AddScoped<IProfileWriteService, ProfileWriteService>();
+        services.AddScoped<IActiveProfileResolver, ActiveProfileResolver>();
+        services.AddScoped<IBasalRateResolver, BasalRateResolver>();
+        services.AddScoped<ISensitivityResolver, SensitivityResolver>();
+        services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
+        services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
+        services.AddScoped<ITherapySettingsResolver, TherapySettingsResolver>();
+        services.AddScoped<ITempBasalResolver, TempBasalResolver>();
+        services.AddScoped<IProfileProjectionService, ProfileProjectionService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>
             new CompositeDataEventSink<Profile>(
                 [sp.GetRequiredService<NightscoutProfileWriteBackSink>()],

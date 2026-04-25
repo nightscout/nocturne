@@ -7,7 +7,7 @@ namespace Nocturne.API.Services.Profiles;
 
 /// <summary>
 /// Write-only domain service for profile data operations. Persists profiles via
-/// <see cref="IProfileRepository"/>, applies write side-effects via <see cref="IWriteSideEffects"/>
+/// the profile repository, applies write side-effects via <see cref="IWriteSideEffects"/>
 /// (cache invalidation, V4 decomposition), and broadcasts changes via
 /// <see cref="IDataEventSink{T}"/>.
 /// </summary>

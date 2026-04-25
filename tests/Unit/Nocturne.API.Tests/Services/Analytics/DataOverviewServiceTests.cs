@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -36,12 +36,12 @@ public class DataOverviewServiceTests : IDisposable
     {
         _dbContext = TestDbContextFactory.CreateInMemoryContext();
         _dbContext.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var mockProfileService = new Mock<IProfileService>();
-        mockProfileService.Setup(p => p.HasData()).Returns(false);
+        var mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
+        mockTherapySettingsResolver.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
         _service = new DataOverviewService(
             _dbContext,
-            mockProfileService.Object,
+            mockTherapySettingsResolver.Object,
             mockStatisticsService.Object,
             NullLogger<DataOverviewService>.Instance
         );

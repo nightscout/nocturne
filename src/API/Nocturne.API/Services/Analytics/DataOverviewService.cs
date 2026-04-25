@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
@@ -12,15 +12,15 @@ namespace Nocturne.API.Services.Analytics;
 /// Service for aggregating data overview statistics across all data types.
 /// Provides year-level availability and day-level <see cref="Entry"/> and <see cref="Treatment"/>
 /// record counts for heatmap and calendar visualization in the dashboard.
-/// All timestamps are resolved to the user's timezone via <see cref="IProfileService.GetTimezone"/>.
+/// All timestamps are resolved to the user's timezone via <see cref="ITherapySettingsResolver.GetTimezoneAsync"/>.
 /// </summary>
 /// <seealso cref="IDataOverviewService"/>
 /// <seealso cref="IStatisticsService"/>
-/// <seealso cref="IProfileService"/>
+/// <seealso cref="ITherapySettingsResolver"/>
 public class DataOverviewService : IDataOverviewService
 {
     private readonly NocturneDbContext _context;
-    private readonly IProfileService _profileService;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IStatisticsService _statisticsService;
     private readonly ILogger<DataOverviewService> _logger;
 
@@ -28,25 +28,25 @@ public class DataOverviewService : IDataOverviewService
     /// Initializes a new instance of <see cref="DataOverviewService"/>.
     /// </summary>
     /// <param name="context">The EF Core database context for direct query access.</param>
-    /// <param name="profileService">Profile service for resolving the user's active timezone.</param>
+    /// <param name="therapySettingsResolver">Resolver for the user's active timezone and therapy settings.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         NocturneDbContext context,
-        IProfileService profileService,
+        ITherapySettingsResolver therapySettingsResolver,
         IStatisticsService statisticsService,
         ILogger<DataOverviewService> logger
     )
     {
         _context = context;
-        _profileService = profileService;
+        _therapySettingsResolver = therapySettingsResolver;
         _statisticsService = statisticsService;
         _logger = logger;
     }
 
-    private TimeZoneInfo GetUserTimeZone()
+    private async Task<TimeZoneInfo> GetUserTimeZoneAsync(CancellationToken cancellationToken = default)
     {
-        var tzId = _profileService.HasData() ? _profileService.GetTimezone() : null;
+        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
         return !string.IsNullOrEmpty(tzId)
             ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
             : TimeZoneInfo.Utc;
@@ -196,7 +196,7 @@ public class DataOverviewService : IDataOverviewService
                 globalMax = max.Value;
         }
 
-        var tz = GetUserTimeZone();
+        var tz = await GetUserTimeZoneAsync(cancellationToken);
         var years = Array.Empty<int>();
         if (globalMin.HasValue && globalMax.HasValue)
         {
@@ -233,7 +233,7 @@ public class DataOverviewService : IDataOverviewService
             dataSources != null ? string.Join(",", dataSources) : "(all)"
         );
 
-        var tz = GetUserTimeZone();
+        var tz = await GetUserTimeZoneAsync(cancellationToken);
         var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
         var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
         var startUtc = TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz);
@@ -447,7 +447,7 @@ public class DataOverviewService : IDataOverviewService
             dataSources != null ? string.Join(",", dataSources) : "(all)"
         );
 
-        var tz = GetUserTimeZone();
+        var tz = await GetUserTimeZoneAsync(cancellationToken);
         var hasFilter = dataSources is { Length: > 0 };
         var periods = new List<GriTimelinePeriod>();
 

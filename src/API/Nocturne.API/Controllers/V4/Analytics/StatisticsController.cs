@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -42,8 +42,9 @@ public class StatisticsController : ControllerBase
 {
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
-    private readonly IProfileRepository _profileRepository;
-    private readonly IProfileService _profileService;
+    private readonly IProfileProjectionService _profileProjectionService;
+    private readonly IBasalRateResolver _basalRateResolver;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IBolusRepository _bolusRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
@@ -62,8 +63,9 @@ public class StatisticsController : ControllerBase
     public StatisticsController(
         IStatisticsService statisticsService,
         ICacheService cacheService,
-        IProfileRepository profileRepository,
-        IProfileService profileService,
+        IProfileProjectionService profileProjectionService,
+        IBasalRateResolver basalRateResolver,
+        ITherapySettingsResolver therapySettingsResolver,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
@@ -78,8 +80,9 @@ public class StatisticsController : ControllerBase
     {
         _statisticsService = statisticsService;
         _cacheService = cacheService;
-        _profileRepository = profileRepository;
-        _profileService = profileService;
+        _profileProjectionService = profileProjectionService;
+        _basalRateResolver = basalRateResolver;
+        _therapySettingsResolver = therapySettingsResolver;
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _bolusRepository = bolusRepository;
         _carbIntakeRepository = carbIntakeRepository;
@@ -565,7 +568,7 @@ public class StatisticsController : ControllerBase
     /// entry for each of the five standard periods.</returns>
     /// <remarks>
     /// When no TempBasal or algorithm bolus records are found but a profile is loaded, the method
-    /// falls back to computing scheduled basal from the active <see cref="IProfileService"/> schedule.
+    /// falls back to computing scheduled basal from the active profile schedule via <see cref="IBasalRateResolver"/>.
     /// GMI reliability is assessed per-period using context-appropriate recommended-day minimums
     /// (e.g., 1-day periods cannot require 14 days of data).
     /// </remarks>
@@ -589,17 +592,8 @@ public class StatisticsController : ControllerBase
                 return Ok(cachedResult);
             }
 
-            // Load profile data for scheduled basal calculation
-            var profiles = await _profileRepository.GetProfilesAsync(
-                count: 10,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-            var profileList = profiles.ToList();
-            if (profileList.Any())
-            {
-                _profileService.LoadData(profileList);
-            }
+            // Check if profile data exists for scheduled basal calculation
+            var hasProfileData = await _therapySettingsResolver.HasDataAsync(cancellationToken);
 
             // Calculate statistics for each period
             var periods = new[] { 1, 3, 7, 30, 90 };
@@ -712,12 +706,13 @@ public class StatisticsController : ControllerBase
                     if (
                         tempBasals.Count == 0
                         && algorithmBoluses.Count == 0
-                        && _profileService.HasData()
+                        && hasProfileData
                     )
                     {
-                        var profileBasal = CalculateScheduledBasalForPeriod(
+                        var profileBasal = await CalculateScheduledBasalForPeriodAsync(
                             startTimestamp,
-                            endTimestamp
+                            endTimestamp,
+                            cancellationToken
                         );
                         var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
                         insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
@@ -843,7 +838,10 @@ public class StatisticsController : ControllerBase
     /// <param name="startTimestamp">Start time as DateTime (UTC)</param>
     /// <param name="endTimestamp">End time as DateTime (UTC)</param>
     /// <returns>Total scheduled basal insulin in units</returns>
-    private double CalculateScheduledBasalForPeriod(DateTime startTimestamp, DateTime endTimestamp)
+    private async Task<double> CalculateScheduledBasalForPeriodAsync(
+        DateTime startTimestamp,
+        DateTime endTimestamp,
+        CancellationToken cancellationToken = default)
     {
         double totalBasal = 0.0;
 
@@ -857,7 +855,7 @@ public class StatisticsController : ControllerBase
 
         while (currentTime < endMills)
         {
-            var scheduledRate = _profileService.GetBasalRate(currentTime);
+            var scheduledRate = await _basalRateResolver.GetBasalRateAsync(currentTime, ct: cancellationToken);
             var insulinDelivered = scheduledRate * (5.0 / 60.0); // 5 minutes = 5/60 hours
             totalBasal += insulinDelivered;
             currentTime += intervalMs;
@@ -945,7 +943,7 @@ public class StatisticsController : ControllerBase
                 kind: BolusKind.Algorithm
             );
 
-            var tzId = _profileService.HasData() ? _profileService.GetTimezone() : null;
+            var tzId = await _therapySettingsResolver.GetTimezoneAsync();
             var tz = !string.IsNullOrEmpty(tzId)
                 ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
                 : TimeZoneInfo.Utc;
@@ -1023,19 +1021,13 @@ public class StatisticsController : ControllerBase
                 descending: false
             );
 
-            // Load basal rate profile so we can fill in ScheduledRate on temp basals
-            // that don't have it (e.g. MyLife/CamAPS algorithm adjustments)
-            var profiles = await _profileRepository.GetProfilesAsync(count: 10, skip: 0);
-            var profileList = profiles.ToList();
-            if (profileList.Any())
+            // Fill in ScheduledRate on temp basals that don't have it
+            // (e.g. MyLife/CamAPS algorithm adjustments)
+            foreach (var tb in tempBasals)
             {
-                _profileService.LoadData(profileList);
-                foreach (var tb in tempBasals)
+                if (!tb.ScheduledRate.HasValue && tb.Origin != TempBasalOrigin.Scheduled)
                 {
-                    if (!tb.ScheduledRate.HasValue && tb.Origin != TempBasalOrigin.Scheduled)
-                    {
-                        tb.ScheduledRate = _profileService.GetBasalRate(tb.StartMills);
-                    }
+                    tb.ScheduledRate = await _basalRateResolver.GetBasalRateAsync(tb.StartMills);
                 }
             }
 
@@ -1104,7 +1096,7 @@ public class StatisticsController : ControllerBase
             // Fall back to profile-based scheduled rates when no TempBasals exist.
             // This matches ChartDataService.BuildBasalSeriesFromStateSpans which also
             // falls back to BuildBasalSeriesFromProfile, keeping both charts consistent.
-            if (tempBasals.Count == 0 && _profileService.HasData())
+            if (tempBasals.Count == 0 && await _therapySettingsResolver.HasDataAsync())
             {
                 for (var day = startUtc.Date; day <= endUtc.Date; day = day.AddDays(1))
                 {
@@ -1118,7 +1110,7 @@ public class StatisticsController : ControllerBase
                             hourStart,
                             TimeSpan.Zero
                         ).ToUnixTimeMilliseconds();
-                        var rate = _profileService.GetBasalRate(hourMills);
+                        var rate = await _basalRateResolver.GetBasalRateAsync(hourMills);
                         tempBasals.Add(
                             new TempBasal
                             {

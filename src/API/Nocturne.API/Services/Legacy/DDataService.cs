@@ -3,6 +3,7 @@ using System.Text.Json;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -19,7 +20,7 @@ public class DDataService : IDDataService
 {
     private readonly IEntryStore _store;
     private readonly ITreatmentService _treatments;
-    private readonly IProfileRepository _profiles;
+    private readonly IProfileProjectionService _profiles;
     private readonly IDeviceStatusRepository _deviceStatuses;
     private readonly IFoodRepository _food;
     private readonly IActivityService _activities;
@@ -41,7 +42,7 @@ public class DDataService : IDDataService
     public DDataService(
         IEntryStore store,
         ITreatmentService treatments,
-        IProfileRepository profiles,
+        IProfileProjectionService profiles,
         IDeviceStatusRepository deviceStatuses,
         IFoodRepository food,
         IActivityService activities,
@@ -699,7 +700,7 @@ public class DDataService : IDDataService
             var profiles = await _profiles.GetProfilesAsync(
                 count: 10,
                 skip: 0,
-                cancellationToken: cancellationToken
+                ct: cancellationToken
             );
             ddata.Profiles = profiles.ToList();
         }

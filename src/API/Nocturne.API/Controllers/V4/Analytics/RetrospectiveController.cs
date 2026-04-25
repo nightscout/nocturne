@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
@@ -20,14 +20,14 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// </list>
 /// Glucose values are linearly interpolated from surrounding <see cref="Entry"/> records.
 /// IOB is calculated via <see cref="IIobService"/> and COB via <see cref="ICobService"/>.
-/// Scheduled basal falls back to <see cref="IProfileService.GetBasalRate"/> when no temp basal
+/// Scheduled basal falls back to <see cref="IBasalRateResolver.GetBasalRateAsync"/> when no temp basal
 /// treatment is active.
 /// </remarks>
 /// <seealso cref="IIobService"/>
 /// <seealso cref="ICobService"/>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="IProfileService"/>
+/// <seealso cref="IBasalRateResolver"/>
 [ApiController]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
@@ -38,7 +38,7 @@ public class RetrospectiveController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
     private readonly IDeviceStatusService _deviceStatusService;
-    private readonly IProfileService _profileService;
+    private readonly IBasalRateResolver _basalRateResolver;
     private readonly ILogger<RetrospectiveController> _logger;
     public RetrospectiveController(
         IIobService iobService,
@@ -46,7 +46,7 @@ public class RetrospectiveController : ControllerBase
         IEntryService entryService,
         ITreatmentService treatmentService,
         IDeviceStatusService deviceStatusService,
-        IProfileService profileService,
+        IBasalRateResolver basalRateResolver,
         ILogger<RetrospectiveController> logger
     )
     {
@@ -55,7 +55,7 @@ public class RetrospectiveController : ControllerBase
         _entryService = entryService;
         _treatmentService = treatmentService;
         _deviceStatusService = deviceStatusService;
-        _profileService = profileService;
+        _basalRateResolver = basalRateResolver;
         _logger = logger;
     }
     /// <summary>
@@ -133,7 +133,7 @@ public class RetrospectiveController : ControllerBase
             // Get glucose at the specified time (interpolated)
             var glucoseData = GetGlucoseAtTime(entryList, time);
             // Get basal rate at the specified time
-            var basalData = GetBasalRateAtTime(treatmentList, time);
+            var basalData = await GetBasalRateAtTimeAsync(treatmentList, time);
             // Get recent treatments (within 30 minutes before the target time)
             var recentTreatments = treatmentList
                 .Where(t => t.Mills >= time - 30 * 60 * 1000 && t.Mills <= time)
@@ -272,7 +272,7 @@ public class RetrospectiveController : ControllerBase
                 // Get glucose at this time
                 var glucose = GetGlucoseAtTime(entryList, pointTime);
                 // Get basal rate
-                var basal = GetBasalRateAtTime(relevantTreatments, pointTime);
+                var basal = await GetBasalRateAtTimeAsync(relevantTreatments, pointTime);
                 dataPoints.Add(new RetrospectiveDataPoint
                 {
                     Time = pointTime,
@@ -352,14 +352,14 @@ public class RetrospectiveController : ControllerBase
             {
                 var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
                 var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
-                var basal = GetBasalRateAtTime(treatmentList, pointTime);
+                var basal = await GetBasalRateAtTimeAsync(treatmentList, pointTime);
                 dataPoints.Add(new BasalDataPoint
                 {
                     Time = pointTime,
                     Hour = timestamp.Hour,
                     Minute = timestamp.Minute,
                     TimeLabel = timestamp.ToString("HH:mm"),
-                    Rate = basal?.Rate ?? GetScheduledBasalRate(pointTime),
+                    Rate = basal?.Rate ?? await GetScheduledBasalRateAsync(pointTime),
                     IsTemp = basal?.IsTemp ?? false
                 });
             }
@@ -473,7 +473,7 @@ public class RetrospectiveController : ControllerBase
     /// <summary>
     /// Get basal rate at a specific time (checking for active temp basals)
     /// </summary>
-    private BasalData? GetBasalRateAtTime(List<Treatment> treatments, long targetTime)
+    private async Task<BasalData?> GetBasalRateAtTimeAsync(List<Treatment> treatments, long targetTime)
     {
         // Look for active temp basal at target time
         foreach (var treatment in treatments)
@@ -496,18 +496,18 @@ public class RetrospectiveController : ControllerBase
         // Return scheduled basal rate
         return new BasalData
         {
-            Rate = GetScheduledBasalRate(targetTime),
+            Rate = await GetScheduledBasalRateAsync(targetTime),
             IsTemp = false
         };
     }
     /// <summary>
     /// Get scheduled basal rate from profile
     /// </summary>
-    private double GetScheduledBasalRate(long time)
+    private async Task<double> GetScheduledBasalRateAsync(long time)
     {
         try
         {
-            return _profileService.GetBasalRate(time);
+            return await _basalRateResolver.GetBasalRateAsync(time);
         }
         catch
         {

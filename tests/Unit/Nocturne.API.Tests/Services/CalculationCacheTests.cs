@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -19,7 +19,12 @@ public class Phase3CalculationCacheTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
     private readonly Mock<IIobService> _mockIobService;
-    private readonly Mock<IProfileService> _mockProfileService;
+    private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
+    private readonly Mock<ISensitivityResolver> _mockSensitivityResolver;
+    private readonly Mock<ICarbRatioResolver> _mockCarbRatioResolver;
+    private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
+    private readonly Mock<ITargetRangeResolver> _mockTargetRangeResolver;
+    private readonly Mock<IActiveProfileResolver> _mockActiveProfileResolver;
     private readonly Mock<ILogger<CachedIobService>> _mockIobLogger;
     private readonly Mock<ILogger<CachedProfileService>> _mockProfileLogger;
     private readonly Mock<ILogger<CacheInvalidationService>> _mockInvalidationLogger;
@@ -29,7 +34,12 @@ public class Phase3CalculationCacheTests
     {
         _mockCacheService = new Mock<ICacheService>();
         _mockIobService = new Mock<IIobService>();
-        _mockProfileService = new Mock<IProfileService>();
+        _mockBasalRateResolver = new Mock<IBasalRateResolver>();
+        _mockSensitivityResolver = new Mock<ISensitivityResolver>();
+        _mockCarbRatioResolver = new Mock<ICarbRatioResolver>();
+        _mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
+        _mockTargetRangeResolver = new Mock<ITargetRangeResolver>();
+        _mockActiveProfileResolver = new Mock<IActiveProfileResolver>();
         _mockIobLogger = new Mock<ILogger<CachedIobService>>();
         _mockProfileLogger = new Mock<ILogger<CachedProfileService>>();
         _mockInvalidationLogger = new Mock<ILogger<CacheInvalidationService>>();
@@ -183,7 +193,12 @@ public class Phase3CalculationCacheTests
             .ReturnsAsync(expectedProfileResult);
 
         var cachedProfileService = new CachedProfileService(
-            _mockProfileService.Object,
+            _mockBasalRateResolver.Object,
+            _mockSensitivityResolver.Object,
+            _mockCarbRatioResolver.Object,
+            _mockTherapySettingsResolver.Object,
+            _mockTargetRangeResolver.Object,
+            _mockActiveProfileResolver.Object,
             _mockCacheService.Object,
             _cacheConfig,
             _mockProfileLogger.Object

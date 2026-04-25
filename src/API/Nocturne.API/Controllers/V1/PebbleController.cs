@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
-using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
@@ -16,7 +15,6 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IDeviceStatusService"/>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="IProfileDataService"/>
 [ApiController]
 [Route("")]
 public class PebbleController : ControllerBase
@@ -24,7 +22,6 @@ public class PebbleController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly IDeviceStatusService _deviceStatusService;
     private readonly ITreatmentService _treatmentService;
-    private readonly IProfileDataService _profileDataService;
     private readonly ILogger<PebbleController> _logger;
 
     /// <summary>
@@ -33,20 +30,17 @@ public class PebbleController : ControllerBase
     /// <param name="entryService">Service for glucose entry retrieval.</param>
     /// <param name="deviceStatusService">Service for device status retrieval.</param>
     /// <param name="treatmentService">Service for treatment data retrieval.</param>
-    /// <param name="profileDataService">Service for therapy profile retrieval.</param>
     /// <param name="logger">Logger instance.</param>
     public PebbleController(
         IEntryService entryService,
         IDeviceStatusService deviceStatusService,
         ITreatmentService treatmentService,
-        IProfileDataService profileDataService,
         ILogger<PebbleController> logger
     )
     {
         _entryService = entryService;
         _deviceStatusService = deviceStatusService;
         _treatmentService = treatmentService;
-        _profileDataService = profileDataService;
         _logger = logger;
     }
 

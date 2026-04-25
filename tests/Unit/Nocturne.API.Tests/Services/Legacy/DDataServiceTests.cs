@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Xunit;
 
@@ -19,7 +20,7 @@ public class DDataServiceTests
 {
     private readonly Mock<IEntryStore> _mockEntryStore;
     private readonly Mock<ITreatmentService> _mockTreatmentService;
-    private readonly Mock<IProfileRepository> _mockProfileRepository;
+    private readonly Mock<IProfileProjectionService> _mockProfileProjectionService;
     private readonly Mock<IDeviceStatusRepository> _mockDeviceStatusRepository;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
     private readonly Mock<IActivityService> _mockActivityService;
@@ -30,7 +31,7 @@ public class DDataServiceTests
     {
         _mockEntryStore = new Mock<IEntryStore>();
         _mockTreatmentService = new Mock<ITreatmentService>();
-        _mockProfileRepository = new Mock<IProfileRepository>();
+        _mockProfileProjectionService = new Mock<IProfileProjectionService>();
         _mockDeviceStatusRepository = new Mock<IDeviceStatusRepository>();
         _mockFoodRepository = new Mock<IFoodRepository>();
         _mockActivityService = new Mock<IActivityService>();
@@ -38,7 +39,7 @@ public class DDataServiceTests
         _ddataService = new DDataService(
             _mockEntryStore.Object,
             _mockTreatmentService.Object,
-            _mockProfileRepository.Object,
+            _mockProfileProjectionService.Object,
             _mockDeviceStatusRepository.Object,
             _mockFoodRepository.Object,
             _mockActivityService.Object,
@@ -75,7 +76,7 @@ public class DDataServiceTests
                 )
             )
             .ReturnsAsync(Array.Empty<DeviceStatus>());
-        _mockProfileRepository
+        _mockProfileProjectionService
             .Setup(x =>
                 x.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
             )
