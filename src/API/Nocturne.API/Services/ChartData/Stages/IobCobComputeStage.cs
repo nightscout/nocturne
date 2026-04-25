@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -29,7 +30,7 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// and interval. The tenant ID component prevents cross-tenant cache leakage.
 /// </para>
 /// <para>
-/// Basal series construction (<see cref="BuildBasalSeriesFromTempBasals"/>) uses v4
+/// Basal series construction (<see cref="BuildBasalSeriesFromTempBasalsAsync"/>) uses v4
 /// <see cref="TempBasal"/> records as the source of truth and fills any gaps with
 /// profile-inferred rates at 5-minute resolution. When no TempBasal records exist the
 /// entire series is inferred from the profile. The y-axis maximum is clamped to at least
@@ -45,7 +46,8 @@ namespace Nocturne.API.Services.ChartData.Stages;
 internal sealed class IobCobComputeStage(
     IIobService iobService,
     ICobService cobService,
-    IProfileService profileService,
+    ITherapySettingsResolver therapySettingsResolver,
+    IBasalRateResolver basalRateResolver,
     IMemoryCache cache,
     ITenantAccessor tenantAccessor,
     ILogger<IobCobComputeStage> logger
@@ -56,7 +58,7 @@ internal sealed class IobCobComputeStage(
     private string TenantCacheId => tenantAccessor.Context?.TenantId.ToString()
         ?? throw new InvalidOperationException("Tenant context is not resolved");
 
-    public Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
+    public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
     {
         var syntheticTreatments = context.SyntheticTreatments.ToList();
         var deviceStatusList = context.DeviceStatusList.ToList();
@@ -66,23 +68,24 @@ internal sealed class IobCobComputeStage(
         var intervalMinutes = context.IntervalMinutes;
         var defaultBasalRate = context.DefaultBasalRate;
 
-        var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
+        var (iobSeries, cobSeries, maxIob, maxCob) = await BuildIobCobSeriesAsync(
             syntheticTreatments,
             deviceStatusList,
             startTime,
             endTime,
             intervalMinutes,
-            tempBasalList
+            tempBasalList,
+            cancellationToken
         );
 
-        var basalSeries = BuildBasalSeriesFromTempBasals(tempBasalList, startTime, endTime, defaultBasalRate);
+        var basalSeries = await BuildBasalSeriesFromTempBasalsAsync(tempBasalList, startTime, endTime, defaultBasalRate, cancellationToken);
 
         var maxBasalRate = Math.Max(
             defaultBasalRate * 2.5,
             basalSeries.Any() ? basalSeries.Max(b => b.Rate) : defaultBasalRate
         );
 
-        return Task.FromResult(context with
+        return context with
         {
             IobSeries = iobSeries,
             CobSeries = cobSeries,
@@ -90,21 +93,22 @@ internal sealed class IobCobComputeStage(
             MaxCob = Math.Max(30, maxCob),
             BasalSeries = basalSeries,
             MaxBasalRate = maxBasalRate,
-        });
+        };
     }
 
-    internal (
+    internal async Task<(
         List<TimeSeriesPoint> iobSeries,
         List<TimeSeriesPoint> cobSeries,
         double maxIob,
         double maxCob
-    ) BuildIobCobSeries(
+    )> BuildIobCobSeriesAsync(
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatuses,
         long startTime,
         long endTime,
         int intervalMinutes,
-        List<TempBasal>? tempBasals = null
+        List<TempBasal>? tempBasals = null,
+        CancellationToken ct = default
     )
     {
         // Generate cache key based on treatment data hash and time range
@@ -140,7 +144,8 @@ internal sealed class IobCobComputeStage(
             maxCob = 0;
 
         // Pre-compute DIA and COB absorption window for filtering
-        var dia = profileService.HasData() ? profileService.GetDIA(endTime, null) : 3.0;
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
+        var dia = hasData ? await therapySettingsResolver.GetDIAAsync(endTime, ct: ct) : 3.0;
         var diaMs = (long)(dia * 60 * 60 * 1000); // DIA in milliseconds
         var cobAbsorptionMs = 6L * 60 * 60 * 1000; // 6 hours for COB absorption
 
@@ -152,7 +157,9 @@ internal sealed class IobCobComputeStage(
         // Pre-filter treatments with carbs for COB calculations
         var carbTreatments = treatments.Where(t => t.Carbs.HasValue && t.Carbs.Value > 0).ToList();
 
-        var profile = profileService.HasData() ? profileService : null;
+        // IOB/COB services still accept IProfileService — pass null since profile data
+        // is resolved internally by those services after their own migration (Tasks 19-20).
+        IProfileService? profile = null;
 
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
@@ -272,11 +279,12 @@ internal sealed class IobCobComputeStage(
     /// TempBasal records are the v4 source of truth for pump-confirmed basal delivery.
     /// Falls back to profile-based rates when there are gaps in TempBasal data.
     /// </summary>
-    internal List<BasalPoint> BuildBasalSeriesFromTempBasals(
+    internal async Task<List<BasalPoint>> BuildBasalSeriesFromTempBasalsAsync(
         List<TempBasal> tempBasals,
         long startTime,
         long endTime,
-        double defaultBasalRate
+        double defaultBasalRate,
+        CancellationToken ct = default
     )
     {
         var series = new List<BasalPoint>();
@@ -288,9 +296,11 @@ internal sealed class IobCobComputeStage(
         );
 
         if (sorted.Count == 0)
-            return BuildBasalSeriesFromProfile(startTime, endTime, defaultBasalRate);
+            return await BuildBasalSeriesFromProfileAsync(startTime, endTime, defaultBasalRate, ct);
 
         long currentTime = startTime;
+
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
 
         foreach (var tb in sorted)
         {
@@ -306,15 +316,15 @@ internal sealed class IobCobComputeStage(
             if (tbStart > currentTime)
             {
                 series.AddRange(
-                    BuildBasalSeriesFromProfile(currentTime, tbStart, defaultBasalRate)
+                    await BuildBasalSeriesFromProfileAsync(currentTime, tbStart, defaultBasalRate, ct)
                 );
             }
 
             var origin = MapTempBasalOrigin(tb.Origin);
 
             var scheduledRate = tb.ScheduledRate
-                ?? (profileService.HasData()
-                    ? profileService.GetBasalRate(tbStart, null)
+                ?? (hasData
+                    ? await basalRateResolver.GetBasalRateAsync(tbStart, ct: ct)
                     : defaultBasalRate);
 
             series.Add(
@@ -333,7 +343,7 @@ internal sealed class IobCobComputeStage(
         }
 
         if (currentTime < endTime)
-            series.AddRange(BuildBasalSeriesFromProfile(currentTime, endTime, defaultBasalRate));
+            series.AddRange(await BuildBasalSeriesFromProfileAsync(currentTime, endTime, defaultBasalRate, ct));
 
         if (series.Count == 0)
         {
@@ -355,20 +365,23 @@ internal sealed class IobCobComputeStage(
         return series;
     }
 
-    internal List<BasalPoint> BuildBasalSeriesFromProfile(
+    internal async Task<List<BasalPoint>> BuildBasalSeriesFromProfileAsync(
         long startTime,
         long endTime,
-        double defaultBasalRate
+        double defaultBasalRate,
+        CancellationToken ct = default
     )
     {
         var series = new List<BasalPoint>();
         const long intervalMs = 5 * 60 * 1000;
         double? prevRate = null;
 
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
+
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            var rate = profileService.HasData()
-                ? profileService.GetBasalRate(t, null)
+            var rate = hasData
+                ? await basalRateResolver.GetBasalRateAsync(t, ct: ct)
                 : defaultBasalRate;
 
             if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)

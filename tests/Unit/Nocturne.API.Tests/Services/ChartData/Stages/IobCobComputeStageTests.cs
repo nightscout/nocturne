@@ -6,6 +6,7 @@ using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -18,7 +19,8 @@ public class IobCobComputeStageTests
 {
     private readonly Mock<IIobService> _mockIobService = new();
     private readonly Mock<ICobService> _mockCobService = new();
-    private readonly Mock<IProfileService> _mockProfileService = new();
+    private readonly Mock<ITherapySettingsResolver> _mockTherapySettings = new();
+    private readonly Mock<IBasalRateResolver> _mockBasalRateResolver = new();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IobCobComputeStage _stage;
 
@@ -27,12 +29,13 @@ public class IobCobComputeStageTests
 
     public IobCobComputeStageTests()
     {
-        _mockProfileService.Setup(p => p.HasData()).Returns(false);
+        _mockTherapySettings.Setup(p => p.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         _stage = new IobCobComputeStage(
             _mockIobService.Object,
             _mockCobService.Object,
-            _mockProfileService.Object,
+            _mockTherapySettings.Object,
+            _mockBasalRateResolver.Object,
             _cache,
             MockTenantAccessor.Create().Object,
             NullLogger<IobCobComputeStage>.Instance
