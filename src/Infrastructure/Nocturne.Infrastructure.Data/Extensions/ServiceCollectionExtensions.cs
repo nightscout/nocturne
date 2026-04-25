@@ -119,7 +119,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IProfileRepository, ProfileRepository>();
         services.AddScoped<IDeviceStatusRepository, DeviceStatusRepository>();
         services.AddScoped<IFoodRepository, FoodRepository>();
-        services.AddScoped<IActivityRepository, ActivityRepository>();
+
         services.AddScoped<ISettingsRepository, SettingsRepository>();
 
         // Register Nightscout query parser
@@ -255,7 +255,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IProfileRepository, ProfileRepository>();
         services.AddScoped<IDeviceStatusRepository, DeviceStatusRepository>();
         services.AddScoped<IFoodRepository, FoodRepository>();
-        services.AddScoped<IActivityRepository, ActivityRepository>();
+
         services.AddScoped<ISettingsRepository, SettingsRepository>();
 
         // Register Nightscout query parser

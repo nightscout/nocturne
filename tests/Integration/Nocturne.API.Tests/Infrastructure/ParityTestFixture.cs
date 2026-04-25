@@ -106,8 +106,6 @@ public class ParityTestFixture : IAsyncLifetime
         await db.Profiles.ExecuteDeleteAsync(cancellationToken);
         await db.Settings.ExecuteDeleteAsync(cancellationToken);
         await db.StateSpans.ExecuteDeleteAsync(cancellationToken);
-        await db.Activities.ExecuteDeleteAsync(cancellationToken);
-
         // Clean Nightscout (network calls - may have latency)
         await _sharedState.NightscoutContainer.CleanupDataAsync(cancellationToken);
     }

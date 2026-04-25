@@ -462,7 +462,6 @@ internal class MigrationJob
             ("devicestatus", MigrateDeviceStatusViaApiAsync),
             ("profile", MigrateProfilesViaApiAsync),
             ("food", MigrateFoodViaApiAsync),
-            ("activity", MigrateActivityViaApiAsync),
         };
 
         var collectionsToMigrate = allCollections
@@ -814,86 +813,6 @@ internal class MigrationJob
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
     }
 
-    private async Task MigrateActivityViaApiAsync(
-        HttpClient httpClient,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        _currentOperation = "Migrating activities";
-        var collectionName = "activity";
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-
-        try
-        {
-            var response = await httpClient.GetAsync("/api/v1/activity.json?count=10000", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch activities: {StatusCode}", response.StatusCode);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var activities = System.Text.Json.JsonSerializer.Deserialize<Activity[]>(content) ?? [];
-
-            UpdateCollectionProgress(collectionName, activities.Length, 0, 0, false);
-            UpdateOverallProgress();
-
-            foreach (var activity in activities)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    var mills = activity.Mills;
-
-                    var exists = await dbContext.Activities.AnyAsync(
-                        a => a.Mills == mills && a.Type == activity.Type,
-                        ct
-                    );
-
-                    if (!exists)
-                    {
-                        dbContext.Activities.Add(
-                            new Infrastructure.Data.Entities.ActivityEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Mills = mills,
-                                DateString = activity.DateString,
-                                Type = activity.Type,
-                                Description = activity.Description,
-                                Duration = activity.Duration,
-                                Intensity = activity.Intensity,
-                                Notes = activity.Notes,
-                                EnteredBy = activity.EnteredBy,
-                                UtcOffset = activity.UtcOffset,
-                                Timestamp = activity.Timestamp,
-                                CreatedAt = activity.CreatedAt,
-                            }
-                        );
-                    }
-                    totalMigrated++;
-                }
-                catch
-                {
-                    totalFailed++;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(ct);
-            UpdateCollectionProgress(collectionName, activities.Length, totalMigrated, totalFailed, true);
-            UpdateOverallProgress();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating activities via API");
-        }
-
-        _logger.LogInformation("Migrated {Count} activities via API", totalMigrated);
-    }
-
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
     {
         _currentOperation = "Connecting to MongoDB";
@@ -1030,9 +949,6 @@ internal class MigrationJob
                 break;
             case "food":
                 await TransformFoodAsync(doc, dbContext, ct);
-                break;
-            case "activity":
-                await TransformActivityAsync(doc, dbContext, ct);
                 break;
             default:
                 _logger.LogDebug("Skipping unsupported collection: {Collection}", collectionName);
@@ -1186,52 +1102,6 @@ internal class MigrationJob
         };
 
         dbContext.Foods.Add(entity);
-    }
-
-    private async Task TransformActivityAsync(
-        BsonDocument doc,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("created_at")
-              && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
-                ? new DateTimeOffset(createdAt).ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        var type = doc.Contains("type") ? doc["type"].AsString : null;
-
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Activities.AnyAsync(
-            a =>
-                (originalId != null && a.OriginalId == originalId)
-                || (a.Mills == mills && a.Type == type),
-            ct
-        );
-
-        if (exists)
-            return;
-
-        var entity = new Infrastructure.Data.Entities.ActivityEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Mills = mills,
-            DateString = doc.Contains("dateString") ? doc["dateString"].AsString : null,
-            Type = type,
-            Description = doc.Contains("description") ? doc["description"].AsString : null,
-            Duration = doc.Contains("duration") ? doc["duration"].ToDouble() : null,
-            Intensity = doc.Contains("intensity") ? doc["intensity"].AsString : null,
-            Notes = doc.Contains("notes") ? doc["notes"].AsString : null,
-            EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
-            UtcOffset = doc.Contains("utcOffset") ? doc["utcOffset"].ToInt32() : null,
-            Timestamp = doc.Contains("timestamp") ? doc["timestamp"].ToInt64() : null,
-            CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
-        };
-
-        dbContext.Activities.Add(entity);
     }
 
     /// <summary>

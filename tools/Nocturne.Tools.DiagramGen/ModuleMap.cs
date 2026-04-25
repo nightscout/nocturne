@@ -36,7 +36,7 @@ public static class ModuleMap
         ["patient-food-activity"] = [
             "PatientRecordEntity", "PatientDeviceEntity", "PatientInsulinEntity",
             "FoodEntity", "UserFoodFavoriteEntity", "ConnectorFoodEntryEntity",
-            "ActivityEntity", "StepCountEntity", "HeartRateEntity", "BodyWeightEntity",
+            "StepCountEntity", "HeartRateEntity", "BodyWeightEntity",
         ],
         ["alerts-trackers"] = [
             "AlertRuleEntity", "AlertScheduleEntity", "AlertEscalationStepEntity",

@@ -73,7 +73,6 @@ public class AuthenticationTestFactory : WebApplicationFactory<Nocturne.API.Prog
             RemoveService<IProfileRepository>(services);
             RemoveService<IDeviceStatusRepository>(services);
             RemoveService<IFoodRepository>(services);
-            RemoveService<IActivityRepository>(services);
             RemoveService<ISettingsRepository>(services);
 
             // Remove Entity Framework DbContext and related services to prevent migrations
@@ -148,7 +147,6 @@ public class AuthenticationTestFactory : WebApplicationFactory<Nocturne.API.Prog
             services.AddSingleton(new Mock<IProfileRepository>().Object);
             services.AddSingleton(new Mock<IDeviceStatusRepository>().Object);
             services.AddSingleton(new Mock<IFoodRepository>().Object);
-            services.AddSingleton(new Mock<IActivityRepository>().Object);
             services.AddSingleton(new Mock<ISettingsRepository>().Object);
 
             // Mock authorization service

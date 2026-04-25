@@ -116,9 +116,6 @@ public class DataOverviewService : IDataOverviewService
 
         // Tables without DataSource
         minMaxResults.Add(
-            await GetMinMaxMills(_context.Activities.Select(e => (long?)e.Mills), cancellationToken)
-        );
-        minMaxResults.Add(
             await GetMinMaxMills(
                 _context.DeviceStatuses.Select(e => (long?)e.Mills),
                 cancellationToken
@@ -370,20 +367,6 @@ public class DataOverviewService : IDataOverviewService
             tz,
             cancellationToken
         );
-
-        // Activities: has Mills but NO DataSource - skip when filter is active
-        if (!hasFilter)
-        {
-            await CollectCountsFromMillsTable(
-                "Activity",
-                _context
-                    .Activities.Where(e => e.Mills >= startMills && e.Mills < endMills)
-                    .Select(e => e.Mills),
-                dayMap,
-                tz,
-                cancellationToken
-            );
-        }
 
         // DeviceStatuses: has Mills but NO DataSource - skip when filter is active
         if (!hasFilter)

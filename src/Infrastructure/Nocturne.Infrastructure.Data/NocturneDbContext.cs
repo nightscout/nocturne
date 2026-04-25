@@ -72,11 +72,6 @@ public class NocturneDbContext : DbContext
     public DbSet<ProfileEntity> Profiles { get; set; }
 
     /// <summary>
-    /// Gets or sets the Activities table for user activities
-    /// </summary>
-    public DbSet<ActivityEntity> Activities { get; set; }
-
-    /// <summary>
     /// Gets or sets the StepCounts table for xDrip step count / PebbleMovement records
     /// </summary>
     public DbSet<StepCountEntity> StepCounts { get; set; }
@@ -695,29 +690,6 @@ public class NocturneDbContext : DbContext
             .Entity<ProfileEntity>()
             .HasIndex(p => p.CreatedAtPg)
             .HasDatabaseName("ix_profiles_sys_created_at");
-
-        // Activity indexes - optimized for common queries
-        modelBuilder
-            .Entity<ActivityEntity>()
-            .HasIndex(a => a.Mills)
-            .HasDatabaseName("ix_activities_mills")
-            .IsDescending(); // Most recent first
-
-        modelBuilder
-            .Entity<ActivityEntity>()
-            .HasIndex(a => a.Type)
-            .HasDatabaseName("ix_activities_type");
-
-        modelBuilder
-            .Entity<ActivityEntity>()
-            .HasIndex(a => new { a.Type, a.Mills })
-            .HasDatabaseName("ix_activities_type_timestamp")
-            .IsDescending(false, true); // Type asc, Mills desc
-
-        modelBuilder
-            .Entity<ActivityEntity>()
-            .HasIndex(a => a.SysCreatedAt)
-            .HasDatabaseName("ix_activities_sys_created_at");
 
         // StepCount indexes - optimized for time-range graph queries
         modelBuilder
@@ -1836,10 +1808,6 @@ public class NocturneDbContext : DbContext
             .Property(p => p.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
-            .Entity<ActivityEntity>()
-            .Property(a => a.Id)
-            .HasValueGenerator<GuidV7ValueGenerator>();
-        modelBuilder
             .Entity<StepCountEntity>()
             .Property(s => s.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
@@ -2216,12 +2184,6 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<SettingsEntity>()
             .Property(s => s.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
-
-        modelBuilder
-            .Entity<ActivityEntity>()
-            .Property(a => a.SysUpdatedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP")
             .ValueGeneratedOnAddOrUpdate();
 
@@ -2962,14 +2924,6 @@ public class NocturneDbContext : DbContext
                     settingsEntity.SysCreatedAt = utcNow;
                 }
                 settingsEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ActivityEntity activityEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    activityEntity.SysCreatedAt = utcNow;
-                }
-                activityEntity.SysUpdatedAt = utcNow;
             }
             else if (entry.Entity is StepCountEntity stepCountEntity)
             {

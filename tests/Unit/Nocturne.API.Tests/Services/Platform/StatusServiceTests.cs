@@ -320,15 +320,12 @@ public class StatusServiceTests
         result.DeviceStatus.Should().NotBeNull();
         result.Food.Should().NotBeNull();
         result.Settings.Should().NotBeNull();
-        result.Activity.Should().NotBeNull();
-
         result.Entries.Should().BeOnOrBefore(result.ServerTime);
         result.Treatments.Should().BeOnOrBefore(result.ServerTime);
         result.Profile.Should().BeOnOrBefore(result.ServerTime);
         result.DeviceStatus.Should().BeOnOrBefore(result.ServerTime);
         result.Food.Should().BeOnOrBefore(result.ServerTime);
         result.Settings.Should().BeOnOrBefore(result.ServerTime);
-        result.Activity.Should().BeOnOrBefore(result.ServerTime);
 
         // Additional timestamps
         result.Additional.Should().NotBeNull();
@@ -791,15 +788,6 @@ public class StatusServiceTests
                 Value = "{}",
                 SysUpdatedAt = now.AddHours(-6),
                 SrvModified = now.AddHours(-6),
-            }
-        );
-
-        context.Activities.Add(
-            new ActivityEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Type = "exercise",
-                SysUpdatedAt = now.AddMinutes(-30),
             }
         );
 

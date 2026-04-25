@@ -548,11 +548,6 @@ public class StatusService : IStatusService
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))
             .FirstOrDefaultAsync());
 
-        var activityTask = LastModifiedAsync(ctx => ctx.Activities.AsNoTracking()
-            .OrderByDescending(a => a.SysUpdatedAt)
-            .Select(a => (DateTime?)a.SysUpdatedAt)
-            .FirstOrDefaultAsync());
-
         var authSubjectsTask = LastModifiedAsync(ctx => ctx.Subjects.AsNoTracking()
             .OrderByDescending(s => s.UpdatedAt)
             .Select(s => (DateTime?)s.UpdatedAt)
@@ -570,7 +565,7 @@ public class StatusService : IStatusService
 
         await Task.WhenAll(
             entriesTask, treatmentsTask, profileTask, deviceStatusTask,
-            foodTask, settingsTask, activityTask, authSubjectsTask,
+            foodTask, settingsTask, authSubjectsTask,
             roleTask, oidcProviderTask);
 
         var additional = new Dictionary<string, DateTime>();
@@ -595,7 +590,6 @@ public class StatusService : IStatusService
             DeviceStatus = await deviceStatusTask,
             Food = await foodTask,
             Settings = await settingsTask,
-            Activity = await activityTask,
             Additional = additional,
         };
 

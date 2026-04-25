@@ -160,11 +160,6 @@ public class DataOverviewServiceTests : IDisposable
             Mgdl = 120.0,
             DataSource = null
         });
-        _dbContext.Activities.Add(new ActivityEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon
-        });
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetAvailableYearsAsync();
@@ -214,13 +209,8 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetAvailableYearsAsync_ActivitiesAndDeviceStatusesIncludedInYears()
+    public async Task GetAvailableYearsAsync_DeviceStatusesIncludedInYears()
     {
-        _dbContext.Activities.Add(new ActivityEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2023_Noon
-        });
         _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
         {
             Id = Guid.NewGuid(),
@@ -231,7 +221,7 @@ public class DataOverviewServiceTests : IDisposable
 
         var result = await _service.GetAvailableYearsAsync();
 
-        result.Years.Should().BeEquivalentTo([2023, 2024]);
+        result.Years.Should().ContainSingle().Which.Should().Be(2024);
         result.AvailableDataSources.Should().BeEmpty();
     }
 
@@ -461,33 +451,6 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_ActivitiesExcludedWhenDataSourceFilterActive()
-    {
-        _dbContext.Activities.Add(new ActivityEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon
-        });
-        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 1000).UtcDateTime,
-            Mgdl = 100.0,
-            DataSource = "dexcom"
-        });
-        await _dbContext.SaveChangesAsync();
-
-        var result = await _service.GetDailySummaryAsync(2024, ["dexcom"]);
-
-        result.Days.Should().ContainSingle();
-        var day = result.Days[0];
-        day.Counts.Should().NotContainKey("Activity");
-        day.Counts.Should().ContainKey("Glucose");
-        day.TotalCount.Should().Be(1);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_DeviceStatusesExcludedWhenDataSourceFilterActive()
     {
         _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
@@ -515,17 +478,12 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_ActivitiesAndDeviceStatusesIncludedWithoutFilter()
+    public async Task GetDailySummaryAsync_DeviceStatusesIncludedWithoutFilter()
     {
-        _dbContext.Activities.Add(new ActivityEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon
-        });
         _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon + 1000,
+            Mills = June15_2024_Noon,
             Device = "test-device"
         });
         await _dbContext.SaveChangesAsync();
@@ -534,9 +492,8 @@ public class DataOverviewServiceTests : IDisposable
 
         result.Days.Should().ContainSingle();
         var day = result.Days[0];
-        day.Counts["Activity"].Should().Be(1);
         day.Counts["DeviceStatus"].Should().Be(1);
-        day.TotalCount.Should().Be(2);
+        day.TotalCount.Should().Be(1);
     }
 
     [Fact]
