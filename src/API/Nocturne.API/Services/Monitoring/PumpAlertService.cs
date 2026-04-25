@@ -1,5 +1,5 @@
 using Nocturne.Core.Contracts.Monitoring;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 
@@ -23,11 +23,16 @@ public class PumpAlertService : IPumpAlertService
     ];
 
     private readonly IOpenApsService _openApsService;
+    private readonly ITherapySettingsResolver _therapySettings;
     private readonly ILogger<PumpAlertService> _logger;
 
-    public PumpAlertService(IOpenApsService openApsService, ILogger<PumpAlertService> logger)
+    public PumpAlertService(
+        IOpenApsService openApsService,
+        ITherapySettingsResolver therapySettings,
+        ILogger<PumpAlertService> logger)
     {
         _openApsService = openApsService;
+        _therapySettings = therapySettings;
         _logger = logger;
     }
 
@@ -87,7 +92,6 @@ public class PumpAlertService : IPumpAlertService
         IEnumerable<DeviceStatus> deviceStatuses,
         long currentTime,
         PumpPreferences preferences,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments = null
     )
     {
@@ -116,7 +120,7 @@ public class PumpAlertService : IPumpAlertService
             }
         }
 
-        return PrepareData(pumpStatus, preferences, currentTime, profileService, treatments);
+        return PrepareData(pumpStatus, preferences, currentTime, treatments);
     }
 
     /// <inheritdoc />
@@ -124,7 +128,6 @@ public class PumpAlertService : IPumpAlertService
         PumpStatusResult status,
         PumpPreferences preferences,
         long currentTime,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments = null
     )
     {
@@ -154,7 +157,6 @@ public class PumpAlertService : IPumpAlertService
         PumpPreferences preferences,
         bool isRetroMode,
         long currentTime,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments = null
     )
     {
@@ -233,12 +235,11 @@ public class PumpAlertService : IPumpAlertService
         DeviceStatus? prop,
         PumpPreferences preferences,
         long currentTime,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments
     )
     {
         var pump = prop?.Pump;
-        var batteryWarn = ShouldWarnBattery(preferences, currentTime, profileService);
+        var batteryWarn = ShouldWarnBattery(preferences, currentTime);
 
         var result = new PumpStatusResult
         {
@@ -494,8 +495,7 @@ public class PumpAlertService : IPumpAlertService
 
     private bool ShouldWarnBattery(
         PumpPreferences preferences,
-        long currentTime,
-        IProfileService profileService
+        long currentTime
     )
     {
         if (!preferences.WarnBattQuietNight)
@@ -503,7 +503,7 @@ public class PumpAlertService : IPumpAlertService
 
         try
         {
-            var timezone = profileService.GetTimezone();
+            var timezone = _therapySettings.GetTimezoneAsync().GetAwaiter().GetResult();
             if (string.IsNullOrEmpty(timezone))
                 return true;
 
