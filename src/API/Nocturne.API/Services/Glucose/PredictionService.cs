@@ -1,7 +1,7 @@
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Oref;
@@ -20,20 +20,32 @@ public class PredictionService : IPredictionService
 {
     private readonly IEntryStore _store;
     private readonly ITreatmentService _treatments;
-    private readonly IProfileRepository _profiles;
+    private readonly IBasalRateResolver _basalRate;
+    private readonly ISensitivityResolver _sensitivity;
+    private readonly ICarbRatioResolver _carbRatio;
+    private readonly ITargetRangeResolver _targetRange;
+    private readonly ITherapySettingsResolver _therapySettings;
     private readonly IPatientInsulinRepository _insulins;
     private readonly ILogger<PredictionService> _logger;
 
     public PredictionService(
         IEntryStore store,
         ITreatmentService treatments,
-        IProfileRepository profiles,
+        IBasalRateResolver basalRate,
+        ISensitivityResolver sensitivity,
+        ICarbRatioResolver carbRatio,
+        ITargetRangeResolver targetRange,
+        ITherapySettingsResolver therapySettings,
         IPatientInsulinRepository insulins,
         ILogger<PredictionService> logger)
     {
         _store = store;
         _treatments = treatments;
-        _profiles = profiles;
+        _basalRate = basalRate;
+        _sensitivity = sensitivity;
+        _carbRatio = carbRatio;
+        _targetRange = targetRange;
+        _therapySettings = therapySettings;
         _insulins = insulins;
         _logger = logger;
     }
@@ -169,59 +181,58 @@ public class PredictionService : IPredictionService
     }
 
     /// <summary>
-    /// Get or create a default oref profile.
+    /// Build an oref profile from V4 resolvers.
     /// </summary>
     private async Task<OrefModels.OrefProfile> GetProfileAsync(string? profileId, CancellationToken cancellationToken)
     {
         // Resolve insulin pharmacokinetics from active bolus insulin
         var bolusInsulin = await ResolveBolusInsulinAsync();
-        var dia = bolusInsulin?.Dia ?? 3.0;
         var peak = bolusInsulin?.Peak;
         var curve = bolusInsulin?.Curve;
 
-        // Try to fetch profile from database
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
         try
         {
-            var profiles = await _profiles.GetProfilesAsync(1, 0, cancellationToken);
-            var dbProfile = profiles.FirstOrDefault();
-
-            if (dbProfile?.Store != null && dbProfile.Store.Count > 0)
+            var hasData = await _therapySettings.HasDataAsync(cancellationToken);
+            if (hasData)
             {
-                var activeStore = dbProfile.Store.Values.FirstOrDefault();
-                if (activeStore != null)
+                var dia = await _therapySettings.GetDIAAsync(nowMills, profileId, cancellationToken);
+                var basal = await _basalRate.GetBasalRateAsync(nowMills, profileId, cancellationToken);
+                var sens = await _sensitivity.GetSensitivityAsync(nowMills, profileId, cancellationToken);
+                var carbs = await _carbRatio.GetCarbRatioAsync(nowMills, profileId, cancellationToken);
+                var minBg = await _targetRange.GetLowBGTargetAsync(nowMills, profileId, cancellationToken);
+                var maxBg = await _targetRange.GetHighBGTargetAsync(nowMills, profileId, cancellationToken);
+
+                var orefProfile = new OrefModels.OrefProfile
                 {
-                    // Use insulin-derived DIA unless profile is externally managed
-                    var profileDia = dbProfile.IsExternallyManaged ? activeStore.Dia : dia;
+                    Dia = dia,
+                    CurrentBasal = basal,
+                    Sens = sens,
+                    CarbRatio = carbs,
+                    MinBg = minBg,
+                    MaxBg = maxBg,
+                    MaxIob = 10.0,
+                    MaxBasal = 4.0,
+                    MaxDailyBasal = 2.0
+                };
 
-                    var orefProfile = new OrefModels.OrefProfile
-                    {
-                        Dia = profileDia,
-                        CurrentBasal = activeStore.Basal?.FirstOrDefault()?.Value ?? 1.0,
-                        Sens = activeStore.Sens?.FirstOrDefault()?.Value ?? 50.0,
-                        CarbRatio = activeStore.CarbRatio?.FirstOrDefault()?.Value ?? 10.0,
-                        MinBg = activeStore.TargetLow?.FirstOrDefault()?.Value ?? 100.0,
-                        MaxBg = activeStore.TargetHigh?.FirstOrDefault()?.Value ?? 120.0,
-                        MaxIob = 10.0,
-                        MaxBasal = 4.0,
-                        MaxDailyBasal = 2.0
-                    };
+                if (curve != null) orefProfile.Curve = curve;
+                if (peak.HasValue) orefProfile.Peak = peak.Value;
 
-                    if (curve != null) orefProfile.Curve = curve;
-                    if (peak.HasValue) orefProfile.Peak = peak.Value;
-
-                    return orefProfile;
-                }
+                return orefProfile;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch profile, using defaults");
+            _logger.LogWarning(ex, "Failed to resolve profile from V4 resolvers, using defaults");
         }
 
-        // Return default profile
+        // Return default profile (DIA falls back through resolver chain already, but we have no data)
+        var defaultDia = bolusInsulin?.Dia ?? 3.0;
         return new OrefModels.OrefProfile
         {
-            Dia = dia,
+            Dia = defaultDia,
             CurrentBasal = 1.0,
             Sens = 50.0,
             CarbRatio = 10.0,
