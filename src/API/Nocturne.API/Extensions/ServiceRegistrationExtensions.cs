@@ -396,6 +396,7 @@ public static class ServiceRegistrationExtensions
                 sp.GetService<ILogger<CompositeDataEventSink<DeviceStatus>>>()));
         services.AddScoped<IBatteryService, BatteryService>();
         services.AddScoped<IProfileDataService, ProfileDataService>();
+        services.AddScoped<IProfileWriteService, ProfileWriteService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>
             new CompositeDataEventSink<Profile>(
                 [sp.GetRequiredService<NightscoutProfileWriteBackSink>()],
