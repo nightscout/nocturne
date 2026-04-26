@@ -20,12 +20,20 @@
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import {
+    getPreference,
+    setPreference,
+    getSourceDefaults,
+    setSourceDefaults,
+  } from "$lib/api/glucose-processing-settings.remote";
+  import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
+  import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
@@ -38,6 +46,7 @@
   } from "$lib/components/ui/select";
   import { Label as FormLabel } from "$lib/components/ui/label";
   import {
+    Activity,
     Palette,
     Sun,
     Moon,
@@ -110,6 +119,22 @@
       second: "2-digit",
     })
   );
+
+  // Glucose processing settings
+  let glucoseProcessingPreference = $state<string | null>(null);
+  let sourceDefaults = $state<Array<{ match: string; field: string; processing: string }>>([]);
+  let sourceDefaultsDialogOpen = $state(false);
+
+  $effect(() => {
+    if (browser) {
+      getPreference().then((result) => {
+        glucoseProcessingPreference = result?.preferredGlucoseProcessing ?? null;
+      });
+      getSourceDefaults().then((result) => {
+        sourceDefaults = result?.rules ?? [];
+      });
+    }
+  });
 </script>
 
 <svelte:head>
@@ -420,6 +445,85 @@
             </Select>
           </div>
         </div>
+      </CardContent>
+    </Card>
+
+    <!-- Glucose Processing -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Activity class="h-5 w-5" />
+          Glucose Processing
+        </CardTitle>
+        <CardDescription>
+          Choose how glucose values are displayed when both smoothed and unsmoothed readings are available
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2">
+            <Label>Display preference</Label>
+            <Select
+              type="single"
+              value={glucoseProcessingPreference ?? "default"}
+              onValueChange={async (value) => {
+                const newValue = value === "default" ? null : value;
+                glucoseProcessingPreference = newValue;
+                await setPreference({ preferredGlucoseProcessing: newValue });
+              }}
+            >
+              <SelectTrigger>
+                <span>
+                  {#if glucoseProcessingPreference === "Smoothed"}
+                    Smoothed
+                  {:else if glucoseProcessingPreference === "Unsmoothed"}
+                    Unsmoothed
+                  {:else}
+                    Default
+                  {/if}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="Smoothed">Smoothed</SelectItem>
+                <SelectItem value="Unsmoothed">Unsmoothed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          This only affects values where both smoothed and unsmoothed readings are present.
+          "Default" uses the value as reported by the data source.
+        </p>
+
+        <Separator />
+
+        <div class="flex items-center justify-between">
+          <div class="space-y-0.5">
+            <Label>Client upload source defaults</Label>
+            <p class="text-sm text-muted-foreground">
+              {#if sourceDefaults.length === 0}
+                No source rules configured. All uploads use the default processing.
+              {:else}
+                {sourceDefaults.length} rule{sourceDefaults.length === 1 ? '' : 's'} configured
+              {/if}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onclick={() => (sourceDefaultsDialogOpen = true)}>
+            Configure
+          </Button>
+        </div>
+
+        <GlucoseSourceDefaultsDialog
+          bind:open={sourceDefaultsDialogOpen}
+          rules={sourceDefaults}
+          onSave={async (rules) => {
+            sourceDefaults = rules;
+            sourceDefaultsDialogOpen = false;
+            await setSourceDefaults({ rules });
+          }}
+          onCancel={() => (sourceDefaultsDialogOpen = false)}
+        />
       </CardContent>
     </Card>
 
