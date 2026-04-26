@@ -29,7 +29,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
     }
 
     private EntryDecomposer CreateDecomposer() =>
-        new(_dbContext, _sgRepo.Object, _mgRepo.Object, _calRepo.Object, _logger.Object);
+        new(_dbContext, _sgRepo.Object, _mgRepo.Object, _calRepo.Object, new Mock<IGlucoseProcessingResolver>().Object, _logger.Object);
 
     [Fact]
     [Trait("Category", "Unit")]

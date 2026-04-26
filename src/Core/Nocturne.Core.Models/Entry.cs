@@ -400,4 +400,11 @@ public class Entry : ProcessableDocumentBase
     /// </summary>
     [JsonPropertyName("subject")]
     public string? Subject { get; set; }
+
+    /// <summary>
+    /// Catches unknown JSON fields during v1/v3 deserialization so they survive round-trip
+    /// through the API (e.g. <c>glucoseProcessing</c>, <c>smoothedMgdl</c>).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, object>? AdditionalProperties { get; set; }
 }

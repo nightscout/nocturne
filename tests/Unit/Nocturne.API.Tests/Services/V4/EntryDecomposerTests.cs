@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -25,7 +26,15 @@ public class EntryDecomposerTests : IDisposable
         var sgRepo = new SensorGlucoseRepository(_context, mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<SensorGlucoseRepository>.Instance);
         var mgRepo = new MeterGlucoseRepository(_context, NullLogger<MeterGlucoseRepository>.Instance);
         var calRepo = new CalibrationRepository(_context, NullLogger<CalibrationRepository>.Instance);
-        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, NullLogger<EntryDecomposer>.Instance);
+
+        var mockConfigProvider = new Mock<IGlucoseProcessingConfigProvider>();
+        mockConfigProvider.Setup(x => x.GetSourceDefaultsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<GlucoseProcessingSourceDefault>());
+        mockConfigProvider.Setup(x => x.GetPreferredProcessingAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GlucoseProcessing?)null);
+        var glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
+
+        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, glucoseResolver, NullLogger<EntryDecomposer>.Instance);
     }
 
     public void Dispose()
@@ -662,6 +671,118 @@ public class EntryDecomposerTests : IDisposable
     {
         // String.IsNullOrEmpty returns false for whitespace, so it goes to switch
         EntryDecomposer.MapDirection("   ").Should().BeNull();
+    }
+
+    #endregion
+
+    #region Glucose Processing from AdditionalProperties
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithGlucoseProcessing_ResolvesProcessingType()
+    {
+        // Arrange - "glucoseProcessing" arrives as a string in AdditionalProperties
+        var entry = new Entry
+        {
+            Id = "gp_test_1",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 120.0,
+            Mgdl = 120.0,
+            Device = "xDrip-DexcomG5",
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["glucoseProcessing"] = "Smoothed"
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        result.CreatedRecords.Should().HaveCount(1);
+        var sg = result.CreatedRecords[0] as SensorGlucose;
+        sg!.GlucoseProcessing.Should().Be(GlucoseProcessing.Smoothed);
+        sg.SmoothedMgdl.Should().Be(120.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithSmoothedAndUnsmoothed_ResolvesAllFields()
+    {
+        // Arrange - both smoothed and unsmoothed provided
+        var entry = new Entry
+        {
+            Id = "gp_test_2",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 120.0,
+            Mgdl = 120.0,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["glucoseProcessing"] = "Smoothed",
+                ["smoothedMgdl"] = 118.0,
+                ["unsmoothedMgdl"] = 125.0
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0] as SensorGlucose;
+        sg!.GlucoseProcessing.Should().Be(GlucoseProcessing.Smoothed);
+        sg.SmoothedMgdl.Should().Be(118.0);
+        sg.UnsmoothedMgdl.Should().Be(125.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithJsonElementValues_ExtractsCorrectly()
+    {
+        // Arrange - simulate System.Text.Json deserialization where values are JsonElements
+        var entry = new Entry
+        {
+            Id = "gp_test_json",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 120.0,
+            Mgdl = 120.0,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["glucoseProcessing"] = JsonDocument.Parse("\"Smoothed\"").RootElement,
+                ["smoothedMgdl"] = JsonDocument.Parse("118.5").RootElement,
+                ["unsmoothedMgdl"] = JsonDocument.Parse("125.3").RootElement
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0] as SensorGlucose;
+        sg!.GlucoseProcessing.Should().Be(GlucoseProcessing.Smoothed);
+        sg.SmoothedMgdl.Should().Be(118.5);
+        sg.UnsmoothedMgdl.Should().Be(125.3);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_SgvEntryWithNoAdditionalProperties_LeavesProcessingNull()
+    {
+        // Arrange
+        var entry = new Entry
+        {
+            Id = "gp_test_none",
+            Type = "sgv",
+            Mills = 1700000000000,
+            Sgv = 120.0
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(entry);
+
+        // Assert
+        var sg = result.CreatedRecords[0] as SensorGlucose;
+        sg!.GlucoseProcessing.Should().BeNull();
+        sg.SmoothedMgdl.Should().BeNull();
+        sg.UnsmoothedMgdl.Should().BeNull();
     }
 
     #endregion

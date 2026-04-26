@@ -24,24 +24,28 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
+    private readonly IGlucoseProcessingResolver _glucoseResolver;
     private readonly ILogger<EntryDecomposer> _logger;
 
     /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
     /// <param name="sensorGlucoseRepository">Repository for <see cref="SensorGlucose"/> records.</param>
     /// <param name="meterGlucoseRepository">Repository for <see cref="MeterGlucose"/> records.</param>
     /// <param name="calibrationRepository">Repository for <see cref="Calibration"/> records.</param>
+    /// <param name="glucoseResolver">Resolves glucose processing type and smoothed/unsmoothed values from v1/v3 hints or source defaults.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public EntryDecomposer(
         NocturneDbContext dbContext,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
+        IGlucoseProcessingResolver glucoseResolver,
         ILogger<EntryDecomposer> logger)
     {
         _dbContext = dbContext;
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
+        _glucoseResolver = glucoseResolver;
         _logger = logger;
     }
 
@@ -91,6 +95,23 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             : null;
 
         var model = MapToSensorGlucose(entry, result.CorrelationId);
+
+        // Extract glucose processing hints from v1/v3 additional properties
+        string? gpHint = null;
+        double? smoothedHint = null;
+        double? unsmoothedHint = null;
+
+        if (entry.AdditionalProperties is { } props)
+        {
+            if (TryGetString(props, "glucoseProcessing", out var gpStr))
+                gpHint = gpStr;
+            if (TryGetDouble(props, "smoothedMgdl", out var sm))
+                smoothedHint = sm;
+            if (TryGetDouble(props, "unsmoothedMgdl", out var um))
+                unsmoothedHint = um;
+        }
+
+        await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
 
         if (existing != null)
         {
@@ -273,6 +294,32 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             UtcOffset = entry.UtcOffset,
             CorrelationId = correlationId
         };
+    }
+
+    private static bool TryGetString(Dictionary<string, object> props, string key, out string value)
+    {
+        value = default!;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is string s) { value = s; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
+        { value = el.GetString()!; return true; }
+
+        return false;
+    }
+
+    private static bool TryGetDouble(Dictionary<string, object> props, string key, out double value)
+    {
+        value = default;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is double d) { value = d; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.TryGetDouble(out var elVal))
+        { value = elVal; return true; }
+
+        return false;
     }
 
     /// <summary>
