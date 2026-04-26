@@ -11,8 +11,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // correlation_id already exists as varchar(50) from a shadow property.
-            // Convert to uuid using a CAST so existing data is preserved.
+            // Promote correlation_id from EF shadow property (varchar) to explicit
+            // entity property (Guid/uuid). ALTER COLUMN is idempotent if already uuid.
             foreach (var table in new[] { "aps_snapshots", "pump_snapshots", "uploader_snapshots" })
             {
                 migrationBuilder.Sql(

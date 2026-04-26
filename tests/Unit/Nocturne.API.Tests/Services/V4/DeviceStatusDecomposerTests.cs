@@ -1,9 +1,11 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -19,6 +21,7 @@ public class DeviceStatusDecomposerTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanService> _stateSpanServiceMock;
     private readonly Mock<IDeviceService> _deviceServiceMock;
+    private readonly DeviceStatusExtrasRepository _extrasRepo;
     private readonly DeviceStatusDecomposer _decomposer;
 
     public DeviceStatusDecomposerTests()
@@ -28,12 +31,14 @@ public class DeviceStatusDecomposerTests : IDisposable
         var apsRepo = new ApsSnapshotRepository(_context, NullLogger<ApsSnapshotRepository>.Instance);
         var pumpRepo = new PumpSnapshotRepository(_context, NullLogger<PumpSnapshotRepository>.Instance);
         var uploaderRepo = new UploaderSnapshotRepository(_context, NullLogger<UploaderSnapshotRepository>.Instance);
+        _extrasRepo = new DeviceStatusExtrasRepository(_context, NullLogger<DeviceStatusExtrasRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _deviceServiceMock = new Mock<IDeviceService>();
 
         _decomposer = new DeviceStatusDecomposer(
             _context,
             apsRepo, pumpRepo, uploaderRepo,
+            _extrasRepo,
             _stateSpanServiceMock.Object,
             _deviceServiceMock.Object,
             NullLogger<DeviceStatusDecomposer>.Instance);
@@ -1708,6 +1713,285 @@ public class DeviceStatusDecomposerTests : IDisposable
         aps.Timestamp.Year.Should().Be(2026);
         aps.Timestamp.Month.Should().Be(4);
         aps.Timestamp.Day.Should().Be(12);
+    }
+
+    #endregion
+
+    #region LoopJson and AidVersion
+
+    [Fact]
+    public async Task DecomposeAsync_WithLoopData_StoresLoopJson()
+    {
+        // Arrange
+        var ds = new DeviceStatus
+        {
+            Id = "loop-json-1",
+            Mills = 1700000000000,
+            Device = "Loop/3.0",
+            Loop = new LoopStatus
+            {
+                Iob = new LoopIob { Iob = 1.8, BasalIob = 0.5 },
+                Cob = new LoopCob { Cob = 25.0 },
+                RecommendedBolus = 0.7,
+                Predicted = new LoopPredicted
+                {
+                    Values = [130, 125, 120, 115, 110],
+                    StartDate = "2023-11-14T12:00:00Z"
+                },
+                Enacted = new LoopEnacted
+                {
+                    Received = true,
+                    Rate = 2.0,
+                    Duration = 30,
+                    BolusVolume = 0.4
+                }
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.LoopJson.Should().NotBeNullOrEmpty();
+        // Should contain key Loop data
+        aps.LoopJson.Should().Contain("iob");
+        aps.LoopJson.Should().Contain("cob");
+        // AidVersion is not used for Loop
+        aps.AidVersion.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WithTrioData_StoresAidVersion()
+    {
+        // Arrange
+        var ds = new DeviceStatus
+        {
+            Id = "trio-version-1",
+            Mills = 1700000000000,
+            Device = "trio://iPhone",
+            OpenAps = new OpenApsStatus
+            {
+                Version = "0.2.1",
+                Iob = new OpenApsIobData { Iob = 0.8 },
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 105.0,
+                    EventualBG = 98.0,
+                    Timestamp = "2023-11-14T12:00:00Z"
+                }
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.AidVersion.Should().Be("0.2.1");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WithAapsData_StoresAidVersion()
+    {
+        // Arrange — AAPS has no version on OpenAps, but version could come from device string
+        var ds = new DeviceStatus
+        {
+            Id = "aaps-version-1",
+            Mills = 1700000000000,
+            Device = "openaps://samsung SM-G975F",
+            OpenAps = new OpenApsStatus
+            {
+                Version = "3.2.0.4",
+                Iob = new OpenApsIobData { Iob = 1.5 },
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 110.0,
+                    EventualBG = 100.0,
+                    Timestamp = "2023-11-14T12:00:00Z"
+                }
+            },
+            Uploader = new UploaderStatus { Name = "AndroidAPS", Battery = 85 }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.AidVersion.Should().Be("3.2.0.4");
+        aps.AidAlgorithm.Should().Be(V4Models.AidAlgorithm.AndroidAps);
+    }
+
+    #endregion
+
+    #region PumpSnapshot IOB
+
+    [Fact]
+    public async Task DecomposeAsync_WithPumpIob_StoresPumpIob()
+    {
+        // Arrange
+        var ds = new DeviceStatus
+        {
+            Id = "pump-iob-1",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus
+            {
+                Manufacturer = "Medtronic",
+                Reservoir = 100.0,
+                Battery = new PumpBattery { Percent = 90 },
+                Iob = new PumpIob { Iob = 3.5, BolusIob = 2.1 }
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var pump = result.CreatedRecords[0].Should().BeOfType<V4Models.PumpSnapshot>().Subject;
+        pump.Iob.Should().Be(3.5);
+        pump.BolusIob.Should().Be(2.1);
+    }
+
+    #endregion
+
+    #region Extras Decomposition
+
+    [Fact]
+    public async Task DecomposeAsync_WithConfiguration_StoresExtras()
+    {
+        // Arrange — AAPS sends "configuration" as an unknown top-level key
+        var json = """
+        {
+            "_id": "aaps-config-1",
+            "mills": 1700000000000,
+            "device": "openaps://samsung",
+            "configuration": { "sensitivityType": "oref1", "autosensMax": 1.2 },
+            "uploader": { "name": "AndroidAPS", "battery": 85 },
+            "openaps": {
+                "iob": { "iob": 1.0 },
+                "suggested": { "bg": 120, "eventualBG": 100, "timestamp": "2023-11-14T12:00:00Z" }
+            }
+        }
+        """;
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert — configuration should end up in extras
+        var extras = _context.DeviceStatusExtras.ToList();
+        extras.Should().HaveCount(1);
+        extras[0].Extras.Should().ContainKey("configuration");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WithRadioAdapter_StoresExtras()
+    {
+        // Arrange
+        var ds = new DeviceStatus
+        {
+            Id = "radio-adapter-1",
+            Mills = 1700000000000,
+            Device = "Loop/3.0",
+            Loop = new LoopStatus
+            {
+                Iob = new LoopIob { Iob = 1.0 },
+                Predicted = new LoopPredicted
+                {
+                    Values = [120.0, 115.0],
+                    StartDate = "2023-11-14T12:00:00Z"
+                }
+            },
+            RadioAdapter = new RadioAdapterStatus { PumpRssi = -65, Rssi = -70 }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var extras = _context.DeviceStatusExtras.ToList();
+        extras.Should().HaveCount(1);
+        extras[0].Extras.Should().ContainKey("radioAdapter");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WithXDripJs_StoresExtras()
+    {
+        // Arrange
+        var ds = new DeviceStatus
+        {
+            Id = "xdripjs-1",
+            Mills = 1700000000000,
+            Device = "xDrip+",
+            XDripJs = new XDripJsStatus { State = 6, StateString = "OK", VoltageA = 217, VoltageB = 212 },
+            Uploader = new UploaderStatus { Battery = 80 }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var extras = _context.DeviceStatusExtras.ToList();
+        extras.Should().HaveCount(1);
+        extras[0].Extras.Should().ContainKey("xdripjs");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WithNoExtras_SkipsExtrasCreation()
+    {
+        // Arrange — standard OpenAPS device status with no peripheral sub-objects
+        var ds = new DeviceStatus
+        {
+            Id = "no-extras-1",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus
+            {
+                Iob = new OpenApsIobData { Iob = 2.0 },
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 110.0,
+                    EventualBG = 100.0,
+                    Timestamp = "2023-11-14T12:00:00Z"
+                }
+            },
+            Pump = new PumpStatus { Reservoir = 100.0 },
+            Uploader = new UploaderStatus { Battery = 55 }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert — no extras record should be created
+        var extras = _context.DeviceStatusExtras.ToList();
+        extras.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_WithUnknownTopLevelKeys_CapturesInExtras()
+    {
+        // Arrange — unknown top-level keys are captured via JsonExtensionData
+        var json = """
+        {
+            "_id": "unknown-keys-1",
+            "mills": 1700000000000,
+            "device": "some-device",
+            "customPlugin": { "version": "1.0", "data": [1, 2, 3] },
+            "anotherField": "hello"
+        }
+        """;
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var extras = _context.DeviceStatusExtras.ToList();
+        extras.Should().HaveCount(1);
+        extras[0].Extras.Should().ContainKey("customPlugin");
+        extras[0].Extras.Should().ContainKey("anotherField");
     }
 
     #endregion

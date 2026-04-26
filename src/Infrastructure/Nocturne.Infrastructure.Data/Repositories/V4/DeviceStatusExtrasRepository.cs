@@ -49,6 +49,8 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         IEnumerable<Guid> correlationIds, CancellationToken ct = default)
     {
         var ids = correlationIds.ToList();
+        if (ids.Count == 0) return [];
+
         var entities = await _context.DeviceStatusExtras
             .AsNoTracking()
             .Where(e => ids.Contains(e.CorrelationId))
