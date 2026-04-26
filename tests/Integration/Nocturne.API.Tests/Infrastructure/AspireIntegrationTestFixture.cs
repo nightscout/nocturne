@@ -109,7 +109,10 @@ public class AspireIntegrationTestFixture : IAsyncLifetime
                 profiles,
                 settings,
                 foods,
-                device_statuses,
+                aps_snapshots,
+                pump_snapshots,
+                uploader_snapshots,
+                device_status_extras,
                 treatments,
                 entries
             CASCADE;

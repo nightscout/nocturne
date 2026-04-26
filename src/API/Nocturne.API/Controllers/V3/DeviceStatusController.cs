@@ -101,7 +101,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 deviceStatusList.Reverse();
             }
 
-            // Get total count for pagination (approximate from result set)
+            // TODO: implement proper count query via projection service
             var totalCount = (long)deviceStatusList.Count;
 
             var mappedData = deviceStatusList.Select(MapToV3Dto);

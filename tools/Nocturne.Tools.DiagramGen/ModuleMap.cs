@@ -22,7 +22,8 @@ public static class ModuleMap
         ],
         ["glucose-readings"] = [
             "EntryEntity", "SensorGlucoseEntity", "MeterGlucoseEntity",
-            "CalibrationEntity", "DeviceStatusEntity",
+            "CalibrationEntity", "ApsSnapshotEntity", "PumpSnapshotEntity",
+            "UploaderSnapshotEntity", "DeviceStatusExtrasEntity",
         ],
         ["treatments-events"] = [
             "TreatmentEntity", "TreatmentFoodEntity", "DecompositionBatchEntity",

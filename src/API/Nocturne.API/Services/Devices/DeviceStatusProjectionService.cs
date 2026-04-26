@@ -67,6 +67,8 @@ public class DeviceStatusProjectionService
     public async Task<IEnumerable<DeviceStatus>> GetAsync(
         int count, int skip, string? find, CancellationToken ct)
     {
+        // TODO: implement find parameter translation from MongoDB query syntax to V4 filters
+
         // 1. Query APS snapshots as primary anchor (newest-first with pagination)
         var apsSnapshots = (await _apsRepo.GetAsync(
             from: null, to: null, device: null, source: null,

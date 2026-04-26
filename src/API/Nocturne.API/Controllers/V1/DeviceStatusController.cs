@@ -374,10 +374,19 @@ public class DeviceStatusController : ControllerBase
             }
 
             // Find matching records via V4 projection, then delete each by legacy ID.
-            // Use a large limit to find all matching records for deletion.
+            // NOTE: hardcoded limit of 10,000 means bulk deletes silently truncate
+            // if more records match. Nightscout legacy has the same limitation.
+            const int bulkDeleteLimit = 10_000;
             var matchingRecords = (await _projection.GetAsync(
-                count: 10000, skip: 0, find: findQuery, ct: cancellationToken
+                count: bulkDeleteLimit, skip: 0, find: findQuery, ct: cancellationToken
             )).ToList();
+
+            if (matchingRecords.Count == bulkDeleteLimit)
+            {
+                _logger.LogWarning(
+                    "Bulk delete matched the maximum of {Limit} records — results may be truncated",
+                    bulkDeleteLimit);
+            }
 
             long deletedCount = 0;
             foreach (var record in matchingRecords)
