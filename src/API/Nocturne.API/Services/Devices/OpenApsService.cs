@@ -4,6 +4,7 @@ using System.Web;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Devices;
 
@@ -89,23 +90,19 @@ public class OpenApsService : IOpenApsService
     }
 
     /// <summary>
-    /// Analyzes device status data to determine OpenAPS loop status
-    /// Implements the legacy analyzeData() functionality with 1:1 compatibility
+    /// Analyzes APS snapshot data to determine OpenAPS loop status.
+    /// Implements the legacy analyzeData() functionality with 1:1 compatibility.
     /// </summary>
     public OpenApsAnalysisResult AnalyzeData(
-        IEnumerable<DeviceStatus> deviceStatuses,
+        IEnumerable<ApsSnapshot> snapshots,
         DateTime currentTime,
         OpenApsPreferences preferences
     )
     {
-        var recentMills = currentTime.AddHours(-RECENT_HOURS);
-        var recentData = deviceStatuses
-            .Where(status =>
-                status.OpenAps != null
-                && status.Mills >= ((DateTimeOffset)recentMills).ToUnixTimeMilliseconds()
-                && status.Mills <= ((DateTimeOffset)currentTime).ToUnixTimeMilliseconds()
-            )
-            .Select(ProcessDeviceStatusIob)
+        var recentMills = ((DateTimeOffset)currentTime.AddHours(-RECENT_HOURS)).ToUnixTimeMilliseconds();
+        var currentMills = ((DateTimeOffset)currentTime).ToUnixTimeMilliseconds();
+        var recentData = snapshots
+            .Where(s => s.Mills >= recentMills && s.Mills <= currentMills)
             .ToList();
 
         var recent = currentTime.AddMinutes(-preferences.Warn / 2.0);
@@ -116,10 +113,10 @@ public class OpenApsService : IOpenApsService
             Status = new OpenApsLoopStatus(),
         };
 
-        foreach (var status in recentData)
+        foreach (var snapshot in recentData)
         {
-            var device = GetDevice(status, result.SeenDevices);
-            var moments = ToMoments(status);
+            var device = GetDevice(snapshot.Device, result.SeenDevices);
+            var moments = ToMoments(snapshot);
             var loopStatus = MomentsToLoopStatus(moments, recent, true);
 
             if (device.When == null || moments.When > device.When)
@@ -129,16 +126,13 @@ public class OpenApsService : IOpenApsService
             }
 
             // Process enacted commands
-            ProcessEnactedCommand(status, moments, result);
+            ProcessEnactedCommand(snapshot, moments, result);
 
             // Process suggested commands
-            ProcessSuggestedCommand(status, moments, result);
+            ProcessSuggestedCommand(snapshot, moments, result);
 
             // Process IOB data
-            ProcessIobData(status, moments, result);
-
-            // Process MM tune data
-            ProcessMmTuneData(status, moments, device);
+            ProcessIobData(snapshot, moments, result);
         }
 
         // Determine last loop moment and eventual BG
@@ -585,23 +579,14 @@ public class OpenApsService : IOpenApsService
     }
 
     /// <summary>
-    /// Process device status IOB data (legacy array handling)
-    /// Array normalization is now handled by OpenApsIobDataConverter during deserialization.
+    /// Get or create device entry (legacy getDevice function).
     /// </summary>
-    private static DeviceStatus ProcessDeviceStatusIob(DeviceStatus status)
-    {
-        return status;
-    }
-
-    /// <summary>
-    /// Get or create device entry (legacy getDevice function)
-    /// </summary>
-    private OpenApsDevice GetDevice(
-        DeviceStatus status,
+    private static OpenApsDevice GetDevice(
+        string? deviceUri,
         Dictionary<string, OpenApsDevice> seenDevices
     )
     {
-        var uri = status.Device ?? "device";
+        var uri = deviceUri ?? "device";
         if (seenDevices.TryGetValue(uri, out var device))
         {
             return device;
@@ -612,83 +597,73 @@ public class OpenApsService : IOpenApsService
         return device;
     }
 
+    private static readonly JsonSerializerOptions CamelCaseJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     /// <summary>
-    /// Convert device status to moments (legacy toMoments function)
+    /// Convert an APS snapshot to moments (legacy toMoments function).
     /// </summary>
-    private static OpenApsMoments ToMoments(DeviceStatus status)
+    private static OpenApsMoments ToMoments(ApsSnapshot snapshot)
     {
         var moments = new OpenApsMoments
         {
-            When = DateTimeOffset.FromUnixTimeMilliseconds(status.Mills).DateTime,
+            When = DateTimeOffset.FromUnixTimeMilliseconds(snapshot.Mills).DateTime,
         };
 
-        // Process OpenAPS data
-        if (status.OpenAps != null)
+        // Handle enacted commands
+        var enacted = DeserializeJson<OpenApsEnacted>(snapshot.EnactedJson);
+        if (enacted != null)
         {
-            // Handle enacted commands
-            if (status.OpenAps.Enacted != null)
+            var parsed = ParseOpenApsCommand(enacted);
+            if (parsed != null)
             {
-                // Try to parse the enacted object to get timestamp and received status
-                var enacted = ParseOpenApsCommand(status.OpenAps.Enacted);
-                if (enacted != null)
+                if (
+                    parsed.Timestamp != null
+                    && (parsed.Received == true || parsed.Recieved == true)
+                )
                 {
-                    if (
-                        enacted.Timestamp != null
-                        && (enacted.Received == true || enacted.Recieved == true)
+                    moments.Enacted =
+                        parsed.Mills != null
+                            ? DateTimeOffset.FromUnixTimeMilliseconds(parsed.Mills.Value).DateTime
+                            : DateTime.Parse(parsed.Timestamp);
+                }
+                else if (
+                    parsed.Timestamp != null
+                    && (
+                        parsed.Received == false
+                        || (parsed.Received != true && parsed.Recieved != true)
                     )
-                    {
-                        moments.Enacted =
-                            enacted.Mills != null
-                                ? DateTimeOffset
-                                    .FromUnixTimeMilliseconds(enacted.Mills.Value)
-                                    .DateTime
-                                : DateTime.Parse(enacted.Timestamp);
-                    }
-                    else if (
-                        enacted.Timestamp != null
-                        && (
-                            enacted.Received == false
-                            || (enacted.Received != true && enacted.Recieved != true)
-                        )
-                    )
-                    {
-                        moments.NotEnacted =
-                            enacted.Mills != null
-                                ? DateTimeOffset
-                                    .FromUnixTimeMilliseconds(enacted.Mills.Value)
-                                    .DateTime
-                                : DateTime.Parse(enacted.Timestamp);
-                    }
-                }
-            }
-
-            // Handle suggested commands
-            if (status.OpenAps.Suggested != null)
-            {
-                var suggested = ParseOpenApsCommand(status.OpenAps.Suggested);
-                if (suggested != null && suggested.Timestamp != null)
+                )
                 {
-                    moments.Suggested =
-                        suggested.Mills != null
-                            ? DateTimeOffset
-                                .FromUnixTimeMilliseconds(suggested.Mills.Value)
-                                .DateTime
-                            : DateTime.Parse(suggested.Timestamp);
+                    moments.NotEnacted =
+                        parsed.Mills != null
+                            ? DateTimeOffset.FromUnixTimeMilliseconds(parsed.Mills.Value).DateTime
+                            : DateTime.Parse(parsed.Timestamp);
                 }
             }
+        }
 
-            // Handle IOB data
-            if (status.OpenAps.Iob != null)
+        // Handle suggested commands
+        var suggested = DeserializeJson<OpenApsSuggested>(snapshot.SuggestedJson);
+        if (suggested != null)
+        {
+            var parsed = ParseOpenApsCommand(suggested);
+            if (parsed != null && parsed.Timestamp != null)
             {
-                var iob = ParseOpenApsIob(status.OpenAps.Iob);
-                if (iob != null && iob.Timestamp != null)
-                {
-                    moments.Iob =
-                        iob.Mills != null
-                            ? DateTimeOffset.FromUnixTimeMilliseconds(iob.Mills.Value).DateTime
-                            : DateTime.Parse(iob.Timestamp);
-                }
+                moments.Suggested =
+                    parsed.Mills != null
+                        ? DateTimeOffset.FromUnixTimeMilliseconds(parsed.Mills.Value).DateTime
+                        : DateTime.Parse(parsed.Timestamp);
             }
+        }
+
+        // Handle IOB data — ApsSnapshot stores IOB as structured fields, synthesize a
+        // timestamp from the snapshot's own timestamp for moment tracking.
+        if (snapshot.Iob.HasValue)
+        {
+            moments.Iob = snapshot.Timestamp;
         }
 
         return moments;
@@ -745,19 +720,20 @@ public class OpenApsService : IOpenApsService
     }
 
     /// <summary>
-    /// Process enacted command data
+    /// Process enacted command data from an APS snapshot.
     /// </summary>
     private static void ProcessEnactedCommand(
-        DeviceStatus status,
+        ApsSnapshot snapshot,
         OpenApsMoments moments,
         OpenApsAnalysisResult result
     )
     {
-        if (status.OpenAps?.Enacted == null)
+        var enacted = DeserializeJson<OpenApsEnacted>(snapshot.EnactedJson);
+        if (enacted == null)
             return;
 
-        var enacted = ParseOpenApsCommand(status.OpenAps.Enacted);
-        if (enacted == null)
+        var parsed = ParseOpenApsCommand(enacted);
+        if (parsed == null)
             return;
 
         // Handle enacted commands
@@ -766,13 +742,13 @@ public class OpenApsService : IOpenApsService
             var enactedCommand = new OpenApsCommand
             {
                 Moment = moments.Enacted,
-                Bg = enacted.Bg,
-                Reason = enacted.Reason,
-                EventualBg = enacted.EventualBg,
-                Rate = enacted.Rate,
-                Duration = enacted.Duration,
-                PredBgs = ParsePredBGs(enacted.PredBGs, moments.Enacted),
-                MealAssist = enacted.MealAssist,
+                Bg = parsed.Bg,
+                Reason = parsed.Reason,
+                EventualBg = parsed.EventualBg,
+                Rate = parsed.Rate,
+                Duration = parsed.Duration,
+                PredBgs = ParsePredBGs(parsed.PredBGs, moments.Enacted),
+                MealAssist = parsed.MealAssist,
             };
 
             if (result.LastEnacted == null || moments.Enacted > result.LastEnacted.Moment)
@@ -781,12 +757,11 @@ public class OpenApsService : IOpenApsService
 
                 // Update prediction data if available and more recent
                 if (
-                    enacted.PredBGs != null
+                    parsed.PredBGs != null
                     && (result.LastPredBgs == null || moments.Enacted > result.LastPredBgs.Moment)
                 )
                 {
-                    result.LastPredBgs = ParsePredBGs(enacted.PredBGs, moments.Enacted);
-                    // Parse predBGs object into structured data
+                    result.LastPredBgs = ParsePredBGs(parsed.PredBGs, moments.Enacted);
                 }
             }
         }
@@ -797,13 +772,13 @@ public class OpenApsService : IOpenApsService
             var notEnactedCommand = new OpenApsCommand
             {
                 Moment = moments.NotEnacted,
-                Bg = enacted.Bg,
-                Reason = enacted.Reason,
-                EventualBg = enacted.EventualBg,
-                Rate = enacted.Rate,
-                Duration = enacted.Duration,
-                PredBgs = ParsePredBGs(enacted.PredBGs, moments.NotEnacted),
-                MealAssist = enacted.MealAssist,
+                Bg = parsed.Bg,
+                Reason = parsed.Reason,
+                EventualBg = parsed.EventualBg,
+                Rate = parsed.Rate,
+                Duration = parsed.Duration,
+                PredBgs = ParsePredBGs(parsed.PredBGs, moments.NotEnacted),
+                MealAssist = parsed.MealAssist,
             };
 
             if (result.LastNotEnacted == null || moments.NotEnacted > result.LastNotEnacted.Moment)
@@ -814,30 +789,35 @@ public class OpenApsService : IOpenApsService
     }
 
     /// <summary>
-    /// Process suggested command data
+    /// Process suggested command data from an APS snapshot.
     /// </summary>
     private static void ProcessSuggestedCommand(
-        DeviceStatus status,
+        ApsSnapshot snapshot,
         OpenApsMoments moments,
         OpenApsAnalysisResult result
     )
     {
-        if (status.OpenAps?.Suggested == null || !moments.Suggested.HasValue)
+        if (!moments.Suggested.HasValue)
             return;
 
-        var suggested = ParseOpenApsCommand(status.OpenAps.Suggested);
+        var suggested = DeserializeJson<OpenApsSuggested>(snapshot.SuggestedJson);
         if (suggested == null)
             return;
+
+        var parsed = ParseOpenApsCommand(suggested);
+        if (parsed == null)
+            return;
+
         var suggestedCommand = new OpenApsCommand
         {
             Moment = moments.Suggested,
-            Bg = suggested.Bg,
-            Reason = suggested.Reason,
-            EventualBg = suggested.EventualBg,
-            Rate = suggested.Rate,
-            Duration = suggested.Duration,
-            PredBgs = ParsePredBGs(suggested.PredBGs, moments.Suggested),
-            MealAssist = suggested.MealAssist,
+            Bg = parsed.Bg,
+            Reason = parsed.Reason,
+            EventualBg = parsed.EventualBg,
+            Rate = parsed.Rate,
+            Duration = parsed.Duration,
+            PredBgs = ParsePredBGs(parsed.PredBGs, moments.Suggested),
+            MealAssist = parsed.MealAssist,
         };
 
         if (result.LastSuggested == null || moments.Suggested > result.LastSuggested.Moment)
@@ -846,78 +826,39 @@ public class OpenApsService : IOpenApsService
 
             // Update prediction data if available and more recent
             if (
-                suggested.PredBGs != null
+                parsed.PredBGs != null
                 && (result.LastPredBgs == null || moments.Suggested > result.LastPredBgs.Moment)
             )
             {
-                result.LastPredBgs = ParsePredBGs(suggested.PredBGs, moments.Suggested);
-                // Parse predBGs object into structured data
+                result.LastPredBgs = ParsePredBGs(parsed.PredBGs, moments.Suggested);
             }
         }
     }
 
     /// <summary>
-    /// Process IOB data
+    /// Process IOB data from an APS snapshot's structured fields.
     /// </summary>
     private static void ProcessIobData(
-        DeviceStatus status,
+        ApsSnapshot snapshot,
         OpenApsMoments moments,
         OpenApsAnalysisResult result
     )
     {
-        if (status.OpenAps?.Iob == null || !moments.Iob.HasValue)
-            return;
-
-        var iobData = ParseOpenApsIob(status.OpenAps.Iob);
-        if (iobData == null)
+        if (!snapshot.Iob.HasValue || !moments.Iob.HasValue)
             return;
 
         var openApsIob = new OpenApsIob
         {
-            Timestamp = iobData.Timestamp,
-            Iob = iobData.Iob,
-            BolusIob = iobData.BolusIob,
-            BasalIob = iobData.BasalIob,
-            Activity = iobData.Activity,
+            Timestamp = snapshot.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Iob = snapshot.Iob,
+            BolusIob = snapshot.BolusIob,
+            BasalIob = snapshot.BasalIob,
             Moment = moments.Iob,
         };
 
         if (result.LastIob == null || moments.Iob > result.LastIob.Moment)
         {
             result.LastIob = openApsIob;
-        }
-    }
-
-    /// <summary>
-    /// Process MM tune data
-    /// Legacy: if (status.mmtune and status.mmtune.timestamp)
-    /// MM tune data is stored directly on the device status, not inside openaps
-    /// </summary>
-    private static void ProcessMmTuneData(
-        DeviceStatus status,
-        OpenApsMoments moments,
-        OpenApsDevice device
-    )
-    {
-        // Legacy JS: if (status.mmtune && status.mmtune.timestamp) {
-        //   status.mmtune.moment = moment(status.mmtune.timestamp);
-        //   if (!device.mmtune || moments.when.isAfter(device.mmtune.moment)) {
-        //     device.mmtune = status.mmtune;
-        //   }
-        // }
-        if (status.MmTune == null || string.IsNullOrEmpty(status.MmTune.Timestamp))
-            return;
-
-        // Parse the timestamp to create the moment
-        if (DateTime.TryParse(status.MmTune.Timestamp, out var mmTuneMoment))
-        {
-            status.MmTune.Moment = mmTuneMoment;
-
-            // Update device mmtune if this is more recent
-            if (device.MmTune == null || moments.When > device.MmTune.Moment)
-            {
-                device.MmTune = status.MmTune;
-            }
         }
     }
 
@@ -1172,6 +1113,24 @@ public class OpenApsService : IOpenApsService
     }
 
     #endregion
+
+    /// <summary>
+    /// Deserializes a JSON string using camelCase naming, returning <c>null</c> on failure.
+    /// </summary>
+    private static T? DeserializeJson<T>(string? json) where T : class
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, CamelCaseJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     #region Helper Methods for Parsing
 

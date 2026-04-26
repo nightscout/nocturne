@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 using Nocturne.API.Tests.Services.Glucose;
 
@@ -84,29 +86,28 @@ public class OpenApsServiceTests
         // Arrange
         var currentTime = new DateTime(2015, 12, 5, 19, 5, 0, DateTimeKind.Utc);
         var preferences = new OpenApsPreferences { Warn = 30 };
-        var deviceStatuses = new List<DeviceStatus>
+        var enacted = new OpenApsEnacted
         {
-            new DeviceStatus
+            Timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Received = true,
+            Bg = 147,
+            Rate = 0.75,
+            Duration = 30,
+            Reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
+        };
+        var snapshots = new List<ApsSnapshot>
+        {
+            new ApsSnapshot
             {
                 Device = "openaps://abusypi",
-                Mills = ((DateTimeOffset)currentTime.AddMinutes(-2)).ToUnixTimeMilliseconds(),
-                OpenAps = new OpenApsStatus
-                {
-                    Enacted = new OpenApsEnacted
-                    {
-                        Timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Received = true,
-                        Bg = 147,
-                        Rate = 0.75,
-                        Duration = 30,
-                        Reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
-                    },
-                },
+                Timestamp = currentTime.AddMinutes(-2),
+                EnactedJson = JsonSerializer.Serialize(enacted, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                Enacted = true,
             },
         };
 
         // Act
-        var result = _openApsService.AnalyzeData(deviceStatuses, currentTime, preferences);
+        var result = _openApsService.AnalyzeData(snapshots, currentTime, preferences);
 
         // Assert
         Assert.NotNull(result);
@@ -122,30 +123,28 @@ public class OpenApsServiceTests
         // Arrange
         var currentTime = new DateTime(2015, 12, 5, 19, 5, 0, DateTimeKind.Utc);
         var preferences = new OpenApsPreferences { Warn = 30 };
-
-        var deviceStatuses = new List<DeviceStatus>
+        var enacted = new OpenApsEnacted
         {
-            new DeviceStatus
+            Timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Received = false, // Not received
+            Bg = 147,
+            Rate = 0.75,
+            Duration = 30,
+            Reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
+        };
+        var snapshots = new List<ApsSnapshot>
+        {
+            new ApsSnapshot
             {
                 Device = "openaps://abusypi",
-                Mills = ((DateTimeOffset)currentTime.AddMinutes(-2)).ToUnixTimeMilliseconds(),
-                OpenAps = new OpenApsStatus
-                {
-                    Enacted = new OpenApsEnacted
-                    {
-                        Timestamp = currentTime.AddMinutes(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        Received = false, // Not received
-                        Bg = 147,
-                        Rate = 0.75,
-                        Duration = 30,
-                        Reason = "Eventual BG 125>120, no temp, setting 0.75U/hr",
-                    },
-                },
+                Timestamp = currentTime.AddMinutes(-2),
+                EnactedJson = JsonSerializer.Serialize(enacted, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                Enacted = false,
             },
         };
 
         // Act
-        var result = _openApsService.AnalyzeData(deviceStatuses, currentTime, preferences);
+        var result = _openApsService.AnalyzeData(snapshots, currentTime, preferences);
 
         // Assert
         Assert.NotNull(result);
