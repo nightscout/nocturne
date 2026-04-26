@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.V4;
@@ -43,5 +44,43 @@ public class GlucoseProcessingConfigProvider(ISettingsRepository settingsReposit
             return [];
 
         return JsonSerializer.Deserialize<List<GlucoseProcessingSourceDefault>>(json, JsonOptions) ?? [];
+    }
+
+    public async Task SetPreferredProcessingAsync(GlucoseProcessing? processing, CancellationToken ct = default)
+    {
+        var existing = await settingsRepository.GetSettingsByKeyAsync(PreferenceKey, ct);
+        var value = processing?.ToString();
+
+        if (existing is not null)
+        {
+            existing.Value = value;
+            await settingsRepository.UpdateSettingsAsync(existing.Id, existing, ct);
+        }
+        else if (value is not null)
+        {
+            await settingsRepository.CreateSettingsAsync(
+            [
+                new Settings { Key = PreferenceKey, Value = value, IsActive = true }
+            ], ct);
+        }
+    }
+
+    public async Task SetSourceDefaultsAsync(List<GlucoseProcessingSourceDefault> defaults, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(defaults, JsonOptions);
+        var existing = await settingsRepository.GetSettingsByKeyAsync(SourceDefaultsKey, ct);
+
+        if (existing is not null)
+        {
+            existing.Value = json;
+            await settingsRepository.UpdateSettingsAsync(existing.Id, existing, ct);
+        }
+        else
+        {
+            await settingsRepository.CreateSettingsAsync(
+            [
+                new Settings { Key = SourceDefaultsKey, Value = json, IsActive = true }
+            ], ct);
+        }
     }
 }

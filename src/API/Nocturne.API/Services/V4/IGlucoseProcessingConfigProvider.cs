@@ -6,6 +6,8 @@ public interface IGlucoseProcessingConfigProvider
 {
     Task<GlucoseProcessing?> GetPreferredProcessingAsync(CancellationToken ct = default);
     Task<List<GlucoseProcessingSourceDefault>> GetSourceDefaultsAsync(CancellationToken ct = default);
+    Task SetPreferredProcessingAsync(GlucoseProcessing? processing, CancellationToken ct = default);
+    Task SetSourceDefaultsAsync(List<GlucoseProcessingSourceDefault> defaults, CancellationToken ct = default);
 }
 
 public class GlucoseProcessingSourceDefault
