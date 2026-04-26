@@ -119,6 +119,26 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     }
 
     /// <summary>
+    /// Gets pump snapshots by correlation IDs.
+    /// </summary>
+    /// <param name="correlationIds">The correlation IDs to match.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Matching pump snapshots.</returns>
+    public async Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    {
+        var ids = correlationIds.ToList();
+        if (ids.Count == 0) return [];
+
+        var entities = await _context.PumpSnapshots
+            .AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+
+        return entities.Select(PumpSnapshotMapper.ToDomainModel);
+    }
+
+    /// <summary>
     /// Counts pump snapshot records within a timestamp range.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>

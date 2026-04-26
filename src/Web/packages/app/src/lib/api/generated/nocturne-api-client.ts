@@ -26909,6 +26909,8 @@ export interface ApsSnapshot {
     predictedUamJson?: string | undefined;
     predictedStartTimestamp?: Date | undefined;
     predictedStartMills?: number | undefined;
+    loopJson?: string | undefined;
+    aidVersion?: string | undefined;
     additionalProperties?: { [key: string]: any; } | undefined;
 }
 
@@ -27110,6 +27112,8 @@ export interface PumpSnapshot {
     pumpStatus?: string | undefined;
     clock?: string | undefined;
     deviceId?: string | undefined;
+    iob?: number | undefined;
+    bolusIob?: number | undefined;
     additionalProperties?: { [key: string]: any; } | undefined;
 }
 

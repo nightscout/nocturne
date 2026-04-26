@@ -18473,7 +18473,7 @@
           "Statistics"
         ],
         "summary": "Gets comprehensive statistics for multiple time periods (1, 3, 7, 30, and 90 days).\nFetches sensor glucose, bolus, carb, and temp-basal data from the database for each period,\ncomputes GlucoseAnalytics, TreatmentSummary, and\nInsulinDeliveryStatistics, and caches the result for 5 minutes.",
-        "description": "When no TempBasal or algorithm bolus records are found but a profile is loaded, the method\nfalls back to computing scheduled basal from the active IProfileService schedule.\nGMI reliability is assessed per-period using context-appropriate recommended-day minimums\n(e.g., 1-day periods cannot require 14 days of data).",
+        "description": "When no TempBasal or algorithm bolus records are found but a profile is loaded, the method\nfalls back to computing scheduled basal from the active profile schedule via IBasalRateResolver.\nGMI reliability is assessed per-period using context-appropriate recommended-day minimums\n(e.g., 1-day periods cannot require 14 days of data).",
         "operationId": "Statistics_GetMultiPeriodStatistics",
         "responses": {
           "200": {
@@ -33549,6 +33549,14 @@
             "format": "int64",
             "nullable": true
           },
+          "loopJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "aidVersion": {
+            "type": "string",
+            "nullable": true
+          },
           "additionalProperties": {
             "type": "object",
             "nullable": true,
@@ -34229,6 +34237,16 @@
           "deviceId": {
             "type": "string",
             "format": "guid",
+            "nullable": true
+          },
+          "iob": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "bolusIob": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           },
           "additionalProperties": {

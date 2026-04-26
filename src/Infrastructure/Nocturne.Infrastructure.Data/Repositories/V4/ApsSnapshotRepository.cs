@@ -119,6 +119,47 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     }
 
     /// <summary>
+    /// Gets APS snapshots by correlation IDs.
+    /// </summary>
+    /// <param name="correlationIds">The correlation IDs to match.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Matching APS snapshots.</returns>
+    public async Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    {
+        var ids = correlationIds.ToList();
+        if (ids.Count == 0) return [];
+
+        var entities = await _context.ApsSnapshots
+            .AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+
+        return entities.Select(ApsSnapshotMapper.ToDomainModel);
+    }
+
+    /// <summary>
+    /// Gets APS snapshots modified since the given timestamp, ordered oldest-first.
+    /// </summary>
+    /// <param name="lastModifiedMills">Unix millisecond timestamp threshold.</param>
+    /// <param name="limit">Maximum number of records to return.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Matching APS snapshots ordered by modification time ascending.</returns>
+    public async Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(
+        long lastModifiedMills, int limit = 1000, CancellationToken ct = default)
+    {
+        var since = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
+        var entities = await _context.ApsSnapshots
+            .AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= since)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return entities.Select(ApsSnapshotMapper.ToDomainModel);
+    }
+
+    /// <summary>
     /// Counts APS snapshots within a timestamp range.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>

@@ -60,6 +60,11 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// <returns>Number of records deleted (0 or 1).</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>Retrieve <see cref="UploaderSnapshot"/> records matching any of the given correlation IDs.</summary>
+    /// <param name="correlationIds">Correlation IDs to match.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<UploaderSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
+
     /// <summary>Count <see cref="UploaderSnapshot"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>

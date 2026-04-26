@@ -64,6 +64,17 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <returns>Number of records deleted (0 or 1).</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
+    /// <param name="correlationIds">Correlation IDs to match.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
+
+    /// <summary>Retrieve <see cref="ApsSnapshot"/> records modified since the given timestamp, ordered oldest-first.</summary>
+    /// <param name="lastModifiedMills">Unix millisecond timestamp; records with <c>SysUpdatedAt</c> at or after this value are returned.</param>
+    /// <param name="limit">Maximum number of records to return (default 1000).</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(long lastModifiedMills, int limit = 1000, CancellationToken ct = default);
+
     /// <summary>Count <see cref="ApsSnapshot"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
