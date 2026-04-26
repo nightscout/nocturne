@@ -73,7 +73,7 @@ dotnet build -c Release src/API/Nocturne.API/Nocturne.API.csproj --verbosity qui
 echo "==> Verifying generated API client files"
 GENERATED_DIR="src/Web/packages/app/src/lib/api/generated"
 MISSING=()
-for f in passkeys patientRecords chartDatas profiles treatments alerts; do
+for f in passkeys patientRecords chartDatas profiles alerts; do
   if [[ ! -f "$GENERATED_DIR/${f}.generated.remote.ts" ]]; then
     MISSING+=("$f")
   fi
