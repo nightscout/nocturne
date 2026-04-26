@@ -498,6 +498,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();
         services.AddScoped<IPumpSnapshotRepository, PumpSnapshotRepository>();
         services.AddScoped<IUploaderSnapshotRepository, UploaderSnapshotRepository>();
+        services.AddScoped<IDeviceStatusExtrasRepository, DeviceStatusExtrasRepository>();
 
         // V4 Profile Repositories
         services.AddScoped<ITherapySettingsRepository, TherapySettingsRepository>();

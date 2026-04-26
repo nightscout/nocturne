@@ -325,6 +325,11 @@ public class NocturneDbContext : DbContext
     public DbSet<UploaderSnapshotEntity> UploaderSnapshots { get; set; }
 
     /// <summary>
+    /// Gets or sets the DeviceStatusExtras table for uncaptured devicestatus sub-objects (v4 diagnostic)
+    /// </summary>
+    public DbSet<DeviceStatusExtrasEntity> DeviceStatusExtras { get; set; }
+
+    /// <summary>
     /// Gets or sets the Devices table for physical device records (v4 granular model)
     /// </summary>
     public DbSet<DeviceEntity> Devices { get; set; }
@@ -1486,6 +1491,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.LegacyId)
             .HasDatabaseName("ix_uploader_snapshots_legacy_id");
 
+
+        // DeviceStatusExtras indexes
+        modelBuilder
+            .Entity<DeviceStatusExtrasEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_device_status_extras_correlation_id");
 
         // TempBasals indexes
         modelBuilder
