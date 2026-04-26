@@ -111,23 +111,16 @@ public class RetrospectiveController : ControllerBase
             var treatmentList = treatments?
                 .Where(t => t.Mills >= treatmentStartTime && t.Mills <= time)
                 .ToList() ?? new List<Treatment>();
-            // Get device status for enhanced IOB/COB data
-            var deviceStatus = await _deviceStatusService.GetDeviceStatusAsync(
-                count: 50,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-            var deviceStatusList = deviceStatus?.ToList() ?? new List<DeviceStatus>();
             // Calculate IOB at the specified time
-            var iobResult = _iobService.CalculateTotal(
+            var iobResult = await _iobService.CalculateTotalAsync(
                 treatmentList,
-                deviceStatusList,
-                time
+                time,
+                ct: cancellationToken
             );
             // Calculate COB at the specified time
             var cobResult = _cobService.CobTotal(
                 treatmentList,
-                deviceStatusList,
+                new List<DeviceStatus>(),
                 time
             );
             // Get glucose at the specified time (interpolated)

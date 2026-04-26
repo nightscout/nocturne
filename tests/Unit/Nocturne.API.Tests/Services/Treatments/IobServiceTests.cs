@@ -2,6 +2,7 @@ using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -17,6 +18,8 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class IobServiceTests
 {
     private readonly IobService _iobService;
+    private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepo;
+    private readonly Mock<IPumpSnapshotRepository> _pumpSnapshotRepo;
 
     // Default test profile values matching the old TestProfile
     private const double DefaultDIA = 3.0;
@@ -40,7 +43,24 @@ public class IobServiceTests
             .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultBasalRate);
 
-        _iobService = new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object);
+        _apsSnapshotRepo = new Mock<IApsSnapshotRepository>();
+        _pumpSnapshotRepo = new Mock<IPumpSnapshotRepository>();
+
+        // Default: repos return empty results
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+        _pumpSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
+
+        _iobService = new IobService(
+            therapySettings.Object,
+            sensitivityResolver.Object,
+            basalRateResolver.Object,
+            _apsSnapshotRepo.Object,
+            _pumpSnapshotRepo.Object
+        );
     }
 
     private static IobService CreateServiceWithDIA(double dia)
@@ -60,7 +80,16 @@ public class IobServiceTests
             .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultBasalRate);
 
-        return new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object);
+        var apsRepo = new Mock<IApsSnapshotRepository>();
+        apsRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+        var pumpRepo = new Mock<IPumpSnapshotRepository>();
+        pumpRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
+
+        return new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object, apsRepo.Object, pumpRepo.Object);
     }
 
     private static IobService CreateServiceWithSensitivity(double sens)
@@ -80,7 +109,16 @@ public class IobServiceTests
             .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultBasalRate);
 
-        return new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object);
+        var apsRepo = new Mock<IApsSnapshotRepository>();
+        apsRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+        var pumpRepo = new Mock<IPumpSnapshotRepository>();
+        pumpRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
+
+        return new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object, apsRepo.Object, pumpRepo.Object);
     }
 
     [Fact]
@@ -181,76 +219,95 @@ public class IobServiceTests
         Assert.True(result.BasalIob.Value > 0);
     }
 
-    [Theory]
-    [InlineData("Loop", 0.75)]
-    [InlineData("OpenAPS", 0.047)]
-    [InlineData("MM Connect", 0.87)]
-    public void FromDeviceStatus_DifferentSources_ShouldParseProperly(
-        string expectedSource,
-        double expectedIOB
-    )
-    {
-        var deviceStatus = CreateDeviceStatusForSource(expectedSource, expectedIOB);
-
-        var result = _iobService.FromDeviceStatus(deviceStatus);
-
-        Assert.Equal(expectedSource, result.Source);
-        Assert.Equal(expectedIOB, result.Iob, 3);
-    }
+    #region ApsSnapshot IOB Priority Tests
 
     [Fact]
-    public void LastIobDeviceStatus_PrioritizesLoopOverOpenAPS()
-    {
-        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var deviceStatuses = new List<DeviceStatus>
-        {
-            CreateDeviceStatusForSource("OpenAPS", 0.5, time - 5 * 60 * 1000),
-            CreateDeviceStatusForSource("Loop", 0.75, time - 10 * 60 * 1000),
-        };
-
-        var result = _iobService.LastIobDeviceStatus(deviceStatuses, time);
-
-        Assert.Equal("Loop", result.Source);
-        Assert.Equal(0.75, result.Iob);
-    }
-
-    [Fact]
-    public void LastIobDeviceStatus_IgnoresStaleData()
-    {
-        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var staleTime = time - 31 * 60 * 1000;
-        var deviceStatuses = new List<DeviceStatus>
-        {
-            CreateDeviceStatusForSource("Loop", 0.75, staleTime),
-        };
-
-        var result = _iobService.LastIobDeviceStatus(deviceStatuses, time);
-
-        Assert.Equal(0.0, result.Iob);
-    }
-
-    [Fact]
-    public void CalculateTotal_CombinesDeviceStatusAndTreatments()
+    public async Task CalculateTotal_UsesApsSnapshotIob_WhenAvailable()
     {
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatments = new List<Treatment>
         {
             new() { Mills = time - 60 * 60 * 1000, Insulin = 1.0 },
         };
-        var deviceStatuses = new List<DeviceStatus>
+
+        var apsSnapshot = new ApsSnapshot
         {
-            CreateDeviceStatusForSource("Loop", 1.5, time - 5 * 60 * 1000),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 1.5,
+            BasalIob = -0.3,
+            AidAlgorithm = AidAlgorithm.Loop,
+            Device = "loop://test",
         };
 
-        var result = _iobService.CalculateTotal(treatments, deviceStatuses, time);
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { apsSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
 
         Assert.Equal(1.5, result.Iob);
-        Assert.True(result.TreatmentIob.HasValue);
         Assert.Equal("Loop", result.Source);
+        Assert.True(result.TreatmentIob.HasValue);
     }
 
     [Fact]
-    public void CalculateTotal_FallsBackToTreatments_WhenNoDeviceStatus()
+    public async Task CalculateTotal_UsesOpenApsSnapshot_WhenAvailable()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>
+        {
+            new() { Mills = time - 60 * 60 * 1000, Insulin = 1.0 },
+        };
+
+        var apsSnapshot = new ApsSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 0.5,
+            BasalIob = -0.298,
+            AidAlgorithm = AidAlgorithm.OpenAps,
+            Device = "openaps://test",
+        };
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { apsSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.Equal(0.5, result.Iob);
+        Assert.Equal("OpenAPS", result.Source);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_UsesAapsSnapshot_WhenAvailable()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>
+        {
+            new() { Mills = time - 60 * 60 * 1000, Insulin = 1.0 },
+        };
+
+        var apsSnapshot = new ApsSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 0.8,
+            BasalIob = -0.1,
+            AidAlgorithm = AidAlgorithm.AndroidAps,
+            Device = "aaps://test",
+        };
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { apsSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.Equal(0.8, result.Iob);
+        Assert.Equal("OpenAPS", result.Source);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_StaleApsSnapshot_FallsThroughToTreatments()
     {
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatments = new List<Treatment>
@@ -258,11 +315,164 @@ public class IobServiceTests
             new() { Mills = time - 30 * 60 * 1000, Insulin = 2.0 },
         };
 
-        var result = _iobService.CalculateTotal(treatments, new List<DeviceStatus>(), time);
+        // ApsSnapshot older than 30 minutes - should be filtered out by the time range query
+        // (the repo query uses recentTime..futureTime, so stale data won't be returned)
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
 
         Assert.True(result.Iob > 0);
         Assert.Equal("Care Portal", result.Source);
     }
+
+    #endregion
+
+    #region PumpSnapshot IOB Tests
+
+    [Fact]
+    public async Task CalculateTotal_UsesPumpSnapshotIob_WhenNoApsSnapshot()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>
+        {
+            new() { Mills = time - 60 * 60 * 1000, Insulin = 1.0 },
+        };
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+
+        var pumpSnapshot = new PumpSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 0.87,
+            BolusIob = 0.87,
+            Device = "pump://test",
+        };
+
+        _pumpSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { pumpSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.Equal(0.87, result.Iob);
+        Assert.Equal("Pump", result.Source);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_PumpSnapshotUsesBolusIob_WhenIobIsNull()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+
+        var pumpSnapshot = new PumpSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = null,
+            BolusIob = 1.23,
+            Device = "pump://test",
+        };
+
+        _pumpSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { pumpSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.Equal(1.23, result.Iob);
+        Assert.Equal("Pump", result.Source);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_ApsSnapshotTakesPriority_OverPumpSnapshot()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>();
+
+        var apsSnapshot = new ApsSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 1.5,
+            AidAlgorithm = AidAlgorithm.Loop,
+            Device = "loop://test",
+        };
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { apsSnapshot });
+
+        var pumpSnapshot = new PumpSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 0.5,
+            Device = "pump://test",
+        };
+
+        _pumpSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { pumpSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.Equal(1.5, result.Iob);
+        Assert.Equal("Loop", result.Source);
+    }
+
+    #endregion
+
+    #region CalculateTotal Fallback Tests
+
+    [Fact]
+    public async Task CalculateTotal_FallsBackToTreatments_WhenNoSnapshots()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>
+        {
+            new() { Mills = time - 30 * 60 * 1000, Insulin = 2.0 },
+        };
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.True(result.Iob > 0);
+        Assert.Equal("Care Portal", result.Source);
+    }
+
+    [Fact]
+    public async Task CalculateTotal_CombinesDeviceIobAndTreatmentIob()
+    {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var treatments = new List<Treatment>
+        {
+            new() { Mills = time - 60 * 60 * 1000, Insulin = 1.0 },
+        };
+
+        var apsSnapshot = new ApsSnapshot
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Iob = 1.5,
+            AidAlgorithm = AidAlgorithm.Loop,
+            Device = "loop://test",
+        };
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { apsSnapshot });
+
+        var result = await _iobService.CalculateTotalAsync(treatments, time);
+
+        Assert.Equal(1.5, result.Iob);
+        Assert.True(result.TreatmentIob.HasValue);
+        Assert.Equal("Loop", result.Source);
+    }
+
+    #endregion
 
     #region CalcTempBasalIob Tests
 
@@ -576,45 +786,6 @@ public class IobServiceTests
 
         var expectedIob = 1.0 * (0.001323 * 81.0 - 0.054233 * 9.0 + 0.55556);
         Assert.Equal(expectedIob, result.IobContrib, 5);
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private static DeviceStatus CreateDeviceStatusForSource(string source, double iob, long? mills = null)
-    {
-        var deviceStatus = new DeviceStatus
-        {
-            Mills = mills ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Device = $"{source.ToLower()}://test",
-        };
-
-        switch (source)
-        {
-            case "Loop":
-                deviceStatus.Loop = new LoopStatus
-                {
-                    Iob = new LoopIob { Iob = iob, Timestamp = DateTimeOffset.UtcNow.ToString("O") },
-                };
-                break;
-            case "OpenAPS":
-                deviceStatus.OpenAps = new OpenApsStatus
-                {
-                    Iob = new OpenApsIobData
-                    {
-                        Iob = iob, BasalIob = -0.298, Activity = 0.0147,
-                        Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    },
-                };
-                break;
-            case "MM Connect":
-                deviceStatus.Pump = new PumpStatus { Iob = new PumpIob { BolusIob = iob } };
-                deviceStatus.Connect = new object();
-                break;
-        }
-
-        return deviceStatus;
     }
 
     #endregion

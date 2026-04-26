@@ -8,31 +8,33 @@ namespace Nocturne.Core.Contracts.Treatments;
 /// Implements exact algorithms from ClientApp/lib/plugins/iob.js and ClientApp/src/lib/calculations/iob.ts.
 /// </summary>
 /// <remarks>
-/// IOB is aggregated from three sources: bolus <see cref="Treatment"/> records, V4 <see cref="TempBasal"/>
-/// records, and <see cref="DeviceStatus"/> entries (which carry loop-reported IOB).
+/// IOB is aggregated from three sources: <see cref="ApsSnapshot"/> (Loop, OpenAPS, AAPS),
+/// <see cref="PumpSnapshot"/> (pump-reported IOB), <see cref="Treatment"/> bolus/temp-basal records,
+/// and V4 <see cref="TempBasal"/> records.
 /// Profile data (DIA, sensitivity, basal rate) is resolved via constructor-injected V4 resolvers.
 /// </remarks>
 /// <seealso cref="Treatment"/>
-/// <seealso cref="DeviceStatus"/>
+/// <seealso cref="ApsSnapshot"/>
+/// <seealso cref="PumpSnapshot"/>
 /// <seealso cref="TempBasal"/>
 /// <seealso cref="IobResult"/>
 public interface IIobService
 {
     /// <summary>
-    /// Calculate total IOB from all sources: bolus treatments, V4 temp basals, and device status.
+    /// Calculate total IOB from all sources: APS snapshots, pump snapshots, bolus treatments, and V4 temp basals.
     /// </summary>
     /// <param name="treatments">Bolus <see cref="Treatment"/> records.</param>
-    /// <param name="deviceStatus"><see cref="DeviceStatus"/> entries (may contain loop-reported IOB).</param>
     /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
     /// <param name="specProfile">Optional specific profile name to use.</param>
     /// <param name="tempBasals">Optional V4 <see cref="TempBasal"/> records.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <returns>Aggregated <see cref="IobResult"/> from all sources.</returns>
-    IobResult CalculateTotal(
+    Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
         string? specProfile = null,
-        List<TempBasal>? tempBasals = null
+        List<TempBasal>? tempBasals = null,
+        CancellationToken ct = default
     );
 
     /// <summary>
@@ -60,21 +62,6 @@ public interface IIobService
         long? time = null,
         string? specProfile = null
     );
-
-    /// <summary>
-    /// Extract IOB from a single <see cref="DeviceStatus"/> entry (loop-reported IOB).
-    /// </summary>
-    /// <param name="deviceStatusEntry">A <see cref="DeviceStatus"/> entry containing loop IOB data.</param>
-    /// <returns><see cref="IobResult"/> extracted from the device status.</returns>
-    IobResult FromDeviceStatus(DeviceStatus deviceStatusEntry);
-
-    /// <summary>
-    /// Get the most recent loop-reported IOB from <see cref="DeviceStatus"/> entries before the given time.
-    /// </summary>
-    /// <param name="deviceStatus">List of <see cref="DeviceStatus"/> entries.</param>
-    /// <param name="time">Timestamp in Unix milliseconds to search before.</param>
-    /// <returns>Most recent <see cref="IobResult"/> from device status.</returns>
-    IobResult LastIobDeviceStatus(List<DeviceStatus> deviceStatus, long time);
 
     /// <summary>
     /// Calculate IOB contribution from a single bolus <see cref="Treatment"/>.

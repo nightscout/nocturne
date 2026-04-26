@@ -159,7 +159,7 @@ public class PropertiesService : IPropertiesService
             SetDirectionProperties(properties, ddata);
 
             // IOB properties (Insulin on Board) - requires treatments and profile data
-            SetIobProperties(properties, ddata);
+            await SetIobPropertiesAsync(properties, ddata);
 
             // COB properties (Carbs on Board) - requires treatments and profile data
             SetCobProperties(properties, ddata);
@@ -272,21 +272,19 @@ public class PropertiesService : IPropertiesService
     /// <summary>
     /// Set IOB (Insulin on Board) properties using full legacy algorithm
     /// </summary>
-    private void SetIobProperties(Dictionary<string, object> properties, DData ddata)
+    private async Task SetIobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
         try
         {
             var treatments = ddata.Treatments?.ToList() ?? new List<Treatment>();
-            var deviceStatus = ddata.DeviceStatus?.ToList() ?? new List<DeviceStatus>();
 
-            if (!treatments.Any() && !deviceStatus.Any())
+            if (!treatments.Any())
                 return;
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-            var iobResult = _iobService.CalculateTotal(
+            var iobResult = await _iobService.CalculateTotalAsync(
                 treatments,
-                deviceStatus,
                 now
             );
 

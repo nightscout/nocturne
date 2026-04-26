@@ -78,13 +78,13 @@ public class RetrospectiveControllerTests
             .ReturnsAsync(new List<DeviceStatus>());
 
         _iobServiceMock
-            .Setup(s => s.CalculateTotal(
+            .Setup(s => s.CalculateTotalAsync(
                 It.IsAny<List<Treatment>>(),
-                It.IsAny<List<DeviceStatus>>(),
                 It.IsAny<long?>(),
                 It.IsAny<string?>(),
-                It.IsAny<List<TempBasal>?>()))
-            .Returns(new IobResult());
+                It.IsAny<List<TempBasal>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult());
 
         _cobServiceMock
             .Setup(s => s.CobTotal(

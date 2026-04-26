@@ -80,7 +80,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         ProcessGlucoseReadings(response, entries, hours, currentTime);
 
         // Calculate IOB and COB
-        CalculateIobCob(response, treatments, deviceStatusList);
+        await CalculateIobCobAsync(response, treatments, deviceStatusList);
 
         // Process tracker statuses
         ProcessTrackers(response, trackerInstances);
@@ -150,7 +150,7 @@ public class WidgetSummaryService : IWidgetSummaryService
     /// <summary>
     /// Calculate IOB and COB values
     /// </summary>
-    private void CalculateIobCob(
+    private async Task CalculateIobCobAsync(
         V4SummaryResponse response,
         List<Treatment> treatments,
         List<DeviceStatus> deviceStatusList
@@ -159,7 +159,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         try
         {
             // Calculate IOB
-            var iobResult = _iobService.CalculateTotal(treatments, deviceStatusList);
+            var iobResult = await _iobService.CalculateTotalAsync(treatments);
             response.Iob = Math.Round(iobResult.Iob * 100) / 100; // Round to 2 decimal places
 
             // Calculate COB

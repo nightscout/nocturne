@@ -3,7 +3,9 @@ using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Oref;
 using OrefModels = Nocturne.Core.Oref.Models;
 using Xunit;
@@ -363,15 +365,22 @@ public class CobServiceTests
         sensitivity.Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(DefaultSensitivity);
         var basalRate = new Mock<IBasalRateResolver>();
         basalRate.Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(DefaultBasalRate);
-        return new IobService(therapySettings.Object, sensitivity.Object, basalRate.Object);
+        var apsRepo = new Mock<IApsSnapshotRepository>();
+        apsRepo.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+        var pumpRepo = new Mock<IPumpSnapshotRepository>();
+        pumpRepo.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
+        return new IobService(therapySettings.Object, sensitivity.Object, basalRate.Object, apsRepo.Object, pumpRepo.Object);
     }
 
     private sealed class OrefIobAdapter : IIobService
     {
-        public IobResult CalculateTotal(
-            List<Treatment> treatments, List<DeviceStatus> deviceStatus,
+        public Task<IobResult> CalculateTotalAsync(
+            List<Treatment> treatments,
             long? time = null, string? specProfile = null,
-            List<Nocturne.Core.Models.V4.TempBasal>? tempBasals = null)
+            List<Nocturne.Core.Models.V4.TempBasal>? tempBasals = null,
+            CancellationToken ct = default)
         {
             var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var orefProfile = new OrefModels.OrefProfile
@@ -382,14 +391,12 @@ public class CobServiceTests
             var orefTreatments = BuildTreatments(treatments);
             var iobData = OrefService.CalculateIob(orefProfile, orefTreatments, DateTimeOffset.FromUnixTimeMilliseconds(currentTime));
             if (iobData == null)
-                return new IobResult { Iob = 0.0, Activity = 0.0, Source = "Care Portal" };
-            return new IobResult { Iob = iobData.Iob, Activity = iobData.Activity * DefaultSensitivity, Source = "Care Portal" };
+                return Task.FromResult(new IobResult { Iob = 0.0, Activity = 0.0, Source = "Care Portal" });
+            return Task.FromResult(new IobResult { Iob = iobData.Iob, Activity = iobData.Activity * DefaultSensitivity, Source = "Care Portal" });
         }
 
         public IobResult FromTreatments(List<Treatment> treatments, long? time = null, string? specProfile = null)
-            => CalculateTotal(treatments, new List<DeviceStatus>(), time, specProfile);
-        public IobResult FromDeviceStatus(DeviceStatus deviceStatusEntry) => new();
-        public IobResult LastIobDeviceStatus(List<DeviceStatus> deviceStatus, long time) => new();
+            => CalculateTotalAsync(treatments, time, specProfile).GetAwaiter().GetResult();
         public IobContribution CalcTreatment(Treatment treatment, long? time = null, string? specProfile = null) => new();
         public IobContribution CalcBasalTreatment(Treatment treatment, long? time = null, string? specProfile = null) => new();
         public IobContribution CalcTempBasalIob(Nocturne.Core.Models.V4.TempBasal tempBasal, long? time = null, string? specProfile = null) => new();

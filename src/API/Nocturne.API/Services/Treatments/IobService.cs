@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -7,8 +8,9 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// Implementation of Insulin on Board (IOB) calculations with exact 1:1 legacy JavaScript compatibility.
-/// Computes IOB from three sources: <see cref="DeviceStatus"/> (Loop, OpenAPS, pump),
-/// <see cref="Treatment"/> bolus/temp-basal records, and V4 <see cref="TempBasal"/> records.
+/// Computes IOB from three sources: <see cref="ApsSnapshot"/> (Loop, OpenAPS, AAPS),
+/// <see cref="PumpSnapshot"/> (pump-reported IOB), <see cref="Treatment"/> bolus/temp-basal records,
+/// and V4 <see cref="TempBasal"/> records.
 /// </summary>
 /// <remarks>
 /// The bolus IOB curve uses a two-phase model:
@@ -25,7 +27,9 @@ namespace Nocturne.API.Services.Treatments;
 public class IobService(
     ITherapySettingsResolver therapySettings,
     ISensitivityResolver sensitivity,
-    IBasalRateResolver basalRate
+    IBasalRateResolver basalRate,
+    IApsSnapshotRepository apsSnapshotRepo,
+    IPumpSnapshotRepository pumpSnapshotRepo
 ) : IIobService
 {
     // Constants from legacy implementation
@@ -36,26 +40,26 @@ public class IobService(
     private const double MAX_IOB_MINUTES = 180.0; // IOB calculation cutoff at 180 minutes
 
     /// <summary>
-    /// Main IOB calculation function that combines <see cref="DeviceStatus"/> and <see cref="Treatment"/> data.
-    /// Exact implementation of legacy calcTotal function.
+    /// Main IOB calculation function that combines device snapshot and <see cref="Treatment"/> data.
+    /// Queries <see cref="IApsSnapshotRepository"/> and <see cref="IPumpSnapshotRepository"/> internally
+    /// for device-reported IOB, falling back to treatment-based calculation when no recent device data exists.
     /// </summary>
     /// <remarks>
-    /// Priority: device status IOB (Loop/OpenAPS/pump) takes precedence. If unavailable,
-    /// treatment-based IOB is used. V4 <see cref="TempBasal"/> basal IOB is always merged
-    /// into the treatment result regardless of source priority.
+    /// Priority: APS snapshot IOB (Loop/OpenAPS/AAPS) > pump snapshot IOB > treatment-based IOB.
+    /// V4 <see cref="TempBasal"/> basal IOB is always merged into the treatment result regardless of source priority.
     /// </remarks>
-    public IobResult CalculateTotal(
+    public async Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
         string? specProfile = null,
-        List<TempBasal>? tempBasals = null
+        List<TempBasal>? tempBasals = null,
+        CancellationToken ct = default
     )
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Get IOB from device status (pumps, OpenAPS, Loop) - prioritized source
-        var result = LastIobDeviceStatus(deviceStatus, currentTime);
+        // Get IOB from device snapshots (APS, pump) - prioritized source
+        var result = await GetLatestDeviceIobAsync(currentTime, ct);
 
         // Calculate IOB from treatments (Care Portal entries)
         var treatmentResult =
@@ -106,118 +110,77 @@ public class IobService(
     }
 
     /// <summary>
-    /// Get the most recent IOB from <see cref="DeviceStatus"/> entries with prioritization.
-    /// Exact implementation of legacy lastIOBDeviceStatus function.
+    /// Query <see cref="IApsSnapshotRepository"/> and <see cref="IPumpSnapshotRepository"/>
+    /// for the most recent device-reported IOB within the staleness window.
     /// </summary>
-    public IobResult LastIobDeviceStatus(List<DeviceStatus> deviceStatus, long time)
+    internal async Task<IobResult> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
     {
-        if (deviceStatus?.Any() != true)
-        {
-            return new IobResult();
-        }
-
         var futureMills = time + 5 * 60 * 1000; // Allow for clocks to be a little off
-        var recentMills = time - RECENCY_THRESHOLD; // Get all IOBs within time range
-        var iobs = deviceStatus
-            .Where(status =>
-                status.Mills > 0 && status.Mills <= futureMills && status.Mills >= recentMills
-            )
-            .Select(FromDeviceStatus)
-            .Where(item => !IsEmpty(item))
-            .OrderBy(iob => iob.Mills ?? 0)
-            .ToList();
+        var recentMills = time - RECENCY_THRESHOLD;
 
-        if (!iobs.Any())
+        var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
+        var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
+
+        // Try APS snapshot first (highest priority: Loop, OpenAPS, AAPS, Trio)
+        var apsSnapshots = await apsSnapshotRepo.GetAsync(
+            from: recentTime,
+            to: futureTime,
+            device: null,
+            source: null,
+            limit: 1,
+            offset: 0,
+            descending: true,
+            ct: ct
+        );
+
+        var apsSnapshot = apsSnapshots.FirstOrDefault();
+        if (apsSnapshot != null)
         {
-            return new IobResult();
-        }
-
-        // Prioritize Loop IOBs if available (highest priority)
-        var loopIobs = iobs.Where(iob => iob.Source == "Loop").ToList();
-        if (loopIobs.Any())
-        {
-            return loopIobs.Last(); // Most recent Loop IOB
-        }
-
-        // Return the most recent IOB entry
-        return iobs.Last();
-    }
-
-    /// <summary>
-    /// Extract IOB from a single <see cref="DeviceStatus"/> entry.
-    /// Priority: Loop > OpenAPS > Pump (MM Connect).
-    /// </summary>
-    public IobResult FromDeviceStatus(DeviceStatus deviceStatusEntry)
-    {
-        // Highest priority: Loop IOB
-        if (HasLoopIob(deviceStatusEntry))
-        {
-            var loopIob = deviceStatusEntry.Loop!.Iob!;
-            var timestamp = deviceStatusEntry.Mills; // fallback
-
-            if (
-                !string.IsNullOrEmpty(loopIob.Timestamp)
-                && DateTimeOffset.TryParse(loopIob.Timestamp, out var parsedTime)
-            )
+            // Legacy V1 API only exposed two source strings: "Loop" and "OpenAPS".
+            // All non-Loop AID algorithms (OpenAPS, AAPS, Trio, etc.) map to "OpenAPS".
+            var source = apsSnapshot.AidAlgorithm switch
             {
-                timestamp = parsedTime.ToUnixTimeMilliseconds();
-            }
-
-            return new IobResult
-            {
-                Iob = loopIob.Iob ?? 0.0,
-                Source = "Loop",
-                Device = deviceStatusEntry.Device,
-                Mills = timestamp,
+                AidAlgorithm.Loop => "Loop",
+                _ => "OpenAPS",
             };
-        }
 
-        // Second priority: OpenAPS IOB
-        if (HasOpenApsIob(deviceStatusEntry))
-        {
-            var openApsIob = deviceStatusEntry.OpenAps!.Iob!;
-
-            var iobValue = openApsIob.Iob ?? 0.0;
-            var basalIobValue = openApsIob.BasalIob;
-            var activityValue = openApsIob.Activity;
-
-            // Handle timestamp field variations (time vs timestamp)
-            var timestampStr = openApsIob.Timestamp ?? openApsIob.Time;
-            var timestamp = deviceStatusEntry.Mills; // fallback
-
-            if (
-                !string.IsNullOrEmpty(timestampStr)
-                && DateTimeOffset.TryParse(timestampStr, out var parsedTime)
-            )
-            {
-                timestamp = parsedTime.ToUnixTimeMilliseconds();
-            }
-
+            // ApsSnapshot does not carry an Activity value — the APS algorithm's metabolic
+            // activity rate was not migrated to the V4 model. COB decay calculations that
+            // need Activity will fall through to the treatment-based value merged by
+            // CalculateTotalAsync.
             return new IobResult
             {
-                Iob = iobValue,
-                BasalIob = basalIobValue,
-                Activity = activityValue,
-                Source = "OpenAPS",
-                Device = deviceStatusEntry.Device,
-                Mills = timestamp,
-            };
-        }
-
-        // Third priority: Pump IOB (MM Connect)
-        if (HasPumpIob(deviceStatusEntry))
-        {
-            var pumpIob = deviceStatusEntry.Pump!.Iob!;
-            var iobValue = pumpIob.Iob ?? pumpIob.BolusIob ?? 0.0;
-
-            var source = deviceStatusEntry.Connect != null ? "MM Connect" : "Pump";
-
-            return new IobResult
-            {
-                Iob = iobValue,
+                Iob = apsSnapshot.Iob ?? 0.0,
+                BasalIob = apsSnapshot.BasalIob,
                 Source = source,
-                Device = deviceStatusEntry.Device,
-                Mills = deviceStatusEntry.Mills,
+                Device = apsSnapshot.Device,
+                Mills = new DateTimeOffset(apsSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            };
+        }
+
+        // Fall back to pump snapshot
+        var pumpSnapshots = await pumpSnapshotRepo.GetAsync(
+            from: recentTime,
+            to: futureTime,
+            device: null,
+            source: null,
+            limit: 1,
+            offset: 0,
+            descending: true,
+            ct: ct
+        );
+
+        var pumpSnapshot = pumpSnapshots.FirstOrDefault();
+        if (pumpSnapshot != null)
+        {
+            var iobValue = pumpSnapshot.Iob ?? pumpSnapshot.BolusIob ?? 0.0;
+
+            return new IobResult
+            {
+                Iob = iobValue,
+                Source = "Pump",
+                Device = pumpSnapshot.Device,
+                Mills = new DateTimeOffset(pumpSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             };
         }
 
@@ -538,21 +501,6 @@ public class IobService(
     private static double RoundToThreeDecimals(double num)
     {
         return Math.Round(num + double.Epsilon, 3);
-    }
-
-    private static bool HasLoopIob(DeviceStatus deviceStatus)
-    {
-        return deviceStatus.Loop?.Iob != null;
-    }
-
-    private static bool HasOpenApsIob(DeviceStatus deviceStatus)
-    {
-        return deviceStatus.OpenAps?.Iob != null;
-    }
-
-    private static bool HasPumpIob(DeviceStatus deviceStatus)
-    {
-        return deviceStatus.Pump?.Iob != null;
     }
 
     #endregion

@@ -45,7 +45,6 @@ public interface ICachedIobService
     /// </summary>
     Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
         string? specProfile = null,
         CancellationToken cancellationToken = default
@@ -55,14 +54,6 @@ public interface ICachedIobService
     /// Invalidate IOB cache for specific user
     /// </summary>
     Task InvalidateIobCacheAsync(string userId, CancellationToken cancellationToken = default);
-
-    // Forward synchronous methods to underlying service
-    IobResult CalculateTotal(
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
-        long? time = null,
-        string? specProfile = null
-    );
 }
 
 /// <summary>
@@ -91,19 +82,18 @@ public class CachedIobService : ICachedIobService
     /// <inheritdoc />
     public async Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
         string? specProfile = null,
         CancellationToken cancellationToken = default
     )
     {
         var timestamp = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var userId = ExtractUserId(treatments, deviceStatus);
+        var userId = ExtractUserId(treatments);
 
         if (string.IsNullOrEmpty(userId))
         {
             // No user ID available, skip caching
-            return _iobService.CalculateTotal(treatments, deviceStatus, time, specProfile);
+            return await _iobService.CalculateTotalAsync(treatments, time, specProfile, ct: cancellationToken);
         }
 
         var cacheKey = CacheKeyBuilder.BuildIobCalculationKey(userId, timestamp);
@@ -111,26 +101,10 @@ public class CachedIobService : ICachedIobService
 
         return await _cacheService.GetOrSetAsync(
             cacheKey,
-            () =>
-                Task.FromResult(
-                    _iobService.CalculateTotal(treatments, deviceStatus, time, specProfile)
-                ),
+            () => _iobService.CalculateTotalAsync(treatments, time, specProfile, ct: cancellationToken),
             expiration,
             cancellationToken
         );
-    }
-
-    /// <inheritdoc />
-    public IobResult CalculateTotal(
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
-        long? time = null,
-        string? specProfile = null
-    )
-    {
-        return CalculateTotalAsync(treatments, deviceStatus, time, specProfile)
-            .GetAwaiter()
-            .GetResult();
     }
 
     /// <inheritdoc />
@@ -152,28 +126,16 @@ public class CachedIobService : ICachedIobService
     }
 
     /// <summary>
-    /// Extracts user ID from treatments or device status for cache key generation
+    /// Extracts user ID from treatments for cache key generation.
     /// </summary>
-    private static string? ExtractUserId(
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus
-    )
+    private static string? ExtractUserId(List<Treatment> treatments)
     {
-        // Try to extract from treatments first
         var userIdFromTreatment = treatments?.FirstOrDefault()?.EnteredBy;
         if (!string.IsNullOrEmpty(userIdFromTreatment))
         {
             return userIdFromTreatment;
         }
 
-        // Try to extract from device status
-        var userIdFromDevice = deviceStatus?.FirstOrDefault()?.Device;
-        if (!string.IsNullOrEmpty(userIdFromDevice))
-        {
-            return userIdFromDevice;
-        }
-
-        // Could not determine user ID
         return null;
     }
 }

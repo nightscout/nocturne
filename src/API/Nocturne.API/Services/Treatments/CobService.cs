@@ -257,21 +257,23 @@ public class CobService(
                 {
                     var actStart =
                         iobService
-                            .CalculateTotal(
+                            .CalculateTotalAsync(
                                 treatments ?? new List<Treatment>(),
-                                deviceStatus ?? new List<DeviceStatus>(),
                                 lastDecayedBy,
                                 specProfile
                             )
+                            .GetAwaiter()
+                            .GetResult()
                             ?.Activity ?? double.NaN;
                     var actEnd =
                         iobService
-                            .CalculateTotal(
+                            .CalculateTotalAsync(
                                 treatments ?? new List<Treatment>(),
-                                deviceStatus ?? new List<DeviceStatus>(),
                                 cCalc.DecayedBy.ToUnixTimeMilliseconds(),
                                 specProfile
                             )
+                            .GetAwaiter()
+                            .GetResult()
                             ?.Activity ?? double.NaN;
                     var avgActivity = (actStart + actEnd) / 2.0;
 

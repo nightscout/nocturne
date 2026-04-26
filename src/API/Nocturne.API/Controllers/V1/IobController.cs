@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 
@@ -13,7 +12,6 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IIobService"/>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="IDeviceStatusService"/>
 [ApiController]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
@@ -22,7 +20,6 @@ public class IobController : ControllerBase
 {
     private readonly IIobService _iobService;
     private readonly ITreatmentService _treatmentService;
-    private readonly IDeviceStatusService _deviceStatusService;
     private readonly ILogger<IobController> _logger;
 
     /// <summary>
@@ -30,18 +27,15 @@ public class IobController : ControllerBase
     /// </summary>
     /// <param name="iobService">Service for insulin-on-board calculations.</param>
     /// <param name="treatmentService">Service for treatment data retrieval.</param>
-    /// <param name="deviceStatusService">Service for device status data retrieval.</param>
     /// <param name="logger">Logger instance.</param>
     public IobController(
         IIobService iobService,
         ITreatmentService treatmentService,
-        IDeviceStatusService deviceStatusService,
         ILogger<IobController> logger
     )
     {
         _iobService = iobService;
         _treatmentService = treatmentService;
-        _deviceStatusService = deviceStatusService;
         _logger = logger;
     }
 
@@ -73,18 +67,11 @@ public class IobController : ControllerBase
                 cancellationToken: cancellationToken
             );
 
-            // Get recent device status
-            var deviceStatus = await _deviceStatusService.GetDeviceStatusAsync(
-                count: 10,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-
             // Calculate IOB using the service
-            var iobResult = _iobService.CalculateTotal(
+            var iobResult = await _iobService.CalculateTotalAsync(
                 treatments?.ToList() ?? new List<Treatment>(),
-                deviceStatus?.ToList() ?? new List<DeviceStatus>(),
-                calculationTime
+                calculationTime,
+                ct: cancellationToken
             );
 
             return Ok(iobResult);

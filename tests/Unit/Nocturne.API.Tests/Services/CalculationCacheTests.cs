@@ -75,8 +75,6 @@ public class Phase3CalculationCacheTests
                 Mills = timestamp - 60000,
             },
         };
-        var deviceStatus = new List<DeviceStatus>();
-
         var expectedIobResult = new IobResult
         {
             Iob = 2.5,
@@ -106,7 +104,6 @@ public class Phase3CalculationCacheTests
         // Act
         var result = await cachedIobService.CalculateTotalAsync(
             treatments,
-            deviceStatus,
             timestamp,
             cancellationToken: CancellationToken.None
         );
