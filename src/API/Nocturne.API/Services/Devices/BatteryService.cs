@@ -1,26 +1,32 @@
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Battery;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Devices;
 
 /// <summary>
-/// Tracks and analyses device battery status from recent <see cref="Nocturne.Core.Models.DeviceStatus"/> entries.
-/// Categorises battery levels using configurable warning and urgent thresholds.
+/// Tracks and analyses device battery status from recent <see cref="UploaderSnapshot"/>
+/// and <see cref="PumpSnapshot"/> records. Categorises battery levels using configurable
+/// warning and urgent thresholds.
 /// </summary>
 /// <seealso cref="IBatteryService"/>
 public class BatteryService : IBatteryService
 {
-    private readonly IDeviceStatusRepository _deviceStatuses;
+    private readonly IUploaderSnapshotRepository _uploaderSnapshots;
+    private readonly IPumpSnapshotRepository _pumpSnapshots;
     private readonly ILogger<BatteryService> _logger;
 
     private const int DefaultWarnThreshold = 30;
     private const int DefaultUrgentThreshold = 20;
 
-    public BatteryService(IDeviceStatusRepository deviceStatuses, ILogger<BatteryService> logger)
+    public BatteryService(
+        IUploaderSnapshotRepository uploaderSnapshots,
+        IPumpSnapshotRepository pumpSnapshots,
+        ILogger<BatteryService> logger)
     {
-        _deviceStatuses = deviceStatuses;
+        _uploaderSnapshots = uploaderSnapshots;
+        _pumpSnapshots = pumpSnapshots;
         _logger = logger;
     }
 
@@ -34,52 +40,51 @@ public class BatteryService : IBatteryService
 
         try
         {
-            var recentMills =
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (recentMinutes * 60 * 1000);
+            var from = DateTime.UtcNow.AddMinutes(-recentMinutes);
 
-            // Get recent device status entries
-            var deviceStatuses = await _deviceStatuses.GetDeviceStatusWithAdvancedFilterAsync(
-                count: 100,
-                skip: 0,
-                findQuery: $"{{\"mills\":{{\"$gte\":{recentMills}}}}}",
-                cancellationToken: cancellationToken
-            );
+            var uploaderTask = _uploaderSnapshots.GetAsync(
+                from: from, to: null, device: null, source: null,
+                limit: 100, offset: 0, descending: true, ct: cancellationToken);
 
-            // Filter to those with any battery data (uploader, pump, or CGM)
-            var statusesWithBattery = deviceStatuses
-                .Where(s =>
-                    s.Uploader?.Battery != null ||
-                    s.Uploader?.BatteryVoltage != null ||
-                    s.Pump?.Battery?.Percent != null ||
-                    s.Cgm?.TransmitterBattery != null)
-                .ToList();
+            var pumpTask = _pumpSnapshots.GetAsync(
+                from: from, to: null, device: null, source: null,
+                limit: 100, offset: 0, descending: true, ct: cancellationToken);
 
-            if (!statusesWithBattery.Any())
+            await Task.WhenAll(uploaderTask, pumpTask);
+
+            var uploaderSnapshots = (await uploaderTask).ToList();
+            var pumpSnapshots = (await pumpTask).ToList();
+
+            var allReadings = new List<BatteryReading>();
+            allReadings.AddRange(uploaderSnapshots
+                .Where(u => u.Battery != null || u.BatteryVoltage != null)
+                .Select(ConvertUploaderToReading));
+            allReadings.AddRange(pumpSnapshots
+                .Where(p => p.BatteryPercent != null || p.BatteryVoltage != null)
+                .Select(ConvertPumpToReading));
+
+            if (allReadings.Count == 0)
             {
                 return result;
             }
 
             // Group by device, extracting battery readings from all available sources
-            foreach (var status in statusesWithBattery)
+            foreach (var reading in allReadings)
             {
-                var readings = ConvertToBatteryReadings(status);
-                foreach (var reading in readings)
+                var deviceUri = reading.Device;
+                var deviceName = ExtractDeviceName(deviceUri);
+
+                if (!result.Devices.ContainsKey(deviceUri))
                 {
-                    var deviceUri = reading.Device;
-                    var deviceName = ExtractDeviceName(deviceUri);
-
-                    if (!result.Devices.ContainsKey(deviceUri))
+                    result.Devices[deviceUri] = new DeviceBatteryStatus
                     {
-                        result.Devices[deviceUri] = new DeviceBatteryStatus
-                        {
-                            Uri = deviceUri,
-                            Name = deviceName,
-                            Statuses = new List<BatteryReading>(),
-                        };
-                    }
-
-                    result.Devices[deviceUri].Statuses.Add(reading);
+                        Uri = deviceUri,
+                        Name = deviceName,
+                        Statuses = new List<BatteryReading>(),
+                    };
                 }
+
+                result.Devices[deviceUri].Statuses.Add(reading);
             }
 
             // For each device, find the minimum battery in the last 10 minutes
@@ -139,38 +144,28 @@ public class BatteryService : IBatteryService
 
         try
         {
-            // Build query filter
-            var filters = new List<string>();
+            var from = fromMills.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+                : (DateTime?)null;
+            var to = toMills.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+                : (DateTime?)null;
 
-            if (!string.IsNullOrEmpty(device))
-            {
-                filters.Add($"\"device\":\"{device}\"");
-            }
+            var uploaderTask = _uploaderSnapshots.GetAsync(
+                from: from, to: to, device: device, source: null,
+                limit: 10000, offset: 0, descending: false, ct: cancellationToken);
 
-            if (fromMills.HasValue)
-            {
-                filters.Add($"\"mills\":{{\"$gte\":{fromMills.Value}}}");
-            }
+            var pumpTask = _pumpSnapshots.GetAsync(
+                from: from, to: to, device: device, source: null,
+                limit: 10000, offset: 0, descending: false, ct: cancellationToken);
 
-            if (toMills.HasValue)
-            {
-                filters.Add($"\"mills\":{{\"$lte\":{toMills.Value}}}");
-            }
+            await Task.WhenAll(uploaderTask, pumpTask);
 
-            var findQuery = filters.Any() ? "{" + string.Join(",", filters) + "}" : null;
+            var uploaderSnapshots = await uploaderTask;
+            var pumpSnapshots = await pumpTask;
 
-            var deviceStatuses = await _deviceStatuses.GetDeviceStatusWithAdvancedFilterAsync(
-                count: 10000,
-                skip: 0,
-                findQuery: findQuery,
-                cancellationToken: cancellationToken
-            );
-
-            foreach (var status in deviceStatuses)
-            {
-                var statusReadings = ConvertToBatteryReadings(status);
-                readings.AddRange(statusReadings);
-            }
+            readings.AddRange(uploaderSnapshots.Select(ConvertUploaderToReading));
+            readings.AddRange(pumpSnapshots.Select(ConvertPumpToReading));
 
             // Sort by time
             return readings.OrderBy(r => r.Mills);
@@ -273,22 +268,37 @@ public class BatteryService : IBatteryService
 
         try
         {
-            // Get recent device statuses to find all devices with battery data
-            var deviceStatuses = await _deviceStatuses.GetDeviceStatusAsync(
-                count: 1000,
-                cancellationToken: cancellationToken
-            );
+            var uploaderTask = _uploaderSnapshots.GetAsync(
+                from: null, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: true, ct: cancellationToken);
 
-            foreach (var status in deviceStatuses)
+            var pumpTask = _pumpSnapshots.GetAsync(
+                from: null, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: true, ct: cancellationToken);
+
+            await Task.WhenAll(uploaderTask, pumpTask);
+
+            var uploaderSnapshots = await uploaderTask;
+            var pumpSnapshots = await pumpTask;
+
+            foreach (var snapshot in uploaderSnapshots)
             {
-                // Use ConvertToBatteryReadings to find all devices with battery data
-                var readings = ConvertToBatteryReadings(status);
-                foreach (var reading in readings)
+                var deviceName = snapshot.Device ?? "uploader";
+                if (!string.IsNullOrEmpty(deviceName))
                 {
-                    if (!string.IsNullOrEmpty(reading.Device))
-                    {
-                        devices.Add(reading.Device);
-                    }
+                    devices.Add(deviceName);
+                }
+            }
+
+            foreach (var snapshot in pumpSnapshots)
+            {
+                var deviceName = snapshot.Device ?? "pump";
+                var pumpDevice = deviceName.Contains("pump", StringComparison.OrdinalIgnoreCase)
+                    ? deviceName
+                    : $"{deviceName}/pump";
+                if (!string.IsNullOrEmpty(pumpDevice))
+                {
+                    devices.Add(pumpDevice);
                 }
             }
         }
@@ -301,84 +311,45 @@ public class BatteryService : IBatteryService
     }
 
     /// <summary>
-    /// Converts a DeviceStatus to battery readings from all available sources (uploader, pump, CGM)
+    /// Converts an <see cref="UploaderSnapshot"/> to a <see cref="BatteryReading"/>.
     /// </summary>
-    private List<BatteryReading> ConvertToBatteryReadings(DeviceStatus status)
+    private BatteryReading ConvertUploaderToReading(UploaderSnapshot snapshot)
     {
-        var readings = new List<BatteryReading>();
-
-        // Extract uploader battery (phone/uploader device)
-        if (status.Uploader?.Battery != null || status.Uploader?.BatteryVoltage != null)
+        return new BatteryReading
         {
-            readings.Add(new BatteryReading
-            {
-                Id = status.Id,
-                Device = status.Device ?? "uploader",
-                Battery = status.Uploader?.Battery,
-                Voltage = status.Uploader?.BatteryVoltage,
-                IsCharging = status.IsCharging ?? false,
-                Temperature = status.Uploader?.Temperature,
-                Mills = status.Mills,
-                Timestamp = status.CreatedAt,
-                Notification = GetNotificationStatus(status.Uploader?.Battery),
-            });
-        }
-
-        // Extract pump battery
-        if (status.Pump?.Battery?.Percent != null)
-        {
-            var deviceName = status.Device ?? "pump";
-            // Create a unique device identifier for the pump
-            var pumpDevice = deviceName.Contains("pump", StringComparison.OrdinalIgnoreCase)
-                ? deviceName
-                : $"{deviceName}/pump";
-
-            readings.Add(new BatteryReading
-            {
-                Id = $"{status.Id}_pump",
-                Device = pumpDevice,
-                Battery = status.Pump.Battery.Percent,
-                Voltage = status.Pump.Battery.Voltage,
-                IsCharging = false, // Pumps typically don't have charging status
-                Mills = status.Mills,
-                Timestamp = status.CreatedAt,
-                Notification = GetNotificationStatus(status.Pump.Battery.Percent),
-            });
-        }
-
-        // Extract CGM transmitter battery
-        if (status.Cgm?.TransmitterBattery != null)
-        {
-            var deviceName = status.Device ?? "cgm";
-            // Create a unique device identifier for the CGM
-            var cgmDevice = deviceName.Contains("cgm", StringComparison.OrdinalIgnoreCase) ||
-                           deviceName.Contains("dexcom", StringComparison.OrdinalIgnoreCase) ||
-                           deviceName.Contains("libre", StringComparison.OrdinalIgnoreCase)
-                ? deviceName
-                : $"{deviceName}/cgm";
-
-            readings.Add(new BatteryReading
-            {
-                Id = $"{status.Id}_cgm",
-                Device = cgmDevice,
-                Battery = status.Cgm.TransmitterBattery,
-                IsCharging = false, // CGM transmitters don't charge
-                Mills = status.Mills,
-                Timestamp = status.CreatedAt,
-                Notification = GetNotificationStatus(status.Cgm.TransmitterBattery),
-            });
-        }
-
-        return readings;
+            Id = snapshot.Id.ToString(),
+            Device = snapshot.Device ?? "uploader",
+            Battery = snapshot.Battery,
+            Voltage = snapshot.BatteryVoltage,
+            IsCharging = snapshot.IsCharging ?? false,
+            Temperature = snapshot.Temperature,
+            Mills = snapshot.Mills,
+            Timestamp = snapshot.CreatedAt.ToString("o"),
+            Notification = GetNotificationStatus(snapshot.Battery),
+        };
     }
 
     /// <summary>
-    /// Converts a DeviceStatus to a single battery reading (for backward compatibility)
+    /// Converts a <see cref="PumpSnapshot"/> to a <see cref="BatteryReading"/>.
     /// </summary>
-    private BatteryReading? ConvertToBatteryReading(DeviceStatus status)
+    private BatteryReading ConvertPumpToReading(PumpSnapshot snapshot)
     {
-        var readings = ConvertToBatteryReadings(status);
-        return readings.FirstOrDefault();
+        var deviceName = snapshot.Device ?? "pump";
+        var pumpDevice = deviceName.Contains("pump", StringComparison.OrdinalIgnoreCase)
+            ? deviceName
+            : $"{deviceName}/pump";
+
+        return new BatteryReading
+        {
+            Id = $"{snapshot.Id}_pump",
+            Device = pumpDevice,
+            Battery = snapshot.BatteryPercent,
+            Voltage = snapshot.BatteryVoltage,
+            IsCharging = false, // Pumps typically don't have charging status
+            Mills = snapshot.Mills,
+            Timestamp = snapshot.CreatedAt.ToString("o"),
+            Notification = GetNotificationStatus(snapshot.BatteryPercent),
+        };
     }
 
     private string? GetNotificationStatus(int? battery)
