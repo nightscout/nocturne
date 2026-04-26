@@ -35,6 +35,7 @@
 	"dependencies": {
 		"@nocturne/app": "workspace:*",
 		"@nocturne/ui": "workspace:*",
+		"marked": "^18.0.2",
 		"runed": "^0.37.1",
 		"zod": "^4.1.13"
 	}

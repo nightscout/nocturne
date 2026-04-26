@@ -1,0 +1,23 @@
+---
+title: "Glucose Processing: Mgdl Resolution"
+---
+flowchart TD
+    Start([Glucose payload arrives]) --> HasBoth{Both smoothedMgdl\nand unsmoothedMgdl\npresent?}
+
+    HasBoth -->|Yes| BothPref{Tenant preference?}
+    BothPref -->|Smoothed| BothSmoothed[Mgdl = smoothedMgdl]
+    BothPref -->|Unsmoothed| BothUnsmoothed[Mgdl = unsmoothedMgdl]
+    BothPref -->|Not set| BothDefault["Mgdl = payload mgdl\n(or smoothedMgdl if no mgdl)"]
+
+    HasBoth -->|No| HasProcessing{glucoseProcessing\nresolved?}
+
+    HasProcessing -->|Smoothed| SlotSmoothed["SmoothedMgdl = payload mgdl\nUnsmoothedMgdl = null\nMgdl = payload mgdl"]
+    HasProcessing -->|Unsmoothed| SlotUnsmoothed["SmoothedMgdl = null\nUnsmoothedMgdl = payload mgdl\nMgdl = payload mgdl"]
+    HasProcessing -->|No / Unknown| Unknown["SmoothedMgdl = null\nUnsmoothedMgdl = null\nMgdl = payload mgdl"]
+
+    BothSmoothed --> Store
+    BothUnsmoothed --> Store
+    BothDefault --> Store
+    SlotSmoothed --> Store
+    SlotUnsmoothed --> Store
+    Unknown --> Store([Write to sensor_glucose])

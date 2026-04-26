@@ -14,6 +14,14 @@
         Play,
     } from "@lucide/svelte";
     import { DEMO_ENABLED } from "$lib/config";
+    import CommunitySection from "$lib/components/CommunitySection.svelte";
+    import { getCommunityData } from "$lib/data/portal.remote";
+
+    let communityData = $state<Awaited<ReturnType<typeof getCommunityData>> | null>(null);
+
+    getCommunityData({}).then((data) => {
+        communityData = data;
+    }).catch(() => {});
 </script>
 
 <!-- Hero Section -->
@@ -244,6 +252,16 @@
         </div>
     </div>
 </section>
+
+<!-- Community Section -->
+{#if communityData}
+    <CommunitySection
+        stars={communityData.stars}
+        forks={communityData.forks}
+        contributors={communityData.contributors}
+        latestRelease={communityData.latestRelease}
+    />
+{/if}
 
 <!-- CTA Section -->
 <section class="py-20 bg-primary/5">

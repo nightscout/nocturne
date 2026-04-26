@@ -1,4 +1,4 @@
-import { Node, mergeAttributes, type Editor } from '@tiptap/core';
+import { Node, mergeAttributes, type Editor, type RawCommands } from '@tiptap/core';
 import { registerComponentActions, ComponentIcon } from '../../lib/components/edra/extensions/slash-command/groups.ts';
 
 export interface ComponentDefinition {
@@ -71,10 +71,10 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
     },
 
     addCommands() {
-      return {
+      return ({
         insertSvelteComponent:
           (name: string, props?: Record<string, string>) =>
-          ({ commands }) => {
+          ({ commands }: { commands: Record<string, (...args: any[]) => any> }) => {
             return commands.insertContent({
               type: this.name,
               attrs: {
@@ -85,7 +85,7 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
           },
         updateSvelteComponentProps:
           (props: Record<string, string>) =>
-          ({ tr, state }) => {
+          ({ tr, state }: { tr: any; state: any }) => {
             const { selection } = state;
             const node = state.doc.nodeAt(selection.from);
             if (node?.type.name !== 'svelteComponent') return false;
@@ -96,7 +96,7 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
             });
             return true;
           },
-      };
+      }) as Partial<RawCommands>;
     },
   });
 };

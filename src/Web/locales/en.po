@@ -443,11 +443,15 @@ msgstr "Alert"
 msgid "<0/> Acknowledge"
 msgstr "<0/> Acknowledge"
 
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
 #: src/routes/(legal)/+layout.svelte
 #: src/routes/(unauthenticated)/+layout.svelte
 msgid "N"
 msgstr "N"
 
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
@@ -805,6 +809,7 @@ msgstr "Configure a new alert rule"
 
 #: src/lib/components/alerts/RuleEditorSheet.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/routes/faq/+page.svelte
 msgid "General"
 msgstr "General"
 
@@ -2642,6 +2647,7 @@ msgstr "Failed to start deduplication job"
 msgid "Failed to start deduplication"
 msgstr "Failed to start deduplication"
 
+#: src/lib/components/MilestoneCard.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
@@ -3130,6 +3136,7 @@ msgstr "Event Type"
 #: src/lib/components/treatments/edit-dialog/DeviceEventFormFields.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
+#: src/routes/docs/installation/byo-postgres/+page.svelte
 msgid "Notes"
 msgstr "Notes"
 
@@ -4023,6 +4030,8 @@ msgstr "Time Spans"
 msgid "Reports"
 msgstr "Reports"
 
+#: src/lib/components/DocsSidebar.svelte
+#: src/lib/components/DocsSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 msgid "Overview"
@@ -4423,6 +4432,7 @@ msgstr "Notifications unavailable"
 msgid "Click to sync data"
 msgstr "Click to sync data"
 
+#: src/lib/components/SiteHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/layout/SidebarGlucoseWidget.svelte
 msgid "Demo"
@@ -5202,6 +5212,7 @@ msgid "Auto-bolus"
 msgstr "Auto-bolus"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
+#: src/lib/components/docs/SystemRequirements.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
 msgid "Recommended"
 msgstr "Recommended"
@@ -6258,6 +6269,7 @@ msgstr "<0/> Schedule"
 msgid "Alarm Name"
 msgstr "Alarm Name"
 
+#: src/lib/components/docs/EnvVarReference.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
 msgid "Description"
@@ -8393,6 +8405,7 @@ msgstr "Created {0}"
 
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
+#: src/routes/studio/+page.svelte
 msgid "Untitled"
 msgstr "Untitled"
 
@@ -8565,6 +8578,8 @@ msgstr "An error occurred"
 
 #: src/routes/(authenticated)/calendar/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
+#: src/routes/changelog/+page.svelte
+#: src/routes/roadmap/+page.svelte
 msgid "Try Again"
 msgstr "Try Again"
 
@@ -8612,6 +8627,8 @@ msgstr "Polling Active"
 msgid "Polling Paused"
 msgstr "Polling Paused"
 
+#: src/lib/components/DocsSidebar.svelte
+#: src/lib/components/SiteFooter.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 msgid "Configuration"
 msgstr "Configuration"
@@ -8750,6 +8767,7 @@ msgstr "None"
 #: src/routes/(authenticated)/compatibility/test/+page.svelte
 #: src/routes/(legal)/terms/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/DevicePicker.svelte
+#: src/routes/features/+page.svelte
 msgid "Nightscout"
 msgstr "Nightscout"
 
@@ -9651,6 +9669,9 @@ msgstr "<0/> Create tenant"
 msgid "<0/> Tools"
 msgstr "<0/> Tools"
 
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+#: src/lib/components/SiteHeader.svelte
 #: src/routes/(unauthenticated)/setup/+page.svelte
 msgid "Get Started"
 msgstr "Get Started"
@@ -10207,6 +10228,7 @@ msgid "Nocturne integrates with various third-party diabetes data services, incl
 msgstr "Nocturne integrates with various third-party diabetes data services, including:"
 
 #: src/routes/(legal)/terms/+page.svelte
+#: src/routes/features/+page.svelte
 msgid "Dexcom"
 msgstr "Dexcom"
 
@@ -10215,6 +10237,7 @@ msgid "FreeStyle Libre"
 msgstr "FreeStyle Libre"
 
 #: src/routes/(legal)/terms/+page.svelte
+#: src/routes/features/+page.svelte
 msgid "Glooko"
 msgstr "Glooko"
 
@@ -10441,6 +10464,7 @@ msgid "Stable"
 msgstr "Stable"
 
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
+#: src/lib/components/docs/EnvVarReference.svelte
 msgid "Variable"
 msgstr "Variable"
 
@@ -11216,6 +11240,7 @@ msgid "Standard AGP report with glucose pattern overlay, percentile bands, and t
 msgstr "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 
 #: src/routes/(authenticated)/reports/agp/+page.svelte
+#: src/routes/features/+page.svelte
 msgid "<0/> Ambulatory Glucose Profile"
 msgstr "<0/> Ambulatory Glucose Profile"
 
@@ -11479,6 +11504,8 @@ msgstr ""
 "patterns and timing of excursions."
 
 #: src/routes/(authenticated)/reports/agp/+page.svelte
+#: src/routes/docs/installation/docker-compose/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
 msgid "Next Steps"
 msgstr "Next Steps"
 
@@ -11619,6 +11646,8 @@ msgstr "Battery Report"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
+#: src/routes/changelog/+page.svelte
+#: src/routes/roadmap/+page.svelte
 msgid "<0/> Refresh"
 msgstr "<0/> Refresh"
 
@@ -14653,6 +14682,7 @@ msgid "<0/> Migration Status"
 msgstr "<0/> Migration Status"
 
 #: src/routes/(authenticated)/settings/nightscout-transition/+page.svelte
+#: src/routes/roadmap/+page.svelte
 msgid "<0/> In Progress"
 msgstr "<0/> In Progress"
 
@@ -15233,6 +15263,7 @@ msgstr "Discord Community"
 msgid "Chat with developers and other users"
 msgstr "Chat with developers and other users"
 
+#: src/lib/components/SiteFooter.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
 msgstr "Documentation"
@@ -17055,6 +17086,7 @@ msgstr "© 2026 Nocturne"
 msgid "Privacy"
 msgstr "Privacy"
 
+#: src/lib/components/SiteHeader.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Docs"
 msgstr "Docs"
@@ -17742,6 +17774,10 @@ msgstr ""
 msgid "<0/> Create API key"
 msgstr "<0/> Create API key"
 
+#: src/lib/components/layout/GuestBanner.svelte
+msgid "Guest access — read only"
+msgstr "Guest access — read only"
+
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "Audit Log"
@@ -18080,3 +18116,1645 @@ msgstr "Enter the code shared with you to view health data"
 #: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
 msgid "<0/> Access Data"
 msgstr "<0/> Access Data"
+
+#: src/lib/components/DocsSidebar.svelte
+#: src/lib/components/SiteFooter.svelte
+msgid "Getting Started"
+msgstr "Getting Started"
+
+#: src/lib/components/DocsSidebar.svelte
+#: src/routes/docs/+page.svelte
+msgid "Quick Start"
+msgstr "Quick Start"
+
+#: src/lib/components/DocsSidebar.svelte
+#: src/lib/components/SiteFooter.svelte
+#: src/routes/faq/+page.svelte
+msgid "Installation"
+msgstr "Installation"
+
+#: src/lib/components/DocsSidebar.svelte
+#: src/lib/components/docs/SystemRequirements.svelte
+#: src/routes/docs/installation/+page.svelte
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Docker Compose"
+msgstr "Docker Compose"
+
+#: src/lib/components/DocsSidebar.svelte
+#: src/routes/docs/installation/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Portainer"
+msgstr "Portainer"
+
+#: src/lib/components/DocsSidebar.svelte
+#: src/routes/docs/+page.svelte
+msgid "Configuration Guide"
+msgstr "Configuration Guide"
+
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+#: src/routes/features/+page.svelte
+msgid "Features"
+msgstr "Features"
+
+#: src/lib/components/SiteHeader.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "Roadmap"
+msgstr "Roadmap"
+
+#: src/lib/components/SiteFooter.svelte
+#: src/lib/components/SiteHeader.svelte
+#: src/routes/changelog/+page.svelte
+msgid "Changelog"
+msgstr "Changelog"
+
+#: src/lib/components/SiteHeader.svelte
+msgid "Toggle menu"
+msgstr "Toggle menu"
+
+#: src/routes/+page.svelte
+msgid "Your Diabetes Data, <0>Your Way</0>"
+msgstr "Your Diabetes Data, <0>Your Way</0>"
+
+#: src/routes/+page.svelte
+msgid ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+msgstr ""
+"A modern, open-source platform for managing your glucose data with full\n"
+"Nightscout compatibility. Built by the diabetes community, for the\n"
+"diabetes community."
+
+#: src/routes/+page.svelte
+msgid "Get Started <0/>"
+msgstr "Get Started <0/>"
+
+#: src/routes/+page.svelte
+msgid "<0/> See it in Action"
+msgstr "<0/> See it in Action"
+
+#: src/routes/+page.svelte
+msgid "Explore Features"
+msgstr "Explore Features"
+
+#: src/routes/+page.svelte
+msgid "Why Choose Nocturne?"
+msgstr "Why Choose Nocturne?"
+
+#: src/routes/+page.svelte
+msgid ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+msgstr ""
+"Modern architecture meets proven reliability. Get the features you need\n"
+"without sacrificing compatibility."
+
+#: src/routes/+page.svelte
+msgid "Nightscout Compatible"
+msgstr "Nightscout Compatible"
+
+#: src/routes/+page.svelte
+msgid ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+msgstr ""
+"Full API compatibility means your existing apps and devices work\n"
+"seamlessly. No migration headaches."
+
+#: src/routes/+page.svelte
+#: src/routes/features/+page.svelte
+msgid "Modern Performance"
+msgstr "Modern Performance"
+
+#: src/routes/+page.svelte
+msgid ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+msgstr ""
+"Built on .NET 10 for blazing fast performance. Handle more data with\n"
+"less resources."
+
+#: src/routes/+page.svelte
+msgid "Self-Hosted Security"
+msgstr "Self-Hosted Security"
+
+#: src/routes/+page.svelte
+msgid ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+msgstr ""
+"Your data stays on your server. Full control over your health\n"
+"information, always."
+
+#: src/routes/+page.svelte
+msgid "Multiple Data Sources"
+msgstr "Multiple Data Sources"
+
+#: src/routes/+page.svelte
+msgid ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+msgstr ""
+"Connect Dexcom, Libre, Glooko, and more. Bring all your data\n"
+"together in one place."
+
+#: src/routes/+page.svelte
+msgid "Real-Time Monitoring"
+msgstr "Real-Time Monitoring"
+
+#: src/routes/+page.svelte
+msgid ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+msgstr ""
+"Live glucose updates with WebSocket support. Stay informed with\n"
+"instant notifications."
+
+#: src/routes/+page.svelte
+msgid "Easy Migration"
+msgstr "Easy Migration"
+
+#: src/routes/+page.svelte
+msgid ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+msgstr ""
+"Import your existing Nightscout data with one click. Or run both\n"
+"side-by-side to test first."
+
+#: src/routes/+page.svelte
+msgid "Get Started in Minutes"
+msgstr "Get Started in Minutes"
+
+#: src/routes/+page.svelte
+msgid ""
+"Follow our step-by-step guides to deploy Nocturne on your\n"
+"preferred platform."
+msgstr ""
+"Follow our step-by-step guides to deploy Nocturne on your\n"
+"preferred platform."
+
+#: src/routes/+page.svelte
+msgid "Step 1"
+msgstr "Step 1"
+
+#: src/routes/+page.svelte
+#: src/routes/docs/installation/+page.svelte
+msgid "Choose Your Platform"
+msgstr "Choose Your Platform"
+
+#: src/routes/+page.svelte
+msgid ""
+"Pick your hosting provider. We have guides for Docker Compose,\n"
+"Portainer, and more."
+msgstr ""
+"Pick your hosting provider. We have guides for Docker Compose,\n"
+"Portainer, and more."
+
+#: src/routes/+page.svelte
+msgid "Step 2"
+msgstr "Step 2"
+
+#: src/routes/+page.svelte
+msgid "Deploy"
+msgstr "Deploy"
+
+#: src/routes/+page.svelte
+msgid ""
+"Follow the guide to deploy with Docker Compose. Configure\n"
+"environment variables for your setup."
+msgstr ""
+"Follow the guide to deploy with Docker Compose. Configure\n"
+"environment variables for your setup."
+
+#: src/routes/+page.svelte
+msgid "Step 3"
+msgstr "Step 3"
+
+#: src/routes/+page.svelte
+msgid "Monitor"
+msgstr "Monitor"
+
+#: src/routes/+page.svelte
+msgid ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+msgstr ""
+"Start tracking your glucose data with a modern, responsive\n"
+"interface."
+
+#: src/routes/+page.svelte
+msgid "Ready to Take Control?"
+msgstr "Ready to Take Control?"
+
+#: src/routes/+page.svelte
+msgid ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+msgstr ""
+"Join the community of people managing their diabetes data on their own\n"
+"terms. Free, open source, and always will be."
+
+#: src/routes/+page.svelte
+msgid "Installation Guide <0/>"
+msgstr "Installation Guide <0/>"
+
+#: src/routes/+page.svelte
+#: src/routes/features/+page.svelte
+msgid "Read the Docs"
+msgstr "Read the Docs"
+
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"Open source diabetes data management with full Nightscout\n"
+"compatibility."
+msgstr ""
+"Open source diabetes data management with full Nightscout\n"
+"compatibility."
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Product"
+msgstr "Product"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "FAQ"
+msgstr "FAQ"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "Community"
+msgstr "Community"
+
+#: src/lib/components/SiteFooter.svelte
+msgid "<0/> GitHub"
+msgstr "<0/> GitHub"
+
+#. placeholder {0}: new Date().getFullYear()
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"© {0} Nocturne. Open source under MIT\n"
+"license."
+msgstr ""
+"© {0} Nocturne. Open source under MIT\n"
+"license."
+
+#: src/lib/components/SiteFooter.svelte
+msgid ""
+"Made with <0/> by the\n"
+"diabetes community"
+msgstr ""
+"Made with <0/> by the\n"
+"diabetes community"
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "Due"
+msgstr "Due"
+
+#. placeholder {0}: milestone.closed_issues
+#. placeholder {1}: totalIssues
+#: src/lib/components/MilestoneCard.svelte
+msgid "{0} / {1} issues completed"
+msgstr "{0} / {1} issues completed"
+
+#: src/lib/components/MilestoneCard.svelte
+msgid "No issues in this milestone yet"
+msgstr "No issues in this milestone yet"
+
+#: src/routes/blog/+page.svelte
+msgid "Blog"
+msgstr "Blog"
+
+#. placeholder {0}: post.author
+#. placeholder {0}: data.meta?.author
+#: src/routes/blog/+page.svelte
+#: src/routes/blog/[slug]/+page.svelte
+msgid "By {0}"
+msgstr "By {0}"
+
+#: src/routes/changelog/+page.svelte
+#: src/routes/changelog/+page.svelte
+msgid "Failed to load changelog"
+msgstr "Failed to load changelog"
+
+#: src/routes/changelog/+page.svelte
+msgid "Changelog - Nocturne"
+msgstr "Changelog - Nocturne"
+
+#: src/routes/changelog/+page.svelte
+#: src/routes/changelog/+page.svelte
+msgid "All the latest updates, improvements, and fixes to Nocturne."
+msgstr "All the latest updates, improvements, and fixes to Nocturne."
+
+#: src/routes/changelog/+page.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> View on GitHub <1/>"
+msgstr "<0/> View on GitHub <1/>"
+
+#: src/routes/changelog/+page.svelte
+msgid "Loading changelog from GitHub..."
+msgstr "Loading changelog from GitHub..."
+
+#: src/routes/changelog/+page.svelte
+msgid "No releases found"
+msgstr "No releases found"
+
+#: src/routes/changelog/+page.svelte
+msgid "Pre-release"
+msgstr "Pre-release"
+
+#: src/routes/changelog/+page.svelte
+msgid "View on GitHub <0/>"
+msgstr "View on GitHub <0/>"
+
+#: src/routes/changelog/+page.svelte
+msgid "<0/> Loading..."
+msgstr "<0/> Loading..."
+
+#: src/routes/changelog/+page.svelte
+msgid "<0/> Load more releases"
+msgstr "<0/> Load more releases"
+
+#: src/routes/demo/+page.svelte
+msgid "Demo - Nocturne"
+msgstr "Demo - Nocturne"
+
+#: src/routes/demo/+page.svelte
+msgid "Try Nocturne"
+msgstr "Try Nocturne"
+
+#: src/routes/demo/+page.svelte
+msgid ""
+"Experience Nocturne with realistic demo data. Explore the interface,\n"
+"check out the charts, and browse the API documentation."
+msgstr ""
+"Experience Nocturne with realistic demo data. Explore the interface,\n"
+"check out the charts, and browse the API documentation."
+
+#: src/routes/demo/+page.svelte
+msgid "Real-time glucose monitoring"
+msgstr "Real-time glucose monitoring"
+
+#: src/routes/demo/+page.svelte
+msgid "See live glucose values update every 5 minutes with realistic patterns"
+msgstr "See live glucose values update every 5 minutes with realistic patterns"
+
+#: src/routes/demo/+page.svelte
+msgid "90 days of historical data"
+msgstr "90 days of historical data"
+
+#: src/routes/demo/+page.svelte
+msgid "Explore trends, patterns, and analytics with a full data history"
+msgstr "Explore trends, patterns, and analytics with a full data history"
+
+#: src/routes/demo/+page.svelte
+msgid "Treatments and device data"
+msgstr "Treatments and device data"
+
+#: src/routes/demo/+page.svelte
+msgid "Sample insulin doses, carbs, and device status entries included"
+msgstr "Sample insulin doses, carbs, and device status entries included"
+
+#: src/routes/demo/+page.svelte
+msgid "<0/> Launch Demo App <1/>"
+msgstr "<0/> Launch Demo App <1/>"
+
+#: src/routes/demo/+page.svelte
+msgid "<0/> Explore API Docs <1/>"
+msgstr "<0/> Explore API Docs <1/>"
+
+#: src/routes/demo/+page.svelte
+msgid ""
+"<0>Note:</0> This is a demo instance with synthetic data. Data resets periodically.\n"
+"For your own instance with real data, use the <1>setup wizard</1>."
+msgstr ""
+"<0>Note:</0> This is a demo instance with synthetic data. Data resets periodically.\n"
+"For your own instance with real data, use the <1>setup wizard</1>."
+
+#: src/routes/demo/+page.svelte
+msgid "Demo Not Available"
+msgstr "Demo Not Available"
+
+#: src/routes/demo/+page.svelte
+msgid "The demo instance is not currently enabled."
+msgstr "The demo instance is not currently enabled."
+
+#: src/routes/demo/+page.svelte
+msgid "Back to Home"
+msgstr "Back to Home"
+
+#: src/routes/docs/+page.svelte
+msgid "Get up and running with Nocturne in just a few minutes."
+msgstr "Get up and running with Nocturne in just a few minutes."
+
+#: src/routes/docs/+page.svelte
+#: src/routes/docs/installation/+page.svelte
+msgid "Installation Guide"
+msgstr "Installation Guide"
+
+#: src/routes/docs/+page.svelte
+msgid ""
+"Step-by-step guides for deploying Nocturne with Docker Compose,\n"
+"Portainer, and more."
+msgstr ""
+"Step-by-step guides for deploying Nocturne with Docker Compose,\n"
+"Portainer, and more."
+
+#: src/routes/docs/+page.svelte
+msgid ""
+"Learn how to configure connectors, settings, and\n"
+"customize your instance."
+msgstr ""
+"Learn how to configure connectors, settings, and\n"
+"customize your instance."
+
+#: src/routes/docs/+page.svelte
+msgid "API Reference <0/>"
+msgstr "API Reference <0/>"
+
+#: src/routes/docs/+page.svelte
+#: src/routes/docs/+page.svelte
+msgid ""
+"Interactive API documentation powered by Scalar. Explore\n"
+"endpoints, test requests, and integrate with Nocturne."
+msgstr ""
+"Interactive API documentation powered by Scalar. Explore\n"
+"endpoints, test requests, and integrate with Nocturne."
+
+#: src/routes/docs/+page.svelte
+msgid "API Reference"
+msgstr "API Reference"
+
+#: src/routes/docs/+page.svelte
+msgid ""
+"Available at <0>/scalar</0> on\n"
+"your Nocturne API"
+msgstr ""
+"Available at <0>/scalar</0> on\n"
+"your Nocturne API"
+
+#: src/routes/docs/+page.svelte
+msgid "Documentation In Progress"
+msgstr "Documentation In Progress"
+
+#: src/routes/docs/+page.svelte
+msgid ""
+"We're actively working on expanding the documentation. Check\n"
+"back soon for more guides and tutorials, or contribute on\n"
+"GitHub!"
+msgstr ""
+"We're actively working on expanding the documentation. Check\n"
+"back soon for more guides and tutorials, or contribute on\n"
+"GitHub!"
+
+#: src/routes/roadmap/+page.svelte
+#: src/routes/roadmap/+page.svelte
+msgid "Failed to load roadmap"
+msgstr "Failed to load roadmap"
+
+#: src/routes/roadmap/+page.svelte
+msgid ""
+"Track the development progress of Nocturne. See what we're working on,\n"
+"what's coming next, and what's been completed."
+msgstr ""
+"Track the development progress of Nocturne. See what we're working on,\n"
+"what's coming next, and what's been completed."
+
+#: src/routes/roadmap/+page.svelte
+msgid "Loading roadmap from GitHub..."
+msgstr "Loading roadmap from GitHub..."
+
+#: src/routes/roadmap/+page.svelte
+msgid "No milestones found"
+msgstr "No milestones found"
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Upcoming"
+msgstr "<0/> Upcoming"
+
+#: src/routes/roadmap/+page.svelte
+msgid "<0/> Completed"
+msgstr "<0/> Completed"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Everything you need to manage your diabetes data, built on modern\n"
+"technology with full Nightscout compatibility."
+msgstr ""
+"Everything you need to manage your diabetes data, built on modern\n"
+"technology with full Nightscout compatibility."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Core Features"
+msgstr "<0/> Core Features"
+
+#: src/routes/features/+page.svelte
+msgid "Full Nightscout API Compatibility"
+msgstr "Full Nightscout API Compatibility"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Drop-in replacement for Nightscout with v1, v2, and v3 API support.\n"
+"Your existing apps, uploaders, and integrations work without any\n"
+"changes."
+msgstr ""
+"Drop-in replacement for Nightscout with v1, v2, and v3 API support.\n"
+"Your existing apps, uploaders, and integrations work without any\n"
+"changes."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> xDrip+ compatible"
+msgstr "<0/> xDrip+ compatible"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Loop compatible"
+msgstr "<0/> Loop compatible"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> AndroidAPS compatible"
+msgstr "<0/> AndroidAPS compatible"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Built on .NET 10 with PostgreSQL for exceptional performance. Handle\n"
+"years of data without slowdowns."
+msgstr ""
+"Built on .NET 10 with PostgreSQL for exceptional performance. Handle\n"
+"years of data without slowdowns."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Sub-millisecond query response"
+msgstr "<0/> Sub-millisecond query response"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Efficient memory usage"
+msgstr "<0/> Efficient memory usage"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Scales with your data"
+msgstr "<0/> Scales with your data"
+
+#: src/routes/features/+page.svelte
+msgid "Real-Time Updates"
+msgstr "Real-Time Updates"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"WebSocket and SignalR support for instant glucose updates. Socket.IO\n"
+"bridge for Nightscout client compatibility."
+msgstr ""
+"WebSocket and SignalR support for instant glucose updates. Socket.IO\n"
+"bridge for Nightscout client compatibility."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Instant data sync"
+msgstr "<0/> Instant data sync"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Socket.IO compatibility"
+msgstr "<0/> Socket.IO compatibility"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Low bandwidth usage"
+msgstr "<0/> Low bandwidth usage"
+
+#: src/routes/features/+page.svelte
+msgid "Modern Dashboard & Reports"
+msgstr "Modern Dashboard & Reports"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Beautiful, responsive dashboard built with SvelteKit. Advanced\n"
+"reporting with AGP, TIR, and more."
+msgstr ""
+"Beautiful, responsive dashboard built with SvelteKit. Advanced\n"
+"reporting with AGP, TIR, and more."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Time in Range analysis"
+msgstr "<0/> Time in Range analysis"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Customizable widgets"
+msgstr "<0/> Customizable widgets"
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Data Integrations"
+msgstr "<0/> Data Integrations"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Direct integration with Dexcom Share. Automatic data sync from G6, G7,\n"
+"and ONE sensors."
+msgstr ""
+"Direct integration with Dexcom Share. Automatic data sync from G6, G7,\n"
+"and ONE sensors."
+
+#: src/routes/features/+page.svelte
+msgid "Libre"
+msgstr "Libre"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Connect to LibreView for Freestyle Libre 2 and 3 data. Real-time sync\n"
+"with LibreLinkUp."
+msgstr ""
+"Connect to LibreView for Freestyle Libre 2 and 3 data. Real-time sync\n"
+"with LibreLinkUp."
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Import data from Glooko for comprehensive diabetes management data\n"
+"aggregation."
+msgstr ""
+"Import data from Glooko for comprehensive diabetes management data\n"
+"aggregation."
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Run as a proxy alongside existing Nightscout or migrate your complete\n"
+"data history."
+msgstr ""
+"Run as a proxy alongside existing Nightscout or migrate your complete\n"
+"data history."
+
+#: src/routes/features/+page.svelte
+msgid "xDrip+"
+msgstr "xDrip+"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Full xDrip+ uploader support. Continue using your favorite Android CGM\n"
+"app."
+msgstr ""
+"Full xDrip+ uploader support. Continue using your favorite Android CGM\n"
+"app."
+
+#: src/routes/features/+page.svelte
+msgid "More Coming"
+msgstr "More Coming"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Extensible connector architecture makes adding new data sources\n"
+"straightforward."
+msgstr ""
+"Extensible connector architecture makes adding new data sources\n"
+"straightforward."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Security & Privacy"
+msgstr "<0/> Security & Privacy"
+
+#: src/routes/features/+page.svelte
+msgid "Self-Hosted"
+msgstr "Self-Hosted"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Your data stays on your server. No cloud dependencies or third-party\n"
+"data access."
+msgstr ""
+"Your data stays on your server. No cloud dependencies or third-party\n"
+"data access."
+
+#: src/routes/features/+page.svelte
+msgid "Role-Based Access"
+msgstr "Role-Based Access"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Fine-grained permissions for caregivers, healthcare providers, and\n"
+"family members."
+msgstr ""
+"Fine-grained permissions for caregivers, healthcare providers, and\n"
+"family members."
+
+#: src/routes/features/+page.svelte
+msgid "Multi-User Support"
+msgstr "Multi-User Support"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Manage multiple profiles for families. Each person gets their own data\n"
+"and settings."
+msgstr ""
+"Manage multiple profiles for families. Each person gets their own data\n"
+"and settings."
+
+#: src/routes/features/+page.svelte
+msgid "<0/> Developer Features"
+msgstr "<0/> Developer Features"
+
+#: src/routes/features/+page.svelte
+msgid "OpenAPI Documentation"
+msgstr "OpenAPI Documentation"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Full OpenAPI/Swagger documentation with Scalar UI. Generate client\n"
+"libraries for any language."
+msgstr ""
+"Full OpenAPI/Swagger documentation with Scalar UI. Generate client\n"
+"libraries for any language."
+
+#: src/routes/features/+page.svelte
+msgid "Aspire Dashboard"
+msgstr "Aspire Dashboard"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Built-in observability with distributed tracing, structured logging,\n"
+"and metrics visualization."
+msgstr ""
+"Built-in observability with distributed tracing, structured logging,\n"
+"and metrics visualization."
+
+#: src/routes/features/+page.svelte
+msgid "Clean Architecture"
+msgstr "Clean Architecture"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Well-organized codebase following Clean Architecture principles.\n"
+"Easy to extend and customize."
+msgstr ""
+"Well-organized codebase following Clean Architecture principles.\n"
+"Easy to extend and customize."
+
+#: src/routes/features/+page.svelte
+msgid "Docker Ready"
+msgstr "Docker Ready"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Production-ready Docker images with docker-compose configurations.\n"
+"Deploy anywhere containers run."
+msgstr ""
+"Production-ready Docker images with docker-compose configurations.\n"
+"Deploy anywhere containers run."
+
+#: src/routes/features/+page.svelte
+msgid "Ready to Get Started?"
+msgstr "Ready to Get Started?"
+
+#: src/routes/features/+page.svelte
+msgid ""
+"Set up your own Nocturne instance in minutes with our configuration\n"
+"wizard."
+msgstr ""
+"Set up your own Nocturne instance in minutes with our configuration\n"
+"wizard."
+
+#: src/routes/features/+page.svelte
+msgid "Start Configuration <0/>"
+msgstr "Start Configuration <0/>"
+
+#: src/routes/docs/+layout.svelte
+msgid "Escape"
+msgstr "Escape"
+
+#: src/routes/faq/+page.svelte
+msgid "What is Nocturne?"
+msgstr "What is Nocturne?"
+
+#: src/routes/faq/+page.svelte
+msgid "Nocturne is a modern, open-source rewrite of the Nightscout diabetes management platform. Built on .NET 10 with a SvelteKit frontend, it provides the same API compatibility as Nightscout while offering improved performance, modern architecture, and easier deployment."
+msgstr "Nocturne is a modern, open-source rewrite of the Nightscout diabetes management platform. Built on .NET 10 with a SvelteKit frontend, it provides the same API compatibility as Nightscout while offering improved performance, modern architecture, and easier deployment."
+
+#: src/routes/faq/+page.svelte
+msgid "How does Nocturne compare to Nightscout?"
+msgstr "How does Nocturne compare to Nightscout?"
+
+#: src/routes/faq/+page.svelte
+msgid "Nocturne is API-compatible with Nightscout (v1, v2, and v3 APIs), so your existing apps and devices work without changes. The main differences are under the hood: Nocturne uses PostgreSQL instead of MongoDB, is built on .NET for better performance, and includes modern tooling like Aspire for orchestration and observability."
+msgstr "Nocturne is API-compatible with Nightscout (v1, v2, and v3 APIs), so your existing apps and devices work without changes. The main differences are under the hood: Nocturne uses PostgreSQL instead of MongoDB, is built on .NET for better performance, and includes modern tooling like Aspire for orchestration and observability."
+
+#: src/routes/faq/+page.svelte
+msgid "Is Nocturne free?"
+msgstr "Is Nocturne free?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! Nocturne is completely free and open source under the MIT license. You can use it, modify it, and contribute to it without any cost."
+msgstr "Yes! Nocturne is completely free and open source under the MIT license. You can use it, modify it, and contribute to it without any cost."
+
+#: src/routes/faq/+page.svelte
+msgid "Who is Nocturne for?"
+msgstr "Who is Nocturne for?"
+
+#: src/routes/faq/+page.svelte
+msgid "Nocturne is for anyone who uses Nightscout or wants to self-host their diabetes data. Whether you're using a DIY closed loop system, want to share your glucose data with caregivers, or just want to track your data independently, Nocturne can help."
+msgstr "Nocturne is for anyone who uses Nightscout or wants to self-host their diabetes data. Whether you're using a DIY closed loop system, want to share your glucose data with caregivers, or just want to track your data independently, Nocturne can help."
+
+#: src/routes/faq/+page.svelte
+msgid "What are the system requirements?"
+msgstr "What are the system requirements?"
+
+#: src/routes/faq/+page.svelte
+msgid "Nocturne requires Docker to run. Any system that can run Docker (Linux, Windows, macOS) can host Nocturne. For a single user, a small VPS with 1GB RAM is sufficient. For families or multiple users, we recommend 2GB+ RAM."
+msgstr "Nocturne requires Docker to run. Any system that can run Docker (Linux, Windows, macOS) can host Nocturne. For a single user, a small VPS with 1GB RAM is sufficient. For families or multiple users, we recommend 2GB+ RAM."
+
+#: src/routes/faq/+page.svelte
+msgid "Can I run Nocturne on a Raspberry Pi?"
+msgstr "Can I run Nocturne on a Raspberry Pi?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! Nocturne runs well on Raspberry Pi 4 and newer models. The ARM64 Docker images are available for these platforms."
+msgstr "Yes! Nocturne runs well on Raspberry Pi 4 and newer models. The ARM64 Docker images are available for these platforms."
+
+#: src/routes/faq/+page.svelte
+msgid "Do I need technical knowledge to set up Nocturne?"
+msgstr "Do I need technical knowledge to set up Nocturne?"
+
+#: src/routes/faq/+page.svelte
+msgid "Basic familiarity with Docker and command line is helpful, but our configuration wizard generates all the files you need. Most users can get up and running by following our getting started guide."
+msgstr "Basic familiarity with Docker and command line is helpful, but our configuration wizard generates all the files you need. Most users can get up and running by following our getting started guide."
+
+#: src/routes/faq/+page.svelte
+msgid "Can I use an existing PostgreSQL database?"
+msgstr "Can I use an existing PostgreSQL database?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! While Nocturne includes a PostgreSQL container by default, you can configure it to use any external PostgreSQL database. This is useful if you already have managed database hosting."
+msgstr "Yes! While Nocturne includes a PostgreSQL container by default, you can configure it to use any external PostgreSQL database. This is useful if you already have managed database hosting."
+
+#: src/routes/faq/+page.svelte
+msgid "Migration"
+msgstr "Migration"
+
+#: src/routes/faq/+page.svelte
+msgid "Can I migrate my existing Nightscout data?"
+msgstr "Can I migrate my existing Nightscout data?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! Nocturne includes built-in migration tools to import your complete history from Nightscout. Your entries, treatments, and profile data can all be imported."
+msgstr "Yes! Nocturne includes built-in migration tools to import your complete history from Nightscout. Your entries, treatments, and profile data can all be imported."
+
+#: src/routes/faq/+page.svelte
+msgid "Will my existing apps still work?"
+msgstr "Will my existing apps still work?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! Nocturne is fully API-compatible with Nightscout. xDrip+, Loop, AndroidAPS, and other apps that work with Nightscout will work with Nocturne without any configuration changes (just point them to your new Nocturne URL)."
+msgstr "Yes! Nocturne is fully API-compatible with Nightscout. xDrip+, Loop, AndroidAPS, and other apps that work with Nightscout will work with Nocturne without any configuration changes (just point them to your new Nocturne URL)."
+
+#: src/routes/faq/+page.svelte
+msgid "Can I run Nocturne alongside Nightscout?"
+msgstr "Can I run Nocturne alongside Nightscout?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! The Compatibility Proxy mode lets you run Nocturne alongside your existing Nightscout instance. This is great for testing Nocturne before fully migrating."
+msgstr "Yes! The Compatibility Proxy mode lets you run Nocturne alongside your existing Nightscout instance. This is great for testing Nocturne before fully migrating."
+
+#: src/routes/faq/+page.svelte
+msgid "What happens to my Nightscout during migration?"
+msgstr "What happens to my Nightscout during migration?"
+
+#: src/routes/faq/+page.svelte
+msgid "Migration is read-only - it copies data from Nightscout without modifying your original instance. You can keep your Nightscout running during and after migration until you're confident in your Nocturne setup."
+msgstr "Migration is read-only - it copies data from Nightscout without modifying your original instance. You can keep your Nightscout running during and after migration until you're confident in your Nocturne setup."
+
+#: src/routes/faq/+page.svelte
+msgid "Technical"
+msgstr "Technical"
+
+#: src/routes/faq/+page.svelte
+msgid "What technology stack does Nocturne use?"
+msgstr "What technology stack does Nocturne use?"
+
+#: src/routes/faq/+page.svelte
+msgid "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+msgstr "Nocturne is built on .NET 10 for the backend API, PostgreSQL for data storage, and SvelteKit 2 with Svelte 5 for the frontend. It uses .NET Aspire for service orchestration and observability."
+
+#: src/routes/faq/+page.svelte
+msgid "How do data connectors work?"
+msgstr "How do data connectors work?"
+
+#: src/routes/faq/+page.svelte
+msgid "Connectors are background services that fetch data from external sources like Dexcom Share or LibreView. Each connector authenticates with its data source and periodically syncs glucose readings to your Nocturne instance."
+msgstr "Connectors are background services that fetch data from external sources like Dexcom Share or LibreView. Each connector authenticates with its data source and periodically syncs glucose readings to your Nocturne instance."
+
+#: src/routes/faq/+page.svelte
+msgid "Is there an API?"
+msgstr "Is there an API?"
+
+#: src/routes/faq/+page.svelte
+msgid "Yes! Nocturne implements the full Nightscout API (v1, v2, and v3) plus additional endpoints. Interactive API documentation is available through Scalar when enabled."
+msgstr "Yes! Nocturne implements the full Nightscout API (v1, v2, and v3) plus additional endpoints. Interactive API documentation is available through Scalar when enabled."
+
+#: src/routes/faq/+page.svelte
+msgid "Can I contribute to Nocturne?"
+msgstr "Can I contribute to Nocturne?"
+
+#: src/routes/faq/+page.svelte
+msgid "Absolutely! Nocturne is open source and welcomes contributions. Check out our GitHub repository for contribution guidelines, or join the community to discuss features and improvements."
+msgstr "Absolutely! Nocturne is open source and welcomes contributions. Check out our GitHub repository for contribution guidelines, or join the community to discuss features and improvements."
+
+#: src/routes/faq/+page.svelte
+msgid "Frequently Asked Questions"
+msgstr "Frequently Asked Questions"
+
+#: src/routes/faq/+page.svelte
+msgid ""
+"Find answers to common questions about Nocturne, installation, migration,\n"
+"and more."
+msgstr ""
+"Find answers to common questions about Nocturne, installation, migration,\n"
+"and more."
+
+#: src/routes/faq/+page.svelte
+msgid "Still Have Questions?"
+msgstr "Still Have Questions?"
+
+#: src/routes/faq/+page.svelte
+msgid ""
+"Check out the documentation for detailed guides, or visit GitHub\n"
+"to ask the community."
+msgstr ""
+"Check out the documentation for detailed guides, or visit GitHub\n"
+"to ask the community."
+
+#: src/routes/faq/+page.svelte
+msgid "Browse Documentation <0/>"
+msgstr "Browse Documentation <0/>"
+
+#: src/routes/faq/+page.svelte
+msgid "Visit GitHub"
+msgstr "Visit GitHub"
+
+#: src/routes/studio/+page.svelte
+msgid "LanguageSelector"
+msgstr "LanguageSelector"
+
+#: src/routes/studio/+page.svelte
+msgid "Language Selector"
+msgstr "Language Selector"
+
+#: src/routes/studio/+page.svelte
+msgid "Blog Posts"
+msgstr "Blog Posts"
+
+#: src/routes/studio/+page.svelte
+msgid "Failed to publish"
+msgstr "Failed to publish"
+
+#: src/routes/studio/+page.svelte
+msgid "Studio - Nocturne"
+msgstr "Studio - Nocturne"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "PostgreSQL bootstrap superuser. Only used by the Postgres image at first container start to create the nocturne_migrator and nocturne_app roles."
+msgstr "PostgreSQL bootstrap superuser. Only used by the Postgres image at first container start to create the nocturne_migrator and nocturne_app roles."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Password for the bootstrap superuser above."
+msgstr "Password for the bootstrap superuser above."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Password for the nocturne_migrator role. This role owns the schema and runs EF migrations on startup."
+msgstr "Password for the nocturne_migrator role. This role owns the schema and runs EF migrations on startup."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Password for the nocturne_app role. This is the runtime connection and cannot bypass Row Level Security."
+msgstr "Password for the nocturne_app role. This is the runtime connection and cannot bypass Row Level Security."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Password for the nocturne_web role. Used by the SvelteKit web app's bot framework to store chat-platform state in its own non-tenant-scoped tables."
+msgstr "Password for the nocturne_web role. Used by the SvelteKit web app's bot framework to store chat-platform state in its own non-tenant-scoped tables."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Runtime connection string (app role). Exposed to services as ConnectionStrings__nocturne-postgres."
+msgstr "Runtime connection string (app role). Exposed to services as ConnectionStrings__nocturne-postgres."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Host=nocturne-postgres-server;Port=5432;Username=nocturne_app;Password=...;Database=nocturne"
+msgstr "Host=nocturne-postgres-server;Port=5432;Username=nocturne_app;Password=...;Database=nocturne"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Migration connection string (migrator role). Exposed to services as ConnectionStrings__nocturne-postgres-migrator."
+msgstr "Migration connection string (migrator role). Exposed to services as ConnectionStrings__nocturne-postgres-migrator."
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Host=nocturne-postgres-server;Port=5432;Username=nocturne_migrator;Password=...;Database=nocturne"
+msgstr "Host=nocturne-postgres-server;Port=5432;Username=nocturne_migrator;Password=...;Database=nocturne"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Instance key for JWT signing, encryption, and service authentication"
+msgstr "Instance key for JWT signing, encryption, and service authentication"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Port for the Nocturne API service"
+msgstr "Port for the Nocturne API service"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Docker image for the Nocturne API"
+msgstr "Docker image for the Nocturne API"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Docker image for the Dexcom connector"
+msgstr "Docker image for the Dexcom connector"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Internal port for the Dexcom connector"
+msgstr "Internal port for the Dexcom connector"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Dexcom Share username"
+msgstr "Dexcom Share username"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Dexcom Share password"
+msgstr "Dexcom Share password"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Dexcom server region (us or ous)"
+msgstr "Dexcom server region (us or ous)"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "LibreLinkUp email address"
+msgstr "LibreLinkUp email address"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "LibreLinkUp password"
+msgstr "LibreLinkUp password"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "LibreLinkUp region"
+msgstr "LibreLinkUp region"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "Example"
+msgstr "Example"
+
+#: src/lib/components/docs/EnvVarReference.svelte
+msgid "See the full <0>Configuration Guide</0> for connector-specific environment variables."
+msgstr "See the full <0>Configuration Guide</0> for connector-specific environment variables."
+
+#: src/lib/components/docs/DockerComposeYaml.svelte
+msgid "Three-role PostgreSQL setup"
+msgstr "Three-role PostgreSQL setup"
+
+#: src/lib/components/docs/DockerComposeYaml.svelte
+msgid ""
+"Nocturne uses three separate PostgreSQL users for defense-in-depth against PHI leakage. <0/> runs schema\n"
+"migrations; <1/> runs at\n"
+"request time with no DDL privileges and cannot bypass Row Level Security; <2/> owns the\n"
+"SvelteKit bot framework's <3/> tables. The init script mounted at <4/> creates all three\n"
+"roles at first container start. Do not consolidate them."
+msgstr ""
+"Nocturne uses three separate PostgreSQL users for defense-in-depth against PHI leakage. <0/> runs schema\n"
+"migrations; <1/> runs at\n"
+"request time with no DDL privileges and cannot bypass Row Level Security; <2/> owns the\n"
+"SvelteKit bot framework's <3/> tables. The init script mounted at <4/> creates all three\n"
+"roles at first container start. Do not consolidate them."
+
+#: src/lib/components/docs/DockerComposeYaml.svelte
+msgid "docker-compose.yml"
+msgstr "docker-compose.yml"
+
+#: src/lib/components/docs/DockerComposeYaml.svelte
+msgid ".env"
+msgstr ".env"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "Component"
+msgstr "Component"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "Minimum"
+msgstr "Minimum"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "RAM"
+msgstr "RAM"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "1 GB"
+msgstr "1 GB"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "2 GB+"
+msgstr "2 GB+"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "Storage"
+msgstr "Storage"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "10 GB"
+msgstr "10 GB"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "20 GB+"
+msgstr "20 GB+"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "Docker"
+msgstr "Docker"
+
+#: src/lib/components/docs/SystemRequirements.svelte
+#: src/lib/components/docs/SystemRequirements.svelte
+msgid "Latest"
+msgstr "Latest"
+
+#. placeholder {0}: data.meta?.title
+#: src/routes/blog/[slug]/+page.svelte
+msgid "{0} - Nocturne Blog"
+msgstr "{0} - Nocturne Blog"
+
+#: src/lib/components/docs/NextSteps.svelte
+msgid "Configure your data connectors (Dexcom, LibreLinkUp, Glooko, etc.) via the admin panel"
+msgstr "Configure your data connectors (Dexcom, LibreLinkUp, Glooko, etc.) via the admin panel"
+
+#: src/lib/components/docs/NextSteps.svelte
+msgid "Set up a reverse proxy (Nginx, Caddy, Traefik) for HTTPS"
+msgstr "Set up a reverse proxy (Nginx, Caddy, Traefik) for HTTPS"
+
+#: src/lib/components/docs/NextSteps.svelte
+msgid "Point your CGM app or loop system to your new Nocturne instance"
+msgstr "Point your CGM app or loop system to your new Nocturne instance"
+
+#: src/lib/components/docs/NextSteps.svelte
+msgid "Enable Watchtower for automatic updates (included in the default compose)"
+msgstr "Enable Watchtower for automatic updates (included in the default compose)"
+
+#: src/lib/components/docs/NextSteps.svelte
+msgid "Configuration Guide <0/>"
+msgstr "Configuration Guide <0/>"
+
+#: src/lib/components/docs/VerificationSteps.svelte
+msgid "Check that all containers are running:"
+msgstr "Check that all containers are running:"
+
+#: src/lib/components/docs/VerificationSteps.svelte
+msgid "View the logs for any errors:"
+msgstr "View the logs for any errors:"
+
+#: src/lib/components/docs/VerificationSteps.svelte
+msgid "Test the API is responding:"
+msgstr "Test the API is responding:"
+
+#: src/lib/components/docs/VerificationSteps.svelte
+msgid "Replace the port with the value you configured. You should receive a JSON response with server status."
+msgstr "Replace the port with the value you configured. You should receive a JSON response with server status."
+
+#: src/routes/docs/getting-started/+page.svelte
+msgid "Full Installation Guide <0/>"
+msgstr "Full Installation Guide <0/>"
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Choose a deployment method below to get Nocturne running on your infrastructure.\n"
+"All methods use the same Docker images and configuration."
+msgstr ""
+"Choose a deployment method below to get Nocturne running on your infrastructure.\n"
+"All methods use the same Docker images and configuration."
+
+#: src/routes/docs/installation/+page.svelte
+msgid "System Requirements"
+msgstr "System Requirements"
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose\n"
+"from the command line."
+msgstr ""
+"Deploy directly on any Linux server, VPS, or Raspberry Pi using Docker Compose\n"
+"from the command line."
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Deploy using the Portainer web interface. Great for managing your stack\n"
+"visually without SSH access."
+msgstr ""
+"Deploy using the Portainer web interface. Great for managing your stack\n"
+"visually without SSH access."
+
+#: src/routes/docs/installation/+page.svelte
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Bring Your Own PostgreSQL"
+msgstr "Bring Your Own PostgreSQL"
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Use a managed PostgreSQL service (RDS, Cloud SQL, Supabase, Neon) or an\n"
+"existing shared database instance. Requires a one-time role bootstrap."
+msgstr ""
+"Use a managed PostgreSQL service (RDS, Cloud SQL, Supabase, Neon) or an\n"
+"existing shared database instance. Requires a one-time role bootstrap."
+
+#: src/routes/docs/installation/+page.svelte
+msgid "Cloud Providers"
+msgstr "Cloud Providers"
+
+#: src/routes/docs/installation/+page.svelte
+msgid "Guides for GCP, Azure, Heroku, and other cloud platforms are coming soon."
+msgstr "Guides for GCP, Azure, Heroku, and other cloud platforms are coming soon."
+
+#: src/routes/docs/installation/+page.svelte
+msgid "Platform Notes"
+msgstr "Platform Notes"
+
+#: src/routes/docs/installation/+page.svelte
+msgid "Linux (Ubuntu/Debian)"
+msgstr "Linux (Ubuntu/Debian)"
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Install Docker using the official repository for the latest version. Both x86_64 and ARM64\n"
+"architectures are supported."
+msgstr ""
+"Install Docker using the official repository for the latest version. Both x86_64 and ARM64\n"
+"architectures are supported."
+
+#: src/routes/docs/installation/+page.svelte
+msgid "Raspberry Pi"
+msgstr "Raspberry Pi"
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Nocturne supports ARM64 architecture. Use Raspberry Pi 4 or newer with 64-bit\n"
+"Raspberry Pi OS."
+msgstr ""
+"Nocturne supports ARM64 architecture. Use Raspberry Pi 4 or newer with 64-bit\n"
+"Raspberry Pi OS."
+
+#: src/routes/docs/installation/+page.svelte
+msgid "Windows / macOS"
+msgstr "Windows / macOS"
+
+#: src/routes/docs/installation/+page.svelte
+msgid ""
+"Use Docker Desktop with WSL2 backend (Windows) or the native Docker Desktop (macOS).\n"
+"Both Intel and Apple Silicon Macs are supported."
+msgstr ""
+"Use Docker Desktop with WSL2 backend (Windows) or the native Docker Desktop (macOS).\n"
+"Both Intel and Apple Silicon Macs are supported."
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Deploy Nocturne on any server with Docker Compose from the command line."
+msgstr "Deploy Nocturne on any server with Docker Compose from the command line."
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Prerequisites"
+msgstr "Prerequisites"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A Linux server, VPS, or Raspberry Pi with SSH access"
+msgstr "A Linux server, VPS, or Raspberry Pi with SSH access"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Docker Engine 20.10+ and Docker Compose 2.0+ installed"
+msgstr "Docker Engine 20.10+ and Docker Compose 2.0+ installed"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "A domain name (recommended) or static IP address"
+msgstr "A domain name (recommended) or static IP address"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Step 1: Create a project directory"
+msgstr "Step 1: Create a project directory"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Step 2: Create configuration files"
+msgstr "Step 2: Create configuration files"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid ""
+"Create a <0/> and <1/> file in your\n"
+"project directory. The minimal configuration includes PostgreSQL, the Nocturne API, and\n"
+"Watchtower for automatic updates."
+msgstr ""
+"Create a <0/> and <1/> file in your\n"
+"project directory. The minimal configuration includes PostgreSQL, the Nocturne API, and\n"
+"Watchtower for automatic updates."
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid ""
+"<0>Connectors are optional.</0> The minimal compose above runs the core Nocturne stack. To add data source connectors\n"
+"(Dexcom, LibreLinkUp, etc.), add the connector services to your compose file.\n"
+"See the <1>Configuration Guide</1>."
+msgstr ""
+"<0>Connectors are optional.</0> The minimal compose above runs the core Nocturne stack. To add data source connectors\n"
+"(Dexcom, LibreLinkUp, etc.), add the connector services to your compose file.\n"
+"See the <1>Configuration Guide</1>."
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 3: Configure environment variables"
+msgstr "Step 3: Configure environment variables"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid ""
+"Edit the <0/> file and set\n"
+"your values. At minimum, you must change the database password and API secret:"
+msgstr ""
+"Edit the <0/> file and set\n"
+"your values. At minimum, you must change the database password and API secret:"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Step 4: Start the services"
+msgstr "Step 4: Start the services"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid ""
+"Docker will pull the required images and start all services. This may take a few minutes\n"
+"on first run."
+msgstr ""
+"Docker will pull the required images and start all services. This may take a few minutes\n"
+"on first run."
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 5: Verify the installation"
+msgstr "Step 5: Verify the installation"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Updating"
+msgstr "Updating"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid ""
+"Watchtower is included in the default compose and will automatically check for image updates\n"
+"once per day. To update manually:"
+msgstr ""
+"Watchtower is included in the default compose and will automatically check for image updates\n"
+"once per day. To update manually:"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Troubleshooting"
+msgstr "Troubleshooting"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If you encounter issues, check the logs for error details:"
+msgstr "If you encounter issues, check the logs for error details:"
+
+#: src/routes/docs/installation/docker-compose/+page.svelte
+msgid "To start fresh, stop all services and remove volumes:"
+msgstr "To start fresh, stop all services and remove volumes:"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Deploy Nocturne using the Portainer web interface. No SSH or command-line access required."
+msgstr "Deploy Nocturne using the Portainer web interface. No SSH or command-line access required."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "A running Portainer instance (Community or Business Edition)"
+msgstr "A running Portainer instance (Community or Business Edition)"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Access to a Docker environment in Portainer"
+msgstr "Access to a Docker environment in Portainer"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 1: Create a new stack"
+msgstr "Step 1: Create a new stack"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Navigate to Stacks"
+msgstr "Navigate to Stacks"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"In the Portainer sidebar, click <0>Stacks</0>,\n"
+"then click <1>Add stack</1>."
+msgstr ""
+"In the Portainer sidebar, click <0>Stacks</0>,\n"
+"then click <1>Add stack</1>."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Name your stack"
+msgstr "Name your stack"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Enter <0/> as the stack name."
+msgstr "Enter <0/> as the stack name."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Select \"Web editor\""
+msgstr "Select \"Web editor\""
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Choose the Web editor option to paste the compose file directly."
+msgstr "Choose the Web editor option to paste the compose file directly."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 2: Paste the compose configuration"
+msgstr "Step 2: Paste the compose configuration"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"Copy the following Docker Compose configuration and paste it into the Portainer web editor.\n"
+"The minimal configuration includes PostgreSQL, the Nocturne API, and Watchtower for\n"
+"automatic updates."
+msgstr ""
+"Copy the following Docker Compose configuration and paste it into the Portainer web editor.\n"
+"The minimal configuration includes PostgreSQL, the Nocturne API, and Watchtower for\n"
+"automatic updates."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"<0>Only paste the docker-compose.yml content.</0> The .env variables will be configured separately in Portainer's environment\n"
+"variables section below."
+msgstr ""
+"<0>Only paste the docker-compose.yml content.</0> The .env variables will be configured separately in Portainer's environment\n"
+"variables section below."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"Scroll down to the <0>Environment variables</0> section\n"
+"in Portainer. Click <1>Advanced mode</1> and add the\n"
+"following variables, one per line in <2/> format:"
+msgstr ""
+"Scroll down to the <0>Environment variables</0> section\n"
+"in Portainer. Click <1>Advanced mode</1> and add the\n"
+"following variables, one per line in <2/> format:"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Make sure to replace the placeholder values with your own secure passwords and secrets."
+msgstr "Make sure to replace the placeholder values with your own secure passwords and secrets."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Step 4: Deploy the stack"
+msgstr "Step 4: Deploy the stack"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Review your configuration"
+msgstr "Review your configuration"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Double-check the compose content and environment variables are correct."
+msgstr "Double-check the compose content and environment variables are correct."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Click \"Deploy the stack\""
+msgstr "Click \"Deploy the stack\""
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"Portainer will pull the Docker images and start all services. This may take\n"
+"a few minutes on first deployment."
+msgstr ""
+"Portainer will pull the Docker images and start all services. This may take\n"
+"a few minutes on first deployment."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Monitor the deployment"
+msgstr "Monitor the deployment"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"The stack details page will show the status of each container. Wait until all\n"
+"containers show as <0>Running</0>."
+msgstr ""
+"The stack details page will show the status of each container. Wait until all\n"
+"containers show as <0>Running</0>."
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"You can check the container logs directly in Portainer by clicking on any container\n"
+"in your stack, or from the command line:"
+msgstr ""
+"You can check the container logs directly in Portainer by clicking on any container\n"
+"in your stack, or from the command line:"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"Watchtower is included in the stack and will automatically check for image updates\n"
+"once per day. To update manually through Portainer:"
+msgstr ""
+"Watchtower is included in the stack and will automatically check for image updates\n"
+"once per day. To update manually through Portainer:"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Navigate to your <0>nocturne</0> stack"
+msgstr "Navigate to your <0>nocturne</0> stack"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Click <0>Editor</0>"
+msgstr "Click <0>Editor</0>"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Click <0>Update the stack</0>"
+msgstr "Click <0>Update the stack</0>"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Check <0>Re-pull image and redeploy</0>"
+msgstr "Check <0>Re-pull image and redeploy</0>"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Click <0>Update</0>"
+msgstr "Click <0>Update</0>"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid "Adding Connectors"
+msgstr "Adding Connectors"
+
+#: src/routes/docs/installation/portainer/+page.svelte
+msgid ""
+"To add data source connectors (Dexcom, LibreLinkUp, etc.), edit your stack in Portainer\n"
+"and add the connector services to the compose configuration. You will also need to add the\n"
+"connector-specific environment variables. See the <0>Configuration Guide</0> for details."
+msgstr ""
+"To add data source connectors (Dexcom, LibreLinkUp, etc.), edit your stack in Portainer\n"
+"and add the connector services to the compose configuration. You will also need to add the\n"
+"connector-specific environment variables. See the <0>Configuration Guide</0> for details."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"For deployments that use a managed PostgreSQL service or an existing shared database server\n"
+"instead of Nocturne's bundled Postgres container."
+msgstr ""
+"For deployments that use a managed PostgreSQL service or an existing shared database server\n"
+"instead of Nocturne's bundled Postgres container."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Three non-privileged roles are required"
+msgstr "Three non-privileged roles are required"
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"Nocturne enforces Row Level Security on every medical-data table. RLS is only meaningful\n"
+"when the runtime connection cannot bypass it, so Nocturne requires three separate roles:"
+msgstr ""
+"Nocturne enforces Row Level Security on every medical-data table. RLS is only meaningful\n"
+"when the runtime connection cannot bypass it, so Nocturne requires three separate roles:"
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"<0/> —\n"
+"owns the schema and runs migrations."
+msgstr ""
+"<0/> —\n"
+"owns the schema and runs migrations."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"<0/> —\n"
+"runtime connection for the .NET API. Cannot bypass RLS and has no DDL privileges."
+msgstr ""
+"<0/> —\n"
+"runtime connection for the .NET API. Cannot bypass RLS and has no DDL privileges."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"<0/> —\n"
+"used by the SvelteKit web app's bot framework to store chat-platform state. Owns\n"
+"only its own <1/> tables (not tenant-scoped, no PHI)."
+msgstr ""
+"<0/> —\n"
+"used by the SvelteKit web app's bot framework to store chat-platform state. Owns\n"
+"only its own <1/> tables (not tenant-scoped, no PHI)."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Setup steps"
+msgstr "Setup steps"
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Download <0/> from the Nocturne repository under <1/>."
+msgstr "Download <0/> from the Nocturne repository under <1/>."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Edit the file and replace the three <0/> passwords with strong values from your secrets manager."
+msgstr "Edit the file and replace the three <0/> passwords with strong values from your secrets manager."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Run as a PostgreSQL superuser against your Nocturne database: <0/>"
+msgstr "Run as a PostgreSQL superuser against your Nocturne database: <0/>"
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid "Set three connection strings in Nocturne's environment: <0><0/> — use the <1/> role.<0/> — use the <1/> role.<0/> — a <1/> URL for the <2/> role (consumed by the SvelteKit bot state adapter).</0>"
+msgstr "Set three connection strings in Nocturne's environment: <0><0/> — use the <1/> role.<0/> — use the <1/> role.<0/> — a <1/> URL for the <2/> role (consumed by the SvelteKit bot state adapter).</0>"
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"Start Nocturne. If either role is missing or misconfigured, the startup error will\n"
+"inline the exact SQL needed to fix it."
+msgstr ""
+"Start Nocturne. If either role is missing or misconfigured, the startup error will\n"
+"inline the exact SQL needed to fix it."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"The two roles only need to be created once per database. Re-running <0/> is\n"
+"idempotent."
+msgstr ""
+"The two roles only need to be created once per database. Re-running <0/> is\n"
+"idempotent."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"Neither role has <0/> or <1/>. Nocturne\n"
+"refuses to start if the runtime role can bypass Row Level Security."
+msgstr ""
+"Neither role has <0/> or <1/>. Nocturne\n"
+"refuses to start if the runtime role can bypass Row Level Security."
+
+#: src/routes/docs/installation/byo-postgres/+page.svelte
+msgid ""
+"On managed PostgreSQL services (RDS, Cloud SQL, Supabase, Neon), run the script as the\n"
+"database owner your provider gave you rather than the literal <0/> user."
+msgstr ""
+"On managed PostgreSQL services (RDS, Cloud SQL, Supabase, Neon), run the script as the\n"
+"database owner your provider gave you rather than the literal <0/> user."
