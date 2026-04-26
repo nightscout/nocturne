@@ -567,6 +567,211 @@ public class DeviceStatusProjectionServiceTests
 
     #endregion
 
+    #region ParseFindQuery
+
+    [Fact]
+    public void ParseFindQuery_WithNull_ReturnsEmpty()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(null);
+
+        device.Should().BeNull();
+        from.Should().BeNull();
+        to.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithEmptyString_ReturnsEmpty()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery("");
+
+        device.Should().BeNull();
+        from.Should().BeNull();
+        to.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithDevice_ExtractsDevice()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            "find[device]=openaps://rpi");
+
+        device.Should().Be("openaps://rpi");
+        from.Should().BeNull();
+        to.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithCreatedAtGte_ExtractsFrom()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            "find[created_at][$gte]=2024-01-15T00:00:00Z");
+
+        device.Should().BeNull();
+        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithCreatedAtRange_ExtractsFromAndTo()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z");
+
+        device.Should().BeNull();
+        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithJsonDevice_ExtractsDevice()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            """{"device":"loop://iPhone"}""");
+
+        device.Should().Be("loop://iPhone");
+        from.Should().BeNull();
+        to.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithJsonCreatedAtRange_ExtractsFromAndTo()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            """{"created_at":{"$gte":"2024-01-15T00:00:00Z","$lt":"2024-01-16T00:00:00Z"}}""");
+
+        device.Should().BeNull();
+        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithDeviceAndDateRange_ExtractsAll()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
+            "find[device]=openaps://rpi&find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z");
+
+        device.Should().Be("openaps://rpi");
+        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ParseFindQuery_WithMalformedJson_ReturnsEmpty()
+    {
+        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery("{invalid json");
+
+        device.Should().BeNull();
+        from.Should().BeNull();
+        to.Should().BeNull();
+    }
+
+    #endregion
+
+    #region CountAsync
+
+    [Fact]
+    public async Task CountAsync_WithNoFilter_ReturnsSumOfApsAndOrphanPump()
+    {
+        _apsRepo
+            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10);
+        _pumpRepo
+            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(12);
+
+        var count = await _service.CountAsync(null, CancellationToken.None);
+
+        // 10 APS + max(0, 12 - 10) orphan pumps = 12
+        count.Should().Be(12);
+    }
+
+    [Fact]
+    public async Task CountAsync_WithDateFilter_PassesDatesToRepos()
+    {
+        _apsRepo
+            .Setup(r => r.CountAsync(
+                It.Is<DateTime?>(d => d.HasValue),
+                It.Is<DateTime?>(d => d.HasValue),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(5);
+        _pumpRepo
+            .Setup(r => r.CountAsync(
+                It.Is<DateTime?>(d => d.HasValue),
+                It.Is<DateTime?>(d => d.HasValue),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
+
+        var count = await _service.CountAsync(
+            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
+            CancellationToken.None);
+
+        // 5 APS + max(0, 3 - 5) orphan pumps = 5
+        count.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task CountAsync_WhenPumpsExceedAps_IncludesOrphanEstimate()
+    {
+        _apsRepo
+            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
+        _pumpRepo
+            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(8);
+
+        var count = await _service.CountAsync(null, CancellationToken.None);
+
+        // 3 APS + max(0, 8 - 3) orphan pumps = 8
+        count.Should().Be(8);
+    }
+
+    #endregion
+
+    #region GetAsync — Find Filtering
+
+    [Fact]
+    public async Task GetAsync_WithDeviceFilter_PassesDeviceToRepository()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
+
+        _apsRepo
+            .Setup(r => r.GetAsync(null, null, "openaps://rpi", null,
+                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { aps });
+
+        var results = (await _service.GetAsync(10, 0, "find[device]=openaps://rpi", CancellationToken.None)).ToList();
+
+        results.Should().HaveCount(1);
+        _apsRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", null,
+            10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAsync_WithDateRangeFilter_PassesDatesToRepository()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
+
+        var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc);
+
+        _apsRepo
+            .Setup(r => r.GetAsync(expectedFrom, expectedTo, null, null,
+                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { aps });
+
+        var results = (await _service.GetAsync(10, 0,
+            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
+            CancellationToken.None)).ToList();
+
+        results.Should().HaveCount(1);
+        _apsRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, null,
+            10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    #endregion
+
     #region Helpers
 
     private static ApsSnapshot CreateApsSnapshot(AidAlgorithm algorithm)

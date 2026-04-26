@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using System.Web;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -62,16 +64,16 @@ public class DeviceStatusProjectionService
     /// </summary>
     /// <param name="count">Maximum number of results.</param>
     /// <param name="skip">Number of results to skip for pagination.</param>
-    /// <param name="find">Reserved for future MongoDB-compatible query filter (unused).</param>
+    /// <param name="find">MongoDB-style query filter supporting <c>device</c> and <c>created_at</c> date range filters.</param>
     /// <param name="ct">Cancellation token.</param>
     public async Task<IEnumerable<DeviceStatus>> GetAsync(
         int count, int skip, string? find, CancellationToken ct)
     {
-        // TODO: implement find parameter translation from MongoDB query syntax to V4 filters
+        var (device, from, to) = ParseFindQuery(find);
 
         // 1. Query APS snapshots as primary anchor (newest-first with pagination)
         var apsSnapshots = (await _apsRepo.GetAsync(
-            from: null, to: null, device: null, source: null,
+            from: from, to: to, device: device, source: null,
             limit: count, offset: skip, descending: true, ct: ct)).ToList();
 
         // 2. Collect correlation IDs from APS results
@@ -87,7 +89,7 @@ public class DeviceStatusProjectionService
         if (skip == 0)
         {
             var allPumpSnapshots = (await _pumpRepo.GetAsync(
-                from: null, to: null, device: null, source: null,
+                from: from, to: to, device: device, source: null,
                 limit: count, offset: 0, descending: true, ct: ct)).ToList();
 
             orphanPumps = allPumpSnapshots
@@ -265,6 +267,28 @@ public class DeviceStatusProjectionService
             var overrideSpan = FindOverrideForTimestamp(overrides, aps.Timestamp);
             return ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger);
         });
+    }
+
+    /// <summary>
+    /// Returns the total number of projected <see cref="DeviceStatus"/> documents matching the
+    /// optional <paramref name="find"/> filter. Sums APS snapshot count and orphan pump snapshot
+    /// count to approximate the total for V3 pagination.
+    /// </summary>
+    /// <param name="find">MongoDB-style query filter (same format as <see cref="GetAsync"/>).</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<long> CountAsync(string? find, CancellationToken ct)
+    {
+        var (_, from, to) = ParseFindQuery(find);
+
+        var apsCount = await _apsRepo.CountAsync(from, to, ct);
+        var pumpCount = await _pumpRepo.CountAsync(from, to, ct);
+
+        // Orphan pump count is estimated as total pumps minus APS count (each APS correlates
+        // to at most one pump). This is a rough estimate — the real orphan count requires
+        // a correlation join, which is too expensive for a count-only query.
+        var orphanPumpEstimate = Math.Max(0, pumpCount - apsCount);
+
+        return apsCount + orphanPumpEstimate;
     }
 
     #region Projection Logic
@@ -503,6 +527,135 @@ public class DeviceStatusProjectionService
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Parses a MongoDB-style find query string into typed filter values.
+    /// Supports two formats:
+    /// <list type="bullet">
+    /// <item>URL query string: <c>find[device]=openaps&amp;find[created_at][$gte]=2024-01-01</c></item>
+    /// <item>JSON object: <c>{"device":"openaps","created_at":{"$gte":"2024-01-01"}}</c></item>
+    /// </list>
+    /// Only <c>device</c> (exact match) and <c>created_at</c> with <c>$gte/$gt/$lte/$lt</c> operators are supported.
+    /// </summary>
+    internal static (string? Device, DateTime? From, DateTime? To) ParseFindQuery(string? find)
+    {
+        if (string.IsNullOrWhiteSpace(find))
+            return (null, null, null);
+
+        // Try JSON format first
+        if (find.TrimStart().StartsWith('{'))
+        {
+            return ParseFindQueryFromJson(find);
+        }
+
+        // URL query string format: find[device]=value&find[created_at][$gte]=date
+        return ParseFindQueryFromQueryString(find);
+    }
+
+    private static (string? Device, DateTime? From, DateTime? To) ParseFindQueryFromJson(string json)
+    {
+        string? device = null;
+        DateTime? from = null;
+        DateTime? to = null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("device", out var deviceEl) && deviceEl.ValueKind == JsonValueKind.String)
+            {
+                device = deviceEl.GetString();
+            }
+
+            if (root.TryGetProperty("created_at", out var createdAtEl))
+            {
+                if (createdAtEl.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in createdAtEl.EnumerateObject())
+                    {
+                        var dateStr = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() : null;
+                        if (dateStr == null) continue;
+
+                        if (!TryParseDateTime(dateStr, out var dt)) continue;
+
+                        switch (prop.Name)
+                        {
+                            case "$gte":
+                            case "$gt":
+                                from = dt;
+                                break;
+                            case "$lte":
+                            case "$lt":
+                                to = dt;
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed JSON — return empty filters
+        }
+
+        return (device, from, to);
+    }
+
+    private static (string? Device, DateTime? From, DateTime? To) ParseFindQueryFromQueryString(string queryString)
+    {
+        string? device = null;
+        DateTime? from = null;
+        DateTime? to = null;
+
+        var parsed = HttpUtility.ParseQueryString(queryString);
+
+        foreach (string? key in parsed)
+        {
+            if (key == null) continue;
+            var value = parsed[key];
+            if (string.IsNullOrEmpty(value)) continue;
+
+            if (key.Equals("find[device]", StringComparison.OrdinalIgnoreCase))
+            {
+                device = value;
+            }
+            else if (key.Equals("find[created_at][$gte]", StringComparison.OrdinalIgnoreCase)
+                     || key.Equals("find[created_at][$gt]", StringComparison.OrdinalIgnoreCase))
+            {
+                if (TryParseDateTime(value, out var dt))
+                    from = dt;
+            }
+            else if (key.Equals("find[created_at][$lte]", StringComparison.OrdinalIgnoreCase)
+                     || key.Equals("find[created_at][$lt]", StringComparison.OrdinalIgnoreCase))
+            {
+                if (TryParseDateTime(value, out var dt))
+                    to = dt;
+            }
+        }
+
+        return (device, from, to);
+    }
+
+    private static bool TryParseDateTime(string value, out DateTime result)
+    {
+        // Try ISO 8601 first, then fall back to general DateTime parsing
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out result))
+        {
+            return true;
+        }
+
+        // Try Unix milliseconds
+        if (long.TryParse(value, out var mills))
+        {
+            result = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
 
     private async Task<List<StateSpan>> LoadOverridesForSnapshots(
         List<ApsSnapshot> snapshots, CancellationToken ct)

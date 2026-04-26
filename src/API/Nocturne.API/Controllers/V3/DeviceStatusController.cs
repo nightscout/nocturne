@@ -101,8 +101,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 deviceStatusList.Reverse();
             }
 
-            // TODO: implement proper count query via projection service
-            var totalCount = (long)deviceStatusList.Count;
+            var totalCount = await _projection.CountAsync(findQuery, cancellationToken);
 
             var mappedData = deviceStatusList.Select(MapToV3Dto);
 
