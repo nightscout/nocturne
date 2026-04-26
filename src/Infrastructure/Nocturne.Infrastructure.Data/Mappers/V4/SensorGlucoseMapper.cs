@@ -35,6 +35,9 @@ public static class SensorGlucoseMapper
             Filtered = model.Filtered,
             Unfiltered = model.Unfiltered,
             Delta = model.Delta,
+            GlucoseProcessing = model.GlucoseProcessing?.ToString(),
+            SmoothedMgdl = model.SmoothedMgdl,
+            UnsmoothedMgdl = model.UnsmoothedMgdl,
             AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
                 ? JsonSerializer.Serialize(model.AdditionalProperties)
                 : null,
@@ -67,6 +70,9 @@ public static class SensorGlucoseMapper
             Filtered = entity.Filtered,
             Unfiltered = entity.Unfiltered,
             Delta = entity.Delta,
+            GlucoseProcessing = Enum.TryParse<GlucoseProcessing>(entity.GlucoseProcessing, out var gp) ? gp : null,
+            SmoothedMgdl = entity.SmoothedMgdl,
+            UnsmoothedMgdl = entity.UnsmoothedMgdl,
             AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
                 ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
                 : null,
@@ -95,6 +101,9 @@ public static class SensorGlucoseMapper
         entity.Filtered = model.Filtered;
         entity.Unfiltered = model.Unfiltered;
         entity.Delta = model.Delta;
+        entity.GlucoseProcessing = model.GlucoseProcessing?.ToString();
+        entity.SmoothedMgdl = model.SmoothedMgdl;
+        entity.UnsmoothedMgdl = model.UnsmoothedMgdl;
         entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
             ? JsonSerializer.Serialize(model.AdditionalProperties)
             : null;
