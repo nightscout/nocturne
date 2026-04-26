@@ -34,6 +34,7 @@ public class BaseConnectorServiceTests
         public int BatchSize { get; set; } = 100;
         public ConnectSource ConnectSource { get; set; } = ConnectSource.Dexcom;
         public int MaxRetryAttempts { get; set; } = 3;
+        public Nocturne.Core.Models.V4.GlucoseProcessing GlucoseProcessing { get; set; } = Nocturne.Core.Models.V4.GlucoseProcessing.Smoothed;
 
         public void Validate() { }
         public bool IsDataTypeEnabled(SyncDataType type) => true;

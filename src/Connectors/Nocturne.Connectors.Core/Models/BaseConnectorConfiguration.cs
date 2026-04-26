@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Core.Models;
 
@@ -48,6 +49,9 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
 
     [ConnectorProperty(ConnectorPropertyKey.SyncIntervalMinutes, MinValue = 1, MaxValue = 60)]
     public int SyncIntervalMinutes { get; set; } = 5;
+
+    [ConnectorProperty(ConnectorPropertyKey.GlucoseProcessing)]
+    public GlucoseProcessing GlucoseProcessing { get; set; } = GlucoseProcessing.Smoothed;
 
     [ConnectorProperty(ConnectorPropertyKey.SyncGlucose, DefaultValue = "true")]
     public bool SyncGlucose { get; set; } = true;

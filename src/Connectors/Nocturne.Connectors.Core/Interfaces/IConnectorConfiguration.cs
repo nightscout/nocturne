@@ -1,4 +1,5 @@
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Core.Interfaces;
 
@@ -11,6 +12,11 @@ public interface IConnectorConfiguration
     ///     The data source type
     /// </summary>
     ConnectSource ConnectSource { get; set; }
+
+    /// <summary>
+    ///     How the connector's glucose readings were processed by the source system.
+    /// </summary>
+    GlucoseProcessing GlucoseProcessing { get; set; }
 
     /// <summary>
     ///     Whether the connector is enabled

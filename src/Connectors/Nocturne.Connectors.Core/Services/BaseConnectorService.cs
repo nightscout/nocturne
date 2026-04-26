@@ -567,6 +567,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
+        // Stamp glucose processing metadata from connector config
+        var processing = config.GlucoseProcessing;
+        foreach (var record in records)
+        {
+            record.GlucoseProcessing = processing;
+            record.SmoothedMgdl ??= processing == GlucoseProcessing.Smoothed ? record.Mgdl : null;
+        }
+
         return await _publisher.Glucose.PublishSensorGlucoseAsync(
             records,
             ConnectorSource,

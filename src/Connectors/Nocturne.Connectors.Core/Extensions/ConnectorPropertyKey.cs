@@ -13,6 +13,9 @@ public enum ConnectorPropertyKey
     BatchSize,
     SyncIntervalMinutes,
 
+    // Glucose processing
+    GlucoseProcessing,
+
     // Sync toggles
     SyncGlucose,
     SyncManualBG,

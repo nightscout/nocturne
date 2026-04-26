@@ -29,6 +29,7 @@ public class ConnectorBackgroundServiceTests
         public int MaxRetryAttempts { get; set; } = 1;
         public int BatchSize { get; set; } = 100;
         public int SyncIntervalMinutes { get; set; } = 5;
+        public Core.Models.V4.GlucoseProcessing GlucoseProcessing { get; set; } = Core.Models.V4.GlucoseProcessing.Smoothed;
         public void Validate() { }
         public bool IsDataTypeEnabled(SyncDataType type) => true;
         public List<SyncDataType> GetEnabledDataTypes(List<SyncDataType> supportedTypes) => supportedTypes;
