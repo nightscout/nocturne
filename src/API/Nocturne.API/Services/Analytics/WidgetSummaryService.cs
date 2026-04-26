@@ -1,9 +1,11 @@
+using System.Text.Json;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -14,7 +16,7 @@ namespace Nocturne.API.Services.Analytics;
 
 /// <summary>
 /// Aggregates widget-friendly summary data from multiple sources (CGM entries, IOB, COB, treatments,
-/// device status, tracker state, and alarm state) for mobile widgets, watch faces, and other
+/// APS predictions, tracker state, and alarm state) for mobile widgets, watch faces, and other
 /// constrained displays where response size and latency are critical.
 /// </summary>
 /// <seealso cref="IWidgetSummaryService"/>
@@ -24,7 +26,7 @@ public class WidgetSummaryService : IWidgetSummaryService
     private readonly IIobService _iobService;
     private readonly ICobService _cobService;
     private readonly ITreatmentService _treatmentService;
-    private readonly IDeviceStatusService _deviceStatusService;
+    private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
     private readonly ILogger<WidgetSummaryService> _logger;
@@ -39,7 +41,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         IIobService iobService,
         ICobService cobService,
         ITreatmentService treatmentService,
-        IDeviceStatusService deviceStatusService,
+        IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
         ILogger<WidgetSummaryService> logger
@@ -49,7 +51,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         _iobService = iobService;
         _cobService = cobService;
         _treatmentService = treatmentService;
-        _deviceStatusService = deviceStatusService;
+        _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
         _logger = logger;
@@ -73,14 +75,13 @@ public class WidgetSummaryService : IWidgetSummaryService
         var entryCount = hours > 0 ? (hours * 12) + 1 : 1; // 12 readings per hour (5-minute intervals)
         var entries = (await _entryService.GetEntriesAsync(null, entryCount, 0, cancellationToken)).ToList();
         var treatments = (await _treatmentService.GetTreatmentsAsync(100, 0, cancellationToken)).ToList();
-        var deviceStatusList = (await _deviceStatusService.GetRecentDeviceStatusAsync(10, cancellationToken)).ToList();
         var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
 
         // Process glucose readings
         ProcessGlucoseReadings(response, entries, hours, currentTime);
 
         // Calculate IOB and COB
-        await CalculateIobCobAsync(response, treatments, deviceStatusList);
+        await CalculateIobCobAsync(response, treatments);
 
         // Process tracker statuses
         ProcessTrackers(response, trackerInstances);
@@ -91,7 +92,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         // Include predictions if requested
         if (includePredictions)
         {
-            ProcessPredictions(response, deviceStatusList);
+            await ProcessPredictionsAsync(response, cancellationToken);
         }
 
         return response;
@@ -152,8 +153,7 @@ public class WidgetSummaryService : IWidgetSummaryService
     /// </summary>
     private async Task CalculateIobCobAsync(
         V4SummaryResponse response,
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatusList
+        List<Treatment> treatments
     )
     {
         try
@@ -379,149 +379,115 @@ public class WidgetSummaryService : IWidgetSummaryService
     }
 
     /// <summary>
-    /// Process predictions from device status
+    /// Extract predictions from the most recent APS snapshot
     /// </summary>
-    private void ProcessPredictions(
+    private async Task ProcessPredictionsAsync(
         V4SummaryResponse response,
-        List<DeviceStatus> deviceStatusList
+        CancellationToken cancellationToken
     )
-    {
-        // Find the most recent device status with predictions
-        var statusWithPredictions = deviceStatusList
-            .OrderByDescending(ds => ds.Mills)
-            .FirstOrDefault(ds =>
-                ds.Loop?.Predicted?.Values != null && ds.Loop.Predicted.Values.Length > 0
-            );
-
-        if (statusWithPredictions?.Loop?.Predicted != null)
-        {
-            var predicted = statusWithPredictions.Loop.Predicted;
-            var startMills = ParsePredictionStartDate(predicted.StartDate, statusWithPredictions.Mills);
-
-            response.Predictions = new V4Predictions
-            {
-                Values = predicted.Values?.ToList(),
-                StartMills = startMills,
-                IntervalMills = CgmIntervalMills, // Standard 5-minute intervals
-                Source = "loop",
-            };
-
-            return;
-        }
-
-        // Fallback: check OpenAPS for predictions
-        var statusWithOpenApsPredictions = deviceStatusList
-            .OrderByDescending(ds => ds.Mills)
-            .FirstOrDefault(ds =>
-                ds.OpenAps?.Suggested != null || ds.OpenAps?.Enacted != null
-            );
-
-        if (statusWithOpenApsPredictions?.OpenAps != null)
-        {
-            var predictions = ExtractOpenApsPredictions(statusWithOpenApsPredictions);
-            if (predictions != null)
-            {
-                response.Predictions = predictions;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Parse prediction start date from various formats
-    /// </summary>
-    private static long ParsePredictionStartDate(string? startDate, long fallbackMills)
-    {
-        if (string.IsNullOrEmpty(startDate))
-        {
-            return fallbackMills;
-        }
-
-        if (DateTime.TryParse(startDate, out var parsedDate))
-        {
-            return ((DateTimeOffset)DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc))
-                .ToUnixTimeMilliseconds();
-        }
-
-        return fallbackMills;
-    }
-
-    /// <summary>
-    /// Extract predictions from OpenAPS device status
-    /// </summary>
-    private V4Predictions? ExtractOpenApsPredictions(DeviceStatus deviceStatus)
     {
         try
         {
-            // OpenAPS predictions are typically in suggested or enacted objects
-            // The structure can vary, so we handle it carefully
-            var suggested = deviceStatus.OpenAps?.Suggested;
-            var enacted = deviceStatus.OpenAps?.Enacted;
+            var snapshots = await _apsSnapshots.GetAsync(
+                from: null,
+                to: null,
+                device: null,
+                source: null,
+                limit: 1,
+                offset: 0,
+                descending: true,
+                ct: cancellationToken);
 
-            // Try to extract predBGs from suggested or enacted
-            // This is a simplified extraction - OpenAPS has complex prediction structures
-            var predictedValues = ExtractPredBGsFromOpenAps(enacted) ??
-                                  ExtractPredBGsFromOpenAps(suggested);
-
-            if (predictedValues != null && predictedValues.Count > 0)
+            var latest = snapshots.FirstOrDefault();
+            if (latest == null)
             {
-                return new V4Predictions
-                {
-                    Values = predictedValues,
-                    StartMills = deviceStatus.Mills,
-                    IntervalMills = CgmIntervalMills,
-                    Source = "openaps",
-                };
+                return;
+            }
+
+            if (latest.AidAlgorithm == AidAlgorithm.Loop)
+            {
+                ExtractLoopPredictions(response, latest);
+            }
+            else
+            {
+                ExtractOpenApsPredictions(response, latest);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error extracting OpenAPS predictions");
+            _logger.LogWarning(ex, "Error processing predictions for widget summary");
         }
-
-        return null;
     }
 
     /// <summary>
-    /// Extract predicted BG values from OpenAPS object
+    /// Extract predictions from a Loop APS snapshot
     /// </summary>
-    private static List<double>? ExtractPredBGsFromOpenAps(object? openApsData)
+    private static void ExtractLoopPredictions(V4SummaryResponse response, ApsSnapshot snapshot)
     {
-        if (openApsData == null)
+        var values = DeserializeCurve(snapshot.PredictedDefaultJson);
+        if (values == null || values.Count == 0)
+        {
+            return;
+        }
+
+        var startMills = snapshot.PredictedStartMills
+            ?? new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        response.Predictions = new V4Predictions
+        {
+            Values = values,
+            StartMills = startMills,
+            IntervalMills = CgmIntervalMills,
+            Source = "loop",
+        };
+    }
+
+    /// <summary>
+    /// Extract predictions from an OpenAPS/AAPS/Trio APS snapshot
+    /// </summary>
+    private static void ExtractOpenApsPredictions(V4SummaryResponse response, ApsSnapshot snapshot)
+    {
+        var values = DeserializeCurve(snapshot.PredictedIobJson)
+            ?? DeserializeCurve(snapshot.PredictedDefaultJson)
+            ?? DeserializeCurve(snapshot.PredictedCobJson)
+            ?? DeserializeCurve(snapshot.PredictedZtJson)
+            ?? DeserializeCurve(snapshot.PredictedUamJson);
+
+        if (values == null || values.Count == 0)
+        {
+            return;
+        }
+
+        var startMills = snapshot.PredictedStartMills
+            ?? new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        response.Predictions = new V4Predictions
+        {
+            Values = values,
+            StartMills = startMills,
+            IntervalMills = CgmIntervalMills,
+            Source = "openaps",
+        };
+    }
+
+    /// <summary>
+    /// Deserialize a JSON array of nullable doubles into a list, filtering out nulls
+    /// </summary>
+    private static List<double>? DeserializeCurve(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
         {
             return null;
         }
 
         try
         {
-            // Try to access predBGs property using reflection
-            var type = openApsData.GetType();
-            var predBGsProperty = type.GetProperty("predBGs") ?? type.GetProperty("PredBGs");
-
-            if (predBGsProperty != null)
-            {
-                var predBGsValue = predBGsProperty.GetValue(openApsData);
-                if (predBGsValue is IEnumerable<double> values)
-                {
-                    return values.ToList();
-                }
-            }
-
-            // Try IOB predictions as fallback
-            var iobProperty = type.GetProperty("IOB") ?? type.GetProperty("iob");
-            if (iobProperty != null)
-            {
-                var iobValue = iobProperty.GetValue(openApsData);
-                if (iobValue is IEnumerable<double> iobValues)
-                {
-                    return iobValues.ToList();
-                }
-            }
+            var values = JsonSerializer.Deserialize<List<double?>>(json);
+            return values?.Where(v => v.HasValue).Select(v => v!.Value).ToList();
         }
-        catch
+        catch (JsonException)
         {
-            // Silently fail prediction extraction
+            return null;
         }
-
-        return null;
     }
 }
