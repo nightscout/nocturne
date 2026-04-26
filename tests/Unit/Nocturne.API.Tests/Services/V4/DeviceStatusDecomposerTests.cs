@@ -1794,7 +1794,7 @@ public class DeviceStatusDecomposerTests : IDisposable
     [Fact]
     public async Task DecomposeAsync_WithAapsData_StoresAidVersion()
     {
-        // Arrange — AAPS has no version on OpenAps, but version could come from device string
+        // Arrange — AAPS emits a version string on the OpenAps block
         var ds = new DeviceStatus
         {
             Id = "aaps-version-1",
@@ -1881,9 +1881,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         var result = await _decomposer.DecomposeAsync(ds);
 
         // Assert — configuration should end up in extras
-        var extras = _context.DeviceStatusExtras.ToList();
-        extras.Should().HaveCount(1);
-        extras[0].Extras.Should().ContainKey("configuration");
+        var extrasEntities = _context.DeviceStatusExtras.ToList();
+        extrasEntities.Should().HaveCount(1);
+        extrasEntities[0].ExtrasJson.Should().Contain("configuration");
     }
 
     [Fact]
@@ -1911,9 +1911,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         var result = await _decomposer.DecomposeAsync(ds);
 
         // Assert
-        var extras = _context.DeviceStatusExtras.ToList();
-        extras.Should().HaveCount(1);
-        extras[0].Extras.Should().ContainKey("radioAdapter");
+        var extrasEntities = _context.DeviceStatusExtras.ToList();
+        extrasEntities.Should().HaveCount(1);
+        extrasEntities[0].ExtrasJson.Should().Contain("radioAdapter");
     }
 
     [Fact]
@@ -1933,9 +1933,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         var result = await _decomposer.DecomposeAsync(ds);
 
         // Assert
-        var extras = _context.DeviceStatusExtras.ToList();
-        extras.Should().HaveCount(1);
-        extras[0].Extras.Should().ContainKey("xdripjs");
+        var extrasEntities = _context.DeviceStatusExtras.ToList();
+        extrasEntities.Should().HaveCount(1);
+        extrasEntities[0].ExtrasJson.Should().Contain("xdripjs");
     }
 
     [Fact]
@@ -1965,8 +1965,8 @@ public class DeviceStatusDecomposerTests : IDisposable
         var result = await _decomposer.DecomposeAsync(ds);
 
         // Assert — no extras record should be created
-        var extras = _context.DeviceStatusExtras.ToList();
-        extras.Should().BeEmpty();
+        var extrasEntities = _context.DeviceStatusExtras.ToList();
+        extrasEntities.Should().BeEmpty();
     }
 
     [Fact]
@@ -1988,10 +1988,10 @@ public class DeviceStatusDecomposerTests : IDisposable
         var result = await _decomposer.DecomposeAsync(ds);
 
         // Assert
-        var extras = _context.DeviceStatusExtras.ToList();
-        extras.Should().HaveCount(1);
-        extras[0].Extras.Should().ContainKey("customPlugin");
-        extras[0].Extras.Should().ContainKey("anotherField");
+        var extrasEntities = _context.DeviceStatusExtras.ToList();
+        extrasEntities.Should().HaveCount(1);
+        extrasEntities[0].ExtrasJson.Should().Contain("customPlugin");
+        extrasEntities[0].ExtrasJson.Should().Contain("anotherField");
     }
 
     #endregion
