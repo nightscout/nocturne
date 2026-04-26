@@ -30,5 +30,15 @@ public class UpsertSensorGlucoseRequestValidator : AbstractValidator<UpsertSenso
         RuleFor(x => x.DataSource).MaximumLength(500).When(x => x.DataSource is not null);
         RuleFor(x => x.Mgdl).InclusiveBetween(0, 10000).WithMessage("Mgdl must be between 0 and 10000");
         RuleFor(x => x.Direction).IsInEnum().When(x => x.Direction is not null);
+        RuleFor(x => x.GlucoseProcessing)
+            .Must(v => Enum.TryParse<Core.Models.V4.GlucoseProcessing>(v, ignoreCase: true, out _))
+            .When(x => x.GlucoseProcessing is not null)
+            .WithMessage("GlucoseProcessing must be 'Smoothed' or 'Unsmoothed'");
+        RuleFor(x => x.SmoothedMgdl)
+            .InclusiveBetween(0, 10000)
+            .When(x => x.SmoothedMgdl is not null);
+        RuleFor(x => x.UnsmoothedMgdl)
+            .InclusiveBetween(0, 10000)
+            .When(x => x.UnsmoothedMgdl is not null);
     }
 }

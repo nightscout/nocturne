@@ -68,4 +68,20 @@ public class UpsertSensorGlucoseRequest
     /// Glucose delta in mg/dL over the last 5 minutes
     /// </summary>
     public double? Delta { get; set; }
+
+    /// <summary>
+    /// Whether this glucose value is smoothed or unsmoothed.
+    /// Accepted values: "Smoothed", "Unsmoothed". Case-insensitive. Null for unknown.
+    /// </summary>
+    public string? GlucoseProcessing { get; set; }
+
+    /// <summary>
+    /// Smoothed glucose value in mg/dL, when known.
+    /// </summary>
+    public double? SmoothedMgdl { get; set; }
+
+    /// <summary>
+    /// Unsmoothed (raw) glucose value in mg/dL, when known.
+    /// </summary>
+    public double? UnsmoothedMgdl { get; set; }
 }
