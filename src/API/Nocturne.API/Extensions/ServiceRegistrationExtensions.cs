@@ -512,6 +512,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPatientDeviceRepository, PatientDeviceRepository>();
         services.AddScoped<IPatientInsulinRepository, PatientInsulinRepository>();
 
+        // Glucose processing
+        services.AddScoped<IGlucoseProcessingConfigProvider, GlucoseProcessingConfigProvider>();
+        services.AddScoped<IGlucoseProcessingResolver, GlucoseProcessingResolver>();
+
         // AID Detection Strategies and Metrics Service
         services.AddSingleton<IAidDetectionStrategy, ApsSnapshotStrategy>();
         services.AddSingleton<IAidDetectionStrategy, TbrBasedStrategy>();

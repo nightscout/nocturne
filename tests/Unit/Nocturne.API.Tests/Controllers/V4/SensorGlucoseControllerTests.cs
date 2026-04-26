@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Glucose;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
@@ -16,6 +17,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class SensorGlucoseControllerTests
 {
     private readonly Mock<ISensorGlucoseRepository> _repoMock = new();
+    private readonly Mock<IGlucoseProcessingResolver> _glucoseResolverMock = new();
     private readonly Mock<IAlertOrchestrator> _alertOrchestratorMock = new();
     private readonly Mock<ILogger<SensorGlucoseController>> _loggerMock = new();
 
@@ -23,6 +25,7 @@ public class SensorGlucoseControllerTests
     {
         var controller = new SensorGlucoseController(
             _repoMock.Object,
+            _glucoseResolverMock.Object,
             _alertOrchestratorMock.Object,
             _loggerMock.Object);
 
@@ -50,6 +53,10 @@ public class SensorGlucoseControllerTests
             Timestamp = input.Timestamp.UtcDateTime,
             Mgdl = 120
         };
+
+        _repoMock
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(created);
 
         _repoMock.As<IV4Repository<SensorGlucose>>()
             .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))

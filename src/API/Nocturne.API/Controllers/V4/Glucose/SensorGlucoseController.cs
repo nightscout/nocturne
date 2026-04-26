@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [Produces("application/json")]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
+    IGlucoseProcessingResolver glucoseResolver,
     IAlertOrchestrator alertOrchestrator,
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
@@ -37,6 +39,20 @@ public class SensorGlucoseController(
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
         => base.GetAll(from, to, limit, offset, sort, device, source, ct);
+
+    public override async Task<ActionResult<SensorGlucose>> Create([FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
+    {
+        var model = MapCreateToModel(request);
+
+        if (model.Timestamp == default)
+            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+
+        await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
+
+        var created = await Repository.CreateAsync(model, ct);
+        created = await OnAfterCreateAsync(created, ct);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    }
 
     protected override SensorGlucose MapCreateToModel(UpsertSensorGlucoseRequest request) => new()
     {
@@ -75,6 +91,30 @@ public class SensorGlucoseController(
         AdditionalProperties = existing.AdditionalProperties,
     };
 
+    public override async Task<ActionResult<SensorGlucose>> Update(Guid id, [FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
+    {
+        var existing = await Repository.GetByIdAsync(id, ct);
+        if (existing is null)
+            return NotFound();
+
+        var model = MapUpdateToModel(id, request, existing);
+
+        if (model.Timestamp == default)
+            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+
+        await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
+
+        try
+        {
+            var updated = await Repository.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
     /// <summary>
     /// Create multiple sensor glucose readings in bulk (max 1000).
     /// </summary>
@@ -92,6 +132,10 @@ public class SensorGlucoseController(
             return Problem(detail: "Bulk operations are limited to 1000 readings per request", statusCode: 400, title: "Bad Request");
 
         var models = requests.Select(MapCreateToModel).ToList();
+
+        for (var i = 0; i < models.Count; i++)
+            await glucoseResolver.ResolveAsync(models[i], requests[i].GlucoseProcessing, requests[i].SmoothedMgdl, requests[i].UnsmoothedMgdl, ct);
+
         var created = await Repository.BulkCreateAsync(models, ct);
         var createdArray = created.ToArray();
 
