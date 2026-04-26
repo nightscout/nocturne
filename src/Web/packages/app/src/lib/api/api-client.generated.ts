@@ -40,6 +40,7 @@ import {
   DirectGrantClient,
   DiscrepancyClient,
   FoodsClient,
+  GlucoseProcessingSettingsClient,
   GuestLinkClient,
   HeartRateClient,
   HomeAssistantWebhookClient,
@@ -134,6 +135,7 @@ export class ApiClient {
   public readonly directGrant: DirectGrantClient;
   public readonly discrepancy: DiscrepancyClient;
   public readonly foodsV4: FoodsClient;
+  public readonly glucoseProcessingSettings: GlucoseProcessingSettingsClient;
   public readonly guestLink: GuestLinkClient;
   public readonly heartRate: HeartRateClient;
   public readonly homeAssistantWebhook: HomeAssistantWebhookClient;
@@ -228,6 +230,7 @@ export class ApiClient {
     this.directGrant = new DirectGrantClient(apiBaseUrl, http);
     this.discrepancy = new DiscrepancyClient(apiBaseUrl, http);
     this.foodsV4 = new FoodsClient(apiBaseUrl, http);
+    this.glucoseProcessingSettings = new GlucoseProcessingSettingsClient(apiBaseUrl, http);
     this.guestLink = new GuestLinkClient(apiBaseUrl, http);
     this.heartRate = new HeartRateClient(apiBaseUrl, http);
     this.homeAssistantWebhook = new HomeAssistantWebhookClient(apiBaseUrl, http);

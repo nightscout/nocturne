@@ -21,7 +21,6 @@ export const getAll = query(z.object({ from: z.coerce.date().optional(), to: z.c
   }
 });
 
-/** Creates a new record and returns it with a `Location` header pointing to the created resource. */
 export const create = form(UpsertSensorGlucoseRequestSchema as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -50,7 +49,6 @@ export const getById = query(z.string(), async (id) => {
   }
 });
 
-/** Updates an existing record by ID and returns the updated record. */
 export const update = form(z.object({ id: z.string(), request: UpsertSensorGlucoseRequestSchema }) as any, async ({ id, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {

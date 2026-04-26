@@ -211,6 +211,7 @@ msgstr ""
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
@@ -228,6 +229,7 @@ msgstr ""
 #: src/lib/components/settings/ConnectedApps.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 #: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
@@ -481,6 +483,8 @@ msgstr ""
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/compatibility/+page.svelte
 #: src/routes/profile/+page.svelte
 #: src/routes/profile/+page.svelte
@@ -617,6 +621,8 @@ msgstr ""
 msgid "Failed to load session"
 msgstr ""
 
+#: src/lib/components/layout/GuestBanner.svelte
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/stores/auth-store.svelte.ts
@@ -965,6 +971,7 @@ msgid "December"
 msgstr ""
 
 #: src/lib/components/calendar/CalendarHeader.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/calendar/+page.svelte
 msgid "Calendar"
@@ -1458,6 +1465,7 @@ msgstr ""
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/PendingInvitesList.svelte
@@ -1800,6 +1808,7 @@ msgstr ""
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(fullscreen)/setup/uploaders/+page.svelte
 #: src/routes/compatibility/+page.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1880,6 +1889,7 @@ msgstr ""
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/compatibility/+page.svelte
 #: src/routes/meals/+page.svelte
 #: src/routes/settings/admin/tenants/+page.svelte
@@ -2401,6 +2411,7 @@ msgstr ""
 
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/admin/SubjectEditDialog.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/settings/notifications/webhooks/WebhookSettingsModal.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
@@ -2916,6 +2927,7 @@ msgstr ""
 #~ msgid "Notes: {0}"
 #~ msgstr ""
 
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/rbac/PermissionPicker.svelte
 #: src/routes/(authenticated)/reports/+layout.svelte
@@ -3510,6 +3522,7 @@ msgstr ""
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -3534,9 +3547,10 @@ msgstr ""
 msgid "Active"
 msgstr ""
 
+#. placeholder {0}: formatDate(link.createdAt)
 #. placeholder {0}: new Date(face.createdAt).toLocaleDateString()
 #. placeholder {0}: tenant.sysCreatedAt ? new Date(tenant.sysCreatedAt).toLocaleDateString() : ""
-#. placeholder {0}: tenant.sysCreatedAt ? new Date(tenant.sysCreatedAt).toLocaleDateString() : ""
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/(authenticated)/tenants/+page.svelte
 #: src/routes/clock/+page.svelte
@@ -3644,6 +3658,8 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
@@ -3966,6 +3982,7 @@ msgstr ""
 msgid "<0/> Back to Dashboard"
 msgstr ""
 
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "Time Spans"
 msgstr ""
@@ -4481,6 +4498,7 @@ msgstr ""
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "Update"
 msgstr ""
 
@@ -4488,6 +4506,7 @@ msgstr ""
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -4611,6 +4630,7 @@ msgid "No GI level found."
 msgstr ""
 
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 msgid "Dashboard"
 msgstr ""
 
@@ -4650,6 +4670,7 @@ msgid "Day in Review"
 msgstr ""
 
 #: src/lib/components/dashboard/widgets/ClockWidget.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 msgid "Clock"
 msgstr ""
@@ -6141,6 +6162,8 @@ msgstr ""
 msgid "Activity"
 msgstr ""
 
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 msgid "Device"
 msgstr ""
@@ -7027,6 +7050,7 @@ msgstr ""
 #: src/lib/components/settings/CustomSoundUpload.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
@@ -7498,7 +7522,13 @@ msgstr ""
 
 #. placeholder {0}: table.getState().pagination.pageIndex + 1
 #. placeholder {1}: table.getPageCount()
+#. placeholder {0}: mutationsPage
+#. placeholder {1}: mutationsTotalPages
+#. placeholder {0}: readsPage
+#. placeholder {1}: readsTotalPages
 #: src/lib/components/treatments/DataTablePagination.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "Page {0} of {1}"
 msgstr ""
 
@@ -11965,6 +11995,7 @@ msgstr ""
 msgid "Failed to cancel migration"
 msgstr ""
 
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
@@ -12866,12 +12897,16 @@ msgid "Select a date range to re-sync specific data."
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "From"
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
 #: src/routes/settings/services/+page.svelte
 msgid "To"
@@ -14043,6 +14078,7 @@ msgstr ""
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/connectors/SyncResultCard.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
@@ -14273,8 +14309,9 @@ msgstr ""
 #~ msgid "Step 1"
 #~ msgstr ""
 
-#~ msgid "Configure"
-#~ msgstr ""
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Configure"
+msgstr ""
 
 #~ msgid ""
 #~ "Choose your setup type and configure your data sources through our\n"
@@ -15379,8 +15416,9 @@ msgstr ""
 msgid "<0/> Saving..."
 msgstr ""
 
-#~ msgid "<0/> Save Configuration"
-#~ msgstr ""
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "<0/> Save Configuration"
+msgstr ""
 
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
@@ -16736,6 +16774,7 @@ msgstr ""
 msgid "Failed to delete clock face"
 msgstr ""
 
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/clock/+page.svelte
 #: src/routes/studio/+page.svelte
@@ -21231,6 +21270,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
 #: src/routes/settings/setup/profile/+page.svelte
 msgid "Something went wrong. Please try again."
 msgstr ""
@@ -22768,6 +22808,7 @@ msgstr ""
 msgid "<0/> Verified"
 msgstr ""
 
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ConnectedApps.svelte
 #: src/routes/settings/sharing/+page.svelte
 msgid "<0/> Revoke"
@@ -22900,6 +22941,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/members/CreateInviteCard.svelte
+#: src/lib/components/members/GuestLinksSection.svelte
 #: src/routes/settings/members/+page.svelte
 #: src/routes/settings/sharing/+page.svelte
 msgid "<0/> Create Link"
@@ -23515,6 +23557,7 @@ msgstr ""
 
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
 msgid "<0/> Verifying..."
 msgstr ""
 
@@ -27669,6 +27712,9 @@ msgstr ""
 msgid "Listener"
 msgstr ""
 
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/FirstSync.svelte
 msgid "Endpoint"
 msgstr ""
@@ -28088,4 +28134,325 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "<0/> Create API key"
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Smoothed"
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "Source Default Rules"
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "Configure glucose processing defaults per uploading client. Rules are evaluated top-to-bottom; first match wins."
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "No rules configured."
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "Add a rule to set processing defaults based on the uploading client."
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "App"
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "Prefix to match..."
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Unsmoothed"
+msgstr ""
+
+#: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
+msgid "<0/> Add rule"
+msgstr ""
+
+#: src/lib/components/layout/GuestBanner.svelte
+msgid "Guest access — read only"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Audit Log"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "View data changes and access history for compliance."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "<0/> Audit Configuration"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Read Access Logging"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Read Log Retention (days)"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Unlimited"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Mutation Log Retention (days)"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Data Changes"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Data Access"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Entity Type"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Action"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Restore"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Subject"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Entity ID"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "IP Address"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Reason:"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Auth:"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Changes:"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "No mutation audit records found for the selected period."
+msgstr ""
+
+#. placeholder {0}: mutationsTotal
+#. placeholder {0}: readsTotal
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "{0} total records"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "25 / page"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "50 / page"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "100 / page"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Read audit is not enabled"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Enable read access logging to track who views patient data."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "<0/> Enable now"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Contact your admin to enable read audit logging."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Records"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "API Secret:"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "Query Parameters:"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/audit/+page.svelte
+msgid "No read access records found for the selected period."
+msgstr ""
+
+#: src/lib/components/rbac/PermissionPicker.svelte
+msgid "Audit"
+msgstr ""
+
+#: src/lib/components/rbac/PermissionPicker.svelte
+msgid "View Audit Logs"
+msgstr ""
+
+#: src/lib/components/rbac/PermissionPicker.svelte
+msgid "Manage Audit Settings"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Revoked"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Failed to create guest link. Please try again."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "<0/> Temporary Guest Links"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Share read-only access with someone who doesn't have an account"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "<0/> Create Guest Link"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Create Guest Link"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid ""
+"Generate a temporary code or link for read-only access. It expires in\n"
+"48 hours and can only be used once."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Guest link created successfully."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Code"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Link"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid ""
+"Share this code or link. It expires in 48 hours and can only be\n"
+"used once."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Who is this for?"
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "No guest links yet. Create one to share temporary read-only access."
+msgstr ""
+
+#. placeholder {0}: formatDate(link.expiresAt)
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Expires {0}"
+msgstr ""
+
+#. placeholder {0}: maskIp(link.activatedIp)
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Activated from {0}"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "<0/> Glucose Processing"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Choose how glucose values are displayed when both smoothed and unsmoothed readings are available"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Display preference"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid ""
+"This only affects values where both smoothed and unsmoothed readings are present.\n"
+"\"Default\" uses the value as reported by the data source."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Client upload source defaults"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "No source rules configured. All uploads use the default processing."
+msgstr ""
+
+#. placeholder {0}: sourceDefaults.length
+#. placeholder {1}: sourceDefaults.length === 1 ? '' : 's'
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "{0} rule{1} configured"
+msgstr ""
+
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+msgid "Invalid or expired code"
+msgstr ""
+
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+msgid "Guest Access - Nocturne"
+msgstr ""
+
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+msgid "Enter guest code"
+msgstr ""
+
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+msgid "Enter the code shared with you to view health data"
+msgstr ""
+
+#: src/routes/(unauthenticated)/guest/[[code]]/+page.svelte
+msgid "<0/> Access Data"
 msgstr ""

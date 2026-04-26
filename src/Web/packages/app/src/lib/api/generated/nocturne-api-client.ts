@@ -5205,6 +5205,155 @@ export class ClockFacesClient {
     }
 }
 
+export class GlucoseProcessingSettingsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    getPreference(signal?: AbortSignal): Promise<GlucoseProcessingPreferenceResponse> {
+        let url_ = this.baseUrl + "/api/v4/settings/glucose-processing/preference";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetPreference(_response);
+        });
+    }
+
+    protected processGetPreference(response: Response): Promise<GlucoseProcessingPreferenceResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as GlucoseProcessingPreferenceResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<GlucoseProcessingPreferenceResponse>(null as any);
+    }
+
+    setPreference(request: SetGlucoseProcessingPreferenceRequest, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/settings/glucose-processing/preference";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSetPreference(_response);
+        });
+    }
+
+    protected processSetPreference(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    getSourceDefaults(signal?: AbortSignal): Promise<GlucoseProcessingSourceDefaultsResponse> {
+        let url_ = this.baseUrl + "/api/v4/settings/glucose-processing/source-defaults";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetSourceDefaults(_response);
+        });
+    }
+
+    protected processGetSourceDefaults(response: Response): Promise<GlucoseProcessingSourceDefaultsResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as GlucoseProcessingSourceDefaultsResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<GlucoseProcessingSourceDefaultsResponse>(null as any);
+    }
+
+    setSourceDefaults(request: SetGlucoseProcessingSourceDefaultsRequest, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/settings/glucose-processing/source-defaults";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSetSourceDefaults(_response);
+        });
+    }
+
+    protected processSetSourceDefaults(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+}
+
 export class MyFitnessPalSettingsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -14877,10 +15026,6 @@ export class SensorGlucoseClient {
         return Promise.resolve<PaginatedResponseOfSensorGlucose>(null as any);
     }
 
-    /**
-     * Creates a new record and returns it with a `Location` header pointing to the created resource.
-     * @param request The data used to create the record.
-     */
     create(request: UpsertSensorGlucoseRequest, signal?: AbortSignal): Promise<SensorGlucose> {
         let url_ = this.baseUrl + "/api/v4/glucose/sensor";
         url_ = url_.replace(/[?&]$/, "");
@@ -14925,58 +15070,6 @@ export class SensorGlucoseClient {
         return Promise.resolve<SensorGlucose>(null as any);
     }
 
-    /**
-     * Create multiple sensor glucose readings in bulk (max 1000).
-     */
-    createSensorGlucoseBulk(requests: UpsertSensorGlucoseRequest[], signal?: AbortSignal): Promise<SensorGlucose[]> {
-        let url_ = this.baseUrl + "/api/v4/glucose/sensor/bulk";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(requests);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processCreateSensorGlucoseBulk(_response);
-        });
-    }
-
-    protected processCreateSensorGlucoseBulk(response: Response): Promise<SensorGlucose[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 201) {
-            return response.text().then((_responseText) => {
-            let result201: any = null;
-            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorGlucose[];
-            return result201;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<SensorGlucose[]>(null as any);
-    }
-
-    /**
-     * Updates an existing record by ID and returns the updated record.
-     * @param id The unique identifier of the record to update.
-     * @param request The data to apply to the existing record.
-     */
     update(id: string, request: UpsertSensorGlucoseRequest, signal?: AbortSignal): Promise<SensorGlucose> {
         let url_ = this.baseUrl + "/api/v4/glucose/sensor/{id}";
         if (id === undefined || id === null)
@@ -15119,6 +15212,53 @@ export class SensorGlucoseClient {
             });
         }
         return Promise.resolve<SensorGlucose>(null as any);
+    }
+
+    /**
+     * Create multiple sensor glucose readings in bulk (max 1000).
+     */
+    createSensorGlucoseBulk(requests: UpsertSensorGlucoseRequest[], signal?: AbortSignal): Promise<SensorGlucose[]> {
+        let url_ = this.baseUrl + "/api/v4/glucose/sensor/bulk";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(requests);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCreateSensorGlucoseBulk(_response);
+        });
+    }
+
+    protected processCreateSensorGlucoseBulk(response: Response): Promise<SensorGlucose[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 201) {
+            return response.text().then((_responseText) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorGlucose[];
+            return result201;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SensorGlucose[]>(null as any);
     }
 }
 
@@ -23860,6 +24000,8 @@ export interface Entry extends ProcessableDocumentBase {
     srvModified?: number | undefined;
     srvCreated?: number | undefined;
     subject?: string | undefined;
+
+    [key: string]: any;
 }
 
 export function isEntry(object: any): object is Entry {
@@ -24583,6 +24725,33 @@ export interface CreateClockFaceRequest {
 export interface UpdateClockFaceRequest {
     name?: string | undefined;
     config?: ClockFaceConfig | undefined;
+}
+
+export interface GlucoseProcessingPreferenceResponse {
+    preferredGlucoseProcessing?: string | undefined;
+}
+
+export interface SetGlucoseProcessingPreferenceRequest {
+    preferredGlucoseProcessing?: string | undefined;
+}
+
+export interface GlucoseProcessingSourceDefaultsResponse {
+    rules?: GlucoseProcessingSourceDefault[];
+}
+
+export interface GlucoseProcessingSourceDefault {
+    match?: string;
+    field?: string;
+    processing?: GlucoseProcessing;
+}
+
+export enum GlucoseProcessing {
+    Smoothed = "Smoothed",
+    Unsmoothed = "Unsmoothed",
+}
+
+export interface SetGlucoseProcessingSourceDefaultsRequest {
+    rules?: GlucoseProcessingSourceDefault[] | undefined;
 }
 
 export interface MyFitnessPalMatchingSettings {
@@ -26633,6 +26802,11 @@ export interface SensorGlucose {
     filtered?: number | undefined;
     unfiltered?: number | undefined;
     delta?: number | undefined;
+    glucoseProcessing?: GlucoseProcessing | undefined;
+    smoothedMgdl?: number | undefined;
+    smoothedMmol?: number | undefined;
+    unsmoothedMgdl?: number | undefined;
+    unsmoothedMmol?: number | undefined;
     additionalProperties?: { [key: string]: any; } | undefined;
 }
 
@@ -26688,6 +26862,13 @@ export interface UpsertSensorGlucoseRequest {
     unfiltered?: number | undefined;
     /** Glucose delta in mg/dL over the last 5 minutes */
     delta?: number | undefined;
+    /** Whether this glucose value is smoothed or unsmoothed.
+Accepted values: "Smoothed", "Unsmoothed". Case-insensitive. Null for unknown. */
+    glucoseProcessing?: string | undefined;
+    /** Smoothed glucose value in mg/dL, when known. */
+    smoothedMgdl?: number | undefined;
+    /** Unsmoothed (raw) glucose value in mg/dL, when known. */
+    unsmoothedMgdl?: number | undefined;
 }
 
 /** Top-level snapshot of all tenants and their associated identity/config data. Used for dev-only export/import of non-clinical setup state. */

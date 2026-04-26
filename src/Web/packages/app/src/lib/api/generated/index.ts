@@ -19,6 +19,7 @@ export * from './deduplications.generated.remote';
 export { testConnection, startMigration, startFromConnector, cancelMigration, getHistory, getPendingConfig, getSources } from './migrations.generated.remote';
 export { getConfigManaged, enable, disable, testExisting, testUnsaved } from './oidcProviderAdmins.generated.remote';
 // './clockFaces.generated.remote' - all exports collide, import directly
+export * from './glucoseProcessingSettings.generated.remote';
 export * from './profiles.generated.remote';
 export * from './userPreferences.generated.remote';
 export * from './services.generated.remote';

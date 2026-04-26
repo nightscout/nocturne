@@ -4848,6 +4848,102 @@
         ]
       }
     },
+    "/api/v4/settings/glucose-processing/preference": {
+      "get": {
+        "tags": [
+          "Glucose Processing Settings"
+        ],
+        "operationId": "GlucoseProcessingSettings_GetPreference",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlucoseProcessingPreferenceResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Glucose Processing Settings"
+        ],
+        "operationId": "GlucoseProcessingSettings_SetPreference",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGlucoseProcessingPreferenceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPreference"
+        ]
+      }
+    },
+    "/api/v4/settings/glucose-processing/source-defaults": {
+      "get": {
+        "tags": [
+          "Glucose Processing Settings"
+        ],
+        "operationId": "GlucoseProcessingSettings_GetSourceDefaults",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlucoseProcessingSourceDefaultsResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Glucose Processing Settings"
+        ],
+        "operationId": "GlucoseProcessingSettings_SetSourceDefaults",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGlucoseProcessingSourceDefaultsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSourceDefaults"
+        ]
+      }
+    },
     "/api/v4/connectors/myfitnesspal/settings": {
       "get": {
         "tags": [
@@ -13720,12 +13816,9 @@
         "tags": [
           "Sensor Glucose"
         ],
-        "summary": "Creates a new record and returns it with a `Location` header pointing to the created resource.",
-        "description": "`Timestamp` must be set on the mapped model; requests that resolve to a default timestamp are rejected with `400 Bad Request`.\n            \nOn success, responds with `201 Created` and a `Location` header containing the URL of the newly created record.",
         "operationId": "SensorGlucose_Create",
         "requestBody": {
           "x-name": "request",
-          "description": "The data used to create the record.",
           "content": {
             "application/json": {
               "schema": {
@@ -13761,69 +13854,17 @@
         "x-remote-type": "form"
       }
     },
-    "/api/v4/glucose/sensor/bulk": {
-      "post": {
-        "tags": [
-          "Sensor Glucose"
-        ],
-        "summary": "Create multiple sensor glucose readings in bulk (max 1000).",
-        "operationId": "SensorGlucose_CreateSensorGlucoseBulk",
-        "requestBody": {
-          "x-name": "requests",
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/UpsertSensorGlucoseRequest"
-                }
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SensorGlucose"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v4/glucose/sensor/{id}": {
       "put": {
         "tags": [
           "Sensor Glucose"
         ],
-        "summary": "Updates an existing record by ID and returns the updated record.",
-        "description": "Returns `404 Not Found` if no record with the given id exists.\n            \n`Timestamp` must be set on the mapped model; requests that resolve to a default timestamp are rejected with `400 Bad Request`.",
         "operationId": "SensorGlucose_Update",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "The unique identifier of the record to update.",
             "schema": {
               "type": "string",
               "format": "guid"
@@ -13833,7 +13874,6 @@
         ],
         "requestBody": {
           "x-name": "request",
-          "description": "The data to apply to the existing record.",
           "content": {
             "application/json": {
               "schema": {
@@ -13958,6 +13998,55 @@
           }
         },
         "x-remote-type": "query"
+      }
+    },
+    "/api/v4/glucose/sensor/bulk": {
+      "post": {
+        "tags": [
+          "Sensor Glucose"
+        ],
+        "summary": "Create multiple sensor glucose readings in bulk (max 1000).",
+        "operationId": "SensorGlucose_CreateSensorGlucoseBulk",
+        "requestBody": {
+          "x-name": "requests",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UpsertSensorGlucoseRequest"
+                }
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SensorGlucose"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v4/dev-only/admin/snapshot": {
@@ -23631,7 +23720,7 @@
           },
           {
             "type": "object",
-            "additionalProperties": false,
+            "additionalProperties": {},
             "properties": {
               "_id": {
                 "type": "string",
@@ -26205,6 +26294,78 @@
                 "$ref": "#/components/schemas/ClockFaceConfig"
               }
             ]
+          }
+        }
+      },
+      "GlucoseProcessingPreferenceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "preferredGlucoseProcessing": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SetGlucoseProcessingPreferenceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "preferredGlucoseProcessing": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "GlucoseProcessingSourceDefaultsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucoseProcessingSourceDefault"
+            }
+          }
+        }
+      },
+      "GlucoseProcessingSourceDefault": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "match": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "processing": {
+            "$ref": "#/components/schemas/GlucoseProcessing"
+          }
+        }
+      },
+      "GlucoseProcessing": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Smoothed",
+          "Unsmoothed"
+        ],
+        "enum": [
+          "Smoothed",
+          "Unsmoothed"
+        ]
+      },
+      "SetGlucoseProcessingSourceDefaultsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/GlucoseProcessingSourceDefault"
+            }
           }
         }
       },
@@ -32650,6 +32811,34 @@
             "format": "double",
             "nullable": true
           },
+          "glucoseProcessing": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseProcessing"
+              }
+            ]
+          },
+          "smoothedMgdl": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "smoothedMmol": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "unsmoothedMgdl": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "unsmoothedMmol": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "additionalProperties": {
             "type": "object",
             "nullable": true,
@@ -32785,6 +32974,23 @@
           "delta": {
             "type": "number",
             "description": "Glucose delta in mg/dL over the last 5 minutes",
+            "format": "double",
+            "nullable": true
+          },
+          "glucoseProcessing": {
+            "type": "string",
+            "description": "Whether this glucose value is smoothed or unsmoothed.\nAccepted values: \"Smoothed\", \"Unsmoothed\". Case-insensitive. Null for unknown.",
+            "nullable": true
+          },
+          "smoothedMgdl": {
+            "type": "number",
+            "description": "Smoothed glucose value in mg/dL, when known.",
+            "format": "double",
+            "nullable": true
+          },
+          "unsmoothedMgdl": {
+            "type": "number",
+            "description": "Unsmoothed (raw) glucose value in mg/dL, when known.",
             "format": "double",
             "nullable": true
           }
