@@ -116,7 +116,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDeduplicationService, DeduplicationService>();
 
         // Register all repositories via their port interfaces
-        services.AddScoped<IDeviceStatusRepository, DeviceStatusRepository>();
         services.AddScoped<IFoodRepository, FoodRepository>();
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
@@ -251,7 +250,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDeduplicationService, DeduplicationService>();
 
         // Register all repositories via their port interfaces
-        services.AddScoped<IDeviceStatusRepository, DeviceStatusRepository>();
         services.AddScoped<IFoodRepository, FoodRepository>();
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();

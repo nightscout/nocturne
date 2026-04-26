@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -13,14 +13,14 @@ namespace Nocturne.API.Controllers.V1;
 /// Based on the legacy pebble.js implementation.
 /// </summary>
 /// <seealso cref="IEntryService"/>
-/// <seealso cref="IDeviceStatusService"/>
+/// <seealso cref="DeviceStatusProjectionService"/>
 /// <seealso cref="ITreatmentService"/>
 [ApiController]
 [Route("")]
 public class PebbleController : ControllerBase
 {
     private readonly IEntryService _entryService;
-    private readonly IDeviceStatusService _deviceStatusService;
+    private readonly DeviceStatusProjectionService _projectionService;
     private readonly ITreatmentService _treatmentService;
     private readonly ILogger<PebbleController> _logger;
 
@@ -28,18 +28,18 @@ public class PebbleController : ControllerBase
     /// Initializes a new instance of <see cref="PebbleController"/>.
     /// </summary>
     /// <param name="entryService">Service for glucose entry retrieval.</param>
-    /// <param name="deviceStatusService">Service for device status retrieval.</param>
+    /// <param name="projectionService">Service for projecting device status from V4 snapshots.</param>
     /// <param name="treatmentService">Service for treatment data retrieval.</param>
     /// <param name="logger">Logger instance.</param>
     public PebbleController(
         IEntryService entryService,
-        IDeviceStatusService deviceStatusService,
+        DeviceStatusProjectionService projectionService,
         ITreatmentService treatmentService,
         ILogger<PebbleController> logger
     )
     {
         _entryService = entryService;
-        _deviceStatusService = deviceStatusService;
+        _projectionService = projectionService;
         _treatmentService = treatmentService;
         _logger = logger;
     }
@@ -76,7 +76,7 @@ public class PebbleController : ControllerBase
 
             // Fetch required data in parallel
             var entriesTask = _entryService.GetEntriesAsync(type: "sgv", count: count + 1, skip: 0, cancellationToken);
-            var deviceStatusTask = _deviceStatusService.GetDeviceStatusAsync(find: null, count: 1, skip: 0, cancellationToken: cancellationToken);
+            var deviceStatusTask = _projectionService.GetAsync(count: 1, skip: 0, find: null, ct: cancellationToken);
             var calsTask = _entryService.GetEntriesAsync(type: "cal", count: count, skip: 0, cancellationToken);
 
             await Task.WhenAll(entriesTask, deviceStatusTask, calsTask);

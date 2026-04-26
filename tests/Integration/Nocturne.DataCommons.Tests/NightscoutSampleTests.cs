@@ -351,43 +351,6 @@ public class NightscoutSampleTests
         failures.Should().BeEmpty("all device statuses should have identifying fields");
     }
 
-    [Fact]
-    public void AllDeviceStatuses_MapToEntity()
-    {
-        Assert.SkipWhen(_zipPath == null, "Sample data zip not found in .data/");
-
-        var failures = new List<string>();
-        var totalMapped = 0;
-
-        foreach (var (fileName, records) in NightscoutSampleReader.ReadCollection<DeviceStatus>(_zipPath!, "devicestatus"))
-        {
-            for (var i = 0; i < records.Length; i++)
-            {
-                try
-                {
-                    DeviceStatusMapper.ToEntity(records[i]);
-                    totalMapped++;
-                }
-                catch (Exception ex)
-                {
-                    failures.Add($"{fileName}[{i}] _id={records[i].Id}: {ex.GetType().Name}: {ex.Message}");
-                    if (failures.Count >= 50) break;
-                }
-            }
-            if (failures.Count >= 50) break;
-        }
-
-        _output.WriteLine($"Successfully mapped {totalMapped} device statuses");
-
-        if (failures.Count > 0)
-        {
-            _output.WriteLine($"Mapper failures ({failures.Count}):");
-            foreach (var f in failures) _output.WriteLine($"  {f}");
-        }
-
-        failures.Should().BeEmpty("all device statuses should map to database entities without throwing");
-    }
-
     // ========================================================================
     // Summary — runs last, provides aggregate stats
     // ========================================================================

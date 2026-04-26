@@ -1,5 +1,5 @@
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -8,21 +8,21 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 
 /// <summary>
 /// Publishes device status and device event data received from connectors into
-/// the Nocturne domain via <see cref="IDeviceStatusService"/> and <see cref="IDeviceEventRepository"/>.
+/// the Nocturne domain via <see cref="IDeviceStatusDecomposer"/> and <see cref="IDeviceEventRepository"/>.
 /// </summary>
 /// <seealso cref="IDevicePublisher"/>
 internal sealed class DevicePublisher : IDevicePublisher
 {
-    private readonly IDeviceStatusService _deviceStatusService;
+    private readonly IDeviceStatusDecomposer _decomposer;
     private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly ILogger<DevicePublisher> _logger;
 
     public DevicePublisher(
-        IDeviceStatusService deviceStatusService,
+        IDeviceStatusDecomposer decomposer,
         IDeviceEventRepository deviceEventRepository,
         ILogger<DevicePublisher> logger)
     {
-        _deviceStatusService = deviceStatusService ?? throw new ArgumentNullException(nameof(deviceStatusService));
+        _decomposer = decomposer ?? throw new ArgumentNullException(nameof(decomposer));
         _deviceEventRepository = deviceEventRepository ?? throw new ArgumentNullException(nameof(deviceEventRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -34,9 +34,10 @@ internal sealed class DevicePublisher : IDevicePublisher
     {
         try
         {
-            await _deviceStatusService.CreateDeviceStatusAsync(
-                deviceStatuses,
-                cancellationToken);
+            foreach (var ds in deviceStatuses)
+            {
+                await _decomposer.DecomposeAsync(ds, cancellationToken);
+            }
             return true;
         }
         catch (OperationCanceledException) { throw; }

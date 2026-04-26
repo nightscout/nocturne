@@ -600,38 +600,16 @@ internal class MigrationJob
             UpdateCollectionProgress(collectionName, knownTotal, 0, 0, false);
             UpdateOverallProgress();
 
+            using var scope = _serviceProvider.CreateScope();
+            var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
+
             foreach (var status in statuses)
             {
                 ct.ThrowIfCancellationRequested();
 
                 try
                 {
-                    var mills = status.Date ?? status.Mills;
-
-                    var exists = await dbContext.DeviceStatuses.AnyAsync(
-                        d => d.Mills == mills && d.Device == (status.Device ?? ""),
-                        ct
-                    );
-
-                    if (!exists)
-                    {
-                        dbContext.DeviceStatuses.Add(
-                            new Infrastructure.Data.Entities.DeviceStatusEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Mills = mills,
-                                CreatedAt = status.CreatedAt,
-                                Device = status.Device ?? "",
-                                IsCharging = status.IsCharging,
-                                UploaderJson = status.Uploader != null ? System.Text.Json.JsonSerializer.Serialize(status.Uploader) : null,
-                                PumpJson = status.Pump != null ? System.Text.Json.JsonSerializer.Serialize(status.Pump) : null,
-                                OpenApsJson = status.OpenAps != null ? System.Text.Json.JsonSerializer.Serialize(status.OpenAps) : null,
-                                LoopJson = status.Loop != null ? System.Text.Json.JsonSerializer.Serialize(status.Loop) : null,
-                                XDripJsJson = status.XDripJs != null ? System.Text.Json.JsonSerializer.Serialize(status.XDripJs) : null,
-                                OverrideJson = status.Override != null ? System.Text.Json.JsonSerializer.Serialize(status.Override) : null,
-                            }
-                        );
-                    }
+                    await decomposer.DecomposeAsync(status, ct);
                     totalMigrated++;
                     UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, false);
                     UpdateOverallProgress();
@@ -642,7 +620,6 @@ internal class MigrationJob
                 }
             }
 
-            await dbContext.SaveChangesAsync(ct);
             UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, true);
             UpdateOverallProgress();
         }
@@ -958,49 +935,27 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("date") ? doc["date"].ToInt64()
-            : doc.Contains("created_at")
-              && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
-                ? new DateTimeOffset(createdAt).ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // Convert BSON to JSON, then deserialize to DeviceStatus domain model and decompose
+        var jsonWriterSettings = new MongoDB.Bson.IO.JsonWriterSettings
+        {
+            OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson
+        };
+        var json = doc.ToJson(jsonWriterSettings);
+        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
 
-        var device = doc.Contains("device") ? doc["device"].AsString : "";
-
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.DeviceStatuses.AnyAsync(
-            d =>
-                (originalId != null && d.OriginalId == originalId)
-                || (d.Mills == mills && d.Device == device),
-            ct
-        );
-
-        if (exists)
+        if (status == null)
             return;
 
-        var entity = new Infrastructure.Data.Entities.DeviceStatusEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Mills = mills,
-            CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
-            Device = device,
-            IsCharging = doc.Contains("isCharging") ? doc["isCharging"].AsBoolean : null,
-            UploaderJson = doc.Contains("uploader") ? doc["uploader"].ToJson() : null,
-            PumpJson = doc.Contains("pump") ? doc["pump"].ToJson() : null,
-            OpenApsJson = doc.Contains("openaps") ? doc["openaps"].ToJson() : null,
-            LoopJson = doc.Contains("loop") ? doc["loop"].ToJson() : null,
-            XDripJsJson = doc.Contains("xdripjs") ? doc["xdripjs"].ToJson() : null,
-            RadioAdapterJson = doc.Contains("radioAdapter") ? doc["radioAdapter"].ToJson() : null,
-            ConnectJson = doc.Contains("connect") ? doc["connect"].ToJson() : null,
-            OverrideJson = doc.Contains("override") ? doc["override"].ToJson() : null,
-            CgmJson = doc.Contains("cgm") ? doc["cgm"].ToJson() : null,
-            MeterJson = doc.Contains("meter") ? doc["meter"].ToJson() : null,
-            InsulinPenJson = doc.Contains("insulinPen") ? doc["insulinPen"].ToJson() : null,
-        };
+        // Set the original ID from MongoDB _id
+        if (doc.Contains("_id"))
+            status.Id = doc["_id"].AsObjectId.ToString();
 
-        dbContext.DeviceStatuses.Add(entity);
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
+        await decomposer.DecomposeAsync(status, ct);
     }
 
     private async Task TransformProfileAsync(

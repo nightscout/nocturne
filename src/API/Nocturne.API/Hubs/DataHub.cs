@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
@@ -155,9 +155,9 @@ public class DataHub : TenantAwareHub
             var serviceProvider = Context.GetHttpContext()?.RequestServices;
             var entryService = serviceProvider?.GetService<IEntryService>();
             var treatmentService = serviceProvider?.GetService<ITreatmentService>();
-            var deviceStatusService = serviceProvider?.GetService<IDeviceStatusService>();
+            var projectionService = serviceProvider?.GetService<DeviceStatusProjectionService>();
 
-            if (entryService == null || treatmentService == null || deviceStatusService == null)
+            if (entryService == null || treatmentService == null || projectionService == null)
             {
                 _logger.LogWarning("Required services not available for retro data loading");
                 await Clients.Caller.SendAsync(
@@ -186,9 +186,11 @@ public class DataHub : TenantAwareHub
                 count: 1000
             );
 
-            var deviceStatuses = await deviceStatusService.GetDeviceStatusAsync(
-                find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
-                count: 1000
+            var deviceStatuses = await projectionService.GetAsync(
+                count: 1000,
+                skip: 0,
+                find: null,
+                ct: default
             );
 
             var retroData = new

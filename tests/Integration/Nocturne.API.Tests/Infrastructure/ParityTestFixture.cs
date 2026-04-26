@@ -101,7 +101,7 @@ public class ParityTestFixture : IAsyncLifetime
         db.ChangeTracker.Clear();
 
         // Use ExecuteDeleteAsync for efficient bulk deletion that bypasses EF tracking
-        await db.DeviceStatuses.ExecuteDeleteAsync(cancellationToken);
+        await db.ApsSnapshots.ExecuteDeleteAsync(cancellationToken);
         await db.Foods.ExecuteDeleteAsync(cancellationToken);
         await db.Settings.ExecuteDeleteAsync(cancellationToken);
         await db.StateSpans.ExecuteDeleteAsync(cancellationToken);

@@ -1,10 +1,12 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.HomeAssistant.Configurations;
 using Nocturne.Connectors.HomeAssistant.Services;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.HomeAssistant.WriteBack;
 
@@ -15,14 +17,19 @@ namespace Nocturne.Connectors.HomeAssistant.WriteBack;
 public class HomeAssistantWriteBackSink(
     IHomeAssistantApiClient apiClient,
     HomeAssistantConnectorConfiguration config,
-    IDeviceStatusService deviceStatusService,
+    IApsSnapshotRepository apsSnapshotRepository,
     ILogger<HomeAssistantWriteBackSink> logger) : IDataEventSink<Entry>
 {
     private static readonly TimeSpan StalenessThreshold = TimeSpan.FromMinutes(10);
 
-    // Cache the device status for the duration of one write-back cycle
-    private DeviceStatus? _cachedDeviceStatus;
-    private bool _deviceStatusFetched;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    // Cache the APS snapshot for the duration of one write-back cycle
+    private ApsSnapshot? _cachedApsSnapshot;
+    private bool _apsSnapshotFetched;
 
     public async Task OnCreatedAsync(Entry item, CancellationToken ct = default)
     {
@@ -37,8 +44,8 @@ public class HomeAssistantWriteBackSink(
             return;
 
         // Reset cache for this write-back cycle
-        _deviceStatusFetched = false;
-        _cachedDeviceStatus = null;
+        _apsSnapshotFetched = false;
+        _cachedApsSnapshot = null;
 
         if (config.WriteBackTypes.Contains(WriteBackDataType.Glucose))
             await PushGlucoseAsync(item, ct);
@@ -99,8 +106,8 @@ public class HomeAssistantWriteBackSink(
     {
         try
         {
-            var ds = await GetLatestDeviceStatusAsync(ct);
-            var iob = ds?.Loop?.Iob?.Iob ?? ds?.OpenAps?.Iob?.Iob;
+            var aps = await GetLatestApsSnapshotAsync(ct);
+            var iob = aps?.Iob;
             if (iob == null) return;
 
             var attributes = new Dictionary<string, object>
@@ -124,8 +131,8 @@ public class HomeAssistantWriteBackSink(
     {
         try
         {
-            var ds = await GetLatestDeviceStatusAsync(ct);
-            var cob = ds?.Loop?.Cob?.Cob ?? ds?.OpenAps?.Suggested?.COB;
+            var aps = await GetLatestApsSnapshotAsync(ct);
+            var cob = aps?.Cob;
             if (cob == null) return;
 
             var attributes = new Dictionary<string, object>
@@ -149,8 +156,15 @@ public class HomeAssistantWriteBackSink(
     {
         try
         {
-            var ds = await GetLatestDeviceStatusAsync(ct);
-            var predicted = ds?.Loop?.Predicted?.Values;
+            var aps = await GetLatestApsSnapshotAsync(ct);
+            // Parse predicted values from APS snapshot's default prediction curve
+            var predictedJson = aps?.PredictedDefaultJson;
+            double[]? predicted = null;
+            if (!string.IsNullOrEmpty(predictedJson))
+            {
+                try { predicted = JsonSerializer.Deserialize<double[]>(predictedJson, JsonOptions); }
+                catch (JsonException) { /* ignore malformed prediction data */ }
+            }
             if (predicted == null || predicted.Length == 0) return;
 
             // Last predicted value = eventual BG
@@ -179,11 +193,9 @@ public class HomeAssistantWriteBackSink(
     {
         try
         {
-            var ds = await GetLatestDeviceStatusAsync(ct);
-            var loop = ds?.Loop;
+            var aps = await GetLatestApsSnapshotAsync(ct);
 
-            var isEnacted = loop?.Enacted != null;
-            var state = isEnacted ? "enacted" : (loop != null ? "open" : "unknown");
+            var state = aps?.Enacted == true ? "enacted" : (aps != null ? "open" : "unknown");
 
             var attributes = new Dictionary<string, object>
             {
@@ -192,20 +204,12 @@ public class HomeAssistantWriteBackSink(
                 ["last_updated"] = DateTimeOffset.UtcNow.ToString("o")
             };
 
-            if (loop?.Enacted != null)
+            if (aps?.Enacted == true)
             {
-                if (loop.Enacted.Rate != null)
-                    attributes["enacted_rate"] = loop.Enacted.Rate;
-                if (loop.Enacted.Duration != null)
-                    attributes["enacted_duration"] = loop.Enacted.Duration;
-                if (loop.Enacted.Reason != null)
-                    attributes["reason"] = loop.Enacted.Reason;
-            }
-
-            if (loop?.FailureReason != null)
-            {
-                state = "failed";
-                attributes["failure_reason"] = loop.FailureReason;
+                if (aps.EnactedRate != null)
+                    attributes["enacted_rate"] = aps.EnactedRate;
+                if (aps.EnactedDuration != null)
+                    attributes["enacted_duration"] = aps.EnactedDuration;
             }
 
             await apiClient.SetStateAsync("sensor.nocturne_loop_status",
@@ -217,14 +221,16 @@ public class HomeAssistantWriteBackSink(
         }
     }
 
-    private async Task<DeviceStatus?> GetLatestDeviceStatusAsync(CancellationToken ct)
+    private async Task<ApsSnapshot?> GetLatestApsSnapshotAsync(CancellationToken ct)
     {
-        if (!_deviceStatusFetched)
+        if (!_apsSnapshotFetched)
         {
-            var statuses = await deviceStatusService.GetRecentDeviceStatusAsync(1, ct);
-            _cachedDeviceStatus = statuses.FirstOrDefault();
-            _deviceStatusFetched = true;
+            var snapshots = await apsSnapshotRepository.GetAsync(
+                from: null, to: null, device: null, source: null,
+                limit: 1, offset: 0, descending: true, ct: ct);
+            _cachedApsSnapshot = snapshots.FirstOrDefault();
+            _apsSnapshotFetched = true;
         }
-        return _cachedDeviceStatus;
+        return _cachedApsSnapshot;
     }
 }

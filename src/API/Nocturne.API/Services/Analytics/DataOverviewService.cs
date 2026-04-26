@@ -114,10 +114,11 @@ public class DataOverviewService : IDataOverviewService
             )
         );
 
-        // Tables without DataSource
+        // APS snapshots (V4 replacement for device statuses)
         minMaxResults.Add(
             await GetMinMaxMills(
-                _context.DeviceStatuses.Select(e => (long?)e.Mills),
+                _context.ApsSnapshots.Select(e =>
+                    (long?)new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()),
                 cancellationToken
             )
         );
@@ -368,14 +369,16 @@ public class DataOverviewService : IDataOverviewService
             cancellationToken
         );
 
-        // DeviceStatuses: has Mills but NO DataSource - skip when filter is active
+        // APS snapshots: V4 replacement for device statuses - skip when filter is active
         if (!hasFilter)
         {
-            await CollectCountsFromMillsTable(
+            var apsStartUtc = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
+            var apsEndUtc = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+            await CollectCountsFromTimestampTable(
                 "DeviceStatus",
                 _context
-                    .DeviceStatuses.Where(e => e.Mills >= startMills && e.Mills < endMills)
-                    .Select(e => e.Mills),
+                    .ApsSnapshots.Where(e => e.Timestamp >= apsStartUtc && e.Timestamp < apsEndUtc)
+                    .Select(e => e.Timestamp),
                 dayMap,
                 tz,
                 cancellationToken

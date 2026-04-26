@@ -532,7 +532,7 @@ public class StatusService : IStatusService
             .Select(t => (DateTime?)t.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
-        var deviceStatusTask = LastModifiedAsync(ctx => ctx.DeviceStatuses.AsNoTracking()
+        var deviceStatusTask = LastModifiedAsync(ctx => ctx.ApsSnapshots.AsNoTracking()
             .OrderByDescending(d => d.SysUpdatedAt)
             .Select(d => (DateTime?)d.SysUpdatedAt)
             .FirstOrDefaultAsync());

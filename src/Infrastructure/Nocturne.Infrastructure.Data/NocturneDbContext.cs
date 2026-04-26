@@ -37,11 +37,6 @@ public class NocturneDbContext : DbContext
     public IAuditContext? AuditContext { get; set; }
 
     /// <summary>
-    /// Gets or sets the DeviceStatuses table for device status information
-    /// </summary>
-    public DbSet<DeviceStatusEntity> DeviceStatuses { get; set; }
-
-    /// <summary>
     /// Gets or sets the Foods table for food database
     /// </summary>
     public DbSet<FoodEntity> Foods { get; set; }
@@ -530,30 +525,6 @@ public class NocturneDbContext : DbContext
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
     {
-        // DeviceStatus indexes
-        modelBuilder
-            .Entity<DeviceStatusEntity>()
-            .HasIndex(d => d.Mills)
-            .HasDatabaseName("ix_devicestatus_timestamp")
-            .IsDescending(); // Most recent first
-
-        modelBuilder
-            .Entity<DeviceStatusEntity>()
-            .HasIndex(d => d.Device)
-            .HasDatabaseName("ix_devicestatus_device");
-
-        modelBuilder
-            .Entity<DeviceStatusEntity>()
-            .HasIndex(d => new { d.Device, d.Mills })
-            .HasDatabaseName("ix_devicestatus_device_timestamp")
-            .IsDescending(false, true); // Device asc, Mills desc
-
-        // System tracking indexes for maintenance operations
-        modelBuilder
-            .Entity<DeviceStatusEntity>()
-            .HasIndex(d => d.SysCreatedAt)
-            .HasDatabaseName("ix_devicestatus_sys_created_at");
-
         // Food indexes - optimized for common queries
         modelBuilder.Entity<FoodEntity>().HasIndex(f => f.Name).HasDatabaseName("ix_foods_name");
 
@@ -1764,10 +1735,6 @@ public class NocturneDbContext : DbContext
     {
         // Configure UUID Version 7 value generators for all entity primary keys
         modelBuilder
-            .Entity<DeviceStatusEntity>()
-            .Property(d => d.Id)
-            .HasValueGenerator<GuidV7ValueGenerator>();
-        modelBuilder
             .Entity<FoodEntity>()
             .Property(f => f.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
@@ -2123,12 +2090,6 @@ public class NocturneDbContext : DbContext
 
         // Configure automatic timestamp updates
         modelBuilder
-            .Entity<DeviceStatusEntity>()
-            .Property(d => d.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
-
-        modelBuilder
             .Entity<FoodEntity>()
             .Property(f => f.SysUpdatedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP")
@@ -2223,31 +2184,6 @@ public class NocturneDbContext : DbContext
 
         // Settings defaults
         modelBuilder.Entity<SettingsEntity>().Property(s => s.IsActive).HasDefaultValue(true);
-
-        // Configure DeviceStatus JSON fields with default empty objects
-        foreach (
-            var jsonProperty in new[]
-            {
-                nameof(DeviceStatusEntity.UploaderJson),
-                nameof(DeviceStatusEntity.PumpJson),
-                nameof(DeviceStatusEntity.OpenApsJson),
-                nameof(DeviceStatusEntity.LoopJson),
-                nameof(DeviceStatusEntity.XDripJsJson),
-                nameof(DeviceStatusEntity.RadioAdapterJson),
-                nameof(DeviceStatusEntity.ConnectJson),
-                nameof(DeviceStatusEntity.OverrideJson),
-                nameof(DeviceStatusEntity.CgmJson),
-                nameof(DeviceStatusEntity.MeterJson),
-                nameof(DeviceStatusEntity.InsulinPenJson),
-            }
-        )
-        {
-            modelBuilder
-                .Entity<DeviceStatusEntity>()
-                .Property(jsonProperty)
-                .HasDefaultValue("null");
-        }
-
 
         // Configure RefreshToken entity relationships and defaults
         modelBuilder.Entity<RefreshTokenEntity>(entity =>
@@ -2838,15 +2774,7 @@ public class NocturneDbContext : DbContext
                 }
             }
 
-            if (entry.Entity is DeviceStatusEntity deviceStatusEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    deviceStatusEntity.SysCreatedAt = utcNow;
-                }
-                deviceStatusEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is FoodEntity foodEntity)
+            if (entry.Entity is FoodEntity foodEntity)
             {
                 if (entry.State == EntityState.Added)
                 {

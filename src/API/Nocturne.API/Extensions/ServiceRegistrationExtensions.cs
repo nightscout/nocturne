@@ -391,7 +391,6 @@ public static class ServiceRegistrationExtensions
         });
         services.AddScoped<IStateSpanService, StateSpanService>();
         services.AddScoped<DeviceStatusProjectionService>();
-        services.AddScoped<IDeviceStatusService, DeviceStatusService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>
             new CompositeDataEventSink<DeviceStatus>(
                 [sp.GetRequiredService<NightscoutDeviceStatusWriteBackSink>()],

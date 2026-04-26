@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -37,7 +37,7 @@ public class RetrospectiveController : ControllerBase
     private readonly ICobService _cobService;
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
-    private readonly IDeviceStatusService _deviceStatusService;
+    private readonly DeviceStatusProjectionService _projectionService;
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly ILogger<RetrospectiveController> _logger;
     public RetrospectiveController(
@@ -45,7 +45,7 @@ public class RetrospectiveController : ControllerBase
         ICobService cobService,
         IEntryService entryService,
         ITreatmentService treatmentService,
-        IDeviceStatusService deviceStatusService,
+        DeviceStatusProjectionService projectionService,
         IBasalRateResolver basalRateResolver,
         ILogger<RetrospectiveController> logger
     )
@@ -54,7 +54,7 @@ public class RetrospectiveController : ControllerBase
         _cobService = cobService;
         _entryService = entryService;
         _treatmentService = treatmentService;
-        _deviceStatusService = deviceStatusService;
+        _projectionService = projectionService;
         _basalRateResolver = basalRateResolver;
         _logger = logger;
     }
@@ -232,10 +232,11 @@ public class RetrospectiveController : ControllerBase
                 .Where(t => t.Mills >= fetchStartMills && t.Mills <= endMills)
                 .ToList() ?? new List<Treatment>();
             // Get device status
-            var deviceStatus = await _deviceStatusService.GetDeviceStatusAsync(
+            var deviceStatus = await _projectionService.GetAsync(
                 count: 500,
                 skip: 0,
-                cancellationToken: cancellationToken
+                find: null,
+                ct: cancellationToken
             );
             var deviceStatusList = deviceStatus?
                 .Where(d => d.Mills >= startMills && d.Mills <= endMills)

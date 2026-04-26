@@ -14,6 +14,7 @@ using Nocturne.Tests.Shared.Mocks;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -761,11 +762,14 @@ public class StatusServiceTests
             }
         );
 
-        context.DeviceStatuses.Add(
-            new DeviceStatusEntity
+        context.ApsSnapshots.Add(
+            new ApsSnapshotEntity
             {
                 Id = Guid.CreateVersion7(),
                 Device = "dexcom",
+                AidAlgorithm = "OpenAPS",
+                Timestamp = now.AddMinutes(-2),
+                SysCreatedAt = now.AddMinutes(-2),
                 SysUpdatedAt = now.AddMinutes(-2),
             }
         );

@@ -66,14 +66,14 @@ public class DataSourceService : IDataSourceService
             })
             .ToListAsync(cancellationToken);
 
-        // Also check device status for devices that might not have entries
-        var thirtyDaysAgoMills = now.AddDays(-30).ToUnixTimeMilliseconds();
+        // Also check APS snapshots for devices that might not have entries
+        var thirtyDaysAgo = now.AddDays(-30).UtcDateTime;
         var deviceStatusDevices = await _context
-            .DeviceStatuses.Where(ds =>
-                ds.Mills >= thirtyDaysAgoMills && ds.Device != null && ds.Device != ""
+            .ApsSnapshots.Where(ds =>
+                ds.Timestamp >= thirtyDaysAgo && ds.Device != null && ds.Device != ""
             )
             .GroupBy(ds => ds.Device)
-            .Select(g => new { Device = g.Key!, LastMills = g.Max(ds => ds.Mills) })
+            .Select(g => new { Device = g.Key!, LastMills = new DateTimeOffset(g.Max(ds => ds.Timestamp), TimeSpan.Zero).ToUnixTimeMilliseconds() })
             .ToListAsync(cancellationToken);
 
         var dataSources = new List<DataSourceInfo>();
@@ -561,7 +561,7 @@ public class DataSourceService : IDataSourceService
         if (stateSpansCount > 0) counts["StateSpans"] = stateSpansCount;
 
         var deviceStatusCount = await _context
-            .DeviceStatuses.Where(ds => ds.Device == deviceId)
+            .ApsSnapshots.Where(ds => ds.Device == deviceId)
             .LongCountAsync(cancellationToken);
         if (deviceStatusCount > 0) counts["DeviceStatus"] = deviceStatusCount;
 
@@ -628,7 +628,7 @@ public class DataSourceService : IDataSourceService
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deviceStatusDeleted = await _context
-                .DeviceStatuses.Where(ds => ds.Device == deviceId)
+                .ApsSnapshots.Where(ds => ds.Device == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var stateSpansDeleted = await _context
@@ -761,7 +761,7 @@ public class DataSourceService : IDataSourceService
 
             // Delete device status by device
             var deviceStatusDeleted = await _context
-                .DeviceStatuses.Where(ds => ds.Device == deviceId)
+                .ApsSnapshots.Where(ds => ds.Device == deviceId)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var stateSpansDeleted = await _context
@@ -835,9 +835,9 @@ public class DataSourceService : IDataSourceService
             treatmentsDeleted += await _context.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
             treatmentsDeleted += await _context.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
 
-            // Delete device status - demo data uses the demo-service device
+            // Delete APS snapshots - demo data uses the demo-service device
             var deviceStatusDeleted = await _context
-                .DeviceStatuses.Where(ds => ds.Device == DataSources.DemoService)
+                .ApsSnapshots.Where(ds => ds.Device == DataSources.DemoService)
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();
@@ -961,11 +961,11 @@ public class DataSourceService : IDataSourceService
             : 0;
 
         var deviceStatusTotal = await _context
-            .DeviceStatuses.Where(ds => ds.Device == dataSource)
+            .ApsSnapshots.Where(ds => ds.Device == dataSource)
             .LongCountAsync(cancellationToken);
         var deviceStatus24h = deviceStatusTotal > 0
-            ? await _context.DeviceStatuses
-                .Where(ds => ds.Device == dataSource && ds.Mills >= oneDayAgo)
+            ? await _context.ApsSnapshots
+                .Where(ds => ds.Device == dataSource && ds.Timestamp >= DateTimeOffset.FromUnixTimeMilliseconds(oneDayAgo).UtcDateTime)
                 .CountAsync(cancellationToken)
             : 0;
 

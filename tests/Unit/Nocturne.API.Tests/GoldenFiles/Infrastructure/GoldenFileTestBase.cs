@@ -90,17 +90,6 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
         await db.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Seed device status entities directly into the SQLite database.
-    /// </summary>
-    protected async Task SeedDeviceStatuses(params DeviceStatusEntity[] statuses)
-    {
-        using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        db.DeviceStatuses.AddRange(statuses);
-        await db.SaveChangesAsync();
-    }
 
     /// <summary>
     /// Seed food entities directly into the SQLite database.

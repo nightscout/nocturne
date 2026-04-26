@@ -5,8 +5,9 @@ using Nocturne.Connectors.HomeAssistant.Configurations;
 using Nocturne.Connectors.HomeAssistant.Services;
 using Nocturne.Connectors.HomeAssistant.WriteBack;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.HomeAssistant.Tests.WriteBack;
@@ -14,7 +15,7 @@ namespace Nocturne.Connectors.HomeAssistant.Tests.WriteBack;
 public class HomeAssistantWriteBackSinkTests
 {
     private readonly Mock<IHomeAssistantApiClient> _apiClientMock = new();
-    private readonly Mock<IDeviceStatusService> _deviceStatusServiceMock = new();
+    private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepoMock = new();
     private readonly Mock<ILogger<HomeAssistantWriteBackSink>> _loggerMock = new();
 
     private HomeAssistantWriteBackSink CreateSink(
@@ -28,7 +29,7 @@ public class HomeAssistantWriteBackSinkTests
         };
 
         return new HomeAssistantWriteBackSink(
-            _apiClientMock.Object, config, _deviceStatusServiceMock.Object, _loggerMock.Object);
+            _apiClientMock.Object, config, _apsSnapshotRepoMock.Object, _loggerMock.Object);
     }
 
     private static Entry CreateRecentEntry(double sgv = 120, string direction = "Flat")
@@ -51,15 +52,15 @@ public class HomeAssistantWriteBackSinkTests
         };
     }
 
-    private void SetupDeviceStatus(DeviceStatus? deviceStatus)
+    private void SetupApsSnapshot(ApsSnapshot? snapshot)
     {
-        var statuses = deviceStatus != null
-            ? new List<DeviceStatus> { deviceStatus }
-            : new List<DeviceStatus>();
+        var snapshots = snapshot != null
+            ? new List<ApsSnapshot> { snapshot }
+            : new List<ApsSnapshot>();
 
-        _deviceStatusServiceMock
-            .Setup(x => x.GetRecentDeviceStatusAsync(1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(statuses);
+        _apsSnapshotRepoMock
+            .Setup(x => x.GetAsync(null, null, null, null, 1, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshots);
     }
 
     [Fact]
@@ -92,7 +93,7 @@ public class HomeAssistantWriteBackSinkTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WhenEntryIsStale_DoesNothing()
+    public async Task OnCreatedAsync_WhenStaleEntry_Skips()
     {
         var sink = CreateSink();
         var entry = CreateStaleEntry();
@@ -106,7 +107,7 @@ public class HomeAssistantWriteBackSinkTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WhenGlucoseEnabled_PushesGlucoseState()
+    public async Task OnCreatedAsync_PushesGlucoseWithCorrectAttributes()
     {
         _apiClientMock
             .Setup(x => x.SetStateAsync(It.IsAny<string>(), It.IsAny<string>(),
@@ -114,7 +115,7 @@ public class HomeAssistantWriteBackSinkTests
             .ReturnsAsync(true);
 
         var sink = CreateSink(writeBackTypes: [WriteBackDataType.Glucose]);
-        var entry = CreateRecentEntry(sgv: 145, direction: "FortyFiveUp");
+        var entry = CreateRecentEntry(145, "FortyFiveUp");
 
         await sink.OnCreatedAsync(entry);
 
@@ -132,10 +133,7 @@ public class HomeAssistantWriteBackSinkTests
     [Fact]
     public async Task OnCreatedAsync_WhenGlucoseNotInWriteBackTypes_SkipsGlucose()
     {
-        SetupDeviceStatus(new DeviceStatus
-        {
-            Loop = new LoopStatus { Iob = new LoopIob { Iob = 2.5 } }
-        });
+        SetupApsSnapshot(new ApsSnapshot { Iob = 2.5 });
 
         _apiClientMock
             .Setup(x => x.SetStateAsync(It.IsAny<string>(), It.IsAny<string>(),
@@ -159,10 +157,7 @@ public class HomeAssistantWriteBackSinkTests
     [Fact]
     public async Task OnCreatedAsync_IndividualFailureDoesNotBlockOthers()
     {
-        SetupDeviceStatus(new DeviceStatus
-        {
-            Loop = new LoopStatus { Iob = new LoopIob { Iob = 1.0 } }
-        });
+        SetupApsSnapshot(new ApsSnapshot { Iob = 1.0 });
 
         _apiClientMock
             .Setup(x => x.SetStateAsync(
@@ -236,15 +231,9 @@ public class HomeAssistantWriteBackSinkTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WhenIobEnabled_PushesIobFromDeviceStatus()
+    public async Task OnCreatedAsync_WhenIobEnabled_PushesIobFromApsSnapshot()
     {
-        SetupDeviceStatus(new DeviceStatus
-        {
-            Loop = new LoopStatus
-            {
-                Iob = new LoopIob { Iob = 2.55 }
-            }
-        });
+        SetupApsSnapshot(new ApsSnapshot { Iob = 2.55 });
 
         _apiClientMock
             .Setup(x => x.SetStateAsync(It.IsAny<string>(), It.IsAny<string>(),
@@ -268,45 +257,9 @@ public class HomeAssistantWriteBackSinkTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WhenIobEnabled_FallsBackToOpenAps()
+    public async Task OnCreatedAsync_WhenCobEnabled_PushesCobFromApsSnapshot()
     {
-        SetupDeviceStatus(new DeviceStatus
-        {
-            OpenAps = new OpenApsStatus
-            {
-                Iob = new OpenApsIobData { Iob = 3.14 }
-            }
-        });
-
-        _apiClientMock
-            .Setup(x => x.SetStateAsync(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<Dictionary<string, object>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        var sink = CreateSink(writeBackTypes: [WriteBackDataType.Iob]);
-        var entry = CreateRecentEntry();
-
-        await sink.OnCreatedAsync(entry);
-
-        _apiClientMock.Verify(
-            x => x.SetStateAsync(
-                "sensor.nocturne_iob",
-                "3.14",
-                It.Is<Dictionary<string, object>>(d => d["unit_of_measurement"].Equals("U")),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task OnCreatedAsync_WhenCobEnabled_PushesCobFromDeviceStatus()
-    {
-        SetupDeviceStatus(new DeviceStatus
-        {
-            Loop = new LoopStatus
-            {
-                Cob = new LoopCob { Cob = 45.3 }
-            }
-        });
+        SetupApsSnapshot(new ApsSnapshot { Cob = 45.3 });
 
         _apiClientMock
             .Setup(x => x.SetStateAsync(It.IsAny<string>(), It.IsAny<string>(),
@@ -332,15 +285,9 @@ public class HomeAssistantWriteBackSinkTests
     [Fact]
     public async Task OnCreatedAsync_WhenPredictedBgEnabled_PushesEventualBg()
     {
-        SetupDeviceStatus(new DeviceStatus
+        SetupApsSnapshot(new ApsSnapshot
         {
-            Loop = new LoopStatus
-            {
-                Predicted = new LoopPredicted
-                {
-                    Values = [120.0, 115.0, 110.0, 105.0, 100.0]
-                }
-            }
+            PredictedDefaultJson = "[120.0, 115.0, 110.0, 105.0, 100.0]"
         });
 
         _apiClientMock
@@ -367,17 +314,11 @@ public class HomeAssistantWriteBackSinkTests
     [Fact]
     public async Task OnCreatedAsync_WhenLoopStatusEnabled_PushesEnactedState()
     {
-        SetupDeviceStatus(new DeviceStatus
+        SetupApsSnapshot(new ApsSnapshot
         {
-            Loop = new LoopStatus
-            {
-                Enacted = new LoopEnacted
-                {
-                    Rate = 1.5,
-                    Duration = 30,
-                    Reason = "High BG"
-                }
-            }
+            Enacted = true,
+            EnactedRate = 1.5,
+            EnactedDuration = 30
         });
 
         _apiClientMock
@@ -396,22 +337,15 @@ public class HomeAssistantWriteBackSinkTests
                 "enacted",
                 It.Is<Dictionary<string, object>>(d =>
                     d["enacted_rate"].Equals(1.5) &&
-                    d["enacted_duration"].Equals(30) &&
-                    d["reason"].Equals("High BG")),
+                    d["enacted_duration"].Equals(30)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WhenLoopFailed_PushesFailedState()
+    public async Task OnCreatedAsync_WhenLoopNotEnacted_PushesOpenState()
     {
-        SetupDeviceStatus(new DeviceStatus
-        {
-            Loop = new LoopStatus
-            {
-                FailureReason = "Pump unreachable"
-            }
-        });
+        SetupApsSnapshot(new ApsSnapshot { Enacted = false });
 
         _apiClientMock
             .Setup(x => x.SetStateAsync(It.IsAny<string>(), It.IsAny<string>(),
@@ -426,17 +360,16 @@ public class HomeAssistantWriteBackSinkTests
         _apiClientMock.Verify(
             x => x.SetStateAsync(
                 "sensor.nocturne_loop_status",
-                "failed",
-                It.Is<Dictionary<string, object>>(d =>
-                    d["failure_reason"].Equals("Pump unreachable")),
+                "open",
+                It.IsAny<Dictionary<string, object>>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task OnCreatedAsync_WhenNoDeviceStatus_SkipsComputedPushes()
+    public async Task OnCreatedAsync_WhenNoApsSnapshot_SkipsComputedPushes()
     {
-        SetupDeviceStatus(null);
+        SetupApsSnapshot(null);
 
         var sink = CreateSink(writeBackTypes:
         [
@@ -474,7 +407,7 @@ public class HomeAssistantWriteBackSinkTests
                 It.IsAny<CancellationToken>()),
             Times.Never);
 
-        // Loop status still pushes "unknown" when no device status
+        // Loop status still pushes "unknown" when no APS snapshot
         _apiClientMock.Verify(
             x => x.SetStateAsync(
                 "sensor.nocturne_loop_status",
@@ -485,17 +418,16 @@ public class HomeAssistantWriteBackSinkTests
     }
 
     [Fact]
-    public async Task OnCreatedAsync_CachesDeviceStatusAcrossPushes()
+    public async Task OnCreatedAsync_CachesApsSnapshotAcrossPushes()
     {
-        SetupDeviceStatus(new DeviceStatus
+        SetupApsSnapshot(new ApsSnapshot
         {
-            Loop = new LoopStatus
-            {
-                Iob = new LoopIob { Iob = 2.0 },
-                Cob = new LoopCob { Cob = 30.0 },
-                Predicted = new LoopPredicted { Values = [120.0, 110.0] },
-                Enacted = new LoopEnacted { Rate = 1.0, Duration = 30 }
-            }
+            Iob = 2.0,
+            Cob = 30.0,
+            PredictedDefaultJson = "[120.0, 110.0]",
+            Enacted = true,
+            EnactedRate = 1.0,
+            EnactedDuration = 30
         });
 
         _apiClientMock
@@ -520,9 +452,9 @@ public class HomeAssistantWriteBackSinkTests
                 It.IsAny<Dictionary<string, object>>(), It.IsAny<CancellationToken>()),
             Times.Exactly(4));
 
-        // But GetRecentDeviceStatusAsync called only once (cached)
-        _deviceStatusServiceMock.Verify(
-            x => x.GetRecentDeviceStatusAsync(1, It.IsAny<CancellationToken>()),
+        // But GetAsync called only once (cached)
+        _apsSnapshotRepoMock.Verify(
+            x => x.GetAsync(null, null, null, null, 1, 0, true, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

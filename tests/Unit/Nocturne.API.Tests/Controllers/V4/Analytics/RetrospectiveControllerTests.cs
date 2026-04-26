@@ -4,11 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -22,9 +24,19 @@ public class RetrospectiveControllerTests
     private readonly Mock<ICobService> _cobServiceMock = new();
     private readonly Mock<IEntryService> _entryServiceMock = new();
     private readonly Mock<ITreatmentService> _treatmentServiceMock = new();
-    private readonly Mock<IDeviceStatusService> _deviceStatusServiceMock = new();
     private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
     private readonly Mock<ILogger<RetrospectiveController>> _loggerMock = new();
+
+    private static DeviceStatusProjectionService CreateProjectionService()
+    {
+        return new DeviceStatusProjectionService(
+            new Mock<IApsSnapshotRepository>().Object,
+            new Mock<IPumpSnapshotRepository>().Object,
+            new Mock<IUploaderSnapshotRepository>().Object,
+            new Mock<IStateSpanRepository>().Object,
+            new Mock<IDeviceStatusExtrasRepository>().Object,
+            new Mock<ILogger<DeviceStatusProjectionService>>().Object);
+    }
 
     private RetrospectiveController CreateController()
     {
@@ -33,7 +45,7 @@ public class RetrospectiveControllerTests
             _cobServiceMock.Object,
             _entryServiceMock.Object,
             _treatmentServiceMock.Object,
-            _deviceStatusServiceMock.Object,
+            CreateProjectionService(),
             _basalRateResolverMock.Object,
             _loggerMock.Object);
 
@@ -68,14 +80,6 @@ public class RetrospectiveControllerTests
                 It.IsAny<int>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Treatment>());
-
-        _deviceStatusServiceMock
-            .Setup(s => s.GetDeviceStatusAsync(
-                It.IsAny<string?>(),
-                It.IsAny<int?>(),
-                It.IsAny<int?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<DeviceStatus>());
 
         _iobServiceMock
             .Setup(s => s.CalculateTotalAsync(

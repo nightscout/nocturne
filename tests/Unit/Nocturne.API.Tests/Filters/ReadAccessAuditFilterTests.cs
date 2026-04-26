@@ -267,10 +267,10 @@ public class ReadAccessAuditFilterTests
     [Fact]
     public void ExtractResultMetadata_Collection_ReturnsCountAndType()
     {
-        var list = new List<DeviceStatusEntity> { new(), new(), new() };
+        var list = new List<ApsSnapshotEntity> { new(), new(), new() };
         var (count, type) = ReadAccessAuditFilter.ExtractResultMetadata(new ObjectResult(list));
         count.Should().Be(3);
-        type.Should().Be("DeviceStatusEntity");
+        type.Should().Be("ApsSnapshotEntity");
     }
 
     #endregion

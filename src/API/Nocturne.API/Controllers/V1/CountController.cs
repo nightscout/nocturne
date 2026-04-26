@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -14,7 +15,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IEntryStore"/>
 /// <seealso cref="ITreatmentStore"/>
-/// <seealso cref="IDeviceStatusRepository"/>
+/// <seealso cref="IApsSnapshotRepository"/>
 /// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IActivityService"/>
@@ -24,7 +25,7 @@ public class CountController : ControllerBase
 {
     private readonly IEntryStore _entryStore;
     private readonly ITreatmentStore _treatmentStore;
-    private readonly IDeviceStatusRepository _deviceStatusRepository;
+    private readonly IApsSnapshotRepository _apsSnapshotRepository;
     private readonly IProfileProjectionService _profileProjectionService;
     private readonly IFoodRepository _foodRepository;
     private readonly IActivityService _activityService;
@@ -35,7 +36,7 @@ public class CountController : ControllerBase
     /// </summary>
     /// <param name="entryStore">Store for glucose entry records.</param>
     /// <param name="treatmentStore">Store for treatment records.</param>
-    /// <param name="deviceStatusRepository">Repository for device status records.</param>
+    /// <param name="apsSnapshotRepository">Repository for APS snapshot records (V4 replacement for device status).</param>
     /// <param name="profileProjectionService">Service for profile projection and counting.</param>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="activityService">Service for activity operations.</param>
@@ -43,7 +44,7 @@ public class CountController : ControllerBase
     public CountController(
         IEntryStore entryStore,
         ITreatmentStore treatmentStore,
-        IDeviceStatusRepository deviceStatusRepository,
+        IApsSnapshotRepository apsSnapshotRepository,
         IProfileProjectionService profileProjectionService,
         IFoodRepository foodRepository,
         IActivityService activityService,
@@ -52,7 +53,7 @@ public class CountController : ControllerBase
     {
         _entryStore = entryStore;
         _treatmentStore = treatmentStore;
-        _deviceStatusRepository = deviceStatusRepository;
+        _apsSnapshotRepository = apsSnapshotRepository;
         _profileProjectionService = profileProjectionService;
         _foodRepository = foodRepository;
         _activityService = activityService;
@@ -173,7 +174,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _deviceStatusRepository.CountDeviceStatusAsync(find, cancellationToken);
+            var count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);
 
             _logger.LogDebug("Found {Count} device status entries matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -301,10 +302,7 @@ public class CountController : ControllerBase
                     count = await _treatmentStore.CountAsync(find, cancellationToken);
                     break;
                 case "devicestatus":
-                    count = await _deviceStatusRepository.CountDeviceStatusAsync(
-                        find,
-                        cancellationToken
-                    );
+                    count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);
                     break;
                 case "profile":
                     count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);

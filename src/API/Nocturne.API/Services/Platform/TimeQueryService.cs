@@ -4,7 +4,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.API.Services.Devices;
 
 namespace Nocturne.API.Services.Platform;
 
@@ -21,14 +21,14 @@ public class TimeQueryService : ITimeQueryService
 
     private readonly IEntryService _entries;
     private readonly ITreatmentService _treatments;
-    private readonly IDeviceStatusRepository _deviceStatuses;
+    private readonly DeviceStatusProjectionService _deviceStatuses;
     private readonly IBraceExpansionService _braceExpansionService;
     private readonly ILogger<TimeQueryService> _logger;
 
     public TimeQueryService(
         IEntryService entries,
         ITreatmentService treatments,
-        IDeviceStatusRepository deviceStatuses,
+        DeviceStatusProjectionService deviceStatuses,
         IBraceExpansionService braceExpansionService,
         ILogger<TimeQueryService> logger
     )
@@ -176,11 +176,11 @@ public class TimeQueryService : ITimeQueryService
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetDeviceStatusWithAdvancedFilterAsync(
+                await _deviceStatuses.GetAsync(
                     count: 1000,
                     skip: 0,
-                    findQuery: findQuery,
-                    cancellationToken: cancellationToken
+                    find: findQuery,
+                    ct: cancellationToken
                 )
             ).Select(ds => ConvertDeviceStatusToEntry(ds)),
             _ => throw new ArgumentException($"Unsupported storage type: {storage}"),
@@ -266,11 +266,11 @@ public class TimeQueryService : ITimeQueryService
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetDeviceStatusWithAdvancedFilterAsync(
+                await _deviceStatuses.GetAsync(
                     count: 1000,
                     skip: 0,
-                    findQuery: findQuery,
-                    cancellationToken: cancellationToken
+                    find: findQuery,
+                    ct: cancellationToken
                 )
             ).Select(ds => ConvertDeviceStatusToEntry(ds)),
             _ => throw new ArgumentException($"Unsupported storage type: {storage}"),

@@ -209,13 +209,16 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetAvailableYearsAsync_DeviceStatusesIncludedInYears()
+    public async Task GetAvailableYearsAsync_ApsSnapshotsIncludedInYears()
     {
-        _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
+        _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Device = "test-device"
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Device = "test-device",
+            AidAlgorithm = "OpenAPS",
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
         });
         await _dbContext.SaveChangesAsync();
 
@@ -451,13 +454,16 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_DeviceStatusesExcludedWhenDataSourceFilterActive()
+    public async Task GetDailySummaryAsync_ApsSnapshotsExcludedWhenDataSourceFilterActive()
     {
-        _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
+        _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Device = "test-device"
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Device = "test-device",
+            AidAlgorithm = "OpenAPS",
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
         });
         _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
@@ -478,13 +484,16 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_DeviceStatusesIncludedWithoutFilter()
+    public async Task GetDailySummaryAsync_ApsSnapshotsIncludedWithoutFilter()
     {
-        _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
+        _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Device = "test-device"
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Device = "test-device",
+            AidAlgorithm = "OpenAPS",
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
         });
         await _dbContext.SaveChangesAsync();
 
