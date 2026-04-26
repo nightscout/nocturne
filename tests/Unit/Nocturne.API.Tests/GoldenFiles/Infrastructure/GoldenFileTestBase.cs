@@ -128,7 +128,7 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
         // Use raw SQLite connection directly (same shared connection used by all DbContexts)
         // to delete all data, bypassing EF query filters and change tracking.
         using var cmd = Factory.Connection.CreateCommand();
-        cmd.CommandText = "DELETE FROM devicestatus; DELETE FROM foods; DELETE FROM sensor_glucose; DELETE FROM meter_glucose; DELETE FROM calibrations;";
+        cmd.CommandText = "DELETE FROM aps_snapshots; DELETE FROM pump_snapshots; DELETE FROM uploader_snapshots; DELETE FROM device_status_extras; DELETE FROM foods; DELETE FROM sensor_glucose; DELETE FROM meter_glucose; DELETE FROM calibrations;";
         cmd.ExecuteNonQuery();
         return Task.CompletedTask;
     }
