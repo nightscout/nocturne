@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Monitoring;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Monitoring;
@@ -31,47 +32,29 @@ public class PumpAlertServiceTests
         _pumpAlertService = new PumpAlertService(_mockOpenApsService.Object, _mockTherapySettings.Object, _mockLogger.Object);
     }
 
-    private static List<DeviceStatus> CreateTestStatuses(double? reservoir = 86.4, double? voltage = 1.52)
+    private static PumpSnapshot CreateTestSnapshot(double? reservoir = 86.4, double? voltage = 1.52)
     {
-        return
-        [
-            new DeviceStatus
-            {
-                Device = "openaps://farawaypi",
-                CreatedAt = "2015-12-05T17:35:00.000Z",
-                Mills = DateTimeOffset.Parse("2015-12-05T17:35:00.000Z").ToUnixTimeMilliseconds(),
-                Pump = new PumpStatus
-                {
-                    Battery = new PumpBattery { Voltage = voltage },
-                    Status = new PumpStatusDetails { Status = "normal", Bolusing = false, Suspended = false },
-                    Reservoir = reservoir,
-                    Clock = "2015-12-05T17:32:00.000Z"
-                }
-            },
-            new DeviceStatus
-            {
-                Device = "openaps://abusypi",
-                CreatedAt = "2015-12-05T19:05:00.000Z",
-                Mills = DateTimeOffset.Parse("2015-12-05T19:05:00.000Z").ToUnixTimeMilliseconds(),
-                Pump = new PumpStatus
-                {
-                    Battery = new PumpBattery { Voltage = voltage },
-                    Status = new PumpStatusDetails { Status = "normal", Bolusing = false, Suspended = false },
-                    Reservoir = reservoir,
-                    Clock = "2015-12-05T19:02:00.000Z"
-                }
-            }
-        ];
+        return new PumpSnapshot
+        {
+            Device = "openaps://abusypi",
+            Timestamp = DateTime.Parse("2015-12-05T19:05:00.000Z").ToUniversalTime(),
+            BatteryVoltage = voltage,
+            PumpStatus = "normal",
+            Bolusing = false,
+            Suspended = false,
+            Reservoir = reservoir,
+            Clock = "2015-12-05T19:02:00.000Z",
+        };
     }
 
     [Parity]
     [Fact]
     public void SetProperties_WithNormalPump_ShouldSetCorrectLevel()
     {
-        var statuses = CreateTestStatuses();
+        var snapshot = CreateTestSnapshot();
         var preferences = new PumpPreferences { EnableAlerts = true };
 
-        var result = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var result = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
 
         Assert.NotNull(result);
         Assert.Equal(PumpAlertLevel.None, result.Level);
@@ -85,23 +68,19 @@ public class PumpAlertServiceTests
     [Fact]
     public void SetProperties_WithReservoirDisplayOverride_ShouldUseOverride()
     {
-        var statuses = new List<DeviceStatus>
+        var snapshot = new PumpSnapshot
         {
-            new DeviceStatus
-            {
-                Device = "openaps://abusypi", CreatedAt = "2015-12-05T19:05:00.000Z", Mills = TestTime,
-                Pump = new PumpStatus
-                {
-                    Battery = new PumpBattery { Voltage = 1.52 },
-                    Status = new PumpStatusDetails { Status = "normal" },
-                    Reservoir = 86.4, ReservoirDisplayOverride = "50+U",
-                    Clock = "2015-12-05T19:02:00.000Z"
-                }
-            }
+            Device = "openaps://abusypi",
+            Timestamp = DateTime.Parse("2015-12-05T19:05:00.000Z").ToUniversalTime(),
+            BatteryVoltage = 1.52,
+            PumpStatus = "normal",
+            Reservoir = 86.4,
+            ReservoirDisplay = "50+U",
+            Clock = "2015-12-05T19:02:00.000Z",
         };
         var preferences = new PumpPreferences { EnableAlerts = true };
 
-        var result = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var result = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
 
         Assert.NotNull(result.Reservoir);
         Assert.Equal("50+U", result.Reservoir.Display);
@@ -111,10 +90,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_WhenPumpOk_ShouldNotGenerateAlert()
     {
-        var statuses = CreateTestStatuses();
+        var snapshot = CreateTestSnapshot();
         var preferences = new PumpPreferences { EnableAlerts = true };
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var notification = _pumpAlertService.CheckNotifications(status, preferences, TestTime);
 
         Assert.Null(notification);
@@ -124,10 +103,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_WhenReservoirLow_ShouldGenerateUrgentAlert()
     {
-        var statuses = CreateTestStatuses(reservoir: 0.5);
+        var snapshot = CreateTestSnapshot(reservoir: 0.5);
         var preferences = new PumpPreferences { EnableAlerts = true, UrgentRes = 5, WarnRes = 10 };
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var notification = _pumpAlertService.CheckNotifications(status, preferences, TestTime);
 
         Assert.NotNull(notification);
@@ -139,10 +118,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_WhenReservoirZero_ShouldGenerateUrgentAlert()
     {
-        var statuses = CreateTestStatuses(reservoir: 0);
+        var snapshot = CreateTestSnapshot(reservoir: 0);
         var preferences = new PumpPreferences { EnableAlerts = true, UrgentRes = 5, WarnRes = 10 };
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var notification = _pumpAlertService.CheckNotifications(status, preferences, TestTime);
 
         Assert.NotNull(notification);
@@ -154,10 +133,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_WhenBatteryLow_ShouldGenerateWarnAlert()
     {
-        var statuses = CreateTestStatuses(voltage: 1.33);
+        var snapshot = CreateTestSnapshot(voltage: 1.33);
         var preferences = new PumpPreferences { EnableAlerts = true, WarnBattV = 1.35, UrgentBattV = 1.3 };
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var notification = _pumpAlertService.CheckNotifications(status, preferences, TestTime);
 
         Assert.NotNull(notification);
@@ -169,10 +148,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_WhenBatteryCritical_ShouldGenerateUrgentAlert()
     {
-        var statuses = CreateTestStatuses(voltage: 1.00);
+        var snapshot = CreateTestSnapshot(voltage: 1.00);
         var preferences = new PumpPreferences { EnableAlerts = true, WarnBattV = 1.35, UrgentBattV = 1.3 };
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var notification = _pumpAlertService.CheckNotifications(status, preferences, TestTime);
 
         Assert.NotNull(notification);
@@ -184,7 +163,7 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_QuietNight_ShouldSuppressBatteryAlert()
     {
-        var statuses = CreateTestStatuses(voltage: 1.00);
+        var snapshot = CreateTestSnapshot(voltage: 1.00);
         var preferences = new PumpPreferences
         {
             EnableAlerts = true, WarnBattV = 1.35, UrgentBattV = 1.3,
@@ -195,7 +174,7 @@ public class PumpAlertServiceTests
             .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("UTC");
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
 
         Assert.Equal(PumpAlertLevel.None, status.Battery?.Level ?? PumpAlertLevel.None);
     }
@@ -204,7 +183,7 @@ public class PumpAlertServiceTests
     [Fact]
     public void CheckNotifications_OfflineMarker_ShouldNotGenerateAlert()
     {
-        var statuses = CreateTestStatuses();
+        var snapshot = CreateTestSnapshot();
         var staleTime = TestTime + (60 * 60 * 1000);
         var preferences = new PumpPreferences { EnableAlerts = true, UrgentClock = 60, WarnClock = 30 };
 
@@ -217,7 +196,7 @@ public class PumpAlertServiceTests
             .Setup(o => o.FindOfflineMarker(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<DateTime>()))
             .Returns(treatments[0]);
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, staleTime, preferences, treatments);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, staleTime, preferences, treatments);
 
         Assert.Equal(PumpAlertLevel.None, status.Level);
     }
@@ -226,10 +205,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void VirtualAssistant_ReservoirHandler_ShouldReturnFormattedResponse()
     {
-        var statuses = CreateTestStatuses();
+        var snapshot = CreateTestSnapshot();
         var preferences = new PumpPreferences();
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var (title, response) = _pumpAlertService.HandleVirtualAssistantReservoir(status);
 
         Assert.Equal("Insulin Remaining", title);
@@ -240,10 +219,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void VirtualAssistant_BatteryHandler_ShouldReturnFormattedResponse()
     {
-        var statuses = CreateTestStatuses();
+        var snapshot = CreateTestSnapshot();
         var preferences = new PumpPreferences();
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var (title, response) = _pumpAlertService.HandleVirtualAssistantBattery(status);
 
         Assert.Equal("Pump Battery", title);
@@ -293,10 +272,10 @@ public class PumpAlertServiceTests
     [Fact]
     public void GenerateVisualizationData_ShouldReturnCorrectFormat()
     {
-        var statuses = CreateTestStatuses();
+        var snapshot = CreateTestSnapshot();
         var preferences = new PumpPreferences { Fields = ["reservoir"], RetroFields = ["reservoir", "battery"] };
 
-        var status = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var status = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
         var result = _pumpAlertService.GenerateVisualizationData(status, preferences, false, TestTime);
 
         Assert.NotNull(result);
@@ -308,21 +287,17 @@ public class PumpAlertServiceTests
     [Fact]
     public void BuildPumpStatus_WithInsuletManufacturer_ShouldDefaultToFiftyPlusUnits()
     {
-        var statuses = new List<DeviceStatus>
+        var snapshot = new PumpSnapshot
         {
-            new DeviceStatus
-            {
-                Device = "loop://omnipod", Mills = TestTime,
-                Pump = new PumpStatus
-                {
-                    Manufacturer = "Insulet", Battery = new PumpBattery { Percent = 80 },
-                    Clock = "2015-12-05T19:02:00.000Z"
-                }
-            }
+            Device = "loop://omnipod",
+            Timestamp = DateTime.Parse("2015-12-05T19:05:00.000Z").ToUniversalTime(),
+            Manufacturer = "Insulet",
+            BatteryPercent = 80,
+            Clock = "2015-12-05T19:02:00.000Z",
         };
         var preferences = new PumpPreferences();
 
-        var result = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var result = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
 
         Assert.NotNull(result.Reservoir);
         Assert.Equal("50+ U", result.Reservoir.Display);
@@ -331,21 +306,17 @@ public class PumpAlertServiceTests
     [Fact]
     public void BuildPumpStatus_WithBatteryPercent_ShouldUsePercentThresholds()
     {
-        var statuses = new List<DeviceStatus>
+        var snapshot = new PumpSnapshot
         {
-            new DeviceStatus
-            {
-                Device = "loop://omnipod", Mills = TestTime,
-                Pump = new PumpStatus
-                {
-                    Battery = new PumpBattery { Percent = 15 }, Reservoir = 50,
-                    Clock = "2015-12-05T19:02:00.000Z"
-                }
-            }
+            Device = "loop://omnipod",
+            Timestamp = DateTime.Parse("2015-12-05T19:05:00.000Z").ToUniversalTime(),
+            BatteryPercent = 15,
+            Reservoir = 50,
+            Clock = "2015-12-05T19:02:00.000Z",
         };
         var preferences = new PumpPreferences { EnableAlerts = true, WarnBattP = 30, UrgentBattP = 20 };
 
-        var result = _pumpAlertService.BuildPumpStatus(statuses, TestTime, preferences);
+        var result = _pumpAlertService.BuildPumpStatus(snapshot, TestTime, preferences);
 
         Assert.NotNull(result.Battery);
         Assert.Equal(PumpAlertLevel.Urgent, result.Battery.Level);

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
@@ -95,7 +96,7 @@ public class PumpPreferences
 /// <seealso cref="PumpPreferences"/>
 /// <seealso cref="PumpFieldStatus"/>
 /// <seealso cref="PumpAlertLevel"/>
-/// <seealso cref="DeviceStatus"/>
+/// <seealso cref="PumpSnapshot"/>
 public class PumpStatusResult
 {
     /// <summary>
@@ -151,13 +152,13 @@ public class PumpStatusResult
     /// <summary>
     /// Extended pump data (arbitrary key-value pairs)
     /// </summary>
-    public Dictionary<string, object>? Extended { get; set; }
+    public Dictionary<string, object?>? Extended { get; set; }
 
     /// <summary>
-    /// The source device status entry used for this result
+    /// The source pump snapshot used for this result
     /// </summary>
     [JsonIgnore]
-    public DeviceStatus? SourceDeviceStatus { get; set; }
+    public PumpSnapshot? SourcePumpSnapshot { get; set; }
 }
 
 /// <summary>

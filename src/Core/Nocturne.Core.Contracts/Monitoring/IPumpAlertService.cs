@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Monitoring;
 
@@ -18,10 +19,10 @@ public interface IPumpAlertService
     );
 
     /// <summary>
-    /// Analyzes device status to build comprehensive pump status result
+    /// Analyzes a pump snapshot to build comprehensive pump status result
     /// </summary>
     PumpStatusResult BuildPumpStatus(
-        IEnumerable<DeviceStatus> deviceStatuses,
+        PumpSnapshot? pumpSnapshot,
         long currentTime,
         PumpPreferences preferences,
         IEnumerable<Treatment>? treatments = null
