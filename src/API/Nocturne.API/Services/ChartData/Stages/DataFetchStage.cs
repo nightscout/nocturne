@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -47,7 +46,6 @@ internal sealed class DataFetchStage(
     IStateSpanRepository stateSpanRepository,
     ISystemEventRepository systemEventRepository,
     ITrackerRepository trackerRepository,
-    IDeviceStatusService deviceStatusService,
     ILogger<DataFetchStage> logger
 ) : IChartDataStage
 {
@@ -190,16 +188,6 @@ internal sealed class DataFetchStage(
             cancellationToken: cancellationToken
         );
 
-        // Device status - only need recent entries for IOB source detection
-        var deviceStatusList =
-            (
-                await deviceStatusService.GetDeviceStatusAsync(
-                    count: 100,
-                    skip: 0,
-                    cancellationToken: cancellationToken
-                )
-            )?.ToList() ?? new List<DeviceStatus>();
-
         // Display-range subsets for markers
         var displayBoluses = bolusList
             .Where(b => b.Mills >= startTime && b.Mills <= endTime)
@@ -209,14 +197,13 @@ internal sealed class DataFetchStage(
             .ToList();
 
         logger.LogDebug(
-            "DataFetchStage: fetched {Glucose} glucose, {Bolus} bolus, {Carb} carb, {BgCheck} bg-check, {DeviceEvent} device-event, {TempBasal} temp-basal, {DeviceStatus} device-status records",
+            "DataFetchStage: fetched {Glucose} glucose, {Bolus} bolus, {Carb} carb, {BgCheck} bg-check, {DeviceEvent} device-event, {TempBasal} temp-basal records",
             sensorGlucoseList.Count,
             bolusList.Count,
             carbIntakeList.Count,
             bgCheckList.Count,
             deviceEventList.Count,
-            tempBasalList.Count,
-            deviceStatusList.Count
+            tempBasalList.Count
         );
 
         // Project Dictionary<K, List<V>> to IReadOnlyDictionary<K, IEnumerable<V>>
@@ -240,7 +227,6 @@ internal sealed class DataFetchStage(
             SystemEvents = systemEventsResult?.ToList() ?? [],
             TrackerDefinitions = trackerDefs?.ToList() ?? [],
             TrackerInstances = trackerInstances?.ToList() ?? [],
-            DeviceStatusList = deviceStatusList,
         };
     }
 }

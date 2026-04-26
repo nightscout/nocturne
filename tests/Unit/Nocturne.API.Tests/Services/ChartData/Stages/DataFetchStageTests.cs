@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -31,8 +30,6 @@ public class DataFetchStageTests
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
-    private readonly Mock<IDeviceStatusService> _mockDeviceStatusService = new();
-
     private readonly DataFetchStage _stage;
 
     public DataFetchStageTests()
@@ -53,7 +50,6 @@ public class DataFetchStageTests
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
-            _mockDeviceStatusService.Object,
             NullLogger<DataFetchStage>.Instance
         );
     }
@@ -153,13 +149,6 @@ public class DataFetchStageTests
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
 
-        _mockDeviceStatusService
-            .Setup(s => s.GetDeviceStatusAsync(
-                It.IsAny<string?>(),
-                It.IsAny<int?>(),
-                It.IsAny<int?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<DeviceStatus>());
     }
 
     [Fact]
@@ -186,7 +175,6 @@ public class DataFetchStageTests
         result.BgCheckList.Should().NotBeNull();
         result.DeviceEventList.Should().NotBeNull();
         result.TempBasalList.Should().NotBeNull();
-        result.DeviceStatusList.Should().NotBeNull();
         result.SystemEvents.Should().NotBeNull();
         result.TrackerDefinitions.Should().NotBeNull();
         result.TrackerInstances.Should().NotBeNull();

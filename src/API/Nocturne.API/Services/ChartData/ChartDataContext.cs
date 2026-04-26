@@ -63,8 +63,6 @@ public sealed record ChartDataContext
     public IReadOnlyList<BGCheck> BgCheckList { get; init; } = [];
     public IReadOnlyList<DeviceEvent> DeviceEventList { get; init; } = [];
     public IReadOnlyList<TempBasal> TempBasalList { get; init; } = [];
-    public IReadOnlyList<DeviceStatus> DeviceStatusList { get; init; } = [];
-
     /// <summary>State spans keyed by category, populated from a batched repository query.</summary>
     public IReadOnlyDictionary<StateSpanCategory, IEnumerable<StateSpan>> StateSpans { get; init; }
         = new Dictionary<StateSpanCategory, IEnumerable<StateSpan>>();

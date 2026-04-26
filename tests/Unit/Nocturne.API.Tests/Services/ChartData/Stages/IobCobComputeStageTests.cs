@@ -89,7 +89,6 @@ public class IobCobComputeStageTests
             DefaultBasalRate = 1.0,
             SyntheticTreatments = [bolus, carbIntake],
             TempBasalList = [tempBasal],
-            DeviceStatusList = [],
         };
 
         // Act
@@ -125,7 +124,6 @@ public class IobCobComputeStageTests
             DefaultBasalRate = defaultBasalRate,
             SyntheticTreatments = [],
             TempBasalList = [],
-            DeviceStatusList = [],
         };
 
         // Act

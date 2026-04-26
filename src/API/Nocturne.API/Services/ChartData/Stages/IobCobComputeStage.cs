@@ -60,7 +60,6 @@ internal sealed class IobCobComputeStage(
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
     {
         var syntheticTreatments = context.SyntheticTreatments.ToList();
-        var deviceStatusList = context.DeviceStatusList.ToList();
         var tempBasalList = context.TempBasalList.ToList();
         var startTime = context.StartTime;
         var endTime = context.EndTime;
@@ -69,7 +68,6 @@ internal sealed class IobCobComputeStage(
 
         var (iobSeries, cobSeries, maxIob, maxCob) = await BuildIobCobSeriesAsync(
             syntheticTreatments,
-            deviceStatusList,
             startTime,
             endTime,
             intervalMinutes,
@@ -102,7 +100,6 @@ internal sealed class IobCobComputeStage(
         double maxCob
     )> BuildIobCobSeriesAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatuses,
         long startTime,
         long endTime,
         int intervalMinutes,
