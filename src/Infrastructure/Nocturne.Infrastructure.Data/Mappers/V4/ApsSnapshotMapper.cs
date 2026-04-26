@@ -47,6 +47,8 @@ public static class ApsSnapshotMapper
             PredictedCobJson = model.PredictedCobJson,
             PredictedUamJson = model.PredictedUamJson,
             PredictedStartTimestamp = model.PredictedStartTimestamp,
+            LoopJson = model.LoopJson,
+            AidVersion = model.AidVersion,
             AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
                 ? JsonSerializer.Serialize(model.AdditionalProperties)
                 : null,
@@ -91,6 +93,8 @@ public static class ApsSnapshotMapper
             PredictedCobJson = entity.PredictedCobJson,
             PredictedUamJson = entity.PredictedUamJson,
             PredictedStartTimestamp = entity.PredictedStartTimestamp,
+            LoopJson = entity.LoopJson,
+            AidVersion = entity.AidVersion,
             AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
                 ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
                 : null,
@@ -131,6 +135,8 @@ public static class ApsSnapshotMapper
         entity.PredictedCobJson = model.PredictedCobJson;
         entity.PredictedUamJson = model.PredictedUamJson;
         entity.PredictedStartTimestamp = model.PredictedStartTimestamp;
+        entity.LoopJson = model.LoopJson;
+        entity.AidVersion = model.AidVersion;
         entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
             ? JsonSerializer.Serialize(model.AdditionalProperties)
             : null;

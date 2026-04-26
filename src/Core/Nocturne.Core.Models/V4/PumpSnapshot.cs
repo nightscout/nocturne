@@ -104,6 +104,12 @@ public class PumpSnapshot : IV4Record
     /// </summary>
     public Guid? DeviceId { get; set; }
 
+    /// <summary>Pump-reported total IOB (when no APS algorithm is running).</summary>
+    public double? Iob { get; set; }
+
+    /// <summary>Pump-reported bolus IOB.</summary>
+    public double? BolusIob { get; set; }
+
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns
     /// </summary>

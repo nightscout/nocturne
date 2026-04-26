@@ -196,6 +196,19 @@ public class ApsSnapshotEntity : ITenantScoped
     public DateTime? PredictedStartTimestamp { get; set; }
 
     /// <summary>
+    /// Full serialized Loop status object for round-trip fidelity
+    /// </summary>
+    [Column("loop_json", TypeName = "jsonb")]
+    public string? LoopJson { get; set; }
+
+    /// <summary>
+    /// Algorithm version string (e.g. Trio app version)
+    /// </summary>
+    [Column("aid_version")]
+    [MaxLength(64)]
+    public string? AidVersion { get; set; }
+
+    /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]

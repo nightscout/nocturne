@@ -134,6 +134,18 @@ public class PumpSnapshotEntity : ITenantScoped
     public Guid? DeviceId { get; set; }
 
     /// <summary>
+    /// Pump-reported total IOB (when no APS algorithm is running)
+    /// </summary>
+    [Column("iob")]
+    public double? Iob { get; set; }
+
+    /// <summary>
+    /// Pump-reported bolus IOB
+    /// </summary>
+    [Column("bolus_iob")]
+    public double? BolusIob { get; set; }
+
+    /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
