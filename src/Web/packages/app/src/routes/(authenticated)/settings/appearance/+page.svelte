@@ -24,7 +24,7 @@
     setPreference,
     getSourceDefaults,
     setSourceDefaults,
-  } from "$lib/api/glucose-processing-settings.remote";
+  } from "$api/generated/glucoseProcessingSettings.generated.remote";
   import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
   import {
     Card,
