@@ -1,27 +1,29 @@
+using System.Text.Json;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Analytics;
-using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.V4;
 using Nocturne.API.Services.Glucose;
 
 namespace Nocturne.API.Services.Devices;
 
 /// <summary>
 /// <see cref="IPredictionService"/> implementation that reads glucose predictions from the most recent
-/// <see cref="DeviceStatus"/> record. Predictions are calculated on the phone by the AID system
-/// (AAPS, Trio, or Loop) and uploaded as part of the device status payload.
+/// <see cref="ApsSnapshot"/> record. Predictions are calculated on the phone by the AID system
+/// (AAPS, Trio, or Loop) and uploaded as part of the device status payload, then decomposed
+/// into normalized <see cref="ApsSnapshot"/> columns.
 /// </summary>
 /// <seealso cref="IPredictionService"/>
 public class DeviceStatusPredictionService : IPredictionService
 {
-    private readonly IDeviceStatusRepository _deviceStatuses;
+    private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ILogger<DeviceStatusPredictionService> _logger;
 
     public DeviceStatusPredictionService(
-        IDeviceStatusRepository deviceStatuses,
+        IApsSnapshotRepository apsSnapshots,
         ILogger<DeviceStatusPredictionService> logger)
     {
-        _deviceStatuses = deviceStatuses;
+        _apsSnapshots = apsSnapshots;
         _logger = logger;
     }
 
@@ -29,100 +31,95 @@ public class DeviceStatusPredictionService : IPredictionService
         string? profileId = null,
         CancellationToken cancellationToken = default)
     {
-        var statuses = await _deviceStatuses.GetDeviceStatusAsync(
-            count: 1,
-            skip: 0,
-            cancellationToken);
+        var snapshots = await _apsSnapshots.GetAsync(
+            from: null,
+            to: null,
+            device: null,
+            source: null,
+            limit: 1,
+            offset: 0,
+            descending: true,
+            ct: cancellationToken);
 
-        var latest = statuses.FirstOrDefault();
+        var latest = snapshots.FirstOrDefault();
         if (latest == null)
         {
             throw new InvalidOperationException("No device status data available for predictions");
         }
 
-        // Try OpenAPS/AAPS format first (suggested has freshest predictions)
-        var response = TryExtractFromOpenAps(latest);
-        if (response != null)
-            return response;
+        if (latest.AidAlgorithm == AidAlgorithm.Loop)
+            return ExtractFromLoopSnapshot(latest);
 
-        // Try iOS Loop format
-        response = TryExtractFromLoop(latest);
-        if (response != null)
-            return response;
-
-        throw new InvalidOperationException(
-            "No prediction data found in the most recent device status. " +
-            "Ensure your AID system (AAPS, Trio, Loop) is uploading device status with prediction data.");
+        // OpenAPS / AAPS / Trio all use the same prediction column layout
+        return ExtractFromOpenApsSnapshot(latest);
     }
 
-    private GlucosePredictionResponse? TryExtractFromOpenAps(DeviceStatus status)
+    private GlucosePredictionResponse ExtractFromOpenApsSnapshot(ApsSnapshot snapshot)
     {
-        // Prefer enacted (confirmed delivered), fall back to suggested
-        var command = status.OpenAps?.Enacted ?? status.OpenAps?.Suggested;
-        if (command?.PredBGs == null)
-            return null;
+        var iobCurve = DeserializeCurve(snapshot.PredictedIobJson);
+        var ztCurve = DeserializeCurve(snapshot.PredictedZtJson);
+        var cobCurve = DeserializeCurve(snapshot.PredictedCobJson);
+        var uamCurve = DeserializeCurve(snapshot.PredictedUamJson);
+        var defaultCurve = DeserializeCurve(snapshot.PredictedDefaultJson) ?? iobCurve ?? cobCurve ?? ztCurve ?? uamCurve;
 
-        var predBGs = command.PredBGs;
-        var hasAnyCurve = predBGs.IOB != null || predBGs.ZT != null ||
-                          predBGs.COB != null || predBGs.UAM != null;
-        if (!hasAnyCurve)
-            return null;
+        if (defaultCurve == null)
+        {
+            throw new InvalidOperationException(
+                "No prediction data found in the most recent APS snapshot. " +
+                "Ensure your AID system (AAPS, Trio, Loop) is uploading device status with prediction data.");
+        }
 
-        // Use IOB curve as default (always present in AAPS/OpenAPS), filtering nulls
-        var defaultCurve = (predBGs.IOB ?? predBGs.COB ?? predBGs.ZT ?? predBGs.UAM)
-            ?.Where(v => v.HasValue).Select(v => v!.Value).ToList();
-
-        var timestamp = command.Timestamp != null
-            ? DateTimeOffset.Parse(command.Timestamp)
-            : DateTimeOffset.UtcNow;
+        var timestamp = snapshot.PredictedStartTimestamp.HasValue
+            ? new DateTimeOffset(snapshot.PredictedStartTimestamp.Value, TimeSpan.Zero)
+            : new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero);
 
         _logger.LogInformation(
-            "[Predictions] Extracted from OpenAPS device status: bg={Bg}, eventualBG={EventualBG}, " +
+            "[Predictions] Extracted from APS snapshot ({Algorithm}): bg={Bg}, eventualBG={EventualBG}, " +
             "IOB curve={IobLen}, ZT curve={ZtLen}, COB curve={CobLen}, UAM curve={UamLen}",
-            command.Bg, command.EventualBG,
-            predBGs.IOB?.Count ?? 0, predBGs.ZT?.Count ?? 0,
-            predBGs.COB?.Count ?? 0, predBGs.UAM?.Count ?? 0);
+            snapshot.AidAlgorithm, snapshot.CurrentBg, snapshot.EventualBg,
+            iobCurve?.Count ?? 0, ztCurve?.Count ?? 0,
+            cobCurve?.Count ?? 0, uamCurve?.Count ?? 0);
 
         return new GlucosePredictionResponse
         {
             Timestamp = timestamp,
-            CurrentBg = command.Bg ?? 0,
-            Delta = 0, // Not directly available in this format, could be parsed from tick
-            EventualBg = command.EventualBG ?? command.Bg ?? 0,
-            Iob = command.IOB ?? 0,
-            Cob = command.COB ?? 0,
-            SensitivityRatio = command.SensitivityRatio,
+            CurrentBg = snapshot.CurrentBg ?? 0,
+            Delta = 0,
+            EventualBg = snapshot.EventualBg ?? snapshot.CurrentBg ?? 0,
+            Iob = snapshot.Iob ?? 0,
+            Cob = snapshot.Cob ?? 0,
+            SensitivityRatio = snapshot.SensitivityRatio,
             IntervalMinutes = 5,
             Predictions = new PredictionCurves
             {
                 Default = defaultCurve,
-                IobOnly = predBGs.IOB?.Where(v => v.HasValue).Select(v => v!.Value).ToList(),
-                ZeroTemp = predBGs.ZT?.Where(v => v.HasValue).Select(v => v!.Value).ToList(),
-                Cob = predBGs.COB?.Where(v => v.HasValue).Select(v => v!.Value).ToList(),
-                Uam = predBGs.UAM?.Where(v => v.HasValue).Select(v => v!.Value).ToList(),
+                IobOnly = iobCurve,
+                ZeroTemp = ztCurve,
+                Cob = cobCurve,
+                Uam = uamCurve,
             },
         };
     }
 
-    private GlucosePredictionResponse? TryExtractFromLoop(DeviceStatus status)
+    private GlucosePredictionResponse ExtractFromLoopSnapshot(ApsSnapshot snapshot)
     {
-        var predicted = status.Loop?.Predicted;
-        if (predicted?.Values == null || predicted.Values.Length == 0)
-            return null;
-
-        var values = predicted.Values.ToList();
-
-        var timestamp = predicted.StartDate != null
-            ? DateTimeOffset.Parse(predicted.StartDate)
-            : DateTimeOffset.UtcNow;
+        var values = DeserializeCurve(snapshot.PredictedDefaultJson);
+        if (values == null || values.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No prediction data found in the most recent APS snapshot. " +
+                "Ensure your AID system (AAPS, Trio, Loop) is uploading device status with prediction data.");
+        }
 
         var currentBg = values.FirstOrDefault();
-        var iob = status.Loop?.Iob?.Iob ?? 0;
-        var cob = status.Loop?.Cob?.Cob ?? 0;
+
+        var timestamp = snapshot.PredictedStartTimestamp.HasValue
+            ? new DateTimeOffset(snapshot.PredictedStartTimestamp.Value, TimeSpan.Zero)
+            : new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero);
 
         _logger.LogInformation(
-            "[Predictions] Extracted from Loop device status: bg={Bg}, points={PointCount}, iob={Iob}, cob={Cob}",
-            currentBg, values.Count, iob, cob);
+            "[Predictions] Extracted from APS snapshot (Loop): bg={Bg}, points={PointCount}, iob={Iob}, cob={Cob}",
+            currentBg, values.Count, snapshot.Iob, snapshot.Cob);
 
         return new GlucosePredictionResponse
         {
@@ -130,18 +127,34 @@ public class DeviceStatusPredictionService : IPredictionService
             CurrentBg = currentBg,
             Delta = 0,
             EventualBg = values.LastOrDefault(),
-            Iob = iob,
-            Cob = cob,
+            Iob = snapshot.Iob ?? 0,
+            Cob = snapshot.Cob ?? 0,
+            SensitivityRatio = snapshot.SensitivityRatio,
             IntervalMinutes = 5,
             Predictions = new PredictionCurves
             {
                 Default = values,
-                // Loop only provides a single prediction curve
                 IobOnly = null,
                 ZeroTemp = null,
                 Cob = null,
                 Uam = null,
             },
         };
+    }
+
+    private static List<double>? DeserializeCurve(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<double?>>(json);
+            return values?.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }
