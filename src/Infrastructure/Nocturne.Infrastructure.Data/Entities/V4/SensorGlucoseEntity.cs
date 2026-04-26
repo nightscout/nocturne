@@ -128,6 +128,25 @@ public class SensorGlucoseEntity : ITenantScoped, IAuditable
     public double? Delta { get; set; }
 
     /// <summary>
+    /// Whether this reading is smoothed or unsmoothed (enum stored as string). Null when unknown.
+    /// </summary>
+    [Column("glucose_processing")]
+    [MaxLength(16)]
+    public string? GlucoseProcessing { get; set; }
+
+    /// <summary>
+    /// Smoothed glucose value in mg/dL
+    /// </summary>
+    [Column("smoothed_mgdl")]
+    public double? SmoothedMgdl { get; set; }
+
+    /// <summary>
+    /// Unsmoothed (raw) glucose value in mg/dL
+    /// </summary>
+    [Column("unsmoothed_mgdl")]
+    public double? UnsmoothedMgdl { get; set; }
+
+    /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
