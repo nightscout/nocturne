@@ -3,7 +3,9 @@ using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Treatments;
@@ -14,6 +16,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class CobServiceValidationTests
 {
     private readonly ICobService _cobService;
+    private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepo;
 
     public CobServiceValidationTests()
     {
@@ -28,74 +31,66 @@ public class CobServiceValidationTests
         therapySettings.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         therapySettings.Setup(t => t.GetCarbAbsorptionRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(30.0);
 
+        _apsSnapshotRepo = new Mock<IApsSnapshotRepository>();
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+
         _cobService = new Nocturne.API.Services.Treatments.CobService(
-            logger.Object, iobService.Object, sensitivity.Object, carbRatio.Object, therapySettings.Object);
+            logger.Object, iobService.Object, sensitivity.Object, carbRatio.Object, therapySettings.Object, _apsSnapshotRepo.Object);
     }
 
     [Fact]
-    public void CobTotal_WithCarbs_ShouldReturnPositiveCob()
+    public async Task CobTotal_WithCarbs_ShouldReturnPositiveCob()
     {
         var treatments = new List<Treatment>
         {
             new() { Carbs = 50, Mills = DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeMilliseconds() },
         };
 
-        var result = _cobService.CobTotal(treatments, new List<DeviceStatus>());
+        var result = await _cobService.CobTotalAsync(treatments);
 
         Assert.True(result.Cob >= 0, "COB should be non-negative");
         Assert.Equal("Care Portal", result.Source);
     }
 
     [Fact]
-    public void CobTotal_WithoutCarbs_ShouldReturnZeroCob()
+    public async Task CobTotal_WithoutCarbs_ShouldReturnZeroCob()
     {
         var treatments = new List<Treatment>
         {
             new() { Insulin = 5.0, Mills = DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeMilliseconds() },
         };
 
-        var result = _cobService.CobTotal(treatments, new List<DeviceStatus>());
+        var result = await _cobService.CobTotalAsync(treatments);
 
         Assert.Equal(0.0, result.Cob);
     }
 
     [Fact]
-    public void CobTotal_WithRecentDeviceStatus_ShouldPrioritizeDeviceStatus()
+    public async Task CobTotal_WithRecentApsSnapshot_ShouldPrioritizeDeviceData()
     {
+        var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatments = new List<Treatment>
         {
             new() { Carbs = 50, Mills = DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeMilliseconds() },
         };
-        var deviceStatus = new List<DeviceStatus>
+
+        var apsSnapshot = new ApsSnapshot
         {
-            new()
-            {
-                Device = "Loop",
-                Mills = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds(),
-                Loop = new LoopStatus { Cob = new LoopCob { Cob = 25.5 } },
-            },
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(time - 5 * 60 * 1000).UtcDateTime,
+            Cob = 25.5,
+            AidAlgorithm = AidAlgorithm.Loop,
+            Device = "Loop",
         };
 
-        var result = _cobService.CobTotal(treatments, deviceStatus);
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { apsSnapshot });
+
+        var result = await _cobService.CobTotalAsync(treatments);
 
         Assert.Equal(25.5, result.Cob);
         Assert.Equal("Loop", result.Source);
-    }
-
-    [Fact]
-    public void FromDeviceStatus_WithLoopCob_ShouldExtractCorrectly()
-    {
-        var deviceStatus = new DeviceStatus
-        {
-            Device = "MyLoop",
-            Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Loop = new LoopStatus { Cob = new LoopCob { Cob = 15.7 } },
-        };
-
-        var result = _cobService.FromDeviceStatus(deviceStatus);
-
-        Assert.Equal(15.7, result.Cob);
-        Assert.Equal("Loop", result.Source);
-        Assert.Equal("MyLoop", result.Device);
     }
 }

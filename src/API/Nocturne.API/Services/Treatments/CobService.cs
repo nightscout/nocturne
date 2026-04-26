@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -65,40 +67,26 @@ public class TreatmentCobResult
 public interface ICobService
 {
     /// <summary>
-    /// Computes total COB, prioritizing <see cref="DeviceStatus"/> data over treatment-based calculation.
+    /// Computes total COB, prioritizing <see cref="ApsSnapshot"/> data over treatment-based calculation.
+    /// Queries <see cref="IApsSnapshotRepository"/> internally for device-reported COB.
     /// </summary>
-    CobResult CobTotal(
+    Task<CobResult> CobTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
-        string? specProfile = null
+        string? specProfile = null,
+        CancellationToken ct = default
     );
 
     /// <summary>
     /// Calculates COB from <see cref="Treatment"/> records using the exact legacy algorithm
     /// including IOB integration with liver sensitivity ratio.
     /// </summary>
-    CobResult FromTreatments(
+    Task<CobResult> FromTreatmentsAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
-        string? specProfile = null
+        string? specProfile = null,
+        CancellationToken ct = default
     );
-
-    /// <summary>
-    /// Extracts COB from a single <see cref="DeviceStatus"/> entry.
-    /// </summary>
-    CobResult FromDeviceStatus(DeviceStatus deviceStatusEntry);
-
-    /// <summary>
-    /// Gets the most recent COB from <see cref="DeviceStatus"/> entries within the recency threshold.
-    /// </summary>
-    CobResult LastCOBDeviceStatus(List<DeviceStatus> deviceStatus, long time);
-
-    /// <summary>
-    /// Determines whether any of the given <see cref="DeviceStatus"/> entries contain COB data.
-    /// </summary>
-    bool IsDeviceStatusAvailable(List<DeviceStatus> deviceStatus);
 
     /// <summary>
     /// Calculates the COB contribution from a single <see cref="Treatment"/>.
@@ -120,7 +108,7 @@ public interface ICobService
 ///   <item>20-minute delay period before carb absorption begins.</item>
 ///   <item>IOB integration with a liver sensitivity ratio of 8 to adjust decay timing.</item>
 ///   <item>Complex decay calculations via an internal <c>CobCalc</c> helper.</item>
-///   <item>Exact device status prioritization: Loop COB takes precedence over OpenAPS (enacted, then suggested).</item>
+///   <item>APS snapshot prioritization: recent COB from Loop/OpenAPS/AAPS takes precedence over treatment-based calculation.</item>
 /// </list>
 /// </remarks>
 /// <seealso cref="ICobService"/>
@@ -131,7 +119,8 @@ public class CobService(
     IIobService iobService,
     ISensitivityResolver sensitivityResolver,
     ICarbRatioResolver carbRatioResolver,
-    ITherapySettingsResolver therapySettingsResolver
+    ITherapySettingsResolver therapySettingsResolver,
+    IApsSnapshotRepository apsSnapshotRepo
 ) : ICobService
 {
     // Constants from legacy implementation - exact values required
@@ -145,18 +134,20 @@ public class CobService(
     private const double DEFAULT_CARB_RATIO = 18.0;
 
     /// <summary>
-    /// Main COB calculation function - exact implementation of legacy cobTotal
+    /// Main COB calculation function - exact implementation of legacy cobTotal.
+    /// Queries <see cref="IApsSnapshotRepository"/> for device-reported COB,
+    /// falling back to treatment-based calculation when no recent data exists.
     /// </summary>
-    public CobResult CobTotal(
+    public async Task<CobResult> CobTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
-        string? specProfile = null
+        string? specProfile = null,
+        CancellationToken ct = default
     )
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        var hasData = therapySettingsResolver.HasDataAsync().GetAwaiter().GetResult();
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
 
         if (hasData)
         {
@@ -180,24 +171,24 @@ public class CobService(
             }
         }
 
-        // Get COB from device status (prioritized source)
-        var devicestatusCOB = LastCOBDeviceStatus(deviceStatus, currentTime);
+        // Get COB from APS snapshot (prioritized source)
+        var deviceCob = await GetLatestDeviceCobAsync(currentTime, ct);
 
         // Legacy logic: if device COB exists and is recent (within 10 minutes), use it
-        if (devicestatusCOB.Cob > 0 && devicestatusCOB.Mills.HasValue)
+        if (deviceCob != null && deviceCob.Cob > 0 && deviceCob.Mills.HasValue)
         {
             var deviceAge =
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - devicestatusCOB.Mills.Value;
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - deviceCob.Mills.Value;
             if (deviceAge <= 10 * 60 * 1000)
             {
-                return AddDisplay(devicestatusCOB);
+                return AddDisplay(deviceCob);
             }
         }
 
         // Fall back to treatment-based COB calculation
         var treatmentCOB =
             treatments?.Any() == true
-                ? FromTreatments(treatments, deviceStatus, currentTime, specProfile)
+                ? await FromTreatmentsAsync(treatments, currentTime, specProfile, ct)
                 : new CobResult();
 
         var result = new CobResult
@@ -217,13 +208,57 @@ public class CobService(
     }
 
     /// <summary>
+    /// Query <see cref="IApsSnapshotRepository"/> for the most recent device-reported COB
+    /// within the staleness window.
+    /// </summary>
+    internal async Task<CobResult?> GetLatestDeviceCobAsync(long time, CancellationToken ct = default)
+    {
+        var futureMills = time + 5 * 60 * 1000; // Allow for clocks to be a little off
+        var recentMills = time - RECENCY_THRESHOLD;
+
+        var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
+        var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
+
+        var apsSnapshots = await apsSnapshotRepo.GetAsync(
+            from: recentTime,
+            to: futureTime,
+            device: null,
+            source: null,
+            limit: 1,
+            offset: 0,
+            descending: true,
+            ct: ct
+        );
+
+        var apsSnapshot = apsSnapshots.FirstOrDefault();
+        if (apsSnapshot?.Cob is > 0)
+        {
+            var source = apsSnapshot.AidAlgorithm switch
+            {
+                AidAlgorithm.Loop => "Loop",
+                _ => "OpenAPS",
+            };
+
+            return new CobResult
+            {
+                Cob = apsSnapshot.Cob.Value,
+                Source = source,
+                Device = apsSnapshot.Device,
+                Mills = new DateTimeOffset(apsSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Calculate COB from treatments - exact implementation of legacy fromTreatments
     /// </summary>
-    public CobResult FromTreatments(
+    public async Task<CobResult> FromTreatmentsAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
         long? time = null,
-        string? specProfile = null
+        string? specProfile = null,
+        CancellationToken ct = default
     )
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -255,26 +290,24 @@ public class CobService(
 
                 if (decaysinHr > -10)
                 {
-                    var actStart =
-                        iobService
-                            .CalculateTotalAsync(
-                                treatments ?? new List<Treatment>(),
-                                lastDecayedBy,
-                                specProfile
-                            )
-                            .GetAwaiter()
-                            .GetResult()
-                            ?.Activity ?? double.NaN;
-                    var actEnd =
-                        iobService
-                            .CalculateTotalAsync(
-                                treatments ?? new List<Treatment>(),
-                                cCalc.DecayedBy.ToUnixTimeMilliseconds(),
-                                specProfile
-                            )
-                            .GetAwaiter()
-                            .GetResult()
-                            ?.Activity ?? double.NaN;
+                    var actStartResult = await iobService
+                        .CalculateTotalAsync(
+                            treatments ?? new List<Treatment>(),
+                            lastDecayedBy,
+                            specProfile,
+                            ct: ct
+                        );
+                    var actStart = actStartResult?.Activity ?? double.NaN;
+
+                    var actEndResult = await iobService
+                        .CalculateTotalAsync(
+                            treatments ?? new List<Treatment>(),
+                            cCalc.DecayedBy.ToUnixTimeMilliseconds(),
+                            specProfile,
+                            ct: ct
+                        );
+                    var actEnd = actEndResult?.Activity ?? double.NaN;
+
                     var avgActivity = (actStart + actEnd) / 2.0;
 
                     var sensFromProfile = GetSensitivityOrDefault(treatment.Mills, specProfile);
@@ -376,88 +409,6 @@ public class CobService(
             IsDecaying = isDecaying,
             CarbTime = carbTime,
         };
-    }
-
-    public CobResult LastCOBDeviceStatus(List<DeviceStatus> deviceStatus, long time)
-    {
-        if (deviceStatus?.Any() != true)
-        {
-            return new CobResult();
-        }
-
-        var futureMills = time + 5 * 60 * 1000;
-        var recentMills = time - RECENCY_THRESHOLD;
-
-        var validCobs = deviceStatus
-            .Where(ds => ds.Mills >= recentMills && ds.Mills <= futureMills)
-            .Select(FromDeviceStatus)
-            .Where(cob => cob.Cob > 0)
-            .OrderBy(cob => cob.Mills ?? 0)
-            .ToList();
-
-        return validCobs.LastOrDefault() ?? new CobResult();
-    }
-
-    public CobResult FromDeviceStatus(DeviceStatus deviceStatusEntry)
-    {
-        if (deviceStatusEntry.Loop?.Cob?.Cob.HasValue == true)
-        {
-            var timestamp =
-                deviceStatusEntry.Loop.Cob.Timestamp != null
-                    ? (
-                        DateTime.TryParse(deviceStatusEntry.Loop.Cob.Timestamp, out var ts)
-                            ? ((DateTimeOffset)ts).ToUnixTimeMilliseconds()
-                            : deviceStatusEntry.Mills
-                    )
-                    : deviceStatusEntry.Mills;
-            return new CobResult
-            {
-                Cob = deviceStatusEntry.Loop.Cob.Cob.Value,
-                Source = "Loop",
-                Device = deviceStatusEntry.Device,
-                Mills = timestamp,
-            };
-        }
-
-        if (deviceStatusEntry.OpenAps?.Cob.HasValue == true)
-        {
-            return new CobResult
-            {
-                Cob = deviceStatusEntry.OpenAps.Cob.Value,
-                Source = "OpenAPS",
-                Device = deviceStatusEntry.Device,
-                Mills = deviceStatusEntry.Mills,
-            };
-        }
-
-        if (deviceStatusEntry.OpenAps?.Enacted?.COB is { } enactedCob)
-        {
-            return new CobResult
-            {
-                Cob = enactedCob,
-                Source = "OpenAPS",
-                Device = deviceStatusEntry.Device,
-                Mills = deviceStatusEntry.Mills,
-            };
-        }
-
-        if (deviceStatusEntry.OpenAps?.Suggested?.COB is { } suggestedCob)
-        {
-            return new CobResult
-            {
-                Cob = suggestedCob,
-                Source = "OpenAPS",
-                Device = deviceStatusEntry.Device,
-                Mills = deviceStatusEntry.Mills,
-            };
-        }
-
-        return new CobResult();
-    }
-
-    public bool IsDeviceStatusAvailable(List<DeviceStatus> deviceStatus)
-    {
-        return deviceStatus.Select(FromDeviceStatus).Any(cob => cob.Cob > 0);
     }
 
     public TreatmentCobResult CalcTreatment(

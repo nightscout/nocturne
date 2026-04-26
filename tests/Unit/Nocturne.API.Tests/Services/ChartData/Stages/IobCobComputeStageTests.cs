@@ -78,8 +78,8 @@ public class IobCobComputeStageTests
             .Returns(new IobResult { BasalIob = 0.5 });
 
         _mockCobService
-            .Setup(s => s.CobTotal(It.IsAny<List<Treatment>>(), It.IsAny<List<DeviceStatus>>(), It.IsAny<long>(), It.IsAny<string?>()))
-            .Returns(new CobResult { Cob = 20.0 });
+            .Setup(s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult { Cob = 20.0 });
 
         var context = new ChartDataContext
         {
@@ -137,7 +137,7 @@ public class IobCobComputeStageTests
             Times.Never
         );
         _mockCobService.Verify(
-            s => s.CobTotal(It.IsAny<List<Treatment>>(), It.IsAny<List<DeviceStatus>>(), It.IsAny<long>(), It.IsAny<string?>()),
+            s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never
         );
 

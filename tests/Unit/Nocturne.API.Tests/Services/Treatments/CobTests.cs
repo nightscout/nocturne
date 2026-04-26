@@ -3,7 +3,9 @@ using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Treatments;
@@ -30,12 +32,17 @@ public class CobTests
         therapySettings.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         therapySettings.Setup(t => t.GetCarbAbsorptionRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(30.0);
 
+        var apsSnapshotRepo = new Mock<IApsSnapshotRepository>();
+        apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
+
         _cobService = new Nocturne.API.Services.Treatments.CobService(
-            mockLogger.Object, mockIobService.Object, sensitivity.Object, carbRatio.Object, therapySettings.Object);
+            mockLogger.Object, mockIobService.Object, sensitivity.Object, carbRatio.Object, therapySettings.Object, apsSnapshotRepo.Object);
     }
 
     [Fact]
-    public void CobTotal_ShouldCalculateFromMultipleTreatments()
+    public async Task CobTotal_ShouldCalculateFromMultipleTreatments()
     {
         var firstTreatmentTime = new DateTime(2015, 5, 29, 2, 3, 48, 827, DateTimeKind.Utc);
         var secondTreatmentTime = new DateTime(2015, 5, 29, 3, 45, 10, 670, DateTimeKind.Utc);
@@ -50,9 +57,9 @@ public class CobTests
         var before10 = ((DateTimeOffset)secondTreatmentTime).ToUnixTimeMilliseconds();
         var after10 = ((DateTimeOffset)secondTreatmentTime.AddSeconds(1)).ToUnixTimeMilliseconds();
 
-        var result1 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), after100);
-        var result2 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), before10);
-        var result3 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), after10);
+        var result1 = await _cobService.CobTotalAsync(treatments, after100);
+        var result2 = await _cobService.CobTotalAsync(treatments, before10);
+        var result3 = await _cobService.CobTotalAsync(treatments, after10);
 
         Assert.Equal(100, result1.Cob);
         Assert.Equal(59, Math.Round(result2.Cob));
@@ -60,7 +67,7 @@ public class CobTests
     }
 
     [Fact]
-    public void CobTotal_ShouldCalculateFromSingleTreatment()
+    public async Task CobTotal_ShouldCalculateFromSingleTreatment()
     {
         var treatmentTime = new DateTime(2015, 5, 29, 4, 40, 40, 174, DateTimeKind.Utc);
         var treatments = new List<Treatment>
@@ -74,11 +81,11 @@ public class CobTests
         var later3 = ((DateTimeOffset)treatmentTime.AddMinutes(70)).ToUnixTimeMilliseconds();
         var later4 = ((DateTimeOffset)treatmentTime.AddMinutes(130)).ToUnixTimeMilliseconds();
 
-        var result1 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), rightAfter);
-        var result2 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), later1);
-        var result3 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), later2);
-        var result4 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), later3);
-        var result5 = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), later4);
+        var result1 = await _cobService.CobTotalAsync(treatments, rightAfter);
+        var result2 = await _cobService.CobTotalAsync(treatments, later1);
+        var result3 = await _cobService.CobTotalAsync(treatments, later2);
+        var result4 = await _cobService.CobTotalAsync(treatments, later3);
+        var result5 = await _cobService.CobTotalAsync(treatments, later4);
 
         Assert.Equal(8, result1.Cob);
         Assert.Equal(6, result2.Cob);
@@ -88,40 +95,40 @@ public class CobTests
     }
 
     [Fact]
-    public void CobTotal_ShouldHandleZeroCarbs()
+    public async Task CobTotal_ShouldHandleZeroCarbs()
     {
         var treatments = new List<Treatment>
         {
             new() { Carbs = 0, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
         };
 
-        var result = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _cobService.CobTotalAsync(treatments, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.Equal(0, result.Cob);
     }
 
     [Fact]
-    public void CobTotal_ShouldIgnoreNullCarbs()
+    public async Task CobTotal_ShouldIgnoreNullCarbs()
     {
         var treatments = new List<Treatment>
         {
             new() { Carbs = null, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
         };
 
-        var result = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _cobService.CobTotalAsync(treatments, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.Equal(0, result.Cob);
     }
 
     [Fact]
-    public void CobTotal_ShouldUseDefaultAbsorptionRate()
+    public async Task CobTotal_ShouldUseDefaultAbsorptionRate()
     {
         var treatments = new List<Treatment>
         {
             new() { Carbs = 30, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (30 * 60 * 1000) },
         };
 
-        var result = _cobService.CobTotal(treatments, Array.Empty<DeviceStatus>().ToList(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _cobService.CobTotalAsync(treatments, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.True(result.Cob > 0);
         Assert.True(result.Cob < 30);

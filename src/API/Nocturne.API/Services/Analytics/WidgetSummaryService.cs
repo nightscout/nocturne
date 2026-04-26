@@ -163,7 +163,7 @@ public class WidgetSummaryService : IWidgetSummaryService
             response.Iob = Math.Round(iobResult.Iob * 100) / 100; // Round to 2 decimal places
 
             // Calculate COB
-            var cobResult = _cobService.CobTotal(treatments, deviceStatusList);
+            var cobResult = await _cobService.CobTotalAsync(treatments);
             response.Cob = Math.Round(cobResult.Cob);
         }
         catch (Exception ex)

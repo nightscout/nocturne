@@ -87,12 +87,12 @@ public class RetrospectiveControllerTests
             .ReturnsAsync(new IobResult());
 
         _cobServiceMock
-            .Setup(s => s.CobTotal(
+            .Setup(s => s.CobTotalAsync(
                 It.IsAny<List<Treatment>>(),
-                It.IsAny<List<DeviceStatus>>(),
                 It.IsAny<long?>(),
-                It.IsAny<string?>()))
-            .Returns(new CobResult());
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult());
 
         _basalRateResolverMock
             .Setup(s => s.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))

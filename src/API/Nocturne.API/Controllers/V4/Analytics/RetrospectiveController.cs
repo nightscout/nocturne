@@ -118,10 +118,10 @@ public class RetrospectiveController : ControllerBase
                 ct: cancellationToken
             );
             // Calculate COB at the specified time
-            var cobResult = _cobService.CobTotal(
+            var cobResult = await _cobService.CobTotalAsync(
                 treatmentList,
-                new List<DeviceStatus>(),
-                time
+                time,
+                ct: cancellationToken
             );
             // Get glucose at the specified time (interpolated)
             var glucoseData = GetGlucoseAtTime(entryList, time);
@@ -257,9 +257,8 @@ public class RetrospectiveController : ControllerBase
                     pointTime
                 );
                 // Calculate COB
-                var cobResult = _cobService.FromTreatments(
+                var cobResult = await _cobService.FromTreatmentsAsync(
                     relevantTreatments,
-                    deviceStatusList,
                     pointTime
                 );
                 // Get glucose at this time
