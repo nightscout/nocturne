@@ -1,11 +1,14 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Xunit;
@@ -21,7 +24,6 @@ public class DDataServiceTests
     private readonly Mock<IEntryStore> _mockEntryStore;
     private readonly Mock<ITreatmentService> _mockTreatmentService;
     private readonly Mock<IProfileProjectionService> _mockProfileProjectionService;
-    private readonly Mock<IDeviceStatusRepository> _mockDeviceStatusRepository;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
     private readonly Mock<IActivityService> _mockActivityService;
     private readonly Mock<ILogger<DDataService>> _mockLogger;
@@ -32,15 +34,40 @@ public class DDataServiceTests
         _mockEntryStore = new Mock<IEntryStore>();
         _mockTreatmentService = new Mock<ITreatmentService>();
         _mockProfileProjectionService = new Mock<IProfileProjectionService>();
-        _mockDeviceStatusRepository = new Mock<IDeviceStatusRepository>();
         _mockFoodRepository = new Mock<IFoodRepository>();
         _mockActivityService = new Mock<IActivityService>();
         _mockLogger = new Mock<ILogger<DDataService>>();
+
+        // Build a DeviceStatusProjectionService backed by empty mocked repositories
+        var mockApsRepo = new Mock<IApsSnapshotRepository>();
+        mockApsRepo.Setup(x => x.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<ApsSnapshot>());
+        var mockPumpRepo = new Mock<IPumpSnapshotRepository>();
+        mockPumpRepo.Setup(x => x.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PumpSnapshot>());
+        var mockUploaderRepo = new Mock<IUploaderSnapshotRepository>();
+        var mockStateSpanRepo = new Mock<IStateSpanRepository>();
+        var mockExtrasRepo = new Mock<IDeviceStatusExtrasRepository>();
+
+        var projectionService = new DeviceStatusProjectionService(
+            mockApsRepo.Object,
+            mockPumpRepo.Object,
+            mockUploaderRepo.Object,
+            mockStateSpanRepo.Object,
+            mockExtrasRepo.Object,
+            new Mock<ILogger<DeviceStatusProjectionService>>().Object);
+
         _ddataService = new DDataService(
             _mockEntryStore.Object,
             _mockTreatmentService.Object,
             _mockProfileProjectionService.Object,
-            _mockDeviceStatusRepository.Object,
+            projectionService,
             _mockFoodRepository.Object,
             _mockActivityService.Object,
             _mockLogger.Object
@@ -67,15 +94,6 @@ public class DDataServiceTests
                 )
             )
             .ReturnsAsync(Array.Empty<Treatment>());
-        _mockDeviceStatusRepository
-            .Setup(x =>
-                x.GetDeviceStatusAsync(
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(Array.Empty<DeviceStatus>());
         _mockProfileProjectionService
             .Setup(x =>
                 x.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())

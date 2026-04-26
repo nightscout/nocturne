@@ -390,6 +390,7 @@ public static class ServiceRegistrationExtensions
                 sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
         });
         services.AddScoped<IStateSpanService, StateSpanService>();
+        services.AddScoped<DeviceStatusProjectionService>();
         services.AddScoped<IDeviceStatusService, DeviceStatusService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>
             new CompositeDataEventSink<DeviceStatus>(

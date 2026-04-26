@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -21,7 +22,7 @@ public class DDataService : IDDataService
     private readonly IEntryStore _store;
     private readonly ITreatmentService _treatments;
     private readonly IProfileProjectionService _profiles;
-    private readonly IDeviceStatusRepository _deviceStatuses;
+    private readonly DeviceStatusProjectionService _projectionService;
     private readonly IFoodRepository _food;
     private readonly IActivityService _activities;
     private readonly ILogger<DDataService> _logger;
@@ -43,7 +44,7 @@ public class DDataService : IDDataService
         IEntryStore store,
         ITreatmentService treatments,
         IProfileProjectionService profiles,
-        IDeviceStatusRepository deviceStatuses,
+        DeviceStatusProjectionService projectionService,
         IFoodRepository food,
         IActivityService activities,
         ILogger<DDataService> logger)
@@ -51,7 +52,7 @@ public class DDataService : IDDataService
         _store = store;
         _treatments = treatments;
         _profiles = profiles;
-        _deviceStatuses = deviceStatuses;
+        _projectionService = projectionService;
         _food = food;
         _activities = activities;
         _logger = logger;
@@ -719,10 +720,11 @@ public class DDataService : IDDataService
     {
         try
         {
-            var deviceStatuses = await _deviceStatuses.GetDeviceStatusAsync(
+            var deviceStatuses = await _projectionService.GetAsync(
                 count: 1000,
                 skip: 0,
-                cancellationToken: cancellationToken
+                find: null,
+                ct: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();
         }
