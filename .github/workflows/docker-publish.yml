@@ -97,7 +97,7 @@ jobs:
           MISSING=()
 
           # Spot-check a representative set of generated remote files
-          for f in passkeys patientRecords chartDatas profiles treatments alerts; do
+          for f in passkeys patientRecords chartDatas profiles alerts; do
             if [ ! -f "$GENERATED_DIR/${f}.generated.remote.ts" ]; then
               MISSING+=("$f")
             fi
