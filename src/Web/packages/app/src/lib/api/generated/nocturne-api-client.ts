@@ -17661,70 +17661,6 @@ export class ConfigurationClient {
     }
 }
 
-export class HomeAssistantWebhookClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    /**
-     * Receives a webhook from Home Assistant with entity state updates and creates
-    corresponding glucose entries.
-     * @param secret Shared webhook secret used to authenticate the request.
-     * @param payload Home Assistant state response containing entity data.
-     * @return No content on success; 401 if the secret is invalid; 404 if not configured.
-     */
-    receiveWebhook(secret: string, payload: HomeAssistantStateResponse, signal?: AbortSignal): Promise<FileResponse> {
-        let url_ = this.baseUrl + "/api/v4/connectors/home-assistant/webhook/{secret}";
-        if (secret === undefined || secret === null)
-            throw new globalThis.Error("The parameter 'secret' must be defined.");
-        url_ = url_.replace("{secret}", encodeURIComponent("" + secret));
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(payload);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/octet-stream"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processReceiveWebhook(_response);
-        });
-    }
-
-    protected processReceiveWebhook(response: Response): Promise<FileResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<FileResponse>(null as any);
-    }
-}
-
 export class WebhookSettingsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -23278,6 +23214,40 @@ export class PasskeyClient {
     }
 
     /**
+     * Mark the current tenant's onboarding as complete.
+     */
+    completeOnboarding(signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/auth/passkey/onboarding/complete";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processCompleteOnboarding(_response);
+        });
+    }
+
+    protected processCompleteOnboarding(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
      * Generate registration options for the first user during initial setup.
     Only available when no non-system subjects exist (setup mode).
     Creates the subject, assigns admin role, and returns passkey registration options.
@@ -28211,14 +28181,6 @@ export interface SetActiveRequest {
     isActive?: boolean;
 }
 
-export interface HomeAssistantStateResponse {
-    entity_id?: string;
-    state?: string;
-    attributes?: { [key: string]: any; };
-    last_changed?: Date;
-    last_updated?: Date;
-}
-
 export interface WebhookNotificationSettings {
     enabled?: boolean;
     urls?: string[];
@@ -29927,6 +29889,7 @@ export interface AuthStatusResponse {
     setupRequired?: boolean;
     recoveryMode?: boolean;
     allowAccessRequests?: boolean;
+    onboardingCompleted?: boolean;
 }
 
 /** Request for initial setup registration options (first user creation) */

@@ -16440,53 +16440,6 @@
         ]
       }
     },
-    "/api/v4/connectors/home-assistant/webhook/{secret}": {
-      "post": {
-        "tags": [
-          "Home Assistant Webhook"
-        ],
-        "summary": "Receives a webhook from Home Assistant with entity state updates and creates\ncorresponding glucose entries.",
-        "operationId": "HomeAssistantWebhook_ReceiveWebhook",
-        "parameters": [
-          {
-            "name": "secret",
-            "in": "path",
-            "required": true,
-            "description": "Shared webhook secret used to authenticate the request.",
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "payload",
-          "description": "Home Assistant state response containing entity data.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HomeAssistantStateResponse"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": "No content on success; 401 if the secret is invalid; 404 if not configured.",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v4/ui-settings/notifications/webhooks": {
       "get": {
         "tags": [
@@ -21506,6 +21459,24 @@
           }
         },
         "x-remote-type": "query"
+      }
+    },
+    "/api/auth/passkey/onboarding/complete": {
+      "post": {
+        "tags": [
+          "Passkey"
+        ],
+        "summary": "Mark the current tenant's onboarding as complete.",
+        "operationId": "Passkey_CompleteOnboarding",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAuthStatus"
+        ]
       }
     },
     "/api/auth/passkey/setup/options": {
@@ -35895,30 +35866,6 @@
           }
         }
       },
-      "HomeAssistantStateResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "entity_id": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "attributes": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "last_changed": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "last_updated": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "WebhookNotificationSettings": {
         "type": "object",
         "additionalProperties": false,
@@ -41180,6 +41127,9 @@
             "type": "boolean"
           },
           "allowAccessRequests": {
+            "type": "boolean"
+          },
+          "onboardingCompleted": {
             "type": "boolean"
           }
         }

@@ -8,7 +8,11 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url }) => {
     // Check onboarding first — if the instance needs setup, redirect there
     // regardless of auth state. This covers fresh installs where no tenant
     // or credentials exist yet.
-    const onboarding = checkOnboarding(cookies);
+    const onboarding = await checkOnboarding(
+      cookies,
+      locals.apiClient,
+      url.protocol === "https:",
+    );
     if (!onboarding.isComplete) {
       throw redirect(303, "/setup");
     }
