@@ -1994,6 +1994,120 @@ public class DeviceStatusDecomposerTests : IDisposable
         extrasEntities[0].ExtrasJson.Should().Contain("anotherField");
     }
 
+    [Fact]
+    public async Task DecomposeAsync_ApsSnapshotGetsPumpDeviceId()
+    {
+        // Arrange
+        var expectedDeviceId = Guid.CreateVersion7();
+        _deviceServiceMock
+            .Setup(s => s.ResolveAsync(
+                V4Models.DeviceCategory.InsulinPump,
+                "Insulet",
+                "Omnipod 5",
+                1700000000000,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedDeviceId);
+
+        var ds = new DeviceStatus
+        {
+            Id = "aps-pump-device-id",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus
+            {
+                Iob = new OpenApsIobData { Iob = 2.0 },
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 110.0, EventualBG = 100.0, Timestamp = "2023-11-14T12:00:00Z"
+                }
+            },
+            Pump = new PumpStatus
+            {
+                Manufacturer = "Insulet",
+                Model = "Omnipod 5",
+                Reservoir = 100.0
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.DeviceId.Should().Be(expectedDeviceId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ApsSnapshotWithNoPump_HasNullDeviceId()
+    {
+        // Arrange — no Pump section means no DeviceId to propagate
+        var ds = new DeviceStatus
+        {
+            Id = "aps-no-pump-device-id",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            OpenAps = new OpenApsStatus
+            {
+                Iob = new OpenApsIobData { Iob = 1.5 },
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 120.0, EventualBG = 100.0, Timestamp = "2023-11-14T12:00:00Z"
+                }
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var aps = result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single();
+        aps.DeviceId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpSnapshotGetsPatientDeviceId()
+    {
+        // Arrange
+        var expectedDeviceId = Guid.CreateVersion7();
+        var expectedPatientDeviceId = Guid.CreateVersion7();
+
+        _deviceServiceMock
+            .Setup(s => s.ResolveAsync(
+                V4Models.DeviceCategory.InsulinPump,
+                "Insulet",
+                "Omnipod 5",
+                1700000000000,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedDeviceId);
+
+        _deviceServiceMock
+            .Setup(s => s.ResolvePatientDeviceAsync(
+                expectedDeviceId,
+                1700000000000,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedPatientDeviceId);
+
+        var ds = new DeviceStatus
+        {
+            Id = "pump-patient-device-id",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus
+            {
+                Manufacturer = "Insulet",
+                Model = "Omnipod 5",
+                Reservoir = 150.0
+            }
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(ds);
+
+        // Assert
+        var pump = result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single();
+        pump.PatientDeviceId.Should().Be(expectedPatientDeviceId);
+    }
+
     #endregion
 
     #region AAPS SMB Volume Fallback
