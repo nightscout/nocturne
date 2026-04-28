@@ -495,7 +495,31 @@ public class PasskeyController : ControllerBase
             SetupRequired = setupRequired,
             RecoveryMode = recoveryMode,
             AllowAccessRequests = tenant?.AllowAccessRequests ?? false,
+            OnboardingCompleted = tenant?.OnboardingCompletedAt != null,
         });
+    }
+
+    /// <summary>
+    /// Mark the current tenant's onboarding as complete.
+    /// </summary>
+    [HttpPost("onboarding/complete")]
+    [Authorize]
+    [RemoteCommand(Invalidates = ["GetAuthStatus"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> CompleteOnboarding()
+    {
+        var tenantId = _tenantAccessor.TenantId;
+        var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+        if (tenant == null)
+            return NotFound();
+
+        if (tenant.OnboardingCompletedAt == null)
+        {
+            tenant.OnboardingCompletedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+        }
+
+        return NoContent();
     }
 
     /// <summary>
@@ -1062,6 +1086,7 @@ public class AuthStatusResponse
     public bool SetupRequired { get; set; }
     public bool RecoveryMode { get; set; }
     public bool AllowAccessRequests { get; set; }
+    public bool OnboardingCompleted { get; set; }
 }
 
 /// <summary>
