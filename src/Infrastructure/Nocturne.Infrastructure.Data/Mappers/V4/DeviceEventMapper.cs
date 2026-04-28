@@ -23,6 +23,8 @@ public static class DeviceEventMapper
             Timestamp = model.Timestamp,
             UtcOffset = model.UtcOffset,
             Device = model.Device,
+            DeviceId = model.DeviceId,
+            PatientDeviceId = model.PatientDeviceId,
             App = model.App,
             DataSource = model.DataSource,
             CorrelationId = model.CorrelationId,
@@ -51,6 +53,8 @@ public static class DeviceEventMapper
             Timestamp = entity.Timestamp,
             UtcOffset = entity.UtcOffset,
             Device = entity.Device,
+            DeviceId = entity.DeviceId,
+            PatientDeviceId = entity.PatientDeviceId,
             App = entity.App,
             DataSource = entity.DataSource,
             CorrelationId = entity.CorrelationId,
@@ -78,6 +82,8 @@ public static class DeviceEventMapper
         entity.Timestamp = model.Timestamp;
         entity.UtcOffset = model.UtcOffset;
         entity.Device = model.Device;
+        entity.DeviceId = model.DeviceId;
+        entity.PatientDeviceId = model.PatientDeviceId;
         entity.App = model.App;
         entity.DataSource = model.DataSource;
         entity.CorrelationId = model.CorrelationId;
