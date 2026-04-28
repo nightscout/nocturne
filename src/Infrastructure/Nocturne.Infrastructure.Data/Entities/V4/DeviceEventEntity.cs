@@ -106,6 +106,18 @@ public class DeviceEventEntity : ITenantScoped, IAuditable
     public string? SyncIdentifier { get; set; }
 
     /// <summary>
+    /// Foreign key to the Device table.
+    /// </summary>
+    [Column("device_id")]
+    public Guid? DeviceId { get; set; }
+
+    /// <summary>
+    /// Foreign key to the PatientDevice table.
+    /// </summary>
+    [Column("patient_device_id")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
