@@ -66,6 +66,12 @@ public class TenantEntity
     public bool AllowAccessRequests { get; set; } = true;
 
     /// <summary>
+    /// When the onboarding wizard was completed or skipped. Null = not yet onboarded.
+    /// </summary>
+    [Column("onboarding_completed_at")]
+    public DateTime? OnboardingCompletedAt { get; set; }
+
+    /// <summary>
     /// When the tenant record was created
     /// </summary>
     [Column("sys_created_at")]
