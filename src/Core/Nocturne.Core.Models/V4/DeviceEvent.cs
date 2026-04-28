@@ -42,6 +42,11 @@ public class DeviceEvent : IV4Record
     public string? Device { get; set; }
 
     /// <summary>
+    /// Foreign key to the <see cref="Device"/> table.
+    /// </summary>
+    public Guid? DeviceId { get; set; }
+
+    /// <summary>
     /// Application that uploaded this record
     /// </summary>
     public string? App { get; set; }

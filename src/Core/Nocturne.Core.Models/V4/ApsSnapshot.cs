@@ -42,6 +42,11 @@ public class ApsSnapshot : IV4Record
     /// <inheritdoc />
     public string? Device { get; set; }
 
+    /// <summary>
+    /// Foreign key to the <see cref="Device"/> table.
+    /// </summary>
+    public Guid? DeviceId { get; set; }
+
     /// <inheritdoc />
     public string? App { get; set; }
 
