@@ -15,15 +15,18 @@ namespace Nocturne.API.Services.Devices;
 public class DeviceService : IDeviceService
 {
     private readonly IDeviceRepository _repository;
+    private readonly IPatientDeviceRepository _patientDeviceRepository;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ConcurrentDictionary<(string, string, string, string), Guid> _cache = new();
+    private readonly ConcurrentDictionary<(string, Guid), IReadOnlyList<PatientDevice>> _patientDeviceCache = new();
 
     private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
         ?? throw new InvalidOperationException("Tenant context is not resolved");
 
-    public DeviceService(IDeviceRepository repository, ITenantAccessor tenantAccessor)
+    public DeviceService(IDeviceRepository repository, IPatientDeviceRepository patientDeviceRepository, ITenantAccessor tenantAccessor)
     {
         _repository = repository;
+        _patientDeviceRepository = patientDeviceRepository;
         _tenantAccessor = tenantAccessor;
     }
 
@@ -62,5 +65,26 @@ public class DeviceService : IDeviceService
         var created = await _repository.CreateAsync(device, ct);
         _cache[key] = created.Id;
         return created.Id;
+    }
+
+    public async Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default)
+    {
+        if (deviceId is null)
+            return null;
+
+        var tenantId = TenantCacheId;
+        var key = (tenantId, deviceId.Value);
+
+        if (!_patientDeviceCache.TryGetValue(key, out var patientDevices))
+        {
+            patientDevices = await _patientDeviceRepository.GetByDeviceIdAsync(deviceId.Value, ct);
+            _patientDeviceCache[key] = patientDevices;
+        }
+
+        var date = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime);
+
+        return patientDevices.FirstOrDefault(pd =>
+            (pd.StartDate is null || pd.StartDate <= date) &&
+            (pd.EndDate is null || pd.EndDate >= date))?.Id;
     }
 }
