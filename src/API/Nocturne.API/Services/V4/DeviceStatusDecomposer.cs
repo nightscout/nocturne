@@ -90,18 +90,20 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
         var legacyId = ds.Id;
 
-        if (ds.OpenAps != null)
-        {
-            await DecomposeApsFromOpenApsAsync(ds, legacyId, result, ct);
-        }
-        else if (ds.Loop != null)
-        {
-            await DecomposeApsFromLoopAsync(ds, legacyId, result, ct);
-        }
+        Guid? pumpDeviceId = null;
 
         if (ds.Pump != null)
         {
-            await DecomposePumpAsync(ds, legacyId, result, ct);
+            pumpDeviceId = await DecomposePumpAsync(ds, legacyId, result, ct);
+        }
+
+        if (ds.OpenAps != null)
+        {
+            await DecomposeApsFromOpenApsAsync(ds, legacyId, result, pumpDeviceId, ct);
+        }
+        else if (ds.Loop != null)
+        {
+            await DecomposeApsFromLoopAsync(ds, legacyId, result, pumpDeviceId, ct);
         }
 
         if (ds.Uploader != null || ds.UploaderBattery.HasValue)
@@ -122,7 +124,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     #region APS Decomposition
 
     private async Task DecomposeApsFromOpenApsAsync(
-        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, Guid? pumpDeviceId, CancellationToken ct)
     {
         var command = ds.OpenAps!.Enacted ?? ds.OpenAps.Suggested;
         var predBGs = command?.PredBGs;
@@ -167,11 +169,14 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             AidVersion = ds.OpenAps?.Version,
         };
 
+        model.DeviceId = pumpDeviceId;
+        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
+
         await UpsertApsSnapshotAsync(legacyId, model, result, ct);
     }
 
     private async Task DecomposeApsFromLoopAsync(
-        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, Guid? pumpDeviceId, CancellationToken ct)
     {
         var model = new V4Models.ApsSnapshot
         {
@@ -199,6 +204,9 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             // Loop's version is captured from the device string (e.g. "Loop/3.0"), not from the Loop data object
             AidVersion = null,
         };
+
+        model.DeviceId = pumpDeviceId;
+        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
 
         await UpsertApsSnapshotAsync(legacyId, model, result, ct);
     }
@@ -229,7 +237,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
     #region Pump Decomposition
 
-    private async Task DecomposePumpAsync(
+    private async Task<Guid?> DecomposePumpAsync(
         DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, CancellationToken ct)
     {
         var model = new V4Models.PumpSnapshot
@@ -260,6 +268,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             ds.Pump?.Manufacturer,
             ds.Pump?.Model,
             ds.Mills, ct);
+        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, ds.Mills, ct);
 
         var existing = legacyId != null
             ? await _pumpRepo.GetByLegacyIdAsync(legacyId, ct)
@@ -281,6 +290,8 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         }
 
         await DecomposePumpSuspensionAsync(ds, persisted, result, ct);
+
+        return model.DeviceId;
     }
 
     /// <summary>
