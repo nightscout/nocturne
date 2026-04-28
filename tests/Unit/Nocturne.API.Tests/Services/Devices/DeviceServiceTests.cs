@@ -14,12 +14,14 @@ namespace Nocturne.API.Tests.Services.Devices;
 public class DeviceServiceTests
 {
     private readonly Mock<IDeviceRepository> _mockRepository;
+    private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
     private readonly DeviceService _service;
 
     public DeviceServiceTests()
     {
         _mockRepository = new Mock<IDeviceRepository>();
-        _service = new DeviceService(_mockRepository.Object, MockTenantAccessor.Create().Object);
+        _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
+        _service = new DeviceService(_mockRepository.Object, _mockPatientDeviceRepository.Object, MockTenantAccessor.Create().Object);
     }
 
     [Fact]
@@ -247,6 +249,135 @@ public class DeviceServiceTests
         result2.Should().Be(existingId);
         _mockRepository.Verify(
             r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolvePatientDeviceAsync_WithMatchingDeviceAndTimestamp_ReturnsPatientDeviceId()
+    {
+        var deviceId = Guid.CreateVersion7();
+        var patientDeviceId = Guid.CreateVersion7();
+        var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
+
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PatientDevice>
+            {
+                new()
+                {
+                    Id = patientDeviceId,
+                    DeviceId = deviceId,
+                    StartDate = new DateOnly(2026, 1, 1),
+                    EndDate = new DateOnly(2026, 6, 1),
+                }
+            });
+
+        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        result.Should().Be(patientDeviceId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolvePatientDeviceAsync_WithNullDeviceId_ReturnsNull()
+    {
+        var result = await _service.ResolvePatientDeviceAsync(null, 1700000000000L);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolvePatientDeviceAsync_WithNoMatchingPatientDevice_ReturnsNull()
+    {
+        var deviceId = Guid.CreateVersion7();
+        var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
+
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PatientDevice>());
+
+        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolvePatientDeviceAsync_WithTimestampOutsideDateRange_ReturnsNull()
+    {
+        var deviceId = Guid.CreateVersion7();
+        var patientDeviceId = Guid.CreateVersion7();
+        var mills = DateTimeOffset.Parse("2025-06-15T12:00:00Z").ToUnixTimeMilliseconds();
+
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PatientDevice>
+            {
+                new()
+                {
+                    Id = patientDeviceId,
+                    DeviceId = deviceId,
+                    StartDate = new DateOnly(2026, 1, 1),
+                    EndDate = new DateOnly(2026, 6, 1),
+                }
+            });
+
+        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolvePatientDeviceAsync_WithNullEndDate_MatchesCurrentDevice()
+    {
+        var deviceId = Guid.CreateVersion7();
+        var patientDeviceId = Guid.CreateVersion7();
+        var mills = DateTimeOffset.Parse("2030-01-01T12:00:00Z").ToUnixTimeMilliseconds();
+
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PatientDevice>
+            {
+                new()
+                {
+                    Id = patientDeviceId,
+                    DeviceId = deviceId,
+                    StartDate = new DateOnly(2026, 1, 1),
+                    EndDate = null,
+                }
+            });
+
+        var result = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        result.Should().Be(patientDeviceId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolvePatientDeviceAsync_SameDeviceTwice_UsesCacheSecondTime()
+    {
+        var deviceId = Guid.CreateVersion7();
+        var patientDeviceId = Guid.CreateVersion7();
+        var mills = DateTimeOffset.Parse("2026-03-15T12:00:00Z").ToUnixTimeMilliseconds();
+
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PatientDevice>
+            {
+                new()
+                {
+                    Id = patientDeviceId,
+                    DeviceId = deviceId,
+                    StartDate = new DateOnly(2026, 1, 1),
+                    EndDate = null,
+                }
+            });
+
+        var result1 = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+        var result2 = await _service.ResolvePatientDeviceAsync(deviceId, mills);
+
+        result1.Should().Be(patientDeviceId);
+        result2.Should().Be(patientDeviceId);
+        _mockPatientDeviceRepository.Verify(
+            r => r.GetByDeviceIdAsync(deviceId, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }
