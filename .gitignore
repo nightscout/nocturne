@@ -16,6 +16,7 @@ mongodb-dump
 .idea
 .playwright-mcp
 appsettings.Development.json
+**/.mono/
 
 coveragereport/
 TestResults/

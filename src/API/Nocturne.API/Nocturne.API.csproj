@@ -94,7 +94,7 @@
     <MakeDir Directories="$(DiagramsOutputDir)" />
     <Exec Command="npx @mermaid-js/mermaid-cli -i &quot;%(MermaidFiles.Identity)&quot; -o &quot;$(DiagramsOutputDir)/%(MermaidFiles.Filename).svg&quot; -b transparent -c &quot;$(DiagramsSourceDir)/mermaid-config.json&quot;" Condition="'@(MermaidFiles)' != ''" ContinueOnError="true" />
   </Target>
-  <Target Name="GenerateClient" AfterTargets="Build" Condition="'$(GenerateNSwagClient)' == 'true'">
+  <Target Name="GenerateClient" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true'">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
     <Exec Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="false" />
     <Message Importance="high" Text="TypeScript API client generation complete." />

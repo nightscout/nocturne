@@ -16,6 +16,8 @@
         <!-- Added for design-time configuration loading -->
         <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
         <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+        <!-- Added to take vulnerability patched version -->
+        <PackageReference Include="System.Security.Cryptography.Xml" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />

@@ -14,5 +14,7 @@
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- Needed to pull the pinned version that has a vulnerability patch -->
+    <PackageReference Include="System.Drawing.Common" />
   </ItemGroup>
 </Project>
