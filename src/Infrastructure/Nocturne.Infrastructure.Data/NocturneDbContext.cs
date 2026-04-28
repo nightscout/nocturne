@@ -1994,6 +1994,56 @@ public class NocturneDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .HasOne<DeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.DeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<DeviceEventEntity>()
+            .HasOne<DeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.DeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // PatientDevice foreign keys
+        modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<DeviceEventEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<TempBasalEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<PumpSnapshotEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<BolusEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
             .Entity<UploaderSnapshotEntity>()
             .HasOne<DeviceEntity>()
             .WithMany()
