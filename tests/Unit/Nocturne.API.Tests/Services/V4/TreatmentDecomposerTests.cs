@@ -2079,6 +2079,78 @@ public class TreatmentDecomposerTests : IDisposable
         bolus.Automatic.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task DecomposeAsync_DeviceEvent_GetsDeviceIdFromPumpInfo()
+    {
+        // Arrange
+        var expectedDeviceId = Guid.CreateVersion7();
+        _deviceServiceMock
+            .Setup(s => s.ResolveAsync(
+                V4Models.DeviceCategory.InsulinPump,
+                "Insulet",
+                "Omnipod 5",
+                1700000000000,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedDeviceId);
+
+        var treatment = new Treatment
+        {
+            Id = "device-event-fk-1",
+            EventType = "Site Change",
+            Mills = 1700000000000,
+            PumpType = "Insulet",
+            PumpSerial = "Omnipod 5"
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
+        deviceEvent.DeviceId.Should().Be(expectedDeviceId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_Bolus_GetsPatientDeviceId()
+    {
+        // Arrange
+        var expectedDeviceId = Guid.CreateVersion7();
+        var expectedPatientDeviceId = Guid.CreateVersion7();
+
+        _deviceServiceMock
+            .Setup(s => s.ResolveAsync(
+                V4Models.DeviceCategory.InsulinPump,
+                "Insulet",
+                "Omnipod 5",
+                1700000000000,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedDeviceId);
+
+        _deviceServiceMock
+            .Setup(s => s.ResolvePatientDeviceAsync(
+                expectedDeviceId,
+                1700000000000,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedPatientDeviceId);
+
+        var treatment = new Treatment
+        {
+            Id = "bolus-patient-device-1",
+            EventType = "Correction Bolus",
+            Mills = 1700000000000,
+            Insulin = 3.0,
+            PumpType = "Insulet",
+            PumpSerial = "Omnipod 5"
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
+        bolus.PatientDeviceId.Should().Be(expectedPatientDeviceId);
+    }
+
     #endregion
 
     #region Profile Switch with Inline ProfileJson
