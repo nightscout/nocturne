@@ -85,6 +85,18 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         return entities.Select(PatientDeviceMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PatientDevice>> GetByDeviceIdAsync(Guid deviceId, CancellationToken ct = default)
+    {
+        var entities = await _context.PatientDevices
+            .AsNoTracking()
+            .Where(e => e.DeviceId == deviceId)
+            .OrderByDescending(e => e.StartDate)
+            .ToListAsync(ct);
+
+        return entities.Select(PatientDeviceMapper.ToDomainModel).ToList();
+    }
+
     /// <summary>
     /// Gets a patient device record by its unique identifier.
     /// </summary>
