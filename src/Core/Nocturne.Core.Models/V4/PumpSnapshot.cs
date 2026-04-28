@@ -104,6 +104,11 @@ public class PumpSnapshot : IV4Record
     /// </summary>
     public Guid? DeviceId { get; set; }
 
+    /// <summary>
+    /// Foreign key to the <see cref="PatientDevice"/> table.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
+
     /// <summary>Pump-reported total IOB (when no APS algorithm is running).</summary>
     public double? Iob { get; set; }
 
