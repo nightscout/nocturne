@@ -211,7 +211,8 @@ public class IobService(
         var totalIob = 0.0;
         var totalActivity = 0.0;
         var totalBasalIob = 0.0;
-        Treatment? lastBolus = null;
+        // LastBolus tracking disabled — old IobService will be deleted in Task 8
+        // Treatment→Bolus migration pending
 
         foreach (var treatment in treatments)
         {
@@ -222,10 +223,6 @@ public class IobService(
                 {
                     var contribution = CalcTreatment(treatment, currentTime, specProfile);
 
-                    if (contribution.IobContrib > 0)
-                    {
-                        lastBolus = treatment;
-                    }
 
                     totalIob += contribution.IobContrib;
                     totalActivity += contribution.ActivityContrib;
@@ -246,7 +243,7 @@ public class IobService(
             Iob = RoundToThreeDecimals(totalIob),
             BasalIob = totalBasalIob > 0 ? RoundToThreeDecimals(totalBasalIob) : null,
             Activity = totalActivity,
-            LastBolus = lastBolus,
+            LastBolus = null, // Treatment→Bolus migration pending Task 8
             Source = "Care Portal",
         };
     }

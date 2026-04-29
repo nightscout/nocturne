@@ -1,21 +1,23 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// IOB contribution from a single <see cref="Treatment"/>.
+/// IOB contribution from a single <see cref="Bolus"/> or <see cref="TempBasal"/>.
 /// </summary>
 public class IobContribution
 {
-    /// <summary>Insulin-on-board contribution from this treatment (units).</summary>
+    /// <summary>Insulin-on-board contribution (units).</summary>
     public double IobContrib { get; set; }
 
-    /// <summary>Insulin activity contribution from this treatment (units/hr).</summary>
+    /// <summary>Insulin activity contribution (units/hr).</summary>
     public double ActivityContrib { get; set; }
 }
 
 /// <summary>
-/// Insulin on Board (IOB) calculation result aggregated across all active <see cref="Treatment"/> records.
+/// Insulin on Board (IOB) calculation result aggregated across all active <see cref="Bolus"/> records.
 /// </summary>
-/// <seealso cref="Treatment"/>
+/// <seealso cref="Bolus"/>
 public class IobResult
 {
     /// <summary>Total insulin on board (units).</summary>
@@ -24,8 +26,8 @@ public class IobResult
     /// <summary>Total insulin activity (units/hr).</summary>
     public double? Activity { get; set; }
 
-    /// <summary>Most recent bolus <see cref="Treatment"/>.</summary>
-    public Treatment? LastBolus { get; set; }
+    /// <summary>Most recent <see cref="Bolus"/>.</summary>
+    public Bolus? LastBolus { get; set; }
 
     /// <summary>Source of the IOB calculation (e.g., "iob", "openaps").</summary>
     public string? Source { get; set; }

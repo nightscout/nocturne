@@ -346,9 +346,7 @@ public class PropertiesService : IPropertiesService
                 ["timestamp"] = now,
                 ["source"] = cobResult.Source ?? "Care Portal",
                 ["activity"] = cobResult.Activity,
-                ["treatments"] = cobResult
-                    .Treatments?.Select(t => new { t.Mills, t.Carbs })
-                    .ToList(),
+                // Treatments list removed — CobResult no longer carries Treatment objects
             };
             _logger.LogDebug("SetCobProperties: COB property set successfully");
         }

@@ -8,57 +8,6 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
-/// COB calculation result with exact 1:1 legacy JavaScript compatibility.
-/// Based on the <c>ClientApp/lib/plugins/cob.js</c> return structure.
-/// </summary>
-/// <seealso cref="CobService"/>
-/// <seealso cref="ICobService"/>
-public class CobResult
-{
-    public double Cob { get; set; }
-    public double? Activity { get; set; }
-    public List<Treatment>? Treatments { get; set; }
-    public string? Source { get; set; }
-    public string? Device { get; set; }
-    public long? Mills { get; set; }
-    public string? Display { get; set; }
-    public string? DisplayLine { get; set; }
-
-    // Properties from legacy fromTreatments return
-    public long? DecayedBy { get; set; }
-    public double? IsDecaying { get; set; }
-    public double? CarbsHr { get; set; }
-    public double? RawCarbImpact { get; set; }
-    public Treatment? LastCarbs { get; set; }
-    public CobResult? TreatmentCOB { get; set; }
-}
-
-/// <summary>
-/// COB calculation result from the <c>cobCalc</c> function.
-/// Exact structure from legacy JavaScript.
-/// </summary>
-/// <seealso cref="CobService"/>
-public class CobCalcResult
-{
-    public double InitialCarbs { get; set; }
-    public DateTimeOffset DecayedBy { get; set; }
-    public double IsDecaying { get; set; }
-    public DateTimeOffset CarbTime { get; set; }
-}
-
-/// <summary>
-/// COB contribution calculated for a single <see cref="Treatment"/>.
-/// </summary>
-/// <seealso cref="CobService.CalcTreatment"/>
-public class TreatmentCobResult
-{
-    public double CobContrib { get; set; }
-    public double ActivityContrib { get; set; }
-    public long? DecayedBy { get; set; }
-    public bool IsDecaying { get; set; }
-}
-
-/// <summary>
 /// Service for calculating Carbs on Board (COB) with exact 1:1 legacy JavaScript compatibility.
 /// Implements exact algorithms from <c>ClientApp/lib/plugins/cob.js</c> with no simplifications.
 /// </summary>
@@ -91,7 +40,7 @@ public interface ICobService
     /// <summary>
     /// Calculates the COB contribution from a single <see cref="Treatment"/>.
     /// </summary>
-    TreatmentCobResult CalcTreatment(
+    CarbCobContribution CalcTreatment(
         Treatment treatment,
         long time,
         string? specProfile = null
@@ -264,7 +213,8 @@ public class CobService(
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var totalCOB = 0.0;
-        Treatment? lastCarbs = null;
+        // LastCarbs tracking disabled — old CobService will be deleted in Task 8
+        Treatment? lastCarbsTreatment = null;
         var isDecaying = 0.0;
         var lastDecayedBy = 0L;
 
@@ -280,7 +230,7 @@ public class CobService(
                 && treatment.Mills < currentTime
             )
             {
-                lastCarbs = treatment;
+                lastCarbsTreatment = treatment;
                 var cCalc = CobCalc(treatment, lastDecayedBy, currentTime, specProfile);
                 if (cCalc == null)
                     continue;
@@ -360,7 +310,7 @@ public class CobService(
             CarbsHr = carbAbsorptionRate,
             RawCarbImpact = rawCarbImpact,
             Cob = totalCOB,
-            LastCarbs = lastCarbs,
+            LastCarbs = null, // Treatment→CarbIntake migration pending Task 8
         };
     }
 
@@ -411,7 +361,7 @@ public class CobService(
         };
     }
 
-    public TreatmentCobResult CalcTreatment(
+    public CarbCobContribution CalcTreatment(
         Treatment treatment,
         long time,
         string? specProfile = null
@@ -423,7 +373,7 @@ public class CobService(
         if (!hasData)
         {
             logger.LogWarning("For the COB plugin to function you need a treatment profile");
-            return new TreatmentCobResult();
+            return new CarbCobContribution();
         }
 
         try
@@ -435,7 +385,7 @@ public class CobService(
                 logger.LogWarning(
                     "For the COB plugin to function your treatment profile must have both sens and carbratio fields"
                 );
-                return new TreatmentCobResult();
+                return new CarbCobContribution();
             }
         }
         catch
@@ -443,7 +393,7 @@ public class CobService(
             logger.LogWarning(
                 "For the COB plugin to function your treatment profile must have both sens and carbratio fields"
             );
-            return new TreatmentCobResult();
+            return new CarbCobContribution();
         }
 
         var cobContrib = 0.0;
@@ -487,7 +437,7 @@ public class CobService(
             }
         }
 
-        return new TreatmentCobResult
+        return new CarbCobContribution
         {
             CobContrib = cobContrib,
             ActivityContrib = activityContrib,
