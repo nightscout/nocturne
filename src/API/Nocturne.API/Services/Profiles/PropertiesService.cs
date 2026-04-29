@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
@@ -19,8 +20,11 @@ public class PropertiesService : IPropertiesService
 {
     private readonly IDDataService _ddataService;
     private readonly ILogger<PropertiesService> _logger;
-    private readonly IIobService _iobService;
-    private readonly ICobService _cobService;
+    private readonly IIobCalculator _iobCalculator;
+    private readonly ICobCalculator _cobCalculator;
+    private readonly IBolusRepository _bolusRepository;
+    private readonly ICarbIntakeRepository _carbIntakeRepository;
+    private readonly ITempBasalRepository _tempBasalRepository;
     private readonly IAr2Service _ar2Service;
 
     // Properties that should be filtered out for security
@@ -38,15 +42,21 @@ public class PropertiesService : IPropertiesService
     public PropertiesService(
         IDDataService ddataService,
         ILogger<PropertiesService> logger,
-        IIobService iobService,
-        ICobService cobService,
+        IIobCalculator iobCalculator,
+        ICobCalculator cobCalculator,
+        IBolusRepository bolusRepository,
+        ICarbIntakeRepository carbIntakeRepository,
+        ITempBasalRepository tempBasalRepository,
         IAr2Service ar2Service
     )
     {
         _ddataService = ddataService;
         _logger = logger;
-        _iobService = iobService;
-        _cobService = cobService;
+        _iobCalculator = iobCalculator;
+        _cobCalculator = cobCalculator;
+        _bolusRepository = bolusRepository;
+        _carbIntakeRepository = carbIntakeRepository;
+        _tempBasalRepository = tempBasalRepository;
         _ar2Service = ar2Service;
     }
 
@@ -270,21 +280,30 @@ public class PropertiesService : IPropertiesService
     }
 
     /// <summary>
-    /// Set IOB (Insulin on Board) properties using full legacy algorithm
+    /// Set IOB (Insulin on Board) properties using v4 calculator
     /// </summary>
     private async Task SetIobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
         try
         {
-            var treatments = ddata.Treatments?.ToList() ?? new List<Treatment>();
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var diaHoursAgo = DateTime.UtcNow.AddHours(-8);
 
-            if (!treatments.Any())
+            var boluses = (await _bolusRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false
+            )).ToList();
+            var tempBasals = (await _tempBasalRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false
+            )).ToList();
+
+            if (!boluses.Any() && !tempBasals.Any())
                 return;
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-            var iobResult = await _iobService.CalculateTotalAsync(
-                treatments,
+            var iobResult = await _iobCalculator.CalculateTotalAsync(
+                boluses,
+                tempBasals,
                 now
             );
 
@@ -311,27 +330,39 @@ public class PropertiesService : IPropertiesService
     }
 
     /// <summary>
-    /// Set COB (Carbs on Board) properties using full legacy algorithm
+    /// Set COB (Carbs on Board) properties using v4 calculator
     /// </summary>
     private async Task SetCobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
         try
         {
             _logger.LogDebug("SetCobProperties: Starting");
-            var treatments = ddata.Treatments?.ToList() ?? new List<Treatment>();
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var cobHoursAgo = DateTime.UtcNow.AddHours(-6);
+            var diaHoursAgo = DateTime.UtcNow.AddHours(-8);
 
-            if (!treatments.Any())
+            var carbIntakes = (await _carbIntakeRepository.GetAsync(
+                from: cobHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false
+            )).ToList();
+            var boluses = (await _bolusRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false
+            )).ToList();
+            var tempBasals = (await _tempBasalRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false
+            )).ToList();
+
+            if (!carbIntakes.Any())
             {
-                _logger.LogDebug("SetCobProperties: No treatments, returning");
+                _logger.LogDebug("SetCobProperties: No carb intakes, returning");
                 return;
             }
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-            // Use full COB calculation service - NO SIMPLIFICATIONS
-            _logger.LogDebug("SetCobProperties: Calling COB service");
-            var cobResult = await _cobService.CobTotalAsync(treatments, now);
-            _logger.LogDebug("SetCobProperties: COB service returned result, is null: {IsNull}", cobResult == null);
+            _logger.LogDebug("SetCobProperties: Calling COB calculator");
+            var cobResult = await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now);
+            _logger.LogDebug("SetCobProperties: COB calculator returned result, is null: {IsNull}", cobResult == null);
 
             if (cobResult == null)
             {
@@ -346,7 +377,6 @@ public class PropertiesService : IPropertiesService
                 ["timestamp"] = now,
                 ["source"] = cobResult.Source ?? "Care Portal",
                 ["activity"] = cobResult.Activity,
-                // Treatments list removed — CobResult no longer carries Treatment objects
             };
             _logger.LogDebug("SetCobProperties: COB property set successfully");
         }

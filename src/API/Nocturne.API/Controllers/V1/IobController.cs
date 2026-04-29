@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V1;
@@ -10,32 +11,35 @@ namespace Nocturne.API.Controllers.V1;
 /// IOB (Insulin on Board) controller providing calculation endpoints.
 /// Implements IOB calculation endpoints compatible with Nightscout legacy behavior.
 /// </summary>
-/// <seealso cref="IIobService"/>
-/// <seealso cref="ITreatmentService"/>
+/// <seealso cref="IIobCalculator"/>
 [ApiController]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
 [ClientPropertyName("iob")]
 public class IobController : ControllerBase
 {
-    private readonly IIobService _iobService;
-    private readonly ITreatmentService _treatmentService;
+    private readonly IIobCalculator _iobCalculator;
+    private readonly IBolusRepository _bolusRepository;
+    private readonly ITempBasalRepository _tempBasalRepository;
     private readonly ILogger<IobController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="IobController"/>.
     /// </summary>
-    /// <param name="iobService">Service for insulin-on-board calculations.</param>
-    /// <param name="treatmentService">Service for treatment data retrieval.</param>
+    /// <param name="iobCalculator">Calculator for insulin-on-board computations.</param>
+    /// <param name="bolusRepository">Repository for bolus records.</param>
+    /// <param name="tempBasalRepository">Repository for temp basal records.</param>
     /// <param name="logger">Logger instance.</param>
     public IobController(
-        IIobService iobService,
-        ITreatmentService treatmentService,
+        IIobCalculator iobCalculator,
+        IBolusRepository bolusRepository,
+        ITempBasalRepository tempBasalRepository,
         ILogger<IobController> logger
     )
     {
-        _iobService = iobService;
-        _treatmentService = treatmentService;
+        _iobCalculator = iobCalculator;
+        _bolusRepository = bolusRepository;
+        _tempBasalRepository = tempBasalRepository;
         _logger = logger;
     }
 
@@ -60,16 +64,21 @@ public class IobController : ControllerBase
         {
             var calculationTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-            // Get recent treatments (last 8 hours to cover DIA)
-            var treatments = await _treatmentService.GetTreatmentsAsync(
-                count: 1000,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            // Query boluses and temp basals from the last 8 hours to cover any DIA
+            var diaHoursAgo = DateTime.UtcNow.AddHours(-8);
+            var boluses = (await _bolusRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
+            var tempBasals = (await _tempBasalRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
 
-            // Calculate IOB using the service
-            var iobResult = await _iobService.CalculateTotalAsync(
-                treatments?.ToList() ?? new List<Treatment>(),
+            // Calculate IOB using the calculator
+            var iobResult = await _iobCalculator.CalculateTotalAsync(
+                boluses,
+                tempBasals,
                 calculationTime,
                 ct: cancellationToken
             );
@@ -104,18 +113,15 @@ public class IobController : ControllerBase
         {
             var calculationTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-            // Get recent treatments (last 8 hours to cover DIA)
-            var treatments = await _treatmentService.GetTreatmentsAsync(
-                count: 1000,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            // Query boluses from the last 8 hours to cover any DIA
+            var diaHoursAgo = DateTime.UtcNow.AddHours(-8);
+            var boluses = (await _bolusRepository.GetAsync(
+                from: diaHoursAgo, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
 
-            // Calculate IOB from treatments only
-            var iobResult = _iobService.FromTreatments(
-                treatments?.ToList() ?? new List<Treatment>(),
-                calculationTime
-            );
+            // Calculate IOB from boluses only
+            var iobResult = _iobCalculator.FromBoluses(boluses, calculationTime);
 
             return Ok(iobResult);
         }
@@ -164,12 +170,12 @@ public class IobController : ControllerBase
             var endTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var calculationStartTime = startTime ?? (endTime - (hours * 60 * 60 * 1000));
 
-            // Get treatments that could affect IOB during this period
-            var treatments = await _treatmentService.GetTreatmentsAsync(
-                count: 2000,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
+            // Query boluses covering the full calculation window plus 8h DIA before it
+            var fetchFrom = DateTimeOffset.FromUnixTimeMilliseconds(calculationStartTime).UtcDateTime.AddHours(-8);
+            var boluses = (await _bolusRepository.GetAsync(
+                from: fetchFrom, to: null, device: null, source: null,
+                limit: 2000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
 
             var hourlyData = new List<HourlyIobData>();
             var totalIntervals = (hours * 60) / intervalMinutes;
@@ -179,11 +185,11 @@ public class IobController : ControllerBase
                 var timeSlot = calculationStartTime + (i * intervalMinutes * 60 * 1000);
                 var timeStamp = DateTimeOffset.FromUnixTimeMilliseconds(timeSlot);
 
+                // Filter boluses relevant to this time point
+                var relevantBoluses = boluses.Where(b => b.Mills <= timeSlot).ToList();
+
                 // Calculate IOB at this time point
-                var iobResult = _iobService.FromTreatments(
-                    treatments?.ToList() ?? new List<Treatment>(),
-                    timeSlot
-                );
+                var iobResult = _iobCalculator.FromBoluses(relevantBoluses, timeSlot);
 
                 hourlyData.Add(
                     new HourlyIobData

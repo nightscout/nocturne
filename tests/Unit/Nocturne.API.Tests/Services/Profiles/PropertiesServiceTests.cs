@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -25,15 +26,21 @@ public class PropertiesServiceTests
     {
         _mockDDataService = new Mock<IDDataService>();
         _mockLogger = new Mock<ILogger<PropertiesService>>();
-        var mockIobService = new Mock<IIobService>();
-        var mockCobService = new Mock<ICobService>();
+        var mockIobCalculator = new Mock<IIobCalculator>();
+        var mockCobCalculator = new Mock<ICobCalculator>();
+        var mockBolusRepo = new Mock<IBolusRepository>();
+        var mockCarbIntakeRepo = new Mock<ICarbIntakeRepository>();
+        var mockTempBasalRepo = new Mock<ITempBasalRepository>();
         var mockAr2Service = new Mock<IAr2Service>();
 
         _service = new PropertiesService(
             _mockDDataService.Object,
             _mockLogger.Object,
-            mockIobService.Object,
-            mockCobService.Object,
+            mockIobCalculator.Object,
+            mockCobCalculator.Object,
+            mockBolusRepo.Object,
+            mockCarbIntakeRepo.Object,
+            mockTempBasalRepo.Object,
             mockAr2Service.Object
         );
     }

@@ -1,5 +1,5 @@
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -16,7 +16,7 @@ public class BolusWizardResult
     public List<string>? Errors { get; set; }
     public object? IobData { get; set; }
     public double Iob { get; set; }
-    public Treatment? RecentCarbs { get; set; }
+    public CarbIntake? RecentCarbs { get; set; }
     public double? AimTarget { get; set; }
     public string? AimTargetString { get; set; }
     public bool BelowLowTarget { get; set; }
@@ -47,7 +47,7 @@ public interface IBwpSandbox
     Entry? LastSGVEntry();
     double? LastScaledSGV();
     bool IsCurrent(Entry entry);
-    List<Treatment> GetTreatments();
+    List<CarbIntake> GetCarbIntakes();
     List<DeviceStatus> GetDeviceStatus();
     IBwpProfile? GetProfile();
     long Time { get; }
@@ -106,14 +106,6 @@ public class BwpNotificationSettings
 /// </summary>
 public class BolusWizardService : IBolusWizardService
 {
-    private readonly IIobService _iobService;
-    private readonly ICobService _cobService;
-
-    public BolusWizardService(IIobService iobService, ICobService cobService)
-    {
-        _iobService = iobService;
-        _cobService = cobService;
-    }
 
     /// <summary>
     /// Main BWP calculation function implementing exact legacy algorithm
@@ -161,14 +153,13 @@ public class BolusWizardService : IBolusWizardService
 
         // Find recent carbs within last 60 minutes
         var recentCarbs = sandbox
-            .GetTreatments()
-            .Where(t =>
-                t.Mills <= sandbox.Time
-                && sandbox.Time - t.Mills < 60 * 60 * 1000
-                && // 60 minutes in milliseconds
-                t.Carbs > 0
+            .GetCarbIntakes()
+            .Where(c =>
+                c.Mills <= sandbox.Time
+                && sandbox.Time - c.Mills < 60 * 60 * 1000 // 60 minutes in milliseconds
+                && c.Carbs > 0
             )
-            .OrderByDescending(t => t.Mills)
+            .OrderByDescending(c => c.Mills)
             .FirstOrDefault();
 
         result.RecentCarbs = recentCarbs;

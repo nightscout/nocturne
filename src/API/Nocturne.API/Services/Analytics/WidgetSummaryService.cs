@@ -23,9 +23,11 @@ namespace Nocturne.API.Services.Analytics;
 public class WidgetSummaryService : IWidgetSummaryService
 {
     private readonly IEntryService _entryService;
-    private readonly IIobService _iobService;
-    private readonly ICobService _cobService;
-    private readonly ITreatmentService _treatmentService;
+    private readonly IIobCalculator _iobCalculator;
+    private readonly ICobCalculator _cobCalculator;
+    private readonly IBolusRepository _bolusRepository;
+    private readonly ICarbIntakeRepository _carbIntakeRepository;
+    private readonly ITempBasalRepository _tempBasalRepository;
     private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
@@ -38,9 +40,11 @@ public class WidgetSummaryService : IWidgetSummaryService
 
     public WidgetSummaryService(
         IEntryService entryService,
-        IIobService iobService,
-        ICobService cobService,
-        ITreatmentService treatmentService,
+        IIobCalculator iobCalculator,
+        ICobCalculator cobCalculator,
+        IBolusRepository bolusRepository,
+        ICarbIntakeRepository carbIntakeRepository,
+        ITempBasalRepository tempBasalRepository,
         IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
@@ -48,9 +52,11 @@ public class WidgetSummaryService : IWidgetSummaryService
     )
     {
         _entryService = entryService;
-        _iobService = iobService;
-        _cobService = cobService;
-        _treatmentService = treatmentService;
+        _iobCalculator = iobCalculator;
+        _cobCalculator = cobCalculator;
+        _bolusRepository = bolusRepository;
+        _carbIntakeRepository = carbIntakeRepository;
+        _tempBasalRepository = tempBasalRepository;
         _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
@@ -74,14 +80,13 @@ public class WidgetSummaryService : IWidgetSummaryService
         // Fetch data sequentially (EF Core DbContext is not thread-safe)
         var entryCount = hours > 0 ? (hours * 12) + 1 : 1; // 12 readings per hour (5-minute intervals)
         var entries = (await _entryService.GetEntriesAsync(null, entryCount, 0, cancellationToken)).ToList();
-        var treatments = (await _treatmentService.GetTreatmentsAsync(100, 0, cancellationToken)).ToList();
         var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
 
         // Process glucose readings
         ProcessGlucoseReadings(response, entries, hours, currentTime);
 
-        // Calculate IOB and COB
-        await CalculateIobCobAsync(response, treatments);
+        // Calculate IOB and COB using v4 types
+        await CalculateIobCobAsync(response, cancellationToken);
 
         // Process tracker statuses
         ProcessTrackers(response, trackerInstances);
@@ -149,21 +154,40 @@ public class WidgetSummaryService : IWidgetSummaryService
     }
 
     /// <summary>
-    /// Calculate IOB and COB values
+    /// Calculate IOB and COB values from v4 repositories
     /// </summary>
     private async Task CalculateIobCobAsync(
         V4SummaryResponse response,
-        List<Treatment> treatments
+        CancellationToken cancellationToken
     )
     {
         try
         {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            // Query v4 types: 8h for IOB, 6h for COB
+            var iobFrom = DateTime.UtcNow.AddHours(-8);
+            var cobFrom = DateTime.UtcNow.AddHours(-6);
+
+            var boluses = (await _bolusRepository.GetAsync(
+                from: iobFrom, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
+            var tempBasals = (await _tempBasalRepository.GetAsync(
+                from: iobFrom, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
+            var carbIntakes = (await _carbIntakeRepository.GetAsync(
+                from: cobFrom, to: null, device: null, source: null,
+                limit: 1000, offset: 0, descending: false, ct: cancellationToken
+            )).ToList();
+
             // Calculate IOB
-            var iobResult = await _iobService.CalculateTotalAsync(treatments);
+            var iobResult = await _iobCalculator.CalculateTotalAsync(boluses, tempBasals, now, ct: cancellationToken);
             response.Iob = Math.Round(iobResult.Iob * 100) / 100; // Round to 2 decimal places
 
             // Calculate COB
-            var cobResult = await _cobService.CobTotalAsync(treatments);
+            var cobResult = await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now, ct: cancellationToken);
             response.Cob = Math.Round(cobResult.Cob);
         }
         catch (Exception ex)

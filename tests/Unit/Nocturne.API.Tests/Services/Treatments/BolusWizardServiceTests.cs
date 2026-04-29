@@ -1,7 +1,7 @@
 using Moq;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Treatments;
@@ -14,28 +14,21 @@ namespace Nocturne.API.Tests.Services.Treatments;
 [Parity("boluswizardpreview.test.js")]
 public class BolusWizardServiceTests
 {
-    private readonly Mock<IIobService> _mockIobService;
-    private readonly Mock<ICobService> _mockCobService;
     private readonly BolusWizardService _service;
 
     public BolusWizardServiceTests()
     {
-        _mockIobService = new Mock<IIobService>();
-        _mockCobService = new Mock<ICobService>();
-        _service = new BolusWizardService(_mockIobService.Object, _mockCobService.Object);
+        _service = new BolusWizardService();
     }
 
     [Fact]
     public void Calculate_WithZeroIOB_ShouldReturnZeroBolusEstimate()
     {
         // Arrange
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - 5 * 60 * 1000; // 5 minutes ago
-
         var mockSandbox = CreateMockSandbox(
             currentBG: 100,
             iob: 0,
-            treatments: new List<Treatment>(),
+            carbIntakes: new List<CarbIntake>(),
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -61,16 +54,10 @@ public class BolusWizardServiceTests
     public void Calculate_WithOneUnitIOB_ShouldCalculateCorrectly()
     {
         // Arrange
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var treatments = new List<Treatment>
-        {
-            new Treatment { Mills = now, Insulin = 1.0 },
-        };
-
         var mockSandbox = CreateMockSandbox(
             currentBG: 100,
             iob: 1.0,
-            treatments: treatments,
+            carbIntakes: new List<CarbIntake>(),
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -96,16 +83,10 @@ public class BolusWizardServiceTests
     public void Calculate_WithIOBResultingInGoingLow_ShouldRecommendNegativeBolus()
     {
         // Arrange
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var treatments = new List<Treatment>
-        {
-            new Treatment { Mills = now, Insulin = 1.0 },
-        };
-
         var mockSandbox = CreateMockSandbox(
             currentBG: 100,
             iob: 1.0,
-            treatments: treatments,
+            carbIntakes: new List<CarbIntake>(),
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -135,18 +116,11 @@ public class BolusWizardServiceTests
     public void Calculate_WithIOBInMMOL_ShouldCalculateCorrectly()
     {
         // Arrange
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - 5 * 60 * 1000;
-        var treatments = new List<Treatment>
-        {
-            new Treatment { Mills = now, Insulin = 1.0 },
-        };
-
         // MMOL conversion: 100 mg/dL = 5.6 mmol/L
         var mockSandbox = CreateMockSandbox(
             currentBG: 5.6, // 100 mg/dL in mmol/L
             iob: 1.0,
-            treatments: treatments,
+            carbIntakes: new List<CarbIntake>(),
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -175,17 +149,11 @@ public class BolusWizardServiceTests
     public void Calculate_WithPartialIOBInMMOL_ShouldCalculateCorrectly()
     {
         // Arrange
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var treatments = new List<Treatment>
-        {
-            new Treatment { Mills = now, Insulin = 0.45 },
-        };
-
         // 175 mg/dL = 9.7 mmol/L, 153 mg/dL = 8.5 mmol/L
         var mockSandbox = CreateMockSandbox(
             currentBG: 8.5, // 153 mg/dL in mmol/L
             iob: 0.45,
-            treatments: treatments,
+            carbIntakes: new List<CarbIntake>(),
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -219,7 +187,7 @@ public class BolusWizardServiceTests
         var mockSandbox = CreateMockSandbox(
             currentBG: 180,
             iob: 0,
-            treatments: new List<Treatment>(),
+            carbIntakes: new List<CarbIntake>(),
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -246,15 +214,16 @@ public class BolusWizardServiceTests
         // Arrange
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var recentTime = now - 30 * 60 * 1000; // 30 minutes ago
-        var treatments = new List<Treatment>
+        var recentTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(recentTime).UtcDateTime;
+        var carbIntakes = new List<CarbIntake>
         {
-            new Treatment { Mills = recentTime, Carbs = 45 },
+            new CarbIntake { Timestamp = recentTimestamp, Carbs = 45 },
         };
 
         var mockSandbox = CreateMockSandbox(
             currentBG: 150,
             iob: 0,
-            treatments: treatments,
+            carbIntakes: carbIntakes,
             profileData: new TestProfileData
             {
                 Dia = 3,
@@ -353,10 +322,13 @@ public class BolusWizardServiceTests
     private Mock<IBwpSandbox> CreateMockSandbox(
         double currentBG,
         double iob,
-        List<Treatment> treatments,
-        TestProfileData profileData
+        List<CarbIntake>? carbIntakes = null,
+        TestProfileData? profileData = null
     )
     {
+        profileData ??= new TestProfileData();
+        carbIntakes ??= new List<CarbIntake>();
+
         var mockProfile = new Mock<IBwpProfile>();
         mockProfile.Setup(p => p.HasData()).Returns(true);
         mockProfile.Setup(p => p.GetSensitivity(It.IsAny<long>(), null)).Returns(profileData.Sens);
@@ -392,7 +364,7 @@ public class BolusWizardServiceTests
         mockSandbox.Setup(s => s.LastSGVEntry()).Returns(entry);
         mockSandbox.Setup(s => s.LastScaledSGV()).Returns(currentBG);
         mockSandbox.Setup(s => s.IsCurrent(It.IsAny<Entry>())).Returns(true);
-        mockSandbox.Setup(s => s.GetTreatments()).Returns(treatments);
+        mockSandbox.Setup(s => s.GetCarbIntakes()).Returns(carbIntakes);
         mockSandbox.Setup(s => s.Iob).Returns(iobResult);
         mockSandbox.Setup(s => s.Time).Returns(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         mockSandbox.Setup(s => s.Units).Returns(profileData.Units ?? "mg/dL"); // Mock the rounding functions to match legacy behavior exactly

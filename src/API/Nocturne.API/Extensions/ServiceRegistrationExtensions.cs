@@ -122,6 +122,8 @@ public static class ServiceRegistrationExtensions
         }
 
         services.AddScoped<ICobService, CobService>();
+        services.AddScoped<IIobCalculator, IobCalculator>();
+        services.AddScoped<ICobCalculator, CobCalculator>();
         services.AddScoped<IAr2Service, Ar2Service>();
         services.AddScoped<IBolusWizardService, BolusWizardService>();
 
