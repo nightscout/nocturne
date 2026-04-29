@@ -14,8 +14,7 @@ namespace Nocturne.API.Services.ChartData;
 /// <list type="number">
 ///   <item><see cref="Stages.ProfileLoadStage"/> — populates <see cref="Timezone"/>, <see cref="Thresholds"/>, and <see cref="DefaultBasalRate"/>.</item>
 ///   <item><see cref="Stages.DataFetchStage"/> — populates all raw data collections.</item>
-///   <item><see cref="Stages.TreatmentAdapterStage"/> — builds <see cref="SyntheticTreatments"/> from v4 Bolus/CarbIntake records for legacy IOB/COB calcs.</item>
-///   <item><see cref="Stages.IobCobComputeStage"/> — computes IOB/COB series and basal series, with 1-minute memory cache keyed by tenant + data fingerprint.</item>
+///   <item><see cref="Stages.IobCobComputeStage"/> — computes IOB/COB series and basal series from v4 Bolus/CarbIntake/TempBasal records, with 1-minute memory cache keyed by tenant + data fingerprint.</item>
 ///   <item><see cref="Stages.DtoMappingStage"/> — converts raw data to chart-ready DTOs (markers, spans, glucose points).</item>
 /// </list>
 /// All timestamp properties use Unix milliseconds to match the mills-first domain convention.
@@ -70,15 +69,6 @@ public sealed record ChartDataContext
     public IReadOnlyList<SystemEvent> SystemEvents { get; init; } = [];
     public IReadOnlyList<TrackerDefinitionEntity> TrackerDefinitions { get; init; } = [];
     public IReadOnlyList<TrackerInstanceEntity> TrackerInstances { get; init; } = [];
-
-    // === Intermediate computed data (set by TreatmentAdapterStage) ===
-
-    /// <summary>Synthetic Treatment adapter objects built from v4 Bolus and CarbIntake records.</summary>
-    public IReadOnlyList<Treatment> SyntheticTreatments { get; init; } = [];
-
-    /// <summary>TreatmentFood records grouped by their parent CarbIntake ID.</summary>
-    public IReadOnlyDictionary<Guid, List<TreatmentFood>> FoodsByCarbIntake { get; init; }
-        = new Dictionary<Guid, List<TreatmentFood>>();
 
     // === Computed series (set by computation stages) ===
 

@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -16,8 +15,8 @@ namespace Nocturne.API.Tests.Services.ChartData.Stages;
 
 public class IobCobComputeStageTests
 {
-    private readonly Mock<IIobService> _mockIobService = new();
-    private readonly Mock<ICobService> _mockCobService = new();
+    private readonly Mock<IIobCalculator> _mockIobCalculator = new();
+    private readonly Mock<ICobCalculator> _mockCobCalculator = new();
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettings = new();
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver = new();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -31,8 +30,8 @@ public class IobCobComputeStageTests
         _mockTherapySettings.Setup(p => p.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         _stage = new IobCobComputeStage(
-            _mockIobService.Object,
-            _mockCobService.Object,
+            _mockIobCalculator.Object,
+            _mockCobCalculator.Object,
             _mockTherapySettings.Object,
             _mockBasalRateResolver.Object,
             _cache,
@@ -49,15 +48,15 @@ public class IobCobComputeStageTests
         var endTime = TestMills + 30 * 60 * 1000; // 30 minutes later
         const int intervalMinutes = 5;
 
-        var bolus = new Treatment
+        var bolus = new Bolus
         {
-            Mills = TestMills - 60 * 60 * 1000, // 1 hour before start
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 60 * 60 * 1000).UtcDateTime, // 1 hour before start
             Insulin = 3.0,
         };
 
-        var carbIntake = new Treatment
+        var carbIntake = new CarbIntake
         {
-            Mills = TestMills - 30 * 60 * 1000, // 30 minutes before start
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills - 30 * 60 * 1000).UtcDateTime, // 30 minutes before start
             Carbs = 45.0,
         };
 
@@ -69,17 +68,17 @@ public class IobCobComputeStageTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        _mockIobService
-            .Setup(s => s.FromTreatments(It.IsAny<List<Treatment>>(), It.IsAny<long>(), It.IsAny<string?>()))
+        _mockIobCalculator
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<long?>()))
             .Returns(new IobResult { Iob = 2.0 });
 
-        _mockIobService
-            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<string?>()))
+        _mockIobCalculator
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<long?>()))
             .Returns(new IobResult { BasalIob = 0.5 });
 
-        _mockCobService
-            .Setup(s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CobResult { Cob = 20.0 });
+        _mockCobCalculator
+            .Setup(s => s.FromCarbIntakes(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long?>()))
+            .Returns(new CobResult { Cob = 20.0 });
 
         var context = new ChartDataContext
         {
@@ -87,7 +86,8 @@ public class IobCobComputeStageTests
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
             DefaultBasalRate = 1.0,
-            SyntheticTreatments = [bolus, carbIntake],
+            BolusList = [bolus],
+            CarbIntakeList = [carbIntake],
             TempBasalList = [tempBasal],
         };
 
@@ -122,20 +122,21 @@ public class IobCobComputeStageTests
             EndTime = endTime,
             IntervalMinutes = intervalMinutes,
             DefaultBasalRate = defaultBasalRate,
-            SyntheticTreatments = [],
+            BolusList = [],
+            CarbIntakeList = [],
             TempBasalList = [],
         };
 
         // Act
         var result = await _stage.ExecuteAsync(context, CancellationToken.None);
 
-        // Assert — IOB/COB services should never be called with no treatments
-        _mockIobService.Verify(
-            s => s.FromTreatments(It.IsAny<List<Treatment>>(), It.IsAny<long>(), It.IsAny<string?>()),
+        // Assert — IOB/COB calculators should never be called with no data
+        _mockIobCalculator.Verify(
+            s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<long?>()),
             Times.Never
         );
-        _mockCobService.Verify(
-            s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+        _mockCobCalculator.Verify(
+            s => s.FromCarbIntakes(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long?>()),
             Times.Never
         );
 

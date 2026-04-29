@@ -483,7 +483,6 @@ public static class ServiceRegistrationExtensions
         // Chart data pipeline stages (order matters!)
         services.AddScoped<ProfileLoadStage>();
         services.AddScoped<DataFetchStage>();
-        services.AddScoped<TreatmentAdapterStage>();
         services.AddScoped<IobCobComputeStage>();
         services.AddScoped<DtoMappingStage>();
 
@@ -491,7 +490,6 @@ public static class ServiceRegistrationExtensions
         {
             sp.GetRequiredService<ProfileLoadStage>(),
             sp.GetRequiredService<DataFetchStage>(),
-            sp.GetRequiredService<TreatmentAdapterStage>(),
             sp.GetRequiredService<IobCobComputeStage>(),
             sp.GetRequiredService<DtoMappingStage>(),
         });
