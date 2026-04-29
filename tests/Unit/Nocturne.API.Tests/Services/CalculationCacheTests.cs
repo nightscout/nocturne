@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Keys;
 using Nocturne.Infrastructure.Cache.Services;
@@ -18,7 +20,8 @@ namespace Nocturne.API.Tests.Services;
 public class Phase3CalculationCacheTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
-    private readonly Mock<IIobService> _mockIobService;
+    private readonly Mock<IIobCalculator> _mockIobCalculator;
+    private readonly Mock<ITenantAccessor> _mockTenantAccessor;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ISensitivityResolver> _mockSensitivityResolver;
     private readonly Mock<ICarbRatioResolver> _mockCarbRatioResolver;
@@ -33,7 +36,8 @@ public class Phase3CalculationCacheTests
     public Phase3CalculationCacheTests()
     {
         _mockCacheService = new Mock<ICacheService>();
-        _mockIobService = new Mock<IIobService>();
+        _mockIobCalculator = new Mock<IIobCalculator>();
+        _mockTenantAccessor = new Mock<ITenantAccessor>();
         _mockBasalRateResolver = new Mock<IBasalRateResolver>();
         _mockSensitivityResolver = new Mock<ISensitivityResolver>();
         _mockCarbRatioResolver = new Mock<ICarbRatioResolver>();
@@ -64,15 +68,14 @@ public class Phase3CalculationCacheTests
     public async Task CachedIobService_CalculateTotalAsync_CacheHit_ReturnsCachedResult()
     {
         // Arrange
-        var userId = "test-user";
+        var tenantId = Guid.NewGuid();
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var treatments = new List<Treatment>
+        var boluses = new List<Bolus>
         {
             new()
             {
-                EnteredBy = userId,
                 Insulin = 5.0,
-                Mills = timestamp - 60000,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - 60000).UtcDateTime,
             },
         };
         var expectedIobResult = new IobResult
@@ -82,7 +85,11 @@ public class Phase3CalculationCacheTests
             Source = "Care Portal",
         };
 
-        var expectedCacheKey = CacheKeyBuilder.BuildIobCalculationKey(userId, timestamp);
+        _mockTenantAccessor
+            .Setup(x => x.Context)
+            .Returns(new TenantContext(tenantId, "test-tenant", "Test Tenant", true));
+
+        var expectedCacheKey = CacheKeyBuilder.BuildIobCalculationKey(tenantId.ToString(), timestamp);
         _mockCacheService
             .Setup(x =>
                 x.GetOrSetAsync(
@@ -95,7 +102,8 @@ public class Phase3CalculationCacheTests
             .ReturnsAsync(expectedIobResult);
 
         var cachedIobService = new CachedIobService(
-            _mockIobService.Object,
+            _mockIobCalculator.Object,
+            _mockTenantAccessor.Object,
             _mockCacheService.Object,
             _cacheConfig,
             _mockIobLogger.Object
@@ -103,8 +111,8 @@ public class Phase3CalculationCacheTests
 
         // Act
         var result = await cachedIobService.CalculateTotalAsync(
-            treatments,
-            timestamp,
+            boluses,
+            time: timestamp,
             cancellationToken: CancellationToken.None
         );
 
@@ -137,7 +145,8 @@ public class Phase3CalculationCacheTests
         var expectedPattern = CacheKeyBuilder.BuildIobCalculationPattern(userId);
 
         var cachedIobService = new CachedIobService(
-            _mockIobService.Object,
+            _mockIobCalculator.Object,
+            _mockTenantAccessor.Object,
             _mockCacheService.Object,
             _cacheConfig,
             _mockIobLogger.Object

@@ -22,8 +22,8 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="ITreatmentStore"/>
 /// <seealso cref="ITreatmentDecomposer"/>
-/// <seealso cref="IobService"/>
-/// <seealso cref="CobService"/>
+/// <seealso cref="IobCalculator"/>
+/// <seealso cref="CobCalculator"/>
 public class TreatmentService : ITreatmentService
 {
     private readonly ITreatmentStore _store;

@@ -11,8 +11,8 @@ namespace Nocturne.API.Tests.Services.Treatments;
 
 /// <summary>
 /// Parity tests proving <see cref="IobCalculator"/> produces identical results to
-/// <see cref="IobService"/> for the same inputs. Every assertion value is copied verbatim
-/// from <see cref="IobServiceTests"/> — if a value differs, the math changed.
+/// the legacy IobService for the same inputs. Every assertion value is copied verbatim
+/// from IobServiceTests — if a value differs, the math changed.
 /// </summary>
 public class IobCalculatorParityTests
 {

@@ -12,9 +12,8 @@ namespace Nocturne.API.Tests.Services.Treatments;
 
 /// <summary>
 /// Parity tests proving <see cref="CobCalculator"/> produces identical results to
-/// <see cref="CobService"/> for the same inputs. Every assertion value is copied verbatim
-/// from <see cref="CobServiceTests"/> and <see cref="CobTests"/> — if a value differs, the
-/// math changed.
+/// the legacy CobService for the same inputs. Every assertion value is copied verbatim
+/// from CobServiceTests and CobTests — if a value differs, the math changed.
 /// </summary>
 /// <remarks>
 /// Tests that relied on <c>ApplyAdvancedAbsorptionAdjustments</c> (fat/notes-based adjustments)

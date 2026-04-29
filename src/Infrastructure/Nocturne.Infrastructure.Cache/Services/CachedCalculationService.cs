@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
 using Nocturne.Infrastructure.Cache.Keys;
@@ -36,44 +38,48 @@ public class CalculationCacheConfiguration
 }
 
 /// <summary>
-/// Cached wrapper for IOB calculations implementing Phase 3 caching strategy
+/// Cached wrapper for IOB calculations implementing Phase 3 caching strategy.
 /// </summary>
 public interface ICachedIobService
 {
     /// <summary>
-    /// Calculate total IOB with caching
+    /// Calculate total IOB with caching.
     /// </summary>
     Task<IobResult> CalculateTotalAsync(
-        List<Treatment> treatments,
+        List<Bolus> boluses,
+        List<TempBasal>? tempBasals = null,
         long? time = null,
-        string? specProfile = null,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>
-    /// Invalidate IOB cache for specific user
+    /// Invalidate IOB cache for specific user.
     /// </summary>
     Task InvalidateIobCacheAsync(string userId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Cached IOB service implementation with in-memory caching for expensive calculations
+/// Cached IOB service implementation with in-memory caching for expensive calculations.
+/// Uses tenant ID from the request scope for cache key isolation.
 /// </summary>
 public class CachedIobService : ICachedIobService
 {
-    private readonly IIobService _iobService;
+    private readonly IIobCalculator _iobCalculator;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ICacheService _cacheService;
     private readonly ILogger<CachedIobService> _logger;
     private readonly CalculationCacheConfiguration _config;
 
     public CachedIobService(
-        IIobService iobService,
+        IIobCalculator iobCalculator,
+        ITenantAccessor tenantAccessor,
         ICacheService cacheService,
         IOptions<CalculationCacheConfiguration> config,
         ILogger<CachedIobService> logger
     )
     {
-        _iobService = iobService;
+        _iobCalculator = iobCalculator;
+        _tenantAccessor = tenantAccessor;
         _cacheService = cacheService;
         _config = config.Value;
         _logger = logger;
@@ -81,27 +87,27 @@ public class CachedIobService : ICachedIobService
 
     /// <inheritdoc />
     public async Task<IobResult> CalculateTotalAsync(
-        List<Treatment> treatments,
+        List<Bolus> boluses,
+        List<TempBasal>? tempBasals = null,
         long? time = null,
-        string? specProfile = null,
         CancellationToken cancellationToken = default
     )
     {
         var timestamp = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var userId = ExtractUserId(treatments);
+        var tenantId = _tenantAccessor.Context?.TenantId.ToString();
 
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(tenantId))
         {
-            // No user ID available, skip caching
-            return await _iobService.CalculateTotalAsync(treatments, time, specProfile, ct: cancellationToken);
+            // No tenant resolved, skip caching
+            return await _iobCalculator.CalculateTotalAsync(boluses, tempBasals, time, cancellationToken);
         }
 
-        var cacheKey = CacheKeyBuilder.BuildIobCalculationKey(userId, timestamp);
+        var cacheKey = CacheKeyBuilder.BuildIobCalculationKey(tenantId, timestamp);
         var expiration = TimeSpan.FromSeconds(_config.IobCalculationExpirationSeconds);
 
         return await _cacheService.GetOrSetAsync(
             cacheKey,
-            () => _iobService.CalculateTotalAsync(treatments, time, specProfile, ct: cancellationToken),
+            () => _iobCalculator.CalculateTotalAsync(boluses, tempBasals, time, cancellationToken),
             expiration,
             cancellationToken
         );
@@ -123,20 +129,6 @@ public class CachedIobService : ICachedIobService
         {
             _logger.LogError(ex, "Error invalidating IOB cache for user: {UserId}", userId);
         }
-    }
-
-    /// <summary>
-    /// Extracts user ID from treatments for cache key generation.
-    /// </summary>
-    private static string? ExtractUserId(List<Treatment> treatments)
-    {
-        var userIdFromTreatment = treatments?.FirstOrDefault()?.EnteredBy;
-        if (!string.IsNullOrEmpty(userIdFromTreatment))
-        {
-            return userIdFromTreatment;
-        }
-
-        return null;
     }
 }
 

@@ -14,7 +14,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// used during connector re-sync.
 /// </remarks>
 /// <seealso cref="TempBasal"/>
-/// <seealso cref="IIobService"/>
+/// <seealso cref="Treatments.IIobCalculator"/>
 /// <seealso cref="IStateSpanService"/>
 public interface ITempBasalRepository
 {

@@ -8,15 +8,13 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// V4-native IOB calculator operating on <see cref="Bolus"/> and <see cref="TempBasal"/> records.
-/// Implements the same two-phase exponential decay curve as <see cref="IobService"/> but accepts
-/// V4 domain types directly, eliminating the Treatment adapter layer.
+/// Implements the two-phase exponential decay curve, accepting V4 domain types directly.
 /// </summary>
 /// <remarks>
 /// Per-bolus <see cref="TreatmentInsulinContext"/> overrides profile-level DIA and peak values
 /// when available, enabling accurate multi-insulin IOB calculations without data loss.
 /// </remarks>
 /// <seealso cref="IIobCalculator"/>
-/// <seealso cref="IobService"/>
 public class IobCalculator(
     ITherapySettingsResolver therapySettings,
     ISensitivityResolver sensitivity,

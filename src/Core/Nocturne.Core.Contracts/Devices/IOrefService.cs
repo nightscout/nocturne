@@ -5,7 +5,7 @@ namespace Nocturne.Core.Contracts.Devices;
 /// Provides unified access to IOB, COB, autosens, and determine-basal calculations
 /// via the Rust oref library compiled to WebAssembly.
 /// </summary>
-/// <seealso cref="IIobService"/>
+/// <seealso cref="Treatments.IIobCalculator"/>
 /// <seealso cref="IOpenApsService"/>
 public interface IOrefService
 {

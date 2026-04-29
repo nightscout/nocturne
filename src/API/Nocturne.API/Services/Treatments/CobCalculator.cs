@@ -9,11 +9,9 @@ namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
 /// V4-native COB calculator operating on <see cref="CarbIntake"/> records.
-/// Implements the same decay algorithm as <see cref="CobService"/> but accepts
-/// V4 domain types directly and removes legacy absorption adjustments.
+/// Implements the decay algorithm on V4 domain types directly.
 /// </summary>
 /// <seealso cref="ICobCalculator"/>
-/// <seealso cref="CobService"/>
 public class CobCalculator(
     ILogger<CobCalculator> logger,
     IIobCalculator iobCalculator,

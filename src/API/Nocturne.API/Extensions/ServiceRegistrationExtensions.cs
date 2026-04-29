@@ -96,8 +96,6 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
         services.AddScoped<ISummaryService, SummaryService>();
-        services.AddScoped<IIobService, IobService>();
-
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
         var predictionSource = configuration.GetValue<PredictionSource>(
             "Predictions:Source",
@@ -121,7 +119,6 @@ public static class ServiceRegistrationExtensions
                 break;
         }
 
-        services.AddScoped<ICobService, CobService>();
         services.AddScoped<IIobCalculator, IobCalculator>();
         services.AddScoped<ICobCalculator, CobCalculator>();
         services.AddScoped<IAr2Service, Ar2Service>();
