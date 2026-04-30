@@ -31,6 +31,7 @@ internal sealed class AlertOrchestrator(
     ITenantAccessor tenantAccessor,
     IAlertDeliveryService deliveryService,
     ISignalRBroadcastService broadcastService,
+    ISensorContextEnricher contextEnricher,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -44,11 +45,19 @@ internal sealed class AlertOrchestrator(
 
         if (rules.Count == 0) return;
 
-        foreach (var rule in rules)
+        // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
+        var evaluable = RuleReferenceResolver.FilterEvaluable(rules);
+        if (evaluable.Count == 0) return;
+
+        // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule
+        // in the surviving set will consult (IOB/COB/predictions/active-alerts/etc.).
+        var enriched = await contextEnricher.EnrichAsync(context, evaluable, tenantId, ct);
+
+        foreach (var rule in evaluable)
         {
             try
             {
-                await EvaluateRuleAsync(rule, context, tenantId, ct);
+                await EvaluateRuleAsync(rule, enriched, tenantId, ct);
             }
             catch (Exception ex)
             {

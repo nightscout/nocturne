@@ -25,6 +25,7 @@ public class AlertOrchestratorTests
     private readonly Mock<ITenantAccessor> _tenantAccessor;
     private readonly Mock<IAlertDeliveryService> _deliveryService;
     private readonly Mock<ISignalRBroadcastService> _broadcastService;
+    private readonly Mock<ISensorContextEnricher> _contextEnricher;
     private readonly FakeTimeProvider _timeProvider;
     private readonly ILogger<AlertOrchestrator> _logger;
     private readonly AlertOrchestrator _sut;
@@ -46,10 +47,14 @@ public class AlertOrchestratorTests
         _tenantAccessor = new Mock<ITenantAccessor>();
         _deliveryService = new Mock<IAlertDeliveryService>();
         _broadcastService = new Mock<ISignalRBroadcastService>();
+        _contextEnricher = new Mock<ISensorContextEnricher>();
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         _logger = NullLoggerFactory.Instance.CreateLogger<AlertOrchestrator>();
 
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _contextEnricher
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) => c);
 
         _sut = new AlertOrchestrator(
             _registry,
@@ -59,6 +64,7 @@ public class AlertOrchestratorTests
             _tenantAccessor.Object,
             _deliveryService.Object,
             _broadcastService.Object,
+            _contextEnricher.Object,
             _timeProvider,
             _logger);
     }
@@ -211,5 +217,53 @@ public class AlertOrchestratorTests
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
         _escalationAdvancer.Verify(a => a.AdvanceAsync(dueInstance, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_CallsEnricher_WithEvaluableRulesAndPassesEnrichedContextToEvaluator()
+    {
+        var rule = MakeRule();
+        var enrichedTrendRate = 99m;
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _contextEnricher
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorContext c, IEnumerable<AlertRuleSnapshot> _, Guid _, CancellationToken _) =>
+                c with { TrendRate = enrichedTrendRate });
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.None));
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        _contextEnricher.Verify(
+            e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), _tenantId, It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockEvaluator.Verify(e => e.EvaluateAsync(
+            It.IsAny<string>(),
+            It.Is<SensorContext>(c => c.TrendRate == enrichedTrendRate),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_DropsRulesWithUnresolvedAlertStateReferences()
+    {
+        var orphanRefId = Guid.NewGuid();
+        var chained = new AlertRuleSnapshot(_ruleId, _tenantId, "chained", AlertConditionType.AlertState,
+            $$"""{"alert_id":"{{orphanRefId}}","state":"firing"}""",
+            AlertRuleSeverity.Warning, "{}", 0, AutoResolveEnabled: false, AutoResolveParams: null);
+
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { chained });
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        _excursionTracker.Verify(
+            t => t.ProcessEvaluationAsync(It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _contextEnricher.Verify(
+            e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }
