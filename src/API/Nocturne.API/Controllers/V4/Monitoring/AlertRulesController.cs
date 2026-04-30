@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Services.Alerts;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -19,18 +21,19 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 public class AlertRulesController : ControllerBase
 {
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly IAlertReferenceService _referenceService;
     private readonly ILogger<AlertRulesController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertRulesController"/>.
     /// </summary>
-    /// <param name="contextFactory">Factory for creating <see cref="NocturneDbContext"/> instances.</param>
-    /// <param name="logger">Logger instance.</param>
     public AlertRulesController(
         IDbContextFactory<NocturneDbContext> contextFactory,
+        IAlertReferenceService referenceService,
         ILogger<AlertRulesController> logger)
     {
         _contextFactory = contextFactory;
+        _referenceService = referenceService;
         _logger = logger;
     }
 
@@ -89,6 +92,15 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> CreateRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
+        // Cycle detection on create is a no-op (server generates the new id), but kept here
+        // as the seam for future direct-id assignment.
+        var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
+        if (rootForCycle is not null
+            && await _referenceService.DetectCycleAsync(ruleId: null, rootForCycle, ct))
+        {
+            return BadRequest("Cyclical alert_state reference detected.");
+        }
+
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
 
         var tenantId = db.TenantId;
@@ -162,6 +174,13 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
+        var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
+        if (rootForCycle is not null
+            && await _referenceService.DetectCycleAsync(id, rootForCycle, ct))
+        {
+            return BadRequest("Cyclical alert_state reference detected.");
+        }
+
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
 
         var rule = await db.AlertRules
@@ -222,6 +241,7 @@ public class AlertRulesController : ControllerBase
     [RemoteCommand(Invalidates = ["GetRules"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ReferencingRulesResponse), StatusCodes.Status409Conflict)]
     public async Task<ActionResult> DeleteRule(Guid id, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
@@ -229,6 +249,15 @@ public class AlertRulesController : ControllerBase
         var rule = await db.AlertRules.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (rule is null)
             return NotFound();
+
+        // Refuse to break the alert_state graph: if any other rule references this one, the
+        // caller must update or delete those first. Returning the offending ids lets the FE
+        // either link to them or offer a cascade-delete.
+        var referencing = await _referenceService.FindReferencingRulesAsync(id, ct);
+        if (referencing.Count > 0)
+        {
+            return Conflict(new ReferencingRulesResponse(referencing));
+        }
 
         db.AlertRules.Remove(rule);
         await db.SaveChangesAsync(ct);
@@ -390,8 +419,53 @@ public class AlertRulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Reconstructs a <see cref="ConditionNode"/> from the controller's
+    /// <c>ConditionType</c> + <c>ConditionParams</c> request shape so the reference walker can
+    /// inspect the proposed tree before persisting. Returns null if the payload can't be
+    /// deserialised — cycle detection then no-ops and the request still passes validation
+    /// (the existing rule-shape validator catches malformed payloads with a clearer error).
+    /// </summary>
+    private static ConditionNode? TryDeserializeRoot(AlertConditionType type, object? conditionParams)
+    {
+        if (conditionParams is null) return null;
+        try
+        {
+            var json = JsonSerializer.Serialize(conditionParams);
+            return type switch
+            {
+                AlertConditionType.Composite => new ConditionNode("composite",
+                    Composite: JsonSerializer.Deserialize<CompositeCondition>(json, ReferenceJsonOptions)),
+                AlertConditionType.Not => new ConditionNode("not",
+                    Not: JsonSerializer.Deserialize<NotCondition>(json, ReferenceJsonOptions)),
+                AlertConditionType.Sustained => new ConditionNode("sustained",
+                    Sustained: JsonSerializer.Deserialize<SustainedCondition>(json, ReferenceJsonOptions)),
+                AlertConditionType.AlertState => new ConditionNode("alert_state",
+                    AlertState: JsonSerializer.Deserialize<AlertStateCondition>(json, ReferenceJsonOptions)),
+                _ => new ConditionNode(type.ToString().ToLowerInvariant()),
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static readonly JsonSerializerOptions ReferenceJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
+
     #endregion
 }
+
+/// <summary>
+/// 409 response body returned by <c>DELETE /api/v4/alert-rules/{id}</c> when other rules
+/// reference the target via <c>alert_state</c>. The FE uses this to either link to those
+/// rules or offer a cascade-delete confirmation.
+/// </summary>
+public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds);
 
 #region DTOs
 
