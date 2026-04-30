@@ -131,26 +131,65 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Close excursions that are currently in hysteresis. Hysteresis is a single tick:
-    /// an excursion marked on one sweep is closed on the next.
+    /// Close excursions that are currently in hysteresis. Routes through the tracker
+    /// (single owner of <c>AlertTrackerState.ActiveExcursionId</c>) and the shared
+    /// resolution handler so resolution_reason="hysteresis" is stamped, pending deliveries
+    /// expire, and <c>alert_resolved</c> broadcasts — same close pathway the orchestrator's
+    /// per-reading hysteresis-expiry uses.
     /// </summary>
     private async Task CloseHysteresisWindowsAsync(CancellationToken ct)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
+        using var lookupScope = _serviceProvider.CreateScope();
+        var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
-        var now = DateTime.UtcNow;
-
-        var excursions = await repository.GetExcursionsInHysteresisAsync(ct);
-
+        var excursions = await lookupRepository.GetExcursionsInHysteresisAsync(ct);
         if (excursions.Count == 0) return;
 
-        foreach (var excursion in excursions)
+        var byTenant = excursions.GroupBy(e => e.TenantId);
+        var closedCount = 0;
+
+        foreach (var tenantGroup in byTenant)
         {
-            await repository.CloseHysteresisExcursionAsync(excursion.Id, excursion.AlertRuleId, now, ct);
+            var tenantId = tenantGroup.Key;
+            var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
+            if (tenantContext is null || !tenantContext.IsActive) continue;
+
+            using var tenantScope = _serviceProvider.CreateScope();
+            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+            tenantAccessor.SetTenant(new TenantContext(
+                tenantContext.TenantId,
+                tenantContext.Slug ?? string.Empty,
+                tenantContext.DisplayName ?? string.Empty,
+                true));
+
+            var tracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
+            var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
+
+            foreach (var excursion in tenantGroup)
+            {
+                try
+                {
+                    var transition = await tracker.ForceCloseAsync(
+                        excursion.AlertRuleId, ExcursionCloseReason.Hysteresis, ct);
+                    if (transition.Type == ExcursionTransitionType.ExcursionClosed)
+                    {
+                        await resolutionHandler.HandleClosedAsync(transition, tenantId, ct);
+                        closedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error closing hysteresis excursion {ExcursionId} for rule {AlertRuleId}",
+                        excursion.Id, excursion.AlertRuleId);
+                }
+            }
         }
 
-        _logger.LogInformation("Closed {Count} excursions in hysteresis", excursions.Count);
+        if (closedCount > 0)
+        {
+            _logger.LogInformation("Closed {Count} excursions in hysteresis", closedCount);
+        }
     }
 
     /// <summary>
@@ -386,7 +425,7 @@ public class AlertSweepService : BackgroundService
         var ruleContext = enrichedContext with
         {
             CurrentRuleId = instance.AlertRuleId,
-            CurrentPath = "snooze",
+            CurrentPath = AlertConditionTypeNames.SnoozePathRoot,
         };
 
         try
@@ -528,7 +567,7 @@ public class AlertSweepService : BackgroundService
                 var ruleContext = enriched with
                 {
                     CurrentRuleId = entry.Rule.Id,
-                    CurrentPath = "auto_resolve",
+                    CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
                 };
 
                 bool shouldResolve;

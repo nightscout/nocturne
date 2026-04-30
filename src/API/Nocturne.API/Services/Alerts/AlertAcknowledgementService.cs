@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Services.Realtime;
@@ -16,10 +17,26 @@ namespace Nocturne.API.Services.Alerts;
 /// <seealso cref="ISignalRBroadcastService"/>
 internal sealed class AlertAcknowledgementService(
     IDbContextFactory<NocturneDbContext> contextFactory,
+    ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
     ILogger<AlertAcknowledgementService> logger)
     : IAlertAcknowledgementService
 {
+    /// <summary>
+    /// Creates a fresh pooled <see cref="NocturneDbContext"/> with <see cref="NocturneDbContext.TenantId"/>
+    /// set from the supplied tenant or the ambient <see cref="ITenantAccessor"/>. Necessary because
+    /// <see cref="IDbContextFactory{TContext}.CreateDbContextAsync"/> hands back a raw context
+    /// (TenantId == Guid.Empty) which the global tenant query filter then uses to exclude every row.
+    /// </summary>
+    private async Task<NocturneDbContext> CreateContextForAsync(Guid tenantId, CancellationToken ct)
+    {
+        var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId == Guid.Empty
+            ? (tenantAccessor.IsResolved ? tenantAccessor.TenantId : Guid.Empty)
+            : tenantId;
+        return db;
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// Loads all open excursions (where <c>EndedAt IS NULL</c>), applies the
@@ -30,7 +47,7 @@ internal sealed class AlertAcknowledgementService(
     /// </remarks>
     public async Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await CreateContextForAsync(tenantId, ct);
         var now = DateTime.UtcNow;
 
         var excursions = await db.AlertExcursions
@@ -81,13 +98,19 @@ internal sealed class AlertAcknowledgementService(
     }
 
     /// <inheritdoc/>
-    public async Task AcknowledgeExcursionAsync(Guid excursionId, string acknowledgedBy, CancellationToken ct)
+    public async Task AcknowledgeExcursionAsync(
+        Guid tenantId, Guid excursionId, string acknowledgedBy, bool broadcast, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        await using var db = await CreateContextForAsync(tenantId, ct);
         var now = DateTime.UtcNow;
 
+        // Tenant filter is implicit via db.TenantId; the explicit TenantId == tenantId clause is
+        // defence-in-depth so a passed tenantId of Guid.Empty (never matches a real row) cannot
+        // leak across tenants.
         var excursion = await db.AlertExcursions
-            .FirstOrDefaultAsync(e => e.Id == excursionId && e.EndedAt == null, ct);
+            .FirstOrDefaultAsync(e => e.Id == excursionId
+                                       && e.TenantId == tenantId
+                                       && e.EndedAt == null, ct);
 
         if (excursion is null)
         {
@@ -108,19 +131,22 @@ internal sealed class AlertAcknowledgementService(
 
         await db.SaveChangesAsync(ct);
 
-        try
+        if (broadcast)
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+            try
             {
-                tenantId = excursion.TenantId,
-                excursionId,
-                acknowledgedBy,
-                acknowledgedAt = now,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for excursion {ExcursionId}", excursionId);
+                await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+                {
+                    tenantId = excursion.TenantId,
+                    excursionId,
+                    acknowledgedBy,
+                    acknowledgedAt = now,
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for excursion {ExcursionId}", excursionId);
+            }
         }
 
         logger.LogInformation(

@@ -258,11 +258,14 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
+        // Cross-tenant scan — sweep evaluates every tenant in a single tick, then sets
+        // tenant context per-excursion before invoking the tracker.
         return await context.AlertExcursions
             .AsNoTracking()
+            .IgnoreQueryFilters()
             .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
             .Select(e => new HysteresisExcursionSnapshot(
-                e.Id, e.AlertRuleId, e.HysteresisStartedAt))
+                e.Id, e.TenantId, e.AlertRuleId, e.HysteresisStartedAt))
             .ToListAsync(ct);
     }
 
@@ -291,49 +294,6 @@ public class AlertRepository : IAlertRepository
                     x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
                     x.r.AutoResolveEnabled, x.r.AutoResolveParams)))
             .ToListAsync(ct);
-    }
-
-    /// <summary>
-    /// Closes an alert excursion that has completed its hysteresis period.
-    /// </summary>
-    /// <param name="excursionId">The unique identifier of the alert excursion.</param>
-    /// <param name="alertRuleId">The unique identifier of the associated alert rule.</param>
-    /// <param name="endedAt">The timestamp when the excursion ended.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public virtual async Task CloseHysteresisExcursionAsync(
-        Guid excursionId, Guid alertRuleId, DateTime endedAt, CancellationToken ct)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
-        // Close the excursion
-        var excursion = await context.AlertExcursions
-            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
-
-        if (excursion != null)
-        {
-            excursion.EndedAt = endedAt;
-        }
-
-        // Resolve any remaining instances for this excursion
-        await context.AlertInstances
-            .Where(i => i.AlertExcursionId == excursionId && i.Status != "resolved")
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(i => i.Status, "resolved")
-                .SetProperty(i => i.ResolvedAt, endedAt), ct);
-
-        // Reset tracker state for the rule to idle
-        var tracker = await context.AlertTrackerState
-            .FirstOrDefaultAsync(t => t.AlertRuleId == alertRuleId, ct);
-
-        if (tracker != null)
-        {
-            tracker.State = "idle";
-            tracker.ConfirmationCount = 0;
-            tracker.ActiveExcursionId = null;
-            tracker.UpdatedAt = endedAt;
-        }
-
-        await context.SaveChangesAsync(ct);
     }
 
     /// <summary>

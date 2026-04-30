@@ -416,7 +416,7 @@ public class AlertOrchestratorTests
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
         _acknowledgementService.Verify(
-            a => a.AcknowledgeExcursionAsync(_excursionId, "system:auto-ack-on-trigger", It.IsAny<CancellationToken>()),
+            a => a.AcknowledgeExcursionAsync(_tenantId, _excursionId, "system:auto-ack-on-trigger", false, It.IsAny<CancellationToken>()),
             Times.Once);
 
         // Step-0 delivery still fires per configured channels — Info routing is a frontend concern.
@@ -436,7 +436,7 @@ public class AlertOrchestratorTests
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
         _acknowledgementService.Verify(
-            a => a.AcknowledgeExcursionAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            a => a.AcknowledgeExcursionAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

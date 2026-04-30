@@ -44,7 +44,7 @@ public record UpdateAlertInstanceRequest(Guid Id, int? CurrentStepOrder = null, 
 /// <summary>
 /// Snapshot of an <see cref="AlertExcursion"/> in the hysteresis cooldown period, used to check if cooldown has elapsed.
 /// </summary>
-public record HysteresisExcursionSnapshot(Guid Id, Guid AlertRuleId, DateTime? HysteresisStartedAt);
+public record HysteresisExcursionSnapshot(Guid Id, Guid TenantId, Guid AlertRuleId, DateTime? HysteresisStartedAt);
 
 /// <summary>
 /// Pairing of an open excursion with its owning rule, restricted to rules

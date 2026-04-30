@@ -153,11 +153,13 @@ internal sealed class AlertOrchestrator(
         if (node is null) return;
 
         // Path-prefix auto-resolve so any nested sustained timers don't collide with timers
-        // owned by the main rule body (which roots at e.g. "composite").
+        // owned by the main rule body (which roots at e.g. "composite"). Both per-reading
+        // (orchestrator) and periodic (sweep) auto-resolve paths share this root — same
+        // (ruleId, path) timer row, by design.
         var autoResolveContext = context with
         {
             CurrentRuleId = rule.Id,
-            CurrentPath = "auto_resolve",
+            CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
         };
 
         bool shouldResolve;
@@ -252,10 +254,12 @@ internal sealed class AlertOrchestrator(
         // Info severity is fire-and-forget: deliver once, then auto-acknowledge so escalation
         // halts and the alert renders as acknowledged in the UI. Channel routing for Info is
         // a frontend default (ChannelPicker); the orchestrator does not gate channels by severity.
+        // broadcast=false avoids racing the alert_acknowledged event against the alert_dispatch
+        // we just emitted for an excursion the FE has not yet finished rendering.
         if (rule.Severity == AlertRuleSeverity.Info)
         {
             await acknowledgementService.AcknowledgeExcursionAsync(
-                excursionId, "system:auto-ack-on-trigger", ct);
+                tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: false, ct);
         }
     }
 

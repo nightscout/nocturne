@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -31,8 +32,13 @@ public class AlertAcknowledgementServiceTests
         }
         _factory = new TestDbContextFactory(_options) { TenantOverride = _tenantId };
 
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+
         _service = new AlertAcknowledgementService(
             _factory,
+            tenantAccessor.Object,
             _broadcast.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
     }
@@ -92,7 +98,7 @@ public class AlertAcknowledgementServiceTests
     {
         var (excursionId, instanceId) = await SeedActiveExcursionAsync();
 
-        await _service.AcknowledgeExcursionAsync(excursionId, "system:auto-ack-on-trigger", CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: true, CancellationToken.None);
 
         await using var db = NewUnfilteredContext();
         var excursion = await db.AlertExcursions.IgnoreQueryFilters()
@@ -125,7 +131,7 @@ public class AlertAcknowledgementServiceTests
             await db.SaveChangesAsync();
         }
 
-        await _service.AcknowledgeExcursionAsync(excursionId, "user:bob", CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
 
         await using var db2 = NewUnfilteredContext();
         var excursion = await db2.AlertExcursions.IgnoreQueryFilters()
@@ -142,7 +148,7 @@ public class AlertAcknowledgementServiceTests
     {
         var (excursionId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow);
 
-        await _service.AcknowledgeExcursionAsync(excursionId, "user:bob", CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
 
         await using var db = NewUnfilteredContext();
         var excursion = await db.AlertExcursions.IgnoreQueryFilters()
@@ -157,7 +163,7 @@ public class AlertAcknowledgementServiceTests
     [Fact]
     public async Task AcknowledgeExcursion_NotFound_NoOp()
     {
-        await _service.AcknowledgeExcursionAsync(Guid.NewGuid(), "user:bob", CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, Guid.NewGuid(), "user:bob", broadcast: true, CancellationToken.None);
 
         _broadcast.Verify(
             x => x.BroadcastAlertEventAsync(It.IsAny<string>(), It.IsAny<object>()),

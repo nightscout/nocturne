@@ -114,16 +114,6 @@ public interface IAlertRepository
     Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(CancellationToken ct);
 
     /// <summary>
-    /// Closes a hysteresis excursion, marking it as ended.
-    /// </summary>
-    /// <param name="excursionId">The excursion to close.</param>
-    /// <param name="alertRuleId">The associated <see cref="AlertRule"/> identifier.</param>
-    /// <param name="endedAt">The timestamp when hysteresis expired.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when the excursion has been closed.</returns>
-    Task CloseHysteresisExcursionAsync(Guid excursionId, Guid alertRuleId, DateTime endedAt, CancellationToken ct);
-
-    /// <summary>
     /// Returns the tenant-level alert context (global mute state, timezone, etc.) used
     /// by the orchestrator to evaluate scheduling rules.
     /// </summary>
