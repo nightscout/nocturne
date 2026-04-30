@@ -9643,6 +9643,40 @@
         "x-remote-type": "command"
       }
     },
+    "/api/v4/alerts/replay": {
+      "post": {
+        "tags": [
+          "Alert Replay"
+        ],
+        "summary": "Replay enabled rules over a window. date=null replays the rolling last 24 hours;\notherwise replays that calendar day in timezone (UTC if omitted).",
+        "operationId": "AlertReplay_Replay",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertReplayRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertReplayResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/alert-rules": {
       "get": {
         "tags": [
@@ -9852,6 +9886,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferencingRulesResponse"
                 }
               }
             }
@@ -17285,6 +17329,63 @@
         "x-remote-invalidates": [
           "GetAuditConfig"
         ]
+      }
+    },
+    "/api/v4/Actogram": {
+      "get": {
+        "tags": [
+          "Actogram"
+        ],
+        "summary": "Get actogram report data for a time window.",
+        "operationId": "Actogram_GetActogram",
+        "parameters": [
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Start of the window as Unix milliseconds (inclusive).",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "End of the window as Unix milliseconds (exclusive).\n            Must be greater than startTime.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActogramReportData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/Analytics/status": {
@@ -30578,6 +30679,7 @@
         "description": "",
         "x-enumNames": [
           "WebPush",
+          "InApp",
           "Webhook",
           "DiscordDm",
           "DiscordChannel",
@@ -30591,6 +30693,7 @@
         ],
         "enum": [
           "web_push",
+          "in_app",
           "webhook",
           "discord_dm",
           "discord_channel",
@@ -31338,6 +31441,79 @@
           }
         }
       },
+      "AlertReplayResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "windowStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "windowEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertReplayEvent"
+            }
+          },
+          "limitations": {
+            "type": "string"
+          }
+        }
+      },
+      "AlertReplayEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "ruleName": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
+          }
+        }
+      },
+      "AlertRuleSeverity": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Critical",
+          "Warning",
+          "Info"
+        ],
+        "enum": [
+          "critical",
+          "warning",
+          "info"
+        ]
+      },
+      "AlertReplayRequest": {
+        "type": "object",
+        "description": "Request body for the alerts replay endpoint.",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "AlertRuleResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -31357,14 +31533,6 @@
             "$ref": "#/components/schemas/AlertConditionType"
           },
           "conditionParams": {},
-          "hysteresisMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "confirmationReadings": {
-            "type": "integer",
-            "format": "int32"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -31374,6 +31542,12 @@
           },
           "severity": {
             "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
           },
           "clientConfiguration": {},
           "schedules": {
@@ -31391,25 +31565,37 @@
           "Threshold",
           "RateOfChange",
           "SignalLoss",
-          "Composite"
+          "Composite",
+          "Not",
+          "Sustained",
+          "Staleness",
+          "Predicted",
+          "Trend",
+          "TimeOfDay",
+          "Iob",
+          "Cob",
+          "Reservoir",
+          "SiteAge",
+          "SensorAge",
+          "AlertState"
         ],
         "enum": [
           "threshold",
           "rate_of_change",
           "signal_loss",
-          "composite"
-        ]
-      },
-      "AlertRuleSeverity": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Normal",
-          "Critical"
-        ],
-        "enum": [
-          "normal",
-          "critical"
+          "composite",
+          "not",
+          "sustained",
+          "staleness",
+          "predicted",
+          "trend",
+          "time_of_day",
+          "iob",
+          "cob",
+          "reservoir",
+          "site_age",
+          "sensor_age",
+          "alert_state"
         ]
       },
       "AlertScheduleResponse": {
@@ -31525,14 +31711,6 @@
           "conditionParams": {
             "nullable": true
           },
-          "hysteresisMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "confirmationReadings": {
-            "type": "integer",
-            "format": "int32"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -31547,6 +31725,12 @@
                 "$ref": "#/components/schemas/AlertRuleSeverity"
               }
             ]
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
           },
           "clientConfiguration": {
             "nullable": true
@@ -31668,14 +31852,6 @@
           "conditionParams": {
             "nullable": true
           },
-          "hysteresisMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "confirmationReadings": {
-            "type": "integer",
-            "format": "int32"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -31691,6 +31867,12 @@
               }
             ]
           },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
+          },
           "clientConfiguration": {
             "nullable": true
           },
@@ -31699,6 +31881,20 @@
             "nullable": true,
             "items": {
               "$ref": "#/components/schemas/CreateAlertScheduleRequest"
+            }
+          }
+        }
+      },
+      "ReferencingRulesResponse": {
+        "type": "object",
+        "description": "409 response body returned by DELETE /api/v4/alert-rules/{id} when other rules\nreference the target via alert_state. The FE uses this to either link to those\nrules or offer a cascade-delete confirmation.",
+        "additionalProperties": false,
+        "properties": {
+          "referencingRuleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "guid"
             }
           }
         }
@@ -36652,6 +36848,132 @@
           }
         }
       },
+      "ActogramReportData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "glucose": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucosePointDto"
+            }
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/ChartThresholdsDto"
+          },
+          "heartRates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeartRatePointDto"
+            }
+          },
+          "stepCounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepBubbleDto"
+            }
+          },
+          "sleepSpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActogramSleepSpan"
+            }
+          }
+        }
+      },
+      "GlucosePointDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sgv": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ChartThresholdsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "low": {
+            "type": "number",
+            "format": "double"
+          },
+          "high": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "glucoseYMax": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "HeartRatePointDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bpm": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "StepBubbleDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "steps": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ActogramSleepSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
       "PerformanceMetrics": {
         "type": "object",
         "additionalProperties": false,
@@ -37127,54 +37449,6 @@
           "primary"
         ]
       },
-      "GlucosePointDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "time": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "sgv": {
-            "type": "number",
-            "format": "double"
-          },
-          "direction": {
-            "type": "string",
-            "nullable": true
-          },
-          "dataSource": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "ChartThresholdsDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "low": {
-            "type": "number",
-            "format": "double"
-          },
-          "high": {
-            "type": "number",
-            "format": "double"
-          },
-          "veryLow": {
-            "type": "number",
-            "format": "double"
-          },
-          "veryHigh": {
-            "type": "number",
-            "format": "double"
-          },
-          "glucoseYMax": {
-            "type": "number",
-            "format": "double"
-          }
-        }
-      },
       "BolusMarkerDto": {
         "type": "object",
         "additionalProperties": false,
@@ -37425,34 +37699,6 @@
           },
           "color": {
             "$ref": "#/components/schemas/ChartColor"
-          }
-        }
-      },
-      "HeartRatePointDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "time": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "bpm": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "StepBubbleDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "time": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "steps": {
-            "type": "integer",
-            "format": "int32"
           }
         }
       },

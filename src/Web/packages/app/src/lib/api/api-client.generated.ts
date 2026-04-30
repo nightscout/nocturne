@@ -5,8 +5,10 @@
 import {
   AccessRequestClient,
   ActivityClient,
+  ActogramClient,
   AlertCustomSoundsClient,
   AlertInvitesClient,
+  AlertReplayClient,
   AlertRulesClient,
   AlertsClient,
   AnalyticsClient,
@@ -101,8 +103,10 @@ export class ApiClient {
   public readonly baseUrl: string;
   public readonly accessRequest: AccessRequestClient;
   public readonly activity: ActivityClient;
+  public readonly actogram: ActogramClient;
   public readonly alertCustomSounds: AlertCustomSoundsClient;
   public readonly alertInvites: AlertInvitesClient;
+  public readonly alertReplay: AlertReplayClient;
   public readonly alertRules: AlertRulesClient;
   public readonly alerts: AlertsClient;
   public readonly analytics: AnalyticsClient;
@@ -197,8 +201,10 @@ export class ApiClient {
 
     this.accessRequest = new AccessRequestClient(apiBaseUrl, http);
     this.activity = new ActivityClient(apiBaseUrl, http);
+    this.actogram = new ActogramClient(apiBaseUrl, http);
     this.alertCustomSounds = new AlertCustomSoundsClient(apiBaseUrl, http);
     this.alertInvites = new AlertInvitesClient(apiBaseUrl, http);
+    this.alertReplay = new AlertReplayClient(apiBaseUrl, http);
     this.alertRules = new AlertRulesClient(apiBaseUrl, http);
     this.alerts = new AlertsClient(apiBaseUrl, http);
     this.analytics = new AnalyticsClient(apiBaseUrl, http);

@@ -31,7 +31,6 @@ internal sealed class AlertOrchestrator(
     IEscalationAdvancer escalationAdvancer,
     ITenantAccessor tenantAccessor,
     IAlertDeliveryService deliveryService,
-    ISignalRBroadcastService broadcastService,
     ISensorContextEnricher contextEnricher,
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,

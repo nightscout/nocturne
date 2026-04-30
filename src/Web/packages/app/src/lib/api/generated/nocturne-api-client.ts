@@ -10442,6 +10442,59 @@ export class AlertInvitesClient {
     }
 }
 
+export class AlertReplayClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Replay enabled rules over a window. date=null replays the rolling last 24 hours;
+    otherwise replays that calendar day in timezone (UTC if omitted).
+     */
+    replay(request: AlertReplayRequest, signal?: AbortSignal): Promise<AlertReplayResult> {
+        let url_ = this.baseUrl + "/api/v4/alerts/replay";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processReplay(_response);
+        });
+    }
+
+    protected processReplay(response: Response): Promise<AlertReplayResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AlertReplayResult;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<AlertReplayResult>(null as any);
+    }
+}
+
 export class AlertRulesClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -10672,6 +10725,12 @@ export class AlertRulesClient {
             let result404: any = null;
             result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
             return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 409) {
+            return response.text().then((_responseText) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ReferencingRulesResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result409);
             });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
@@ -18480,6 +18539,75 @@ export class AuditClient {
             });
         }
         return Promise.resolve<AuditConfigDto>(null as any);
+    }
+}
+
+export class ActogramClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get actogram report data for a time window.
+     * @param startTime (optional) Start of the window as Unix milliseconds (inclusive).
+     * @param endTime (optional) End of the window as Unix milliseconds (exclusive).
+                Must be greater than startTime.
+     */
+    getActogram(startTime?: number | undefined, endTime?: number | undefined, signal?: AbortSignal): Promise<ActogramReportData> {
+        let url_ = this.baseUrl + "/api/v4/Actogram?";
+        if (startTime === null)
+            throw new globalThis.Error("The parameter 'startTime' cannot be null.");
+        else if (startTime !== undefined)
+            url_ += "startTime=" + encodeURIComponent("" + startTime) + "&";
+        if (endTime === null)
+            throw new globalThis.Error("The parameter 'endTime' cannot be null.");
+        else if (endTime !== undefined)
+            url_ += "endTime=" + encodeURIComponent("" + endTime) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetActogram(_response);
+        });
+    }
+
+    protected processGetActogram(response: Response): Promise<ActogramReportData> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ActogramReportData;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ActogramReportData>(null as any);
     }
 }
 
@@ -26789,6 +26917,7 @@ export interface ChannelStatusEntry {
 
 export enum ChannelType {
     WebPush = "web_push",
+    InApp = "in_app",
     Webhook = "webhook",
     DiscordDm = "discord_dm",
     DiscordChannel = "discord_channel",
@@ -27034,17 +27163,43 @@ export interface CreateAlertInviteRequest {
     permissionScope?: string | undefined;
 }
 
+export interface AlertReplayResult {
+    windowStart?: Date;
+    windowEnd?: Date;
+    events?: AlertReplayEvent[];
+    limitations?: string;
+}
+
+export interface AlertReplayEvent {
+    at?: Date;
+    ruleId?: string;
+    ruleName?: string;
+    severity?: AlertRuleSeverity;
+}
+
+export enum AlertRuleSeverity {
+    Critical = "critical",
+    Warning = "warning",
+    Info = "info",
+}
+
+/** Request body for the alerts replay endpoint. */
+export interface AlertReplayRequest {
+    date?: Date | undefined;
+    timezone?: string | undefined;
+}
+
 export interface AlertRuleResponse {
     id?: string;
     name?: string;
     description?: string | undefined;
     conditionType?: AlertConditionType;
     conditionParams?: any;
-    hysteresisMinutes?: number;
-    confirmationReadings?: number;
     isEnabled?: boolean;
     sortOrder?: number;
     severity?: AlertRuleSeverity;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: any | undefined;
     clientConfiguration?: any;
     schedules?: AlertScheduleResponse[];
 }
@@ -27054,11 +27209,18 @@ export enum AlertConditionType {
     RateOfChange = "rate_of_change",
     SignalLoss = "signal_loss",
     Composite = "composite",
-}
-
-export enum AlertRuleSeverity {
-    Normal = "normal",
-    Critical = "critical",
+    Not = "not",
+    Sustained = "sustained",
+    Staleness = "staleness",
+    Predicted = "predicted",
+    Trend = "trend",
+    TimeOfDay = "time_of_day",
+    Iob = "iob",
+    Cob = "cob",
+    Reservoir = "reservoir",
+    SiteAge = "site_age",
+    SensorAge = "sensor_age",
+    AlertState = "alert_state",
 }
 
 export interface AlertScheduleResponse {
@@ -27094,11 +27256,11 @@ export interface CreateAlertRuleRequest {
     description?: string | undefined;
     conditionType?: AlertConditionType;
     conditionParams?: any | undefined;
-    hysteresisMinutes?: number;
-    confirmationReadings?: number;
     isEnabled?: boolean;
     sortOrder?: number;
     severity?: AlertRuleSeverity | undefined;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: any | undefined;
     clientConfiguration?: any | undefined;
     schedules?: CreateAlertScheduleRequest[] | undefined;
 }
@@ -27134,13 +27296,18 @@ export interface UpdateAlertRuleRequest {
     description?: string | undefined;
     conditionType?: AlertConditionType;
     conditionParams?: any | undefined;
-    hysteresisMinutes?: number;
-    confirmationReadings?: number;
     isEnabled?: boolean;
     sortOrder?: number;
     severity?: AlertRuleSeverity | undefined;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: any | undefined;
     clientConfiguration?: any | undefined;
     schedules?: CreateAlertScheduleRequest[] | undefined;
+}
+
+/** 409 response body returned by DELETE /api/v4/alert-rules/{id} when other rules reference the target via alert_state. The FE uses this to either link to those rules or offer a cascade-delete confirmation. */
+export interface ReferencingRulesResponse {
+    referencingRuleIds?: string[];
 }
 
 export interface ActiveExcursionResponse {
@@ -28675,6 +28842,45 @@ export interface AuditConfigDto {
     mutationAuditRetentionDays?: number | undefined;
 }
 
+export interface ActogramReportData {
+    glucose?: GlucosePointDto[];
+    thresholds?: ChartThresholdsDto;
+    heartRates?: HeartRatePointDto[];
+    stepCounts?: StepBubbleDto[];
+    sleepSpans?: ActogramSleepSpan[];
+}
+
+export interface GlucosePointDto {
+    time?: number;
+    sgv?: number;
+    direction?: string | undefined;
+    dataSource?: string | undefined;
+}
+
+export interface ChartThresholdsDto {
+    low?: number;
+    high?: number;
+    veryLow?: number;
+    veryHigh?: number;
+    glucoseYMax?: number;
+}
+
+export interface HeartRatePointDto {
+    time?: number;
+    bpm?: number;
+}
+
+export interface StepBubbleDto {
+    time?: number;
+    steps?: number;
+}
+
+export interface ActogramSleepSpan {
+    startMills?: number;
+    endMills?: number;
+    state?: string;
+}
+
 export interface PerformanceMetrics {
     averageResponseTime?: number;
     totalRequests?: number;
@@ -28823,21 +29029,6 @@ export enum ChartColor {
     Primary = "primary",
 }
 
-export interface GlucosePointDto {
-    time?: number;
-    sgv?: number;
-    direction?: string | undefined;
-    dataSource?: string | undefined;
-}
-
-export interface ChartThresholdsDto {
-    low?: number;
-    high?: number;
-    veryLow?: number;
-    veryHigh?: number;
-    glucoseYMax?: number;
-}
-
 export interface BolusMarkerDto {
     time?: number;
     insulin?: number;
@@ -28921,16 +29112,6 @@ export interface TrackerMarkerDto {
     time?: number;
     icon?: string | undefined;
     color?: ChartColor;
-}
-
-export interface HeartRatePointDto {
-    time?: number;
-    bpm?: number;
-}
-
-export interface StepBubbleDto {
-    time?: number;
-    steps?: number;
 }
 
 export interface DataOverviewYearsResponse {
