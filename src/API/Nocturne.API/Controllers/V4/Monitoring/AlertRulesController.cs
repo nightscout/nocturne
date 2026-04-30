@@ -14,7 +14,16 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// <summary>
 /// CRUD controller for alert rules with nested schedules, escalation steps, and channels.
 /// </summary>
+/// <remarks>
+/// The runtime evaluation pipeline that operates on these rules is documented in
+/// <c>docs/diagrams/alert-evaluation-pipeline.mmd</c> — the rendered SVG appears under
+/// the Monitoring tag in the Scalar OpenAPI docs (wired via
+/// <c>diagrams.yaml</c>'s <c>tags: [Monitoring]</c> entry and
+/// <see cref="Configuration.TagDescriptionDocumentTransformer"/>).
+/// </remarks>
 /// <seealso cref="NocturneDbContext"/>
+/// <seealso cref="IAlertReferenceService"/>
+/// <seealso cref="Services.Alerts.AlertOrchestrator"/>
 [ApiController]
 [Authorize]
 [Route("api/v4/alert-rules")]
