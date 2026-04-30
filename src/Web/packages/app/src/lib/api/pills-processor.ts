@@ -259,12 +259,12 @@ function processBasalFromSnapshot(
 	snapshots: ApsSnapshot[],
 	profile: Profile | null,
 	now: number,
-	config: Partial<PillsProcessorConfig>
+	_config: Partial<PillsProcessorConfig>
 ): BasalPillData | null {
 	// Only return a value if we have a temp basal that's still running.
 	// The ?? fallback handles the profile-scheduled case via the legacy processBasal.
 	const { rate: scheduledBasal, profileName } = getScheduledBasalRate(profile, now);
-	const recencyMs = MINUTES(config.iob?.recencyThreshold ?? 30);
+	const recencyMs = MINUTES(30);
 	const enacted = recentSnapshots(snapshots, now, recencyMs).find((s) => {
 		if (!s.enacted || s.enactedRate === undefined || s.enactedRate === null) return false;
 		const duration = s.enactedDuration ?? 0;
@@ -278,14 +278,15 @@ function processBasalFromSnapshot(
 	const duration = enacted.enactedDuration ?? 0;
 	const remaining = duration - (now - startTime) / 60_000;
 
+	const enactedRate = enacted.enactedRate ?? 0;
 	return {
-		totalBasal: enacted.enactedRate!,
+		totalBasal: enactedRate,
 		scheduledBasal,
 		isTempBasal: true,
 		isComboActive: false,
-		tempBasal: { rate: enacted.enactedRate, duration, remaining: Math.max(0, remaining), startTime },
+		tempBasal: { rate: enactedRate, duration, remaining: Math.max(0, remaining), startTime },
 		activeProfile: profileName ?? undefined,
-		display: `${enacted.enactedRate!.toFixed(3)}U`,
+		display: `${enactedRate.toFixed(3)}U`,
 		label: 'BASAL',
 		info: [],
 		level: 'none',
