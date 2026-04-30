@@ -239,6 +239,7 @@ internal sealed class AlertOrchestrator(
             TenantId = tenantId,
             SubjectName = tenant?.SubjectName ?? tenant?.DisplayName ?? "Unknown",
             ActiveExcursionCount = activeExcursionCount,
+            Severity = rule.Severity,
         };
 
         // Dispatch delivery for step 0

@@ -83,6 +83,10 @@ public class EscalationAdvancer : IEscalationAdvancer
             TenantId = instance.TenantId,
             SubjectName = tenant?.SubjectName ?? "Unknown",
             ActiveExcursionCount = activeCount,
+            // Severity is not on the instance — escalation only fires for non-Info rules
+            // (Info pre-acks at trigger time and never escalates), so Warning is the safe
+            // default until we plumb severity through the instance/excursion snapshot.
+            Severity = AlertRuleSeverity.Warning,
         };
 
         await _deliveryService.DispatchAsync(instance.Id, nextStepOrder, payload, ct);

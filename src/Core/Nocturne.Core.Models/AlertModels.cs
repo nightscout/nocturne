@@ -425,4 +425,10 @@ public record AlertPayload
 
     /// <summary>Total number of active excursions across all rules for this tenant.</summary>
     public required int ActiveExcursionCount { get; init; }
+
+    /// <summary>
+    /// The firing rule's severity. Drives downstream rendering: <see cref="Alerts.AlertRuleSeverity.Critical"/>
+    /// rules bypass quiet hours and render with urgent visual treatment in InApp/push channels.
+    /// </summary>
+    public required Alerts.AlertRuleSeverity Severity { get; init; }
 }

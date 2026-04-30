@@ -159,6 +159,15 @@ internal sealed class AlertDeliveryService(
                 }
                 break;
 
+            case ChannelType.InApp:
+                var inAppProvider = serviceProvider.GetService<Providers.InAppProvider>();
+                if (inAppProvider is not null)
+                {
+                    await inAppProvider.SendAsync(delivery.Destination, payload, ct);
+                    await MarkDeliveredAsync(delivery.Id, null, null, ct);
+                }
+                break;
+
             case ChannelType.Webhook:
                 var webhookProvider = serviceProvider.GetService<Providers.WebhookProvider>();
                 if (webhookProvider is not null)
