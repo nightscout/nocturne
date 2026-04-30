@@ -27,7 +27,82 @@ public record SensorContext
     /// Timestamp of the last reading received from the CGM, used for signal loss detection.
     /// </summary>
     public required DateTime? LastReadingAt { get; init; }
+
+    /// <summary>
+    /// Coarse trend bucket derived from <see cref="TrendRate"/>. Used by the trend condition.
+    /// </summary>
+    public TrendBucket? TrendBucket { get; init; }
+
+    /// <summary>
+    /// Insulin on board in units, when available from the loop/pump integration.
+    /// </summary>
+    public decimal? IobUnits { get; init; }
+
+    /// <summary>
+    /// Carbohydrates on board in grams, when available from the loop integration.
+    /// </summary>
+    public decimal? CobGrams { get; init; }
+
+    /// <summary>
+    /// Pump reservoir level in units, when available.
+    /// </summary>
+    public decimal? ReservoirUnits { get; init; }
+
+    /// <summary>
+    /// Timestamp of the most recent infusion site change. Used by the site-age condition.
+    /// </summary>
+    public DateTime? LastSiteChangeAt { get; init; }
+
+    /// <summary>
+    /// Timestamp of the most recent CGM sensor start. Used by the sensor-age condition.
+    /// </summary>
+    public DateTime? LastSensorStartAt { get; init; }
+
+    /// <summary>
+    /// Forward-looking glucose predictions used by the predicted condition.
+    /// </summary>
+    public IReadOnlyList<PredictedGlucosePoint> Predictions { get; init; } = Array.Empty<PredictedGlucosePoint>();
+
+    /// <summary>
+    /// Live state of other alerts for this tenant, keyed by alert (rule) id. Used by the alert-state condition.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; init; } =
+        new Dictionary<Guid, ActiveAlertSnapshot>();
 }
+
+/// <summary>
+/// A single predicted glucose value at a future offset from "now".
+/// </summary>
+/// <param name="OffsetMinutes">Minutes ahead of the most recent reading.</param>
+/// <param name="Mgdl">Predicted glucose in mg/dL.</param>
+public record PredictedGlucosePoint(int OffsetMinutes, decimal Mgdl);
+
+/// <summary>
+/// Coarse trend bucket derived from rate of change.
+/// </summary>
+public enum TrendBucket
+{
+    /// <summary>Trend cannot be determined (e.g. insufficient data).</summary>
+    Unknown,
+    /// <summary>Glucose rising rapidly.</summary>
+    RisingFast,
+    /// <summary>Glucose rising.</summary>
+    Rising,
+    /// <summary>Glucose flat.</summary>
+    Flat,
+    /// <summary>Glucose falling.</summary>
+    Falling,
+    /// <summary>Glucose falling rapidly.</summary>
+    FallingFast,
+}
+
+/// <summary>
+/// Snapshot of another live alert's state, used for cross-alert evaluation.
+/// </summary>
+/// <param name="State">One of "firing", "unacknowledged", "acknowledged".</param>
+/// <param name="TriggeredAt">When the referenced alert first fired.</param>
+/// <param name="AcknowledgedAt">When the referenced alert was acknowledged, or null.</param>
+public record ActiveAlertSnapshot(string State, DateTime TriggeredAt, DateTime? AcknowledgedAt);
 
 // ----- Condition parameter records (deserialized from JSONB) -----
 
@@ -59,20 +134,114 @@ public record SignalLossCondition(int TimeoutMinutes);
 public record CompositeCondition(string Operator, List<ConditionNode> Conditions);
 
 /// <summary>
-/// A polymorphic condition node in the alert rule condition tree.
-/// Exactly one of the optional parameters is populated based on <paramref name="Type"/>.
+/// Logical-NOT wrapper that inverts its child.
 /// </summary>
-/// <param name="Type">Condition type: "threshold", "rateOfChange", "signalLoss", or "composite".</param>
-/// <param name="Threshold">Threshold condition parameters, populated when <paramref name="Type"/> is "threshold".</param>
-/// <param name="RateOfChange">Rate-of-change parameters, populated when <paramref name="Type"/> is "rateOfChange".</param>
-/// <param name="SignalLoss">Signal loss parameters, populated when <paramref name="Type"/> is "signalLoss".</param>
-/// <param name="Composite">Composite parameters, populated when <paramref name="Type"/> is "composite".</param>
+/// <param name="Child">Child node whose evaluation is negated.</param>
+public record NotCondition(ConditionNode Child);
+
+/// <summary>
+/// Wrapper that fires once <paramref name="Child"/> has held continuously for <paramref name="Minutes"/>.
+/// </summary>
+/// <param name="Minutes">Duration in minutes the child must remain true.</param>
+/// <param name="Child">Inner condition whose continuous truth is timed.</param>
+public record SustainedCondition(int Minutes, ConditionNode Child);
+
+/// <summary>
+/// Generalised signal-loss condition. Compares minutes since the last reading against <paramref name="Value"/>.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Minutes since last reading to compare against.</param>
+public record StalenessCondition(string Operator, int Value);
+
+/// <summary>
+/// Predicted glucose comparison within a forecast horizon.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Glucose value in mg/dL to compare against.</param>
+/// <param name="WithinMinutes">Forecast horizon in minutes.</param>
+public record PredictedCondition(string Operator, decimal Value, int WithinMinutes);
+
+/// <summary>
+/// Trend condition matching a coarse direction bucket.
+/// </summary>
+/// <param name="Bucket">One of "rising_fast", "rising", "flat", "falling", "falling_fast".</param>
+public record TrendCondition(string Bucket);
+
+/// <summary>
+/// Time-of-day condition. True when the current local time falls within [<paramref name="From"/>, <paramref name="To"/>).
+/// </summary>
+/// <param name="From">Window start as "HH:mm".</param>
+/// <param name="To">Window end as "HH:mm".</param>
+/// <param name="Timezone">IANA timezone id (e.g. "Europe/London"). Null means UTC.</param>
+public record TimeOfDayCondition(string From, string To, string? Timezone);
+
+/// <summary>
+/// Insulin-on-board comparison.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">IOB in units to compare against.</param>
+public record IobCondition(string Operator, decimal Value);
+
+/// <summary>
+/// Carbs-on-board comparison.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">COB in grams to compare against.</param>
+public record CobCondition(string Operator, decimal Value);
+
+/// <summary>
+/// Pump-reservoir comparison.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Reservoir level in units to compare against.</param>
+public record ReservoirCondition(string Operator, decimal Value);
+
+/// <summary>
+/// Infusion-site age comparison.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Site age in hours to compare against.</param>
+public record SiteAgeCondition(string Operator, decimal Value);
+
+/// <summary>
+/// CGM sensor age comparison.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Sensor age in days to compare against.</param>
+public record SensorAgeCondition(string Operator, decimal Value);
+
+/// <summary>
+/// Cross-alert state condition. True when the referenced alert is in the given state, optionally for at least <paramref name="ForMinutes"/>.
+/// </summary>
+/// <param name="AlertId">The alert (rule) id to inspect.</param>
+/// <param name="State">One of "firing", "unacknowledged", "acknowledged".</param>
+/// <param name="ForMinutes">Optional minimum duration in the state, in minutes.</param>
+public record AlertStateCondition(Guid AlertId, string State, int? ForMinutes);
+
+/// <summary>
+/// A polymorphic condition node in the alert rule condition tree.
+/// <paramref name="Type"/> is the discriminator: one of
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state</c>.
+/// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
+/// </summary>
 public record ConditionNode(
     string Type,
     ThresholdCondition? Threshold = null,
     RateOfChangeCondition? RateOfChange = null,
     SignalLossCondition? SignalLoss = null,
-    CompositeCondition? Composite = null
+    CompositeCondition? Composite = null,
+    NotCondition? Not = null,
+    SustainedCondition? Sustained = null,
+    StalenessCondition? Staleness = null,
+    PredictedCondition? Predicted = null,
+    TrendCondition? Trend = null,
+    TimeOfDayCondition? TimeOfDay = null,
+    IobCondition? Iob = null,
+    CobCondition? Cob = null,
+    ReservoirCondition? Reservoir = null,
+    SiteAgeCondition? SiteAge = null,
+    SensorAgeCondition? SensorAge = null,
+    AlertStateCondition? AlertState = null
 );
 
 /// <summary>
@@ -160,6 +329,12 @@ public class AlertRule
 
     /// <summary>Display order among rules.</summary>
     public int SortOrder { get; set; }
+
+    /// <summary>Whether this rule auto-resolves (clears) when its condition no longer holds.</summary>
+    public bool AutoResolveEnabled { get; set; }
+
+    /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
+    public string? AutoResolveParams { get; set; }
 
     /// <summary>When this rule was created.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

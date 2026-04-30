@@ -8,7 +8,8 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="AlertRule"/>
 public record AlertRuleSnapshot(Guid Id, Guid TenantId, string Name, AlertConditionType ConditionType,
     string ConditionParams, int HysteresisMinutes, int ConfirmationReadings,
-    AlertRuleSeverity Severity, string ClientConfiguration, int SortOrder);
+    AlertRuleSeverity Severity, string ClientConfiguration, int SortOrder,
+    bool AutoResolveEnabled = false, string? AutoResolveParams = null);
 
 /// <summary>
 /// Immutable snapshot of an alert schedule (time window and days when an <see cref="AlertRule"/> is active).
