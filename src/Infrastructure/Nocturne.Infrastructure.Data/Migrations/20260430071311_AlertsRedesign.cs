@@ -254,6 +254,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
             // remap. Schema-only restore: drop the new table + columns, recreate the
             // legacy columns with sensible defaults.
             migrationBuilder.Sql("DROP POLICY IF EXISTS tenant_isolation ON alert_condition_timers;");
+            migrationBuilder.Sql("ALTER TABLE alert_condition_timers NO FORCE ROW LEVEL SECURITY;");
+            migrationBuilder.Sql("ALTER TABLE alert_condition_timers DISABLE ROW LEVEL SECURITY;");
             migrationBuilder.DropTable(
                 name: "alert_condition_timers");
 
