@@ -137,7 +137,7 @@ public class AlertSweepService : BackgroundService
 
         foreach (var excursion in excursions)
         {
-            var expiry = excursion.HysteresisStartedAt!.Value.AddMinutes(excursion.HysteresisMinutes);
+            var expiry = excursion.HysteresisStartedAt!.Value;
             if (now < expiry) continue;
 
             await repository.CloseHysteresisExcursionAsync(excursion.Id, excursion.AlertRuleId, now, ct);

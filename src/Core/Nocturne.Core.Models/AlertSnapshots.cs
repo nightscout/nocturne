@@ -7,9 +7,8 @@ namespace Nocturne.Core.Models;
 /// </summary>
 /// <seealso cref="AlertRule"/>
 public record AlertRuleSnapshot(Guid Id, Guid TenantId, string Name, AlertConditionType ConditionType,
-    string ConditionParams, int HysteresisMinutes, int ConfirmationReadings,
-    AlertRuleSeverity Severity, string ClientConfiguration, int SortOrder,
-    bool AutoResolveEnabled = false, string? AutoResolveParams = null);
+    string ConditionParams, AlertRuleSeverity Severity, string ClientConfiguration, int SortOrder,
+    bool AutoResolveEnabled, string? AutoResolveParams);
 
 /// <summary>
 /// Immutable snapshot of an alert schedule (time window and days when an <see cref="AlertRule"/> is active).
@@ -45,7 +44,7 @@ public record UpdateAlertInstanceRequest(Guid Id, int? CurrentStepOrder = null, 
 /// <summary>
 /// Snapshot of an <see cref="AlertExcursion"/> in the hysteresis cooldown period, used to check if cooldown has elapsed.
 /// </summary>
-public record HysteresisExcursionSnapshot(Guid Id, Guid AlertRuleId, DateTime? HysteresisStartedAt, int HysteresisMinutes);
+public record HysteresisExcursionSnapshot(Guid Id, Guid AlertRuleId, DateTime? HysteresisStartedAt);
 
 /// <summary>
 /// Tenant-level context for alert evaluation, providing subject identity and data freshness.

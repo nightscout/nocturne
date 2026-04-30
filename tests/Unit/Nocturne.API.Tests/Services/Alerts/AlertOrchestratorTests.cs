@@ -74,7 +74,8 @@ public class AlertOrchestratorTests
 
     private AlertRuleSnapshot MakeRule(AlertConditionType conditionType = AlertConditionType.Threshold) =>
         new(_ruleId, _tenantId, "Test Rule", conditionType,
-            """{"direction":"below","value":70}""", 5, 3, AlertRuleSeverity.Critical, "{}", 0);
+            """{"direction":"below","value":70}""", AlertRuleSeverity.Critical, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null);
 
     private AlertScheduleSnapshot MakeSchedule() =>
         new(_scheduleId, _ruleId, "Default", true, null, null, null, "UTC");

@@ -103,8 +103,6 @@ public class AlertRulesController : ControllerBase
             ConditionParams = request.ConditionParams is not null
                 ? JsonSerializer.Serialize(request.ConditionParams)
                 : "{}",
-            HysteresisMinutes = request.HysteresisMinutes,
-            ConfirmationReadings = request.ConfirmationReadings > 0 ? request.ConfirmationReadings : 1,
             IsEnabled = request.IsEnabled,
             SortOrder = request.SortOrder,
             Severity = request.Severity ?? AlertRuleSeverity.Warning,
@@ -183,8 +181,6 @@ public class AlertRulesController : ControllerBase
         rule.ConditionParams = request.ConditionParams is not null
             ? JsonSerializer.Serialize(request.ConditionParams)
             : "{}";
-        rule.HysteresisMinutes = request.HysteresisMinutes;
-        rule.ConfirmationReadings = request.ConfirmationReadings > 0 ? request.ConfirmationReadings : 1;
         rule.IsEnabled = request.IsEnabled;
         rule.SortOrder = request.SortOrder;
         rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
@@ -341,8 +337,6 @@ public class AlertRulesController : ControllerBase
         Description = entity.Description,
         ConditionType = entity.ConditionType,
         ConditionParams = DeserializeJson(entity.ConditionParams),
-        HysteresisMinutes = entity.HysteresisMinutes,
-        ConfirmationReadings = entity.ConfirmationReadings,
         IsEnabled = entity.IsEnabled,
         SortOrder = entity.SortOrder,
         Severity = entity.Severity,

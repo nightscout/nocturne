@@ -5,7 +5,7 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// A composable alert rule with condition tree, hysteresis, and confirmation settings.
+/// A composable alert rule with a condition tree and optional auto-resolve behaviour.
 /// Each rule owns schedules, which own escalation chains.
 /// </summary>
 [Table("alert_rules")]
@@ -51,16 +51,16 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string ConditionParams { get; set; } = "{}";
 
     /// <summary>
-    /// Minutes the condition must remain cleared before transitioning back to idle.
+    /// When true, the rule clears itself once its condition no longer holds (subject to <see cref="AutoResolveParams"/>).
     /// </summary>
-    [Column("hysteresis_minutes")]
-    public int HysteresisMinutes { get; set; }
+    [Column("auto_resolve_enabled")]
+    public bool AutoResolveEnabled { get; set; }
 
     /// <summary>
-    /// Number of consecutive readings that must satisfy the condition before firing.
+    /// JSONB auto-resolve parameters (e.g. delay, mode). Null when unused.
     /// </summary>
-    [Column("confirmation_readings")]
-    public int ConfirmationReadings { get; set; } = 1;
+    [Column("auto_resolve_params", TypeName = "jsonb")]
+    public string? AutoResolveParams { get; set; }
 
     /// <summary>
     /// Alert severity. Critical alerts bypass quiet hours.

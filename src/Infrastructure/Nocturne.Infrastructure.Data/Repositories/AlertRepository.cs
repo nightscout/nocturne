@@ -40,8 +40,8 @@ public class AlertRepository : IAlertRepository
             .OrderBy(r => r.SortOrder)
             .Select(r => new AlertRuleSnapshot(
                 r.Id, r.TenantId, r.Name, r.ConditionType,
-                r.ConditionParams, r.HysteresisMinutes, r.ConfirmationReadings,
-                r.Severity, r.ClientConfiguration, r.SortOrder))
+                r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
+                r.AutoResolveEnabled, r.AutoResolveParams))
             .ToListAsync(ct);
     }
 
@@ -265,11 +265,8 @@ public class AlertRepository : IAlertRepository
         return await context.AlertExcursions
             .AsNoTracking()
             .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
-            .Join(context.AlertRules,
-                e => e.AlertRuleId,
-                r => r.Id,
-                (e, r) => new HysteresisExcursionSnapshot(
-                    e.Id, e.AlertRuleId, e.HysteresisStartedAt, r.HysteresisMinutes))
+            .Select(e => new HysteresisExcursionSnapshot(
+                e.Id, e.AlertRuleId, e.HysteresisStartedAt))
             .ToListAsync(ct);
     }
 
