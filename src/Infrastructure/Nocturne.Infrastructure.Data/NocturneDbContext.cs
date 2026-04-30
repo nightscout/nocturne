@@ -413,6 +413,11 @@ public class NocturneDbContext : DbContext
     public DbSet<AlertRuleEntity> AlertRules { get; set; }
 
     /// <summary>
+    /// Gets or sets the AlertConditionTimers table for sustained-condition timer state, keyed by (rule_id, condition_path).
+    /// </summary>
+    public DbSet<AlertConditionTimerEntity> AlertConditionTimers { get; set; }
+
+    /// <summary>
     /// Gets or sets the AlertSchedules table for time-of-day/day-of-week schedule windows
     /// </summary>
     public DbSet<AlertScheduleEntity> AlertSchedules { get; set; }
@@ -2568,6 +2573,18 @@ public class NocturneDbContext : DbContext
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+        });
+
+        // AlertConditionTimerEntity
+        modelBuilder.Entity<AlertConditionTimerEntity>(entity =>
+        {
+            entity.ToTable("alert_condition_timers");
+            entity.HasKey(e => new { e.RuleId, e.ConditionPath });
+
+            entity.HasOne(e => e.Rule)
+                .WithMany()
+                .HasForeignKey(e => e.RuleId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // AlertScheduleEntity
