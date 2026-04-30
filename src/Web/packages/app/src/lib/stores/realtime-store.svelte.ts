@@ -19,6 +19,7 @@ import type {
   BGCheck,
   Note,
   DeviceEvent,
+  ApsSnapshot,
 } from "$lib/api";
 
 /**
@@ -107,6 +108,7 @@ export class RealtimeStore {
   bgChecks = $state.raw<BGCheck[]>([]);
   notes = $state.raw<Note[]>([]);
   deviceEvents = $state.raw<DeviceEvent[]>([]);
+  apsSnapshots = $state.raw<ApsSnapshot[]>([]);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -189,6 +191,7 @@ export class RealtimeStore {
     // Use hardcoded mg/dL - components handle display formatting themselves
     return processPillsData(
       this.deviceStatuses,
+      this.apsSnapshots,
       this.boluses,
       this.carbIntakes,
       this.deviceEvents,
@@ -302,6 +305,7 @@ export class RealtimeStore {
         historicalBgChecks,
         historicalNotes,
         historicalDeviceEvents,
+        historicalApsSnapshots,
       ] = await Promise.all([
         apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []) as unknown as Entry[]).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
@@ -314,6 +318,7 @@ export class RealtimeStore {
         apiClient.bGCheck.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
         apiClient.note.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
         apiClient.deviceEvent.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
+        apiClient.apsSnapshot.getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
       ]);
 
       // Defer all state updates to a microtask to completely break out of the
@@ -372,6 +377,12 @@ export class RealtimeStore {
         if (historicalDeviceEvents && historicalDeviceEvents.length > 0) {
           this.deviceEvents = historicalDeviceEvents.sort(
             (a: DeviceEvent, b: DeviceEvent) => (b.mills || 0) - (a.mills || 0)
+          );
+        }
+
+        if (historicalApsSnapshots && historicalApsSnapshots.length > 0) {
+          this.apsSnapshots = historicalApsSnapshots.sort(
+            (a: ApsSnapshot, b: ApsSnapshot) => (b.mills || 0) - (a.mills || 0)
           );
         }
 
@@ -515,6 +526,10 @@ export class RealtimeStore {
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
           .slice(0, 100);
       }
+
+      // The backend decomposes devicestatus into an ApsSnapshot asynchronously.
+      // Wait briefly then fetch the latest snapshot so pills update in real time.
+      setTimeout(() => this.refreshLatestApsSnapshot(), 3000);
     }
   }
 
@@ -810,6 +825,27 @@ export class RealtimeStore {
     }
   }
 
+  /** Fetch the most recent APS snapshots and merge any new ones into the store. */
+  private async refreshLatestApsSnapshot(): Promise<void> {
+    try {
+      const apiClient = getApiClient();
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const result = await apiClient.apsSnapshot.getAll(fiveMinAgo, new Date(), 5);
+      const snapshots = result.data ?? [];
+      if (snapshots.length === 0) return;
+      const added = snapshots.filter(
+        (s: ApsSnapshot) => !this.apsSnapshots.some((existing) => existing.id === s.id)
+      );
+      if (added.length > 0) {
+        this.apsSnapshots = [...added, ...this.apsSnapshots]
+          .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+          .slice(0, 50);
+      }
+    } catch {
+      // Non-critical — pills will update on next backfill
+    }
+  }
+
   /**
    * Check if backfill is needed and perform it.
    * Called on visibility change (wake from sleep) and WebSocket reconnection.
@@ -844,7 +880,7 @@ export class RealtimeStore {
       // Fetch all data types since last received using existing API methods
       const backfillFromDate = new Date(backfillFrom);
       const nowDate = new Date();
-      const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents] = await Promise.all([
+      const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []) as unknown as Entry[]).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
         apiClient.bolus.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
@@ -852,6 +888,7 @@ export class RealtimeStore {
         apiClient.bGCheck.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.note.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.deviceEvent.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.apsSnapshot.getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
       ]);
 
       let backfilledCount = 0;
@@ -941,6 +978,17 @@ export class RealtimeStore {
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
             .slice(0, 500);
           backfilledCount += newDevEvents.length;
+        }
+      }
+
+      if (newApsSnapshots && newApsSnapshots.length > 0) {
+        const addedSnapshots = newApsSnapshots.filter(
+          (s: ApsSnapshot) => !this.apsSnapshots.some((existing) => existing.id === s.id)
+        );
+        if (addedSnapshots.length > 0) {
+          this.apsSnapshots = [...this.apsSnapshots, ...addedSnapshots]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 50);
         }
       }
 
