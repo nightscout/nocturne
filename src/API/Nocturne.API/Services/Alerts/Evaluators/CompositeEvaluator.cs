@@ -93,18 +93,7 @@ public class CompositeEvaluator : IConditionEvaluator
         if (evaluator is null)
             return false;
 
-        // Serialize the appropriate sub-condition back to JSON for the evaluator
-        var paramsJson = node.Type.ToLowerInvariant() switch
-        {
-            "threshold" => JsonSerializer.Serialize(node.Threshold, JsonOptions),
-            "rate_of_change" => JsonSerializer.Serialize(node.RateOfChange, JsonOptions),
-            "signal_loss" => JsonSerializer.Serialize(node.SignalLoss, JsonOptions),
-            "composite" => JsonSerializer.Serialize(node.Composite, JsonOptions),
-            "not" => JsonSerializer.Serialize(node.Not, JsonOptions),
-            "sustained" => JsonSerializer.Serialize(node.Sustained, JsonOptions),
-            "staleness" => JsonSerializer.Serialize(node.Staleness, JsonOptions),
-            _ => "{}"
-        };
+        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, JsonOptions);
 
         // Path threading: descend into child[index] of kind <node.Type> (matches ConditionPath.Walk).
         var childContext = context with { CurrentPath = $"{context.CurrentPath}[{index}].{node.Type}" };

@@ -97,17 +97,7 @@ public class SustainedEvaluator : IConditionEvaluator
         if (evaluator is null)
             return false;
 
-        var paramsJson = node.Type.ToLowerInvariant() switch
-        {
-            "threshold" => JsonSerializer.Serialize(node.Threshold, JsonOptions),
-            "rate_of_change" => JsonSerializer.Serialize(node.RateOfChange, JsonOptions),
-            "signal_loss" => JsonSerializer.Serialize(node.SignalLoss, JsonOptions),
-            "composite" => JsonSerializer.Serialize(node.Composite, JsonOptions),
-            "not" => JsonSerializer.Serialize(node.Not, JsonOptions),
-            "sustained" => JsonSerializer.Serialize(node.Sustained, JsonOptions),
-            "staleness" => JsonSerializer.Serialize(node.Staleness, JsonOptions),
-            _ => "{}"
-        };
+        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, JsonOptions);
 
         // Path threading: a sustained wrapper has a single child, indexed as [0] (matches ConditionPath.Walk).
         var childContext = context with { CurrentPath = $"{context.CurrentPath}[0].{node.Type}" };
