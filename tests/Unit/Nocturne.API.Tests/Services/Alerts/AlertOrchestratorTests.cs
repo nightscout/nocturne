@@ -26,6 +26,7 @@ public class AlertOrchestratorTests
     private readonly Mock<IAlertDeliveryService> _deliveryService;
     private readonly Mock<ISignalRBroadcastService> _broadcastService;
     private readonly Mock<ISensorContextEnricher> _contextEnricher;
+    private readonly Mock<IAlertAcknowledgementService> _acknowledgementService;
     private readonly FakeTimeProvider _timeProvider;
     private readonly ILogger<AlertOrchestrator> _logger;
     private readonly AlertOrchestrator _sut;
@@ -48,6 +49,7 @@ public class AlertOrchestratorTests
         _deliveryService = new Mock<IAlertDeliveryService>();
         _broadcastService = new Mock<ISignalRBroadcastService>();
         _contextEnricher = new Mock<ISensorContextEnricher>();
+        _acknowledgementService = new Mock<IAlertAcknowledgementService>();
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         _logger = NullLoggerFactory.Instance.CreateLogger<AlertOrchestrator>();
 
@@ -65,6 +67,7 @@ public class AlertOrchestratorTests
             _deliveryService.Object,
             _broadcastService.Object,
             _contextEnricher.Object,
+            _acknowledgementService.Object,
             _timeProvider,
             _logger);
     }
@@ -359,6 +362,72 @@ public class AlertOrchestratorTests
             Times.Once);
         _excursionTracker.Verify(
             t => t.ForceCloseAsync(It.IsAny<Guid>(), It.IsAny<ExcursionCloseReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    // ---- Info severity (Task 19b) ----
+
+    private AlertRuleSnapshot MakeRuleWithSeverity(AlertRuleSeverity severity) =>
+        new(_ruleId, _tenantId, "Severity Rule", AlertConditionType.Threshold,
+            """{"direction":"below","value":70}""", severity, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null);
+
+    private void SetupExcursionOpenedScenario(AlertRuleSnapshot rule)
+    {
+        var schedule = MakeSchedule();
+        var steps = new[] { MakeStep(0), MakeStep(1) };
+        var instance = new AlertInstanceSnapshot(Guid.NewGuid(), _tenantId, _excursionId, _scheduleId,
+            0, "escalating", DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5), null, 0);
+        var tenantContext = new TenantAlertContext(_tenantId, "John", "john", "John Doe", true, DateTime.UtcNow);
+
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.ExcursionOpened, _excursionId));
+        _repository.Setup(r => r.GetSchedulesForRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { schedule });
+        _repository.Setup(r => r.GetEscalationStepsAsync(_scheduleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(steps);
+        _repository.Setup(r => r.CreateInstanceAsync(It.IsAny<CreateAlertInstanceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instance);
+        _repository.Setup(r => r.CountActiveExcursionsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        _repository.Setup(r => r.GetTenantAlertContextAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenantContext);
+    }
+
+    [Fact]
+    public async Task ExcursionOpened_InfoSeverity_AutoAcknowledgesExcursion()
+    {
+        var rule = MakeRuleWithSeverity(AlertRuleSeverity.Info);
+        SetupExcursionOpenedScenario(rule);
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        _acknowledgementService.Verify(
+            a => a.AcknowledgeExcursionAsync(_excursionId, "system:auto-ack-on-trigger", It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        // Step-0 delivery still fires per configured channels — Info routing is a frontend concern.
+        _deliveryService.Verify(
+            d => d.DispatchAsync(It.IsAny<Guid>(), 0, It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData(AlertRuleSeverity.Critical)]
+    [InlineData(AlertRuleSeverity.Warning)]
+    public async Task ExcursionOpened_NonInfoSeverity_DoesNotAutoAcknowledge(AlertRuleSeverity severity)
+    {
+        var rule = MakeRuleWithSeverity(severity);
+        SetupExcursionOpenedScenario(rule);
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        _acknowledgementService.Verify(
+            a => a.AcknowledgeExcursionAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

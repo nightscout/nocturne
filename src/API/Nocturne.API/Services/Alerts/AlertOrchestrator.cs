@@ -33,6 +33,7 @@ internal sealed class AlertOrchestrator(
     IAlertDeliveryService deliveryService,
     ISignalRBroadcastService broadcastService,
     ISensorContextEnricher contextEnricher,
+    IAlertAcknowledgementService acknowledgementService,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -246,6 +247,15 @@ internal sealed class AlertOrchestrator(
         logger.LogInformation(
             "Alert instance {InstanceId} created for excursion {ExcursionId}, rule {RuleName}",
             instance.Id, excursionId, rule.Name);
+
+        // Info severity is fire-and-forget: deliver once, then auto-acknowledge so escalation
+        // halts and the alert renders as acknowledged in the UI. Channel routing for Info is
+        // a frontend default (ChannelPicker); the orchestrator does not gate channels by severity.
+        if (rule.Severity == AlertRuleSeverity.Info)
+        {
+            await acknowledgementService.AcknowledgeExcursionAsync(
+                excursionId, "system:auto-ack-on-trigger", ct);
+        }
     }
 
     private async Task HandleExcursionClosed(
