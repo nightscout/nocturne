@@ -120,7 +120,8 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Close excursions that are in hysteresis and whose window has expired.
+    /// Close excursions that are currently in hysteresis. Hysteresis is a single tick:
+    /// an excursion marked on one sweep is closed on the next.
     /// </summary>
     private async Task CloseHysteresisWindowsAsync(CancellationToken ct)
     {
@@ -133,21 +134,12 @@ public class AlertSweepService : BackgroundService
 
         if (excursions.Count == 0) return;
 
-        var closedCount = 0;
-
         foreach (var excursion in excursions)
         {
-            var expiry = excursion.HysteresisStartedAt!.Value;
-            if (now < expiry) continue;
-
             await repository.CloseHysteresisExcursionAsync(excursion.Id, excursion.AlertRuleId, now, ct);
-            closedCount++;
         }
 
-        if (closedCount > 0)
-        {
-            _logger.LogInformation("Closed {Count} hysteresis-expired excursions", closedCount);
-        }
+        _logger.LogInformation("Closed {Count} excursions in hysteresis", excursions.Count);
     }
 
     /// <summary>
