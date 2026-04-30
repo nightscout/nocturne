@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -5,12 +6,20 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Services.Alerts.Evaluators;
 
 /// <summary>
-/// Resolves an <see cref="AlertConditionType"/> to the corresponding <see cref="IConditionEvaluator"/>.
+/// Resolves an <see cref="AlertConditionType"/> to the corresponding <see cref="IConditionEvaluator"/>,
+/// and provides the single node-dispatch entrypoint shared by recursive evaluators
+/// (composite/not/sustained), the orchestrator's auto-resolve path, and smart-snooze evaluation.
 /// Registered as scoped because evaluators that touch <see cref="IConditionTimerStore"/> are
 /// DbContext-backed; the constructor takes all registered evaluators via DI.
 /// </summary>
 public class ConditionEvaluatorRegistry
 {
+    private static readonly JsonSerializerOptions NodeJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
+
     private readonly Dictionary<AlertConditionType, IConditionEvaluator> _evaluators;
 
     /// <summary>
@@ -48,5 +57,26 @@ public class ConditionEvaluatorRegistry
             return GetEvaluator(parsed);
 
         return null;
+    }
+
+    /// <summary>
+    /// Single node-dispatch entrypoint: looks up the evaluator for <paramref name="node"/>'s
+    /// <see cref="ConditionNode.Type"/>, serialises its kind-specific payload, and delegates.
+    /// Used by recursive evaluators (composite/not/sustained), auto-resolve in the orchestrator,
+    /// and smart-snooze condition evaluation. Returns <see langword="false"/> when the kind is
+    /// unregistered — matches the silent-fail mode the recursive evaluators have always used so
+    /// a malformed rule never throws at runtime.
+    /// </summary>
+    /// <param name="node">The condition node to evaluate. <see cref="ConditionNode.Type"/> selects the evaluator.</param>
+    /// <param name="context">Sensor context. Path threading is the caller's responsibility.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<bool> EvaluateNodeAsync(ConditionNode node, SensorContext context, CancellationToken ct)
+    {
+        var evaluator = GetEvaluator(node.Type);
+        if (evaluator is null)
+            return false;
+
+        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, NodeJsonOptions);
+        return await evaluator.EvaluateAsync(paramsJson, context, ct);
     }
 }

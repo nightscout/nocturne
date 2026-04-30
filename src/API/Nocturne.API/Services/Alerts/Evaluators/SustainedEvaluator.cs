@@ -91,16 +91,10 @@ public class SustainedEvaluator : IConditionEvaluator
         return (now - first.Value).TotalMinutes >= condition.Minutes;
     }
 
-    private async Task<bool> EvaluateChildAsync(ConditionNode node, SensorContext context, CancellationToken ct)
+    private Task<bool> EvaluateChildAsync(ConditionNode node, SensorContext context, CancellationToken ct)
     {
-        var evaluator = Registry.GetEvaluator(node.Type);
-        if (evaluator is null)
-            return false;
-
-        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, JsonOptions);
-
         // Path threading: a sustained wrapper has a single child, indexed as [0] (matches ConditionPath.Walk).
         var childContext = context with { CurrentPath = $"{context.CurrentPath}[0].{node.Type}" };
-        return await evaluator.EvaluateAsync(paramsJson, childContext, ct);
+        return Registry.EvaluateNodeAsync(node, childContext, ct);
     }
 }

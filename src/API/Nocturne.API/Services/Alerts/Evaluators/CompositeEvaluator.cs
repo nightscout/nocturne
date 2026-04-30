@@ -87,16 +87,10 @@ public class CompositeEvaluator : IConditionEvaluator
         return false;
     }
 
-    private async Task<bool> EvaluateNodeAsync(ConditionNode node, int index, SensorContext context, CancellationToken ct)
+    private Task<bool> EvaluateNodeAsync(ConditionNode node, int index, SensorContext context, CancellationToken ct)
     {
-        var evaluator = Registry.GetEvaluator(node.Type);
-        if (evaluator is null)
-            return false;
-
-        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, JsonOptions);
-
         // Path threading: descend into child[index] of kind <node.Type> (matches ConditionPath.Walk).
         var childContext = context with { CurrentPath = $"{context.CurrentPath}[{index}].{node.Type}" };
-        return await evaluator.EvaluateAsync(paramsJson, childContext, ct);
+        return Registry.EvaluateNodeAsync(node, childContext, ct);
     }
 }

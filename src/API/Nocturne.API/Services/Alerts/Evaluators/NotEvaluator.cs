@@ -59,16 +59,10 @@ public class NotEvaluator : IConditionEvaluator
         return !await EvaluateChildAsync(condition.Child, context, ct);
     }
 
-    private async Task<bool> EvaluateChildAsync(ConditionNode node, SensorContext context, CancellationToken ct)
+    private Task<bool> EvaluateChildAsync(ConditionNode node, SensorContext context, CancellationToken ct)
     {
-        var evaluator = Registry.GetEvaluator(node.Type);
-        if (evaluator is null)
-            return false;
-
-        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, JsonOptions);
-
         // Path threading: a Not wrapper has a single child, indexed as [0].
         var childContext = context with { CurrentPath = $"{context.CurrentPath}[0].{node.Type}" };
-        return await evaluator.EvaluateAsync(paramsJson, childContext, ct);
+        return Registry.EvaluateNodeAsync(node, childContext, ct);
     }
 }
