@@ -33,9 +33,8 @@ internal sealed class AlertReplayService(
     private const string LimitationsBanner =
         "Replay simulates threshold, rate-of-change, trend, time-of-day, staleness, sustained, " +
         "and alert_state references — based solely on historical CGM readings. IOB, COB, " +
-        "predictions, treatments, pump reservoir, site/sensor age, and reservoir reservoir " +
-        "are not reconstructed. Auto-resolve, escalation, and quiet hours are not modelled. " +
-        "Smart-snooze is not modelled.";
+        "predictions, treatments, pump reservoir, and site/sensor age are not reconstructed. " +
+        "Auto-resolve, escalation, quiet hours, and smart-snooze are not modelled.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -109,7 +108,11 @@ internal sealed class AlertReplayService(
                 LatestValue = hasReadingForTick ? (decimal)current!.Mgdl : null,
                 LatestTimestamp = hasReadingForTick ? current!.Timestamp : null,
                 TrendRate = hasReadingForTick && current!.TrendRate is { } tr ? (decimal)tr : null,
-                LastReadingAt = hasReadingForTick ? current!.Timestamp : DateTime.MinValue,
+                // No-data ticks: clamp LastReadingAt to `tick` so staleness evaluators report
+                // zero staleness rather than ~9999 years (DateTime.MinValue) and spuriously
+                // fire on every leading tick. Active alerts dict is the same instance per pass
+                // so a parent rule's mid-tick fire is visible to children later in the loop.
+                LastReadingAt = hasReadingForTick ? current!.Timestamp : tick,
                 ActiveAlerts = activeAlerts,
             };
 
@@ -157,9 +160,10 @@ internal sealed class AlertReplayService(
 
     /// <summary>
     /// Resolves the requested window in UTC. <paramref name="localDate"/> null → rolling 24 h
-    /// ending at the current UTC instant (timezone irrelevant since the window is anchored on
-    /// "now"). Set → that calendar day in <paramref name="timezone"/>, midnight-to-midnight,
-    /// converted to UTC.
+    /// ending at "now" (timezone irrelevant for a rolling window — both endpoints are absolute
+    /// UTC instants). Set → that calendar day in <paramref name="timezone"/>,
+    /// midnight-to-midnight, converted to UTC. On DST-transition days the resulting UTC
+    /// window is 23 or 25 hours wide rather than exactly 24.
     /// </summary>
     private static (DateTime Start, DateTime End) ResolveWindow(DateOnly? localDate, string? timezone)
     {
