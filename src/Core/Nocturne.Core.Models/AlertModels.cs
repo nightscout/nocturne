@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Models;
@@ -95,17 +96,17 @@ public record PredictedGlucosePoint(int OffsetMinutes, decimal Mgdl);
 public enum TrendBucket
 {
     /// <summary>Trend cannot be determined (e.g. insufficient data).</summary>
-    Unknown,
+    [JsonStringEnumMemberName("unknown")] Unknown,
     /// <summary>Glucose rising rapidly.</summary>
-    RisingFast,
+    [JsonStringEnumMemberName("rising_fast")] RisingFast,
     /// <summary>Glucose rising.</summary>
-    Rising,
+    [JsonStringEnumMemberName("rising")] Rising,
     /// <summary>Glucose flat.</summary>
-    Flat,
+    [JsonStringEnumMemberName("flat")] Flat,
     /// <summary>Glucose falling.</summary>
-    Falling,
+    [JsonStringEnumMemberName("falling")] Falling,
     /// <summary>Glucose falling rapidly.</summary>
-    FallingFast,
+    [JsonStringEnumMemberName("falling_fast")] FallingFast,
 }
 
 /// <summary>

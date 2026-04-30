@@ -191,7 +191,7 @@ public class SustainedEvaluatorTests
         // Misconfigured rule: zero/negative sustained windows would make the evaluator fire
         // on the second pass with no real "sustained" semantics. Treat as non-firing so a
         // bad rule never alerts.
-        var json = $$"""{"minutes": {{minutes}}, "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}}""";
+        var json = $$"""{"minutes": {{minutes}}, "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70} } }""";
         var context = MakeContext(latestValue: 60m, path: "sustained");
 
         var result = await _sut.EvaluateAsync(json, context, CancellationToken.None);

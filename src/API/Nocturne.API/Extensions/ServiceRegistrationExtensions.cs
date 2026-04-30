@@ -662,6 +662,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
         services.AddScoped<IConditionEvaluator, NotEvaluator>();
         services.AddScoped<IConditionEvaluator, SustainedEvaluator>();
+        services.AddScoped<IConditionEvaluator, PredictedEvaluator>();
+        services.AddScoped<IConditionEvaluator, TrendEvaluator>();
+        services.AddScoped<IConditionEvaluator, TimeOfDayEvaluator>();
         services.AddScoped<ConditionEvaluatorRegistry>();
 
         // Sustained-condition timer store
