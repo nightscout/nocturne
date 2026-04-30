@@ -6,10 +6,9 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="IConditionTimerStore"/> backed by the
-/// <c>alert_condition_timers</c> table. All reads and writes are scoped to the current
-/// tenant via <see cref="NocturneDbContext.TenantId"/>; this layers on top of the
-/// database's RLS policy as defence in depth. Methods are virtual to allow mocking with
-/// CallBase in tests.
+/// <c>alert_condition_timers</c> table. Tenant scoping is provided by the
+/// <see cref="NocturneDbContext"/> global query filter on <see cref="ITenantScoped"/>.
+/// Methods are virtual to allow mocking with CallBase in tests.
 /// </summary>
 public class ConditionTimerRepository : IConditionTimerStore
 {
@@ -29,11 +28,7 @@ public class ConditionTimerRepository : IConditionTimerStore
     {
         var row = await _context.AlertConditionTimers
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                t => t.TenantId == _context.TenantId
-                    && t.AlertRuleId == ruleId
-                    && t.ConditionPath == path,
-                ct);
+            .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
 
         return row?.FirstTrueAt;
     }
@@ -42,11 +37,7 @@ public class ConditionTimerRepository : IConditionTimerStore
     public virtual async Task SetFirstTrueAsync(Guid ruleId, string path, DateTime at, CancellationToken ct)
     {
         var existing = await _context.AlertConditionTimers
-            .FirstOrDefaultAsync(
-                t => t.TenantId == _context.TenantId
-                    && t.AlertRuleId == ruleId
-                    && t.ConditionPath == path,
-                ct);
+            .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
 
         if (existing == null)
         {
@@ -70,11 +61,7 @@ public class ConditionTimerRepository : IConditionTimerStore
     public virtual async Task ClearAsync(Guid ruleId, string path, CancellationToken ct)
     {
         var existing = await _context.AlertConditionTimers
-            .FirstOrDefaultAsync(
-                t => t.TenantId == _context.TenantId
-                    && t.AlertRuleId == ruleId
-                    && t.ConditionPath == path,
-                ct);
+            .FirstOrDefaultAsync(t => t.AlertRuleId == ruleId && t.ConditionPath == path, ct);
 
         if (existing != null)
         {
@@ -87,7 +74,7 @@ public class ConditionTimerRepository : IConditionTimerStore
     public virtual async Task ClearAllForRuleAsync(Guid ruleId, CancellationToken ct)
     {
         var rows = await _context.AlertConditionTimers
-            .Where(t => t.TenantId == _context.TenantId && t.AlertRuleId == ruleId)
+            .Where(t => t.AlertRuleId == ruleId)
             .ToListAsync(ct);
 
         if (rows.Count == 0)
@@ -108,9 +95,7 @@ public class ConditionTimerRepository : IConditionTimerStore
         var retained = retainedPaths as ICollection<string> ?? retainedPaths.ToHashSet();
 
         var rows = await _context.AlertConditionTimers
-            .Where(t => t.TenantId == _context.TenantId
-                && t.AlertRuleId == ruleId
-                && !retained.Contains(t.ConditionPath))
+            .Where(t => t.AlertRuleId == ruleId && !retained.Contains(t.ConditionPath))
             .ToListAsync(ct);
 
         if (rows.Count == 0)
