@@ -266,4 +266,125 @@ public class AlertOrchestratorTests
             e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    // ---- Auto-resolve (Task 19) ----
+
+    private AlertRuleSnapshot MakeAutoResolveRule(string autoResolveJson) =>
+        new(_ruleId, _tenantId, "Auto-resolving Rule", AlertConditionType.Threshold,
+            """{"direction":"below","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
+            AutoResolveEnabled: true, AutoResolveParams: autoResolveJson);
+
+    [Fact]
+    public async Task AutoResolve_WhenParamsEvaluateTrue_ForceClosesAndResolvesInstances()
+    {
+        // Main rule: condition still met (so excursion continues, not closed by hysteresis).
+        // Auto-resolve params: a threshold node that the mock evaluator returns true for on its second call.
+        var autoResolveJson = """{"type":"threshold","threshold":{"direction":"above","value":120}}""";
+        var rule = MakeAutoResolveRule(autoResolveJson);
+
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+
+        // Both main rule body and auto-resolve params return true through the same mock evaluator.
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        // Main eval -> tracker reports excursion continues (active rule, no transition).
+        _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.ExcursionContinues, _excursionId));
+        _repository.Setup(r => r.GetEscalatingInstancesDueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+
+        // Auto-resolve sees an active excursion and force-closes it.
+        _excursionTracker.Setup(t => t.GetActiveExcursionIdAsync(_ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_excursionId);
+        _excursionTracker.Setup(t => t.ForceCloseAsync(_ruleId, ExcursionCloseReason.AutoResolve, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(
+                ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve));
+
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        _excursionTracker.Verify(t => t.ForceCloseAsync(_ruleId, ExcursionCloseReason.AutoResolve, It.IsAny<CancellationToken>()), Times.Once);
+        // Resolution reason flows through to the repository write.
+        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
+            _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AutoResolve_WhenAutoResolveDisabled_DoesNotEvaluateOrForceClose()
+    {
+        var rule = MakeRule(); // AutoResolveEnabled = false
+
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.ExcursionContinues, _excursionId));
+        _repository.Setup(r => r.GetEscalatingInstancesDueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        _excursionTracker.Verify(
+            t => t.GetActiveExcursionIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _excursionTracker.Verify(
+            t => t.ForceCloseAsync(It.IsAny<Guid>(), It.IsAny<ExcursionCloseReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task AutoResolve_WhenNoActiveExcursion_DoesNotEvaluateAutoResolveParams()
+    {
+        var rule = MakeAutoResolveRule("""{"type":"threshold","threshold":{"direction":"above","value":120}}""");
+
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.None));
+        _excursionTracker.Setup(t => t.GetActiveExcursionIdAsync(_ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        // Main rule eval ran once; auto-resolve short-circuits before evaluating its params.
+        _mockEvaluator.Verify(
+            e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _excursionTracker.Verify(
+            t => t.ForceCloseAsync(It.IsAny<Guid>(), It.IsAny<ExcursionCloseReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task AutoResolve_WhenMainEvalAlreadyClosed_SkipsAutoResolve()
+    {
+        var rule = MakeAutoResolveRule("""{"type":"threshold","threshold":{"direction":"above","value":120}}""");
+
+        _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        // Hysteresis-driven close from main eval.
+        _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionTransition(
+                ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.Hysteresis));
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+
+        await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
+
+        // Hysteresis reason flows through; auto-resolve never queries.
+        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
+            _excursionId, It.IsAny<DateTime>(), "hysteresis", It.IsAny<CancellationToken>()), Times.Once);
+        _excursionTracker.Verify(
+            t => t.GetActiveExcursionIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

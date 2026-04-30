@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -36,6 +37,12 @@ internal sealed class AlertOrchestrator(
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
 {
+    private static readonly JsonSerializerOptions AutoResolveJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
+
     public async Task EvaluateAsync(SensorContext context, CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
@@ -100,11 +107,74 @@ internal sealed class AlertOrchestrator(
 
             case ExcursionTransitionType.ExcursionClosed:
                 await HandleExcursionClosed(transition, tenantId, ct);
-                break;
+                return;
 
             case ExcursionTransitionType.ExcursionContinues:
                 await HandleExcursionContinues(transition, ct);
                 break;
+        }
+
+        await TryAutoResolveAsync(rule, context, tenantId, ct);
+    }
+
+    /// <summary>
+    /// Out-of-band auto-resolve: evaluates <see cref="AlertRuleSnapshot.AutoResolveParams"/>
+    /// against the same enriched context used by the main rule. If true, force-closes the
+    /// active excursion via the tracker and routes the resulting transition through the
+    /// existing close pathway so <c>resolution_reason</c> is stamped and the
+    /// <c>alert_resolved</c> broadcast fires.
+    /// </summary>
+    private async Task TryAutoResolveAsync(
+        AlertRuleSnapshot rule,
+        SensorContext context,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+            return;
+
+        var activeExcursionId = await excursionTracker.GetActiveExcursionIdAsync(rule.Id, ct);
+        if (activeExcursionId is null)
+            return;
+
+        ConditionNode? node;
+        try
+        {
+            node = JsonSerializer.Deserialize<ConditionNode>(rule.AutoResolveParams, AutoResolveJsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}; skipping", rule.Id);
+            return;
+        }
+
+        if (node is null) return;
+
+        // Path-prefix auto-resolve so any nested sustained timers don't collide with timers
+        // owned by the main rule body (which roots at e.g. "composite").
+        var autoResolveContext = context with
+        {
+            CurrentRuleId = rule.Id,
+            CurrentPath = "auto_resolve",
+        };
+
+        bool shouldResolve;
+        try
+        {
+            shouldResolve = await evaluatorRegistry.EvaluateNodeAsync(node, autoResolveContext, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Auto-resolve evaluation failed for rule {AlertRuleId}", rule.Id);
+            return;
+        }
+
+        if (!shouldResolve) return;
+
+        var transition = await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
+        if (transition.Type == ExcursionTransitionType.ExcursionClosed)
+        {
+            await HandleExcursionClosed(transition, tenantId, ct);
         }
     }
 
