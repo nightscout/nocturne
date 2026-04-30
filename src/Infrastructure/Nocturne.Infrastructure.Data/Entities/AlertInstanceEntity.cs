@@ -60,6 +60,15 @@ public class AlertInstanceEntity : ITenantScoped
     public DateTime? ResolvedAt { get; set; }
 
     /// <summary>
+    /// Why the instance was resolved. Mirrors
+    /// <see cref="Nocturne.Core.Models.Alerts.ExcursionCloseReason"/>.
+    /// Null on rows resolved before the column existed.
+    /// </summary>
+    [Column("resolution_reason")]
+    [MaxLength(32)]
+    public string? ResolutionReason { get; set; }
+
+    /// <summary>
     /// When the engine should next attempt escalation to the following step.
     /// </summary>
     [Column("next_escalation_at")]

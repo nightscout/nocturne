@@ -191,7 +191,7 @@ public class AlertOrchestratorTests
 
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
-        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(_excursionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(_excursionId, It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
         _repository.Verify(r => r.ExpirePendingDeliveriesAsync(
             It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(instanceId)),
             It.IsAny<CancellationToken>()), Times.Once);

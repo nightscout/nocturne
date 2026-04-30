@@ -61,13 +61,17 @@ public interface IAlertRepository
 
     /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them
-    /// with the given resolution timestamp.
+    /// with the given resolution timestamp and reason.
     /// </summary>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <param name="resolvedAt">The timestamp when the excursion was resolved.</param>
+    /// <param name="resolutionReason">
+    /// Wire string from <see cref="Nocturne.Core.Models.Alerts.ExcursionCloseReason"/>
+    /// (e.g. <c>"hysteresis"</c>, <c>"auto"</c>). Null is allowed only as a defensive
+    /// fall-back — every production call site has a reason.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when all instances have been resolved.</returns>
-    Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, CancellationToken ct);
+    Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
 
     /// <summary>
     /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).

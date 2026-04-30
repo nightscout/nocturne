@@ -192,8 +192,10 @@ internal sealed class AlertOrchestrator(
         var instances = await repository.GetInstancesForExcursionAsync(excursionId, ct);
         var instanceIds = instances.Select(i => i.Id).ToList();
 
-        // Resolve instances for this excursion
-        await repository.ResolveInstancesForExcursionAsync(excursionId, now, ct);
+        // Resolve instances for this excursion, stamping the reason from the tracker transition
+        // so audit/UI can distinguish hysteresis closes from auto-resolve / manual / rule-disable.
+        var reason = transition.CloseReason?.ToWireString();
+        await repository.ResolveInstancesForExcursionAsync(excursionId, now, reason, ct);
 
         // Cancel pending deliveries
         if (instanceIds.Count > 0)

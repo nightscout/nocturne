@@ -162,14 +162,9 @@ public class AlertRepository : IAlertRepository
             .ToListAsync(ct);
     }
 
-    /// <summary>
-    /// Marks all active alert instances for a specific excursion as resolved.
-    /// </summary>
-    /// <param name="excursionId">The unique identifier of the alert excursion.</param>
-    /// <param name="resolvedAt">The timestamp when resolution occurred.</param>
-    /// <param name="ct">The cancellation token.</param>
+    /// <inheritdoc/>
     public virtual async Task ResolveInstancesForExcursionAsync(
-        Guid excursionId, DateTime resolvedAt, CancellationToken ct)
+        Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
@@ -178,7 +173,8 @@ public class AlertRepository : IAlertRepository
                         && i.Status != "resolved")
             .ExecuteUpdateAsync(s => s
                 .SetProperty(i => i.Status, "resolved")
-                .SetProperty(i => i.ResolvedAt, resolvedAt), ct);
+                .SetProperty(i => i.ResolvedAt, resolvedAt)
+                .SetProperty(i => i.ResolutionReason, resolutionReason), ct);
     }
 
     /// <summary>
