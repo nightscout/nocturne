@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Per-rule, per-condition-path timer used by the sustained evaluator to track when a child
 /// condition first became true. The sustained window is measured from <see cref="FirstTrueAt"/>;
 /// rows are removed once the child condition is no longer satisfied. Composite key is
-/// (RuleId, ConditionPath).
+/// (AlertRuleId, ConditionPath).
 /// </summary>
 [Table("alert_condition_timers")]
 public class AlertConditionTimerEntity : ITenantScoped
@@ -19,10 +19,10 @@ public class AlertConditionTimerEntity : ITenantScoped
     public Guid TenantId { get; set; }
 
     /// <summary>
-    /// Owning rule; part of the composite key alongside <see cref="ConditionPath"/>.
+    /// Identifier of the alert rule the timer belongs to.
     /// </summary>
-    [Column("rule_id")]
-    public Guid RuleId { get; set; }
+    [Column("alert_rule_id")]
+    public Guid AlertRuleId { get; set; }
 
     /// <summary>
     /// Stable path to the sustained node within the rule's condition tree
@@ -39,7 +39,7 @@ public class AlertConditionTimerEntity : ITenantScoped
     public DateTime FirstTrueAt { get; set; }
 
     /// <summary>
-    /// Navigation to the owning rule.
+    /// Navigation property to the associated alert rule.
     /// </summary>
-    public AlertRuleEntity? Rule { get; set; }
+    public AlertRuleEntity? AlertRule { get; set; }
 }

@@ -413,7 +413,7 @@ public class NocturneDbContext : DbContext
     public DbSet<AlertRuleEntity> AlertRules { get; set; }
 
     /// <summary>
-    /// Gets or sets the AlertConditionTimers table for sustained-condition timer state, keyed by (rule_id, condition_path).
+    /// Gets or sets the AlertConditionTimers table for sustained-condition timer state.
     /// </summary>
     public DbSet<AlertConditionTimerEntity> AlertConditionTimers { get; set; }
 
@@ -2579,11 +2579,11 @@ public class NocturneDbContext : DbContext
         modelBuilder.Entity<AlertConditionTimerEntity>(entity =>
         {
             entity.ToTable("alert_condition_timers");
-            entity.HasKey(e => new { e.RuleId, e.ConditionPath });
+            entity.HasKey(e => new { e.AlertRuleId, e.ConditionPath });
 
-            entity.HasOne(e => e.Rule)
+            entity.HasOne(e => e.AlertRule)
                 .WithMany()
-                .HasForeignKey(e => e.RuleId)
+                .HasForeignKey(e => e.AlertRuleId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
