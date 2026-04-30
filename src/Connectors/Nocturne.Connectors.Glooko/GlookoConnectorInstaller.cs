@@ -32,18 +32,6 @@ public class GlookoConnectorInstaller : IConnectorInstaller
         public GlookoConnectorOptions()
         {
             ConnectorName = "Glooko";
-            DefaultServer = GlookoConstants.Configuration.DefaultServer;
-            ServerMapping = new Dictionary<string, string>
-            {
-                ["US"] = GlookoConstants.Servers.Us,
-                ["EU"] = GlookoConstants.Servers.Eu
-            };
-            GetServerRegion = config => ((GlookoConnectorConfiguration)config).Server;
-            AdditionalHeaders = new Dictionary<string, string>
-            {
-                ["Accept-Encoding"] = "gzip, deflate, br"
-            };
-            UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15";
             Timeout = TimeSpan.FromMinutes(5);
             ConnectTimeout = TimeSpan.FromSeconds(15);
             AddResilience = true;

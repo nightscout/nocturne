@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -6,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Connectors.Glooko.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -43,7 +43,9 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
         {
             _logger.LogInformation("Authenticating with Glooko server: {Server}", _config.Server);
 
-            // Setup headers to mimic browser behavior
+            var baseUrl = GlookoConstants.ResolveBaseUrl(_config.Server);
+            var webOrigin = GlookoConstants.ResolveWebOrigin(_config.Server);
+
             var loginData = new
             {
                 userLogin = new
@@ -51,51 +53,24 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                     email = _config.Email,
                     password = _config.Password
                 },
-                deviceInformation = new
-                {
-                    applicationType = "logbook",
-                    os = "android",
-                    osVersion = "33",
-                    device = "Google Pixel 8 Pro",
-                    deviceManufacturer = "Google",
-                    deviceModel = "Pixel 8 Pro",
-                    serialNumber = "HIDDEN",
-                    clinicalResearch = false,
-                    deviceId = "HIDDEN",
-                    applicationVersion = "6.1.3",
-                    buildNumber = "0",
-                    gitHash = "g4fbed2011b"
-                }
+                deviceInformation = GlookoConstants.DeviceInformation
             };
 
-            var json = JsonSerializer.Serialize(loginData);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            // Use absolute URI so per-tenant Server config is respected at request time,
-            // not the static BaseAddress set during DI registration.
-            var baseUrl = GlookoConstants.ResolveBaseUrl(_config.Server);
-            var webOrigin = GlookoConstants.ResolveWebOrigin(_config.Server);
-
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/v2/users/sign_in")
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{GlookoConstants.SignInPath}")
             {
-                Content = content
+                Content = new StringContent(
+                    JsonSerializer.Serialize(loginData),
+                    Encoding.UTF8,
+                    "application/json")
             };
 
-            // Add browser-like headers
-            request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
-            request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br");
-            request.Headers.TryAddWithoutValidation("User-Agent",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15");
-            request.Headers.TryAddWithoutValidation("Referer", $"{webOrigin}/");
-            request.Headers.TryAddWithoutValidation("Origin", webOrigin);
-            request.Headers.TryAddWithoutValidation("Connection", "keep-alive");
-            request.Headers.TryAddWithoutValidation("Accept-Language", "en-GB,en;q=0.9");
+            GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin);
 
             var response = await _httpClient.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await ReadResponseContentAsync(response, cancellationToken);
+                var errorContent = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
                 _logger.LogError("Glooko authentication failed: {StatusCode} - {Error}",
                     response.StatusCode, errorContent);
                 return (null, DateTime.MinValue);
@@ -104,7 +79,7 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
             // Extract session cookie from response headers
             if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
                 foreach (var cookie in cookies)
-                    if (cookie.StartsWith("_logbook-web_session="))
+                    if (cookie.StartsWith($"{GlookoConstants.SessionCookieName}="))
                     {
                         SessionCookie = cookie.Split(';')[0];
                         _logger.LogInformation("Session cookie extracted successfully");
@@ -112,7 +87,7 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                     }
 
             // Parse user data
-            var responseJson = await ReadResponseContentAsync(response, cancellationToken);
+            var responseJson = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
             try
             {
                 UserData = JsonSerializer.Deserialize<GlookoUserData>(responseJson);
@@ -129,8 +104,7 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
             if (!string.IsNullOrEmpty(SessionCookie))
             {
                 _logger.LogInformation("Glooko authentication successful");
-                // Glooko sessions typically last 24 hours
-                return (SessionCookie, DateTime.UtcNow.AddHours(24));
+                return (SessionCookie, DateTime.UtcNow.Add(GlookoConstants.SessionLifetime));
             }
 
             _logger.LogError("Failed to extract session cookie from Glooko response");
@@ -141,24 +115,6 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
             _logger.LogError(ex, "Glooko authentication error: {Message}", ex.Message);
             return (null, DateTime.MinValue);
         }
-    }
-
-    private static async Task<string> ReadResponseContentAsync(HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        var responseBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-
-        // Decompress if needed (check for gzip magic number 0x1F 0x8B)
-        if (responseBytes.Length >= 2 && responseBytes[0] == 0x1F && responseBytes[1] == 0x8B)
-        {
-            using var compressedStream = new MemoryStream(responseBytes);
-            using var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress);
-            using var decompressedStream = new MemoryStream();
-            await gzipStream.CopyToAsync(decompressedStream, cancellationToken);
-            return Encoding.UTF8.GetString(decompressedStream.ToArray());
-        }
-
-        return Encoding.UTF8.GetString(responseBytes);
     }
 }
 

@@ -135,5 +135,5 @@ public class GlookoSensorGlucoseMapper
     }
 
     private static double ConvertToMgdl(double value, string? meterUnits) =>
-        meterUnits?.ToLowerInvariant() == "mmol" ? value * 18.0182 : value;
+        meterUnits?.ToLowerInvariant() == "mmoll" ? value * 18.0182 : value;
 }
