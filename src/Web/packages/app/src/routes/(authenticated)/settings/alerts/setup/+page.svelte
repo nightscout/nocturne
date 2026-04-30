@@ -1,8 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { createRule } from "$api/generated/alertRules.generated.remote";
-  import type { CreateAlertRuleRequest, CreateAlertStepChannelRequest } from "$api-clients";
-  import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
+  import type {
+    CreateAlertRuleRequest,
+    CreateAlertStepChannelRequest,
+  } from "$api-clients";
+  import { AlertRuleSeverity, ChannelType } from "$api-clients";
   import {
     Card,
     CardContent,
@@ -27,29 +30,64 @@
     Loader2,
   } from "lucide-svelte";
   import ChannelPicker from "$lib/components/alerts/ChannelPicker.svelte";
+  import { nodeToApi } from "$lib/components/alerts/types";
+  import type { ConditionNode } from "$lib/components/alerts/types";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { bgValue, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
+  import {
+    bgValue,
+    bgLabel,
+    convertFromDisplayUnits,
+  } from "$lib/utils/formatting";
 
   // Step management
   let currentStep = $state(1);
   const totalSteps = 3;
 
-  // Step 1: Preset selection
+  // ---------------------------------------------------------------------------
+  // Preset shape
+  // ---------------------------------------------------------------------------
+  //
+  // Each preset is a self-contained recipe for a `CreateAlertRuleRequest`.
+  // `threshold`/`thresholdField` drive the UI's editable number; the
+  // `buildRequest` callback turns the current preset into the final API
+  // payload using the new `ConditionNode` shape.
+
+  type PresetKind = "glucose" | "duration";
+
   type Preset = {
     key: string;
     name: string;
     description: string;
     icon: typeof TrendingDown;
-    conditionType: AlertConditionType;
-    conditionParams: Record<string, unknown>;
-    threshold: number;
-    thresholdField: string;
-    confirmationReadings: number;
-    hysteresisMinutes: number;
-    enabled: boolean;
+    kind: PresetKind;
     severity: AlertRuleSeverity;
-    clientConfiguration: Record<string, unknown>;
+    threshold: number;
+    enabled: boolean;
+    buildRule: (p: Preset) => {
+      condition: ConditionNode;
+      autoResolveEnabled: boolean;
+      autoResolveCondition: ConditionNode | null;
+    };
   };
+
+  function thresholdNode(direction: "above" | "below", value: number): ConditionNode {
+    return { type: "threshold", threshold: { direction, value } };
+  }
+
+  function compositeOf(child: ConditionNode): ConditionNode {
+    return {
+      type: "composite",
+      composite: { operator: "and", conditions: [child] },
+    };
+  }
+
+  function autoResolveAbove(value: number): ConditionNode {
+    return compositeOf(thresholdNode("above", value));
+  }
+
+  function autoResolveBelow(value: number): ConditionNode {
+    return compositeOf(thresholdNode("below", value));
+  }
 
   let presets = $state<Preset[]>([
     {
@@ -57,124 +95,122 @@
       name: "Urgent Low",
       description: "Critical low glucose alert for immediate attention",
       icon: AlertTriangle,
-      conditionType: AlertConditionType.Threshold,
-      conditionParams: { threshold: 54, direction: "below" },
-      threshold: 54,
-      thresholdField: "threshold",
-      confirmationReadings: 1,
-      hysteresisMinutes: 15,
-      enabled: true,
+      kind: "glucose",
       severity: AlertRuleSeverity.Critical,
-      clientConfiguration: {
-        audio: { enabled: true, sound: "alarm-urgent", ascending: true, startVolume: 50, maxVolume: 100, ascendDurationSeconds: 30, repeatCount: 3 },
-        visual: { flashEnabled: true, flashColor: "#ff0000", persistentBanner: true, wakeScreen: true },
-        snooze: { defaultMinutes: 5, options: [5, 10, 15], maxCount: 3, smartSnooze: true, smartSnoozeExtendMinutes: 5 },
-      },
+      threshold: 54,
+      enabled: true,
+      buildRule: (p) => ({
+        condition: compositeOf(thresholdNode("below", p.threshold)),
+        autoResolveEnabled: true,
+        autoResolveCondition: autoResolveAbove(70),
+      }),
     },
     {
       key: "low",
       name: "Low",
       description: "Low glucose warning before it becomes urgent",
       icon: TrendingDown,
-      conditionType: AlertConditionType.Threshold,
-      conditionParams: { threshold: 70, direction: "below" },
+      kind: "glucose",
+      severity: AlertRuleSeverity.Warning,
       threshold: 70,
-      thresholdField: "threshold",
-      confirmationReadings: 2,
-      hysteresisMinutes: 15,
       enabled: true,
-      severity: AlertRuleSeverity.Normal,
-      clientConfiguration: {
-        audio: { enabled: true, sound: "alarm-low", ascending: true, startVolume: 30, maxVolume: 80, ascendDurationSeconds: 30, repeatCount: 2 },
-        visual: { flashEnabled: false, flashColor: "#ff0000", persistentBanner: true, wakeScreen: false },
-        snooze: { defaultMinutes: 15, options: [5, 15, 30], maxCount: 5, smartSnooze: true, smartSnoozeExtendMinutes: 10 },
-      },
+      buildRule: (p) => ({
+        condition: compositeOf(thresholdNode("below", p.threshold)),
+        autoResolveEnabled: true,
+        autoResolveCondition: autoResolveAbove(80),
+      }),
     },
     {
       key: "high",
       name: "High",
       description: "High glucose alert for sustained elevated readings",
       icon: TrendingUp,
-      conditionType: AlertConditionType.Threshold,
-      conditionParams: { threshold: 250, direction: "above" },
+      kind: "glucose",
+      severity: AlertRuleSeverity.Warning,
       threshold: 250,
-      thresholdField: "threshold",
-      confirmationReadings: 3,
-      hysteresisMinutes: 30,
       enabled: false,
-      severity: AlertRuleSeverity.Normal,
-      clientConfiguration: {
-        audio: { enabled: true, sound: "alarm-high", ascending: false, startVolume: 60, maxVolume: 60, ascendDurationSeconds: 0, repeatCount: 2 },
-        visual: { flashEnabled: false, flashColor: "#ff0000", persistentBanner: true, wakeScreen: false },
-        snooze: { defaultMinutes: 30, options: [15, 30, 60], maxCount: 5, smartSnooze: false, smartSnoozeExtendMinutes: 10 },
-      },
+      buildRule: (p) => ({
+        condition: compositeOf(thresholdNode("above", p.threshold)),
+        autoResolveEnabled: true,
+        autoResolveCondition: autoResolveBelow(180),
+      }),
     },
     {
       key: "urgent_high",
       name: "Urgent High",
       description: "Critical high glucose alert requiring prompt action",
       icon: AlertTriangle,
-      conditionType: AlertConditionType.Threshold,
-      conditionParams: { threshold: 300, direction: "above" },
-      threshold: 300,
-      thresholdField: "threshold",
-      confirmationReadings: 2,
-      hysteresisMinutes: 30,
-      enabled: false,
+      kind: "glucose",
       severity: AlertRuleSeverity.Critical,
-      clientConfiguration: {
-        audio: { enabled: true, sound: "alarm-urgent", ascending: true, startVolume: 50, maxVolume: 100, ascendDurationSeconds: 30, repeatCount: 3 },
-        visual: { flashEnabled: true, flashColor: "#ff0000", persistentBanner: true, wakeScreen: true },
-        snooze: { defaultMinutes: 15, options: [5, 15, 30], maxCount: 3, smartSnooze: false, smartSnoozeExtendMinutes: 10 },
-      },
+      threshold: 300,
+      enabled: false,
+      buildRule: (p) => ({
+        condition: compositeOf(thresholdNode("above", p.threshold)),
+        autoResolveEnabled: true,
+        autoResolveCondition: autoResolveBelow(250),
+      }),
     },
     {
-      key: "fast_drop",
-      name: "Fast Drop",
-      description: "Rapid glucose decline combined with low threshold",
+      key: "rapid_drop",
+      name: "Rapid Drop",
+      description: "Glucose falling faster than the configured rate",
       icon: Zap,
-      conditionType: AlertConditionType.Composite,
-      conditionParams: {
-        conditions: [
-          { type: "threshold", threshold: 100, direction: "below" },
-          { type: "rate_of_change", rateThreshold: 3.0, direction: "falling" },
-        ],
-      },
+      kind: "glucose",
+      severity: AlertRuleSeverity.Warning,
+      // Threshold here is the BG floor that gates the rate-of-change check.
       threshold: 100,
-      thresholdField: "threshold",
-      confirmationReadings: 2,
-      hysteresisMinutes: 15,
       enabled: false,
-      severity: AlertRuleSeverity.Normal,
-      clientConfiguration: {
-        audio: { enabled: true, sound: "alert", ascending: true, startVolume: 40, maxVolume: 90, ascendDurationSeconds: 30, repeatCount: 2 },
-        visual: { flashEnabled: false, flashColor: "#ff0000", persistentBanner: true, wakeScreen: false },
-        snooze: { defaultMinutes: 15, options: [5, 15, 30], maxCount: 5, smartSnooze: true, smartSnoozeExtendMinutes: 10 },
-      },
+      buildRule: (p) => ({
+        condition: {
+          type: "composite",
+          composite: {
+            operator: "and",
+            conditions: [
+              thresholdNode("below", p.threshold),
+              {
+                type: "rate_of_change",
+                rate_of_change: { direction: "falling", rate: 3 },
+              },
+            ],
+          },
+        },
+        autoResolveEnabled: true,
+        autoResolveCondition: autoResolveAbove(p.threshold + 20),
+      }),
     },
     {
-      key: "sensor_lost",
-      name: "Sensor Lost",
-      description: "Alert when CGM signal is lost for an extended period",
+      key: "signal_loss",
+      name: "Signal Loss",
+      description: "Alert when CGM data has been stale for too long",
       icon: WifiOff,
-      conditionType: AlertConditionType.SignalLoss,
-      conditionParams: { minutes: 15 },
+      kind: "duration",
+      severity: AlertRuleSeverity.Warning,
       threshold: 15,
-      thresholdField: "minutes",
-      confirmationReadings: 1,
-      hysteresisMinutes: 5,
       enabled: false,
-      severity: AlertRuleSeverity.Normal,
-      clientConfiguration: {
-        audio: { enabled: true, sound: "chime", ascending: false, startVolume: 50, maxVolume: 50, ascendDurationSeconds: 0, repeatCount: 1 },
-        visual: { flashEnabled: false, flashColor: "#ff0000", persistentBanner: true, wakeScreen: false },
-        snooze: { defaultMinutes: 30, options: [15, 30, 60], maxCount: 5, smartSnooze: false, smartSnoozeExtendMinutes: 10 },
-      },
+      buildRule: (p) => ({
+        condition: compositeOf({
+          type: "staleness",
+          staleness: { operator: ">=", value: p.threshold },
+        }),
+        // Staleness clears when readings resume. The frontend models this as
+        // "current staleness < small grace window".
+        autoResolveEnabled: true,
+        autoResolveCondition: compositeOf({
+          type: "staleness",
+          staleness: { operator: "<", value: 5 },
+        }),
+      }),
     },
   ]);
 
   // Step 2: Delivery channels
-  let selectedChannels = $state<Array<{ channelType: ChannelType; destination: string; destinationLabel: string }>>([]);
+  let selectedChannels = $state<
+    Array<{
+      channelType: ChannelType;
+      destination: string;
+      destinationLabel: string;
+    }>
+  >([]);
 
   // Step 3: Saving state
   let saving = $state(false);
@@ -183,7 +219,7 @@
   const selectedPresets = $derived(presets.filter((p) => p.enabled));
 
   function isGlucosePreset(preset: Preset): boolean {
-    return preset.conditionType !== AlertConditionType.SignalLoss;
+    return preset.kind === "glucose";
   }
 
   function displayThreshold(preset: Preset): number {
@@ -198,17 +234,6 @@
     const preset = presets.find((p) => p.key === key);
     if (!preset) return;
     preset.threshold = value;
-
-    if (preset.conditionType === AlertConditionType.Composite) {
-      const conditions = preset.conditionParams.conditions as Array<Record<string, unknown>>;
-      if (conditions?.[0]) {
-        conditions[0].threshold = value;
-      }
-    } else if (preset.conditionType === AlertConditionType.SignalLoss) {
-      preset.conditionParams.minutes = value;
-    } else {
-      preset.conditionParams.threshold = value;
-    }
   }
 
   function togglePreset(key: string) {
@@ -218,46 +243,84 @@
     }
   }
 
+  function severityLabel(severity: AlertRuleSeverity): string {
+    switch (severity) {
+      case AlertRuleSeverity.Critical:
+        return "Critical";
+      case AlertRuleSeverity.Warning:
+        return "Warning";
+      case AlertRuleSeverity.Info:
+        return "Info";
+      default:
+        return severity;
+    }
+  }
+
+  // Build a CreateAlertRuleRequest from a preset.
+  // Info severity defaults to InApp-only channels per Task 19b's frontend
+  // convention; Warning/Critical use whatever the wizard collected.
+  function buildRequest(preset: Preset): CreateAlertRuleRequest {
+    const built = preset.buildRule(preset);
+    const conditionApi = nodeToApi(built.condition);
+    const autoResolveApi = built.autoResolveEnabled
+      ? nodeToApi(built.autoResolveCondition)
+      : null;
+
+    const isInfo = preset.severity === AlertRuleSeverity.Info;
+    const channelsForPreset = isInfo
+      ? [
+          {
+            channelType: ChannelType.InApp,
+            destination: "",
+            destinationLabel: "",
+          },
+        ]
+      : selectedChannels;
+
+    const channels: CreateAlertStepChannelRequest[] = channelsForPreset
+      .filter((c) => c.channelType !== ChannelType.Webhook || c.destination)
+      .map((c) => ({
+        channelType: c.channelType,
+        destination: c.destination || undefined,
+        destinationLabel: c.destinationLabel || undefined,
+      }));
+
+    return {
+      name: preset.name,
+      description: preset.description,
+      conditionType: conditionApi?.conditionType,
+      conditionParams: conditionApi?.conditionParams,
+      autoResolveEnabled: built.autoResolveEnabled,
+      autoResolveParams: autoResolveApi?.conditionParams ?? undefined,
+      isEnabled: true,
+      sortOrder: presets.indexOf(preset),
+      severity: preset.severity,
+      schedules: [
+        {
+          name: "Default",
+          isDefault: true,
+          escalationSteps:
+            channels.length > 0
+              ? [
+                  {
+                    stepOrder: 0,
+                    delaySeconds: 0,
+                    channels,
+                  },
+                ]
+              : undefined,
+        },
+      ],
+    };
+  }
+
   async function handleSave() {
     saving = true;
     saveError = null;
 
     try {
       for (const preset of selectedPresets) {
-        const channels: CreateAlertStepChannelRequest[] = selectedChannels
-          .filter(c => c.channelType !== ChannelType.Webhook || c.destination)
-          .map(c => ({ channelType: c.channelType, destination: c.destination, destinationLabel: c.destinationLabel }));
-
-        const request: CreateAlertRuleRequest = {
-          name: preset.name,
-          description: preset.description,
-          conditionType: preset.conditionType,
-          conditionParams: preset.conditionParams,
-          hysteresisMinutes: preset.hysteresisMinutes,
-          confirmationReadings: preset.confirmationReadings,
-          isEnabled: true,
-          sortOrder: presets.indexOf(preset),
-          severity: preset.severity,
-          clientConfiguration: preset.clientConfiguration,
-          schedules: [
-            {
-              name: "Default",
-              isDefault: true,
-              escalationSteps:
-                channels.length > 0
-                  ? [
-                      {
-                        stepOrder: 0,
-                        delaySeconds: 0,
-                        channels,
-                      },
-                    ]
-                  : undefined,
-            },
-          ],
-        };
-
-        await createRule(request);
+        await createRule(buildRequest(preset));
       }
 
       goto("/settings/alerts");
@@ -385,14 +448,20 @@
                       type="number"
                       value={displayThreshold(preset)}
                       class="h-8 text-sm"
-                      step={isGlucosePreset(preset) && glucoseUnits.current === "mmol" ? "0.1" : "1"}
+                      step={isGlucosePreset(preset) &&
+                      glucoseUnits.current === "mmol"
+                        ? "0.1"
+                        : "1"}
                       oninput={(e) => {
                         const val = parseFloat(e.currentTarget.value);
                         if (!Number.isNaN(val)) {
                           updateThreshold(
                             preset.key,
                             isGlucosePreset(preset)
-                              ? convertFromDisplayUnits(val, glucoseUnits.current)
+                              ? convertFromDisplayUnits(
+                                  val,
+                                  glucoseUnits.current,
+                                )
                               : val,
                           );
                         }
@@ -405,10 +474,7 @@
                   <div
                     class="flex items-center gap-4 text-xs text-muted-foreground"
                   >
-                    <span>
-                      {preset.confirmationReadings} confirmation{preset.confirmationReadings !== 1 ? "s" : ""}
-                    </span>
-                    <span>{preset.hysteresisMinutes}m hysteresis</span>
+                    <span>Severity: {severityLabel(preset.severity)}</span>
                   </div>
                 </div>
               {/if}
@@ -467,7 +533,9 @@
                 <div class="flex-1 min-w-0">
                   <span class="text-sm font-medium">{preset.name}</span>
                   {#if preset.severity === AlertRuleSeverity.Critical}
-                    <Badge variant="destructive" class="ml-2 text-xs">Critical</Badge>
+                    <Badge variant="destructive" class="ml-2 text-xs">
+                      Critical
+                    </Badge>
                   {/if}
                   <span class="text-xs text-muted-foreground ml-2">
                     {displayThreshold(preset)}
@@ -475,7 +543,7 @@
                   </span>
                 </div>
                 <div class="text-xs text-muted-foreground">
-                  {preset.confirmationReadings} conf. / {preset.hysteresisMinutes}m hyst.
+                  {severityLabel(preset.severity)}
                 </div>
               </div>
             {/each}
@@ -569,7 +637,9 @@
           Creating Rules...
         {:else}
           <Check class="h-4 w-4 mr-2" />
-          Create {selectedPresets.length} Rule{selectedPresets.length !== 1 ? "s" : ""}
+          Create {selectedPresets.length} Rule{selectedPresets.length !== 1
+            ? "s"
+            : ""}
         {/if}
       </Button>
     {/if}

@@ -23,13 +23,14 @@
   import * as Sheet from "$lib/components/ui/sheet";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Button } from "$lib/components/ui/button";
-  import { AlertCircle, Loader2 } from "lucide-svelte";
+  import { AlertCircle, History, Loader2 } from "lucide-svelte";
   import GeneralTab from "./GeneralTab.svelte";
   import PresentationTab from "./PresentationTab.svelte";
   import SnoozeTab from "./SnoozeTab.svelte";
   import SchedulesTab from "./SchedulesTab.svelte";
   import RuleBuilder from "./RuleBuilder.svelte";
   import AutoResolveSection from "./AutoResolveSection.svelte";
+  import ReplayDialog from "./ReplayDialog.svelte";
   import {
     defaultClientConfig,
     defaultPayload,
@@ -55,6 +56,7 @@
   let activeTab = $state<string>("general");
   let saving = $state(false);
   let saveError = $state<string | null>(null);
+  let replayOpen = $state(false);
   let customSounds = $state<AlertCustomSoundResponse[]>([]);
   let availableChannels = $state<ChannelStatusEntry[]>([]);
   let availableRules = $state<{ id: string; name: string }[]>([]);
@@ -364,6 +366,14 @@
 
     <Sheet.Footer class="mt-4">
       <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+      <Button
+        variant="outline"
+        onclick={() => (replayOpen = true)}
+        title="Replay enabled rules over a window"
+      >
+        <History class="h-4 w-4 mr-2" />
+        Replay
+      </Button>
       <Button onclick={handleSave} disabled={!canSave}>
         {#if saving}
           <Loader2 class="h-4 w-4 mr-2 animate-spin" />
@@ -373,3 +383,5 @@
     </Sheet.Footer>
   </Sheet.Content>
 </Sheet.Root>
+
+<ReplayDialog bind:open={replayOpen} />
