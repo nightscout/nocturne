@@ -67,7 +67,6 @@ public class AlertOrchestratorTests
             _escalationAdvancer.Object,
             _tenantAccessor.Object,
             _deliveryService.Object,
-            _broadcastService.Object,
             _contextEnricher.Object,
             _acknowledgementService.Object,
             _resolutionHandler.Object,
