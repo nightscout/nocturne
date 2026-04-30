@@ -1,0 +1,51 @@
+using Nocturne.Core.Models.Alerts;
+
+namespace Nocturne.Core.Contracts.Alerts;
+
+/// <summary>
+/// Replays a tenant's alert rules against historical glucose readings to show what alerts
+/// <em>would</em> have fired had the current rule set been active. Used by the rule editor
+/// to give the user feedback on rule sensitivity before committing.
+/// </summary>
+/// <remarks>
+/// Replay is approximate by design. The live engine consumes IOB, COB, predictions, treatments,
+/// pump events, and active-alert snapshots — most of which are not reconstructable retroactively
+/// without large historical joins. Replay covers the common cases (threshold, sustained, trend,
+/// time-of-day, staleness, alert_state-on-already-fired-rules) and surfaces the omissions in
+/// <see cref="AlertReplayResult.Limitations"/> so callers can show a banner to the user.
+/// </remarks>
+public interface IAlertReplayService
+{
+    /// <summary>
+    /// Replay enabled rules over a window. When <paramref name="localDate"/> is null, the
+    /// window is the rolling last 24 hours from "now" in the requested timezone (or UTC if
+    /// none provided). When set, the window is that calendar day, midnight-to-midnight in
+    /// the same zone.
+    /// </summary>
+    Task<AlertReplayResult> ReplayAsync(
+        DateOnly? localDate,
+        string? timezone,
+        CancellationToken ct);
+}
+
+/// <summary>
+/// A single point at which a rule transitioned from "not firing" to "firing" during replay.
+/// Continuous-fire periods produce one event at the leading edge — re-fires after a clear
+/// produce a second event. The replay does not attempt to model excursion close (hysteresis
+/// is dropped from the new rule shape).
+/// </summary>
+public record AlertReplayEvent(
+    DateTime At,
+    Guid RuleId,
+    string RuleName,
+    AlertRuleSeverity Severity);
+
+/// <summary>
+/// Result of <see cref="IAlertReplayService.ReplayAsync"/>. Window timestamps are UTC; the
+/// caller localises for display.
+/// </summary>
+public record AlertReplayResult(
+    DateTime WindowStart,
+    DateTime WindowEnd,
+    IReadOnlyList<AlertReplayEvent> Events,
+    string Limitations);
