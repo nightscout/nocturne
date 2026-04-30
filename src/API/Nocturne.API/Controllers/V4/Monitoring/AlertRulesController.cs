@@ -111,6 +111,10 @@ public class AlertRulesController : ControllerBase
             IsEnabled = request.IsEnabled,
             SortOrder = request.SortOrder,
             Severity = request.Severity ?? AlertRuleSeverity.Warning,
+            AutoResolveEnabled = request.AutoResolveEnabled,
+            AutoResolveParams = request.AutoResolveParams is not null
+                ? JsonSerializer.Serialize(request.AutoResolveParams)
+                : null,
             ClientConfiguration = request.ClientConfiguration is not null
                 ? JsonSerializer.Serialize(request.ClientConfiguration)
                 : "{}",
@@ -198,6 +202,10 @@ public class AlertRulesController : ControllerBase
         rule.IsEnabled = request.IsEnabled;
         rule.SortOrder = request.SortOrder;
         rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
+        rule.AutoResolveEnabled = request.AutoResolveEnabled;
+        rule.AutoResolveParams = request.AutoResolveParams is not null
+            ? JsonSerializer.Serialize(request.AutoResolveParams)
+            : null;
         rule.ClientConfiguration = request.ClientConfiguration is not null
             ? JsonSerializer.Serialize(request.ClientConfiguration)
             : "{}";
@@ -364,6 +372,10 @@ public class AlertRulesController : ControllerBase
         IsEnabled = entity.IsEnabled,
         SortOrder = entity.SortOrder,
         Severity = entity.Severity,
+        AutoResolveEnabled = entity.AutoResolveEnabled,
+        AutoResolveParams = entity.AutoResolveParams is null
+            ? null
+            : DeserializeJson(entity.AutoResolveParams),
         ClientConfiguration = DeserializeJson(entity.ClientConfiguration),
         Schedules = entity.Schedules
             .Select(s => new AlertScheduleResponse
@@ -471,11 +483,11 @@ public class AlertRuleResponse
     public string? Description { get; set; }
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
     public object ConditionParams { get; set; } = new { };
-    public int HysteresisMinutes { get; set; }
-    public int ConfirmationReadings { get; set; }
     public bool IsEnabled { get; set; }
     public int SortOrder { get; set; }
     public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
+    public bool AutoResolveEnabled { get; set; }
+    public object? AutoResolveParams { get; set; }
     public object ClientConfiguration { get; set; } = new { };
     public List<AlertScheduleResponse> Schedules { get; set; } = [];
 }
@@ -517,11 +529,11 @@ public class CreateAlertRuleRequest
     public string? Description { get; set; }
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
     public object? ConditionParams { get; set; }
-    public int HysteresisMinutes { get; set; }
-    public int ConfirmationReadings { get; set; } = 1;
     public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; }
     public AlertRuleSeverity? Severity { get; set; }
+    public bool AutoResolveEnabled { get; set; }
+    public object? AutoResolveParams { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertScheduleRequest>? Schedules { get; set; }
 }
@@ -532,11 +544,11 @@ public class UpdateAlertRuleRequest
     public string? Description { get; set; }
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
     public object? ConditionParams { get; set; }
-    public int HysteresisMinutes { get; set; }
-    public int ConfirmationReadings { get; set; } = 1;
     public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; }
     public AlertRuleSeverity? Severity { get; set; }
+    public bool AutoResolveEnabled { get; set; }
+    public object? AutoResolveParams { get; set; }
     public object? ClientConfiguration { get; set; }
     public List<CreateAlertScheduleRequest>? Schedules { get; set; }
 }

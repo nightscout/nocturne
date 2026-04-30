@@ -14,8 +14,6 @@ public class CreateAlertRuleRequestValidatorTests
     {
         Name = "High glucose",
         ConditionType = AlertConditionType.Threshold,
-        HysteresisMinutes = 5,
-        ConfirmationReadings = 2,
         Schedules =
         [
             new CreateAlertScheduleRequest { IsDefault = true }
@@ -57,21 +55,23 @@ public class CreateAlertRuleRequestValidatorTests
     }
 
     [Fact]
-    public void Negative_hysteresis_fails()
+    public void AutoResolve_enabled_without_params_fails()
     {
         var request = ValidRequest();
-        request.HysteresisMinutes = -1;
+        request.AutoResolveEnabled = true;
+        request.AutoResolveParams = null;
         var result = _validator.TestValidate(request);
-        result.ShouldHaveValidationErrorFor(x => x.HysteresisMinutes);
+        result.ShouldHaveValidationErrorFor(x => x.AutoResolveParams);
     }
 
     [Fact]
-    public void Negative_confirmation_readings_fails()
+    public void AutoResolve_disabled_with_null_params_passes()
     {
         var request = ValidRequest();
-        request.ConfirmationReadings = -1;
+        request.AutoResolveEnabled = false;
+        request.AutoResolveParams = null;
         var result = _validator.TestValidate(request);
-        result.ShouldHaveValidationErrorFor(x => x.ConfirmationReadings);
+        result.ShouldNotHaveValidationErrorFor(x => x.AutoResolveParams);
     }
 
     [Fact]
@@ -110,8 +110,6 @@ public class UpdateAlertRuleRequestValidatorTests
     {
         Name = "High glucose",
         ConditionType = AlertConditionType.Threshold,
-        HysteresisMinutes = 5,
-        ConfirmationReadings = 2,
         Schedules =
         [
             new CreateAlertScheduleRequest { IsDefault = true }
@@ -144,12 +142,13 @@ public class UpdateAlertRuleRequestValidatorTests
     }
 
     [Fact]
-    public void Negative_hysteresis_fails()
+    public void AutoResolve_enabled_without_params_fails()
     {
         var request = ValidRequest();
-        request.HysteresisMinutes = -1;
+        request.AutoResolveEnabled = true;
+        request.AutoResolveParams = null;
         var result = _validator.TestValidate(request);
-        result.ShouldHaveValidationErrorFor(x => x.HysteresisMinutes);
+        result.ShouldHaveValidationErrorFor(x => x.AutoResolveParams);
     }
 }
 
