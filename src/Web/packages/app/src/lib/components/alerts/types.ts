@@ -1,5 +1,247 @@
-import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
+import { AlertRuleSeverity, ChannelType } from "$api-clients";
 import type { AlertRuleResponse } from "$api-clients";
+
+// ---------------------------------------------------------------------------
+// Recursive ConditionNode shape
+// ---------------------------------------------------------------------------
+//
+// The API stores each condition as `{ conditionType, conditionParams }` where
+// `conditionParams` is the kind-specific payload only. The frontend wraps
+// payloads in a `ConditionNode` that carries the kind alongside the payload
+// so a single recursive editor component can manipulate any node.
+
+export type ConditionKind =
+	| "composite"
+	| "not"
+	| "sustained"
+	| "threshold"
+	| "rate_of_change"
+	| "staleness"
+	| "predicted"
+	| "trend"
+	| "time_of_day"
+	| "iob"
+	| "cob"
+	| "reservoir"
+	| "site_age"
+	| "sensor_age"
+	| "alert_state";
+
+export type ComparisonOperator = ">=" | ">" | "<=" | "<";
+
+export interface CompositePayload {
+	operator: "and" | "or";
+	conditions: ConditionNode[];
+}
+
+export interface NotPayload {
+	child: ConditionNode;
+}
+
+export interface SustainedPayload {
+	minutes: number;
+	child: ConditionNode;
+}
+
+export interface ThresholdPayload {
+	direction: "above" | "below";
+	value: number;
+}
+
+export interface RateOfChangePayload {
+	direction: "rising" | "falling";
+	rate: number;
+}
+
+export interface StalenessPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface PredictedPayload {
+	operator: ComparisonOperator;
+	value: number;
+	withinMinutes: number;
+}
+
+export type TrendBucket =
+	| "falling_fast"
+	| "falling"
+	| "flat"
+	| "rising"
+	| "rising_fast";
+
+export interface TrendPayload {
+	bucket: TrendBucket;
+}
+
+export interface TimeOfDayPayload {
+	from: string;
+	to: string;
+	timezone?: string;
+}
+
+export interface IobPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface CobPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface ReservoirPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface SiteAgePayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface SensorAgePayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface AlertStatePayload {
+	alertId: string;
+	state: "firing" | "acknowledged";
+	forMinutes?: number;
+}
+
+export interface ConditionNode {
+	type: ConditionKind;
+	composite?: CompositePayload;
+	not?: NotPayload;
+	sustained?: SustainedPayload;
+	threshold?: ThresholdPayload;
+	rate_of_change?: RateOfChangePayload;
+	staleness?: StalenessPayload;
+	predicted?: PredictedPayload;
+	trend?: TrendPayload;
+	time_of_day?: TimeOfDayPayload;
+	iob?: IobPayload;
+	cob?: CobPayload;
+	reservoir?: ReservoirPayload;
+	site_age?: SiteAgePayload;
+	sensor_age?: SensorAgePayload;
+	alert_state?: AlertStatePayload;
+}
+
+// ---------------------------------------------------------------------------
+// Default payloads per kind
+// ---------------------------------------------------------------------------
+
+export function defaultPayload(kind: ConditionKind): ConditionNode {
+	switch (kind) {
+		case "composite":
+			return {
+				type: "composite",
+				composite: {
+					operator: "and",
+					conditions: [defaultPayload("threshold")],
+				},
+			};
+		case "not":
+			return { type: "not", not: { child: defaultPayload("threshold") } };
+		case "sustained":
+			return {
+				type: "sustained",
+				sustained: { minutes: 15, child: defaultPayload("threshold") },
+			};
+		case "threshold":
+			return {
+				type: "threshold",
+				threshold: { direction: "below", value: 70 },
+			};
+		case "rate_of_change":
+			return {
+				type: "rate_of_change",
+				rate_of_change: { direction: "falling", rate: 3 },
+			};
+		case "staleness":
+			return {
+				type: "staleness",
+				staleness: { operator: ">=", value: 15 },
+			};
+		case "predicted":
+			return {
+				type: "predicted",
+				predicted: { operator: "<=", value: 70, withinMinutes: 30 },
+			};
+		case "trend":
+			return { type: "trend", trend: { bucket: "falling" } };
+		case "time_of_day":
+			return {
+				type: "time_of_day",
+				time_of_day: { from: "22:00", to: "06:00" },
+			};
+		case "iob":
+			return { type: "iob", iob: { operator: ">=", value: 1 } };
+		case "cob":
+			return { type: "cob", cob: { operator: ">=", value: 10 } };
+		case "reservoir":
+			return {
+				type: "reservoir",
+				reservoir: { operator: "<=", value: 10 },
+			};
+		case "site_age":
+			return {
+				type: "site_age",
+				site_age: { operator: ">=", value: 72 },
+			};
+		case "sensor_age":
+			return {
+				type: "sensor_age",
+				sensor_age: { operator: ">=", value: 10 },
+			};
+		case "alert_state":
+			return {
+				type: "alert_state",
+				alert_state: { alertId: "", state: "firing" },
+			};
+	}
+}
+
+// ---------------------------------------------------------------------------
+// (De)serialise to/from API conditionParams field
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap a kind + opaque API payload into a `ConditionNode`. The API stores only
+ * the kind-specific payload (e.g. `{direction, value}`); the FE keeps the kind
+ * alongside it so a single recursive editor can dispatch on `node.type`.
+ */
+export function nodeFromApi(
+	kind: string | undefined,
+	params: unknown,
+): ConditionNode | null {
+	if (!kind) return null;
+	if (params === null || params === undefined) return null;
+	const k = kind as ConditionKind;
+	const node: ConditionNode = { type: k };
+	(node as Record<string, unknown>)[k] = params;
+	return node;
+}
+
+/**
+ * Extract the kind-specific payload for the API. Returns `null` when there's
+ * no node.
+ */
+export function nodeToApi(
+	node: ConditionNode | null,
+): { conditionType: string; conditionParams: unknown } | null {
+	if (!node) return null;
+	const params = (node as Record<string, unknown>)[node.type];
+	return { conditionType: node.type, conditionParams: params ?? {} };
+}
+
+// ---------------------------------------------------------------------------
+// Existing client-config / schedule shapes (unchanged)
+// ---------------------------------------------------------------------------
 
 export interface AudioConfig {
 	enabled: boolean;
@@ -60,15 +302,9 @@ export interface RuleEditorState {
 	name: string;
 	description: string;
 	severity: AlertRuleSeverity;
-	conditionType: AlertConditionType;
-	isComposite: boolean;
-	thresholdDirection: string;
-	thresholdValue: number;
-	rocDirection: string;
-	rocRate: number;
-	signalLossTimeout: number;
-	hysteresisMinutes: number;
-	confirmationReadings: number;
+	condition: ConditionNode | null;
+	autoResolveEnabled: boolean;
+	autoResolveCondition: ConditionNode | null;
 	sortOrder: number;
 	isEnabled: boolean;
 	clientConfig: ClientConfiguration;
@@ -132,16 +368,10 @@ function defaultState(): RuleEditorState {
 	return {
 		name: "",
 		description: "",
-		severity: AlertRuleSeverity.Normal,
-		conditionType: AlertConditionType.Threshold,
-		isComposite: false,
-		thresholdDirection: "below",
-		thresholdValue: 70,
-		rocDirection: "falling",
-		rocRate: 3.0,
-		signalLossTimeout: 15,
-		hysteresisMinutes: 5,
-		confirmationReadings: 1,
+		severity: AlertRuleSeverity.Warning,
+		condition: defaultPayload("threshold"),
+		autoResolveEnabled: false,
+		autoResolveCondition: null,
 		sortOrder: 0,
 		isEnabled: true,
 		clientConfig: defaultClientConfig(),
@@ -152,47 +382,8 @@ function defaultState(): RuleEditorState {
 export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 	if (!r) return defaultState();
 
-	// Condition type
-	const ct = r.conditionType ?? AlertConditionType.Threshold;
-	let conditionType: AlertConditionType;
-	let isComposite = false;
-
-	if (ct === AlertConditionType.Composite) {
-		isComposite = true;
-		conditionType = AlertConditionType.Composite;
-	} else if (
-		ct === AlertConditionType.Threshold ||
-		(ct as string) === "threshold_low" ||
-		(ct as string) === "threshold_high"
-	) {
-		conditionType = AlertConditionType.Threshold;
-	} else if (ct === AlertConditionType.RateOfChange) {
-		conditionType = AlertConditionType.RateOfChange;
-	} else if (ct === AlertConditionType.SignalLoss) {
-		conditionType = AlertConditionType.SignalLoss;
-	} else {
-		conditionType = ct as AlertConditionType;
-	}
-
-	// Condition params
-	const params = r.conditionParams;
-	let thresholdDirection = "below";
-	let thresholdValue = 70;
-	let rocDirection = "falling";
-	let rocRate = 3.0;
-	let signalLossTimeout = 15;
-
-	if (params) {
-		if (conditionType === AlertConditionType.Threshold) {
-			thresholdDirection = params.direction === "above" ? "above" : "below";
-			thresholdValue = params.threshold ?? params.value ?? 70;
-		} else if (conditionType === AlertConditionType.RateOfChange) {
-			rocDirection = params.direction ?? "falling";
-			rocRate = params.rateThreshold ?? params.rate ?? 3.0;
-		} else if (conditionType === AlertConditionType.SignalLoss) {
-			signalLossTimeout = params.minutes ?? params.timeout_minutes ?? 15;
-		}
-	}
+	const condition = nodeFromApi(r.conditionType, r.conditionParams) ?? defaultPayload("threshold");
+	const autoResolveCondition = nodeFromApi("composite", r.autoResolveParams);
 
 	// Client configuration
 	const cc = r.clientConfiguration;
@@ -252,18 +443,12 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 	return {
 		name: r.name ?? "",
 		description: r.description ?? "",
-		severity: (r.severity as AlertRuleSeverity) ?? AlertRuleSeverity.Normal,
+		severity: (r.severity as AlertRuleSeverity) ?? AlertRuleSeverity.Warning,
 		isEnabled: r.isEnabled ?? true,
-		hysteresisMinutes: r.hysteresisMinutes ?? 5,
-		confirmationReadings: r.confirmationReadings ?? 1,
 		sortOrder: r.sortOrder ?? 0,
-		conditionType,
-		isComposite,
-		thresholdDirection,
-		thresholdValue,
-		rocDirection,
-		rocRate,
-		signalLossTimeout,
+		condition,
+		autoResolveEnabled: r.autoResolveEnabled ?? false,
+		autoResolveCondition,
 		clientConfig,
 		schedules,
 	};

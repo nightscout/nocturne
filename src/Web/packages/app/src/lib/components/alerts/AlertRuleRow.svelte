@@ -16,7 +16,6 @@
     Loader2,
     Shield,
     Zap,
-    WifiOff,
     TrendingDown,
     ArrowUpRight,
     Pencil,
@@ -41,8 +40,6 @@
         return TrendingDown;
       case AlertConditionType.RateOfChange:
         return Zap;
-      case AlertConditionType.SignalLoss:
-        return WifiOff;
       case AlertConditionType.Composite:
         return Shield;
       default:
@@ -56,8 +53,6 @@
     switch (conditionType) {
       case AlertConditionType.Threshold:
         return "destructive";
-      case AlertConditionType.SignalLoss:
-        return "secondary";
       default:
         return "outline";
     }
@@ -69,8 +64,6 @@
         return "Threshold";
       case AlertConditionType.RateOfChange:
         return "Rate of Change";
-      case AlertConditionType.SignalLoss:
-        return "Signal Loss";
       case AlertConditionType.Composite:
         return "Composite";
       default:
@@ -103,8 +96,6 @@
         const display = formatThreshold((params as Record<string, unknown>)["rateThreshold"]);
         return `${dir} faster than ${display} ${label}/min`;
       }
-      case AlertConditionType.SignalLoss:
-        return `No data for ${(params as Record<string, unknown>)["minutes"] ?? "?"} minutes`;
       case AlertConditionType.Composite:
         return "Multiple conditions combined";
       default:
@@ -160,9 +151,6 @@
               </span>
             {/if}
           {/if}
-          {#if rule.confirmationReadings && rule.confirmationReadings > 1}
-            <span>{rule.confirmationReadings} confirmations</span>
-          {/if}
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
@@ -190,18 +178,10 @@
         </p>
       {/if}
 
-      <div class="grid gap-4 sm:grid-cols-3 text-sm">
+      <div class="grid gap-4 sm:grid-cols-2 text-sm">
         <div>
-          <p class="text-muted-foreground mb-1">Hysteresis</p>
-          <p class="font-medium">
-            {rule.hysteresisMinutes ?? 0} minutes
-          </p>
-        </div>
-        <div>
-          <p class="text-muted-foreground mb-1">Confirmations</p>
-          <p class="font-medium">
-            {rule.confirmationReadings ?? 1} reading{(rule.confirmationReadings ?? 1) !== 1 ? "s" : ""}
-          </p>
+          <p class="text-muted-foreground mb-1">Severity</p>
+          <p class="font-medium">{rule.severity ?? "warning"}</p>
         </div>
         <div>
           <p class="text-muted-foreground mb-1">Sort Order</p>
@@ -240,7 +220,7 @@
               <!-- Escalation Steps -->
               {#if schedule.escalationSteps && schedule.escalationSteps.length > 0}
                 <div class="mt-2 space-y-1">
-                  {#each schedule.escalationSteps.sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0)) as step, idx}
+                  {#each schedule.escalationSteps.sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0)) as step, idx (step.id ?? idx)}
                     <div
                       class="flex items-center gap-2 text-xs text-muted-foreground pl-4 border-l-2 border-muted py-1"
                     >
@@ -256,7 +236,7 @@
                       {/if}
                       {#if step.channels && step.channels.length > 0}
                         <span class="mx-1">via</span>
-                        {#each step.channels as channel}
+                        {#each step.channels as channel, chIdx (channel.id ?? chIdx)}
                           <Badge variant="outline" class="text-xs">
                             {channel.channelType}
                             {#if channel.destinationLabel}

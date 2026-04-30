@@ -9,7 +9,6 @@
   import {
     ChannelStatus,
     type ChannelStatusEntry,
-    AlertConditionType,
     AlertRuleSeverity,
     ChannelType,
   } from "$api-clients";
@@ -28,8 +27,18 @@
   import PresentationTab from "./PresentationTab.svelte";
   import SnoozeTab from "./SnoozeTab.svelte";
   import SchedulesTab from "./SchedulesTab.svelte";
-  import { defaultClientConfig, defaultSchedule, parseRule } from "./types";
-  import type { ClientConfiguration, EditableSchedule } from "./types";
+  import {
+    defaultClientConfig,
+    defaultPayload,
+    defaultSchedule,
+    nodeToApi,
+    parseRule,
+  } from "./types";
+  import type {
+    ClientConfiguration,
+    ConditionNode,
+    EditableSchedule,
+  } from "./types";
 
   interface Props {
     open: boolean;
@@ -48,19 +57,13 @@
   // General tab
   let name = $state("");
   let description = $state("");
-  let severity = $state<AlertRuleSeverity>(AlertRuleSeverity.Normal);
-  let conditionType = $state<AlertConditionType>(AlertConditionType.Threshold);
-  let isComposite = $state(false);
+  let severity = $state<AlertRuleSeverity>(AlertRuleSeverity.Warning);
 
-  // Condition params
-  let thresholdDirection = $state("below");
-  let thresholdValue = $state(70);
-  let rocDirection = $state("falling");
-  let rocRate = $state(3.0);
-  let signalLossTimeout = $state(15);
+  // Condition tree (edited via the upcoming RuleBuilder integration)
+  let condition = $state<ConditionNode | null>(defaultPayload("threshold"));
+  let autoResolveEnabled = $state(false);
+  let autoResolveCondition = $state<ConditionNode | null>(null);
 
-  let hysteresisMinutes = $state(5);
-  let confirmationReadings = $state(1);
   let sortOrder = $state(0);
   let isEnabled = $state(true);
 
@@ -80,15 +83,9 @@
     name = s.name;
     description = s.description;
     severity = s.severity;
-    conditionType = s.conditionType;
-    isComposite = s.isComposite;
-    thresholdDirection = s.thresholdDirection;
-    thresholdValue = s.thresholdValue;
-    rocDirection = s.rocDirection;
-    rocRate = s.rocRate;
-    signalLossTimeout = s.signalLossTimeout;
-    hysteresisMinutes = s.hysteresisMinutes;
-    confirmationReadings = s.confirmationReadings;
+    condition = s.condition;
+    autoResolveEnabled = s.autoResolveEnabled;
+    autoResolveCondition = s.autoResolveCondition;
     sortOrder = s.sortOrder;
     isEnabled = s.isEnabled;
     clientConfig = s.clientConfig;
@@ -119,40 +116,6 @@
       })
       .catch(() => {});
   });
-
-  // --- Condition type mapping ---
-  function getApiConditionType(): string {
-    if (conditionType === AlertConditionType.Threshold) {
-      return thresholdDirection === "above"
-        ? "threshold_high"
-        : "threshold_low";
-    }
-    return conditionType;
-  }
-
-  function getConditionParams(): Record<string, unknown> {
-    switch (conditionType) {
-      case AlertConditionType.Threshold:
-        return {
-          direction: thresholdDirection,
-          value: thresholdValue,
-          threshold: thresholdValue,
-        };
-      case AlertConditionType.RateOfChange:
-        return {
-          direction: rocDirection,
-          rate: rocRate,
-          rateThreshold: rocRate,
-        };
-      case AlertConditionType.SignalLoss:
-        return {
-          timeout_minutes: signalLossTimeout,
-          minutes: signalLossTimeout,
-        };
-      default:
-        return {};
-    }
-  }
 
   // --- Save ---
   async function handleSave() {
@@ -185,17 +148,18 @@
         })
       );
 
+      const conditionApi = nodeToApi(condition);
+      const autoResolveApi = autoResolveEnabled
+        ? nodeToApi(autoResolveCondition)
+        : null;
+
       const payload = {
         name,
         description: description || undefined,
-        conditionType: isComposite
-          ? AlertConditionType.Composite
-          : getApiConditionType(),
-        conditionParams: isComposite
-          ? rule?.conditionParams
-          : getConditionParams(),
-        hysteresisMinutes,
-        confirmationReadings,
+        conditionType: conditionApi?.conditionType,
+        conditionParams: conditionApi?.conditionParams,
+        autoResolveEnabled,
+        autoResolveParams: autoResolveApi?.conditionParams ?? undefined,
         isEnabled,
         sortOrder,
         severity: severity || undefined,
@@ -250,15 +214,6 @@
             bind:name
             bind:description
             bind:severity
-            bind:conditionType
-            {isComposite}
-            bind:thresholdDirection
-            bind:thresholdValue
-            bind:rocDirection
-            bind:rocRate
-            bind:signalLossTimeout
-            bind:hysteresisMinutes
-            bind:confirmationReadings
             bind:sortOrder
             bind:isEnabled
           />
