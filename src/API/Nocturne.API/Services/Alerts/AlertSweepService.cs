@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -82,6 +84,15 @@ public class AlertSweepService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking snoozed instances");
+            }
+
+            try
+            {
+                await EvaluateAutoResolveAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error evaluating auto-resolve");
             }
         }
 
@@ -298,6 +309,118 @@ public class AlertSweepService : BackgroundService
         if (modifiedCount > 0)
         {
             _logger.LogInformation("Processed {Count} expired snoozed instances", modifiedCount);
+        }
+    }
+
+    private static readonly JsonSerializerOptions AutoResolveJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
+
+    /// <summary>
+    /// Periodic counterpart to the orchestrator's per-reading auto-resolve. Catches
+    /// auto-resolve conditions that don't depend on the latest glucose reading
+    /// (time-of-day, IOB, sensor age) — those would never fire from the per-reading
+    /// path because no new reading triggers re-evaluation.
+    /// </summary>
+    /// <remarks>
+    /// LatestValue is left null on the synthesised <see cref="SensorContext"/>: any
+    /// LatestValue-dependent auto-resolve params (e.g. threshold-based) are still the
+    /// orchestrator's job and will have been evaluated on the most recent reading.
+    /// The enricher fills in IOB/COB/predictions/etc. as needed.
+    /// </remarks>
+    private async Task EvaluateAutoResolveAsync(CancellationToken ct)
+    {
+        using var lookupScope = _serviceProvider.CreateScope();
+        var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
+
+        var openExcursions = await lookupRepository.GetAutoResolveExcursionsAsync(ct);
+        if (openExcursions.Count == 0) return;
+
+        var byTenant = openExcursions.GroupBy(x => x.TenantId);
+        var now = DateTime.UtcNow;
+
+        foreach (var tenantGroup in byTenant)
+        {
+            var tenantId = tenantGroup.Key;
+            var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
+            if (tenantContext is null || !tenantContext.IsActive) continue;
+
+            using var tenantScope = _serviceProvider.CreateScope();
+            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+            tenantAccessor.SetTenant(new TenantContext(
+                tenantContext.TenantId,
+                tenantContext.Slug ?? string.Empty,
+                tenantContext.DisplayName ?? string.Empty,
+                true));
+
+            var registry = tenantScope.ServiceProvider.GetRequiredService<ConditionEvaluatorRegistry>();
+            var enricher = tenantScope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
+            var tracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
+            var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
+
+            // Build a baseline context from tenant freshness; enricher fills the rest.
+            var baseContext = new SensorContext
+            {
+                LatestValue = null,
+                LatestTimestamp = tenantContext.LastReadingAt,
+                TrendRate = null,
+                LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
+            };
+
+            var rules = tenantGroup.Select(x => x.Rule).ToList();
+            SensorContext enriched;
+            try
+            {
+                enriched = await enricher.EnrichAsync(baseContext, rules, tenantId, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to enrich sensor context for auto-resolve sweep on tenant {TenantId}", tenantId);
+                continue;
+            }
+
+            foreach (var entry in tenantGroup)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Rule.AutoResolveParams)) continue;
+
+                ConditionNode? node;
+                try
+                {
+                    node = JsonSerializer.Deserialize<ConditionNode>(entry.Rule.AutoResolveParams, AutoResolveJsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}", entry.Rule.Id);
+                    continue;
+                }
+                if (node is null) continue;
+
+                var ruleContext = enriched with
+                {
+                    CurrentRuleId = entry.Rule.Id,
+                    CurrentPath = "auto_resolve",
+                };
+
+                bool shouldResolve;
+                try
+                {
+                    shouldResolve = await registry.EvaluateNodeAsync(node, ruleContext, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Auto-resolve evaluation failed for rule {AlertRuleId}", entry.Rule.Id);
+                    continue;
+                }
+                if (!shouldResolve) continue;
+
+                var transition = await tracker.ForceCloseAsync(entry.Rule.Id, ExcursionCloseReason.AutoResolve, ct);
+                if (transition.Type == ExcursionTransitionType.ExcursionClosed)
+                {
+                    await resolutionHandler.HandleClosedAsync(transition, tenantId, ct);
+                }
+            }
         }
     }
 

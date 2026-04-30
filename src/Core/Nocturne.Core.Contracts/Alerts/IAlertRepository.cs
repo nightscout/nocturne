@@ -74,6 +74,14 @@ public interface IAlertRepository
     Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
 
     /// <summary>
+    /// Returns every open excursion whose owning rule has auto-resolve enabled
+    /// and a non-null <c>AutoResolveParams</c>. Used by <c>AlertSweepService</c>
+    /// to evaluate auto-resolve conditions that don't depend on the latest
+    /// reading (e.g. time-of-day, IOB, sensor age).
+    /// </summary>
+    Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(CancellationToken ct);
+
+    /// <summary>
     /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).
     /// </summary>
     /// <param name="request">The update request containing the fields to change.</param>

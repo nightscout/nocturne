@@ -47,6 +47,17 @@ public record UpdateAlertInstanceRequest(Guid Id, int? CurrentStepOrder = null, 
 public record HysteresisExcursionSnapshot(Guid Id, Guid AlertRuleId, DateTime? HysteresisStartedAt);
 
 /// <summary>
+/// Pairing of an open excursion with its owning rule, restricted to rules
+/// that have <see cref="AlertRule.AutoResolveEnabled"/> set. Returned by
+/// <see cref="Nocturne.Core.Contracts.Alerts.IAlertRepository.GetAutoResolveExcursionsAsync"/>
+/// for periodic auto-resolve evaluation by the sweep service.
+/// </summary>
+public record AutoResolveExcursionSnapshot(
+    Guid ExcursionId,
+    Guid TenantId,
+    AlertRuleSnapshot Rule);
+
+/// <summary>
 /// Tenant-level context for alert evaluation, providing subject identity and data freshness.
 /// </summary>
 public record TenantAlertContext(Guid TenantId, string SubjectName, string? Slug, string? DisplayName,

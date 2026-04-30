@@ -266,6 +266,33 @@ public class AlertRepository : IAlertRepository
             .ToListAsync(ct);
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(
+        CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Cross-tenant scan: bypass the global tenant filter since the sweep evaluates
+        // every tenant's auto-resolvable excursions in a single tick.
+        return await context.AlertExcursions
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(e => e.EndedAt == null)
+            .Join(context.AlertRules.AsNoTracking().IgnoreQueryFilters(),
+                e => e.AlertRuleId, r => r.Id, (e, r) => new { e, r })
+            .Where(x => x.r.IsEnabled
+                        && x.r.AutoResolveEnabled
+                        && x.r.AutoResolveParams != null)
+            .Select(x => new AutoResolveExcursionSnapshot(
+                x.e.Id,
+                x.e.TenantId,
+                new AlertRuleSnapshot(
+                    x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
+                    x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
+                    x.r.AutoResolveEnabled, x.r.AutoResolveParams)))
+            .ToListAsync(ct);
+    }
+
     /// <summary>
     /// Closes an alert excursion that has completed its hysteresis period.
     /// </summary>

@@ -34,6 +34,7 @@ internal sealed class AlertOrchestrator(
     ISignalRBroadcastService broadcastService,
     ISensorContextEnricher contextEnricher,
     IAlertAcknowledgementService acknowledgementService,
+    IExcursionResolutionHandler resolutionHandler,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -258,47 +259,11 @@ internal sealed class AlertOrchestrator(
         }
     }
 
-    private async Task HandleExcursionClosed(
+    private Task HandleExcursionClosed(
         ExcursionTransition transition,
         Guid tenantId,
-        CancellationToken ct)
-    {
-        if (!transition.ExcursionId.HasValue) return;
-
-        var excursionId = transition.ExcursionId.Value;
-        var now = timeProvider.GetUtcNow().UtcDateTime;
-
-        // Get instance IDs before resolving so we can expire deliveries
-        var instances = await repository.GetInstancesForExcursionAsync(excursionId, ct);
-        var instanceIds = instances.Select(i => i.Id).ToList();
-
-        // Resolve instances for this excursion, stamping the reason from the tracker transition
-        // so audit/UI can distinguish hysteresis closes from auto-resolve / manual / rule-disable.
-        var reason = transition.CloseReason?.ToWireString();
-        await repository.ResolveInstancesForExcursionAsync(excursionId, now, reason, ct);
-
-        // Cancel pending deliveries
-        if (instanceIds.Count > 0)
-        {
-            await repository.ExpirePendingDeliveriesAsync(instanceIds, ct);
-        }
-
-        try
-        {
-            await broadcastService.BroadcastAlertEventAsync("alert_resolved", new
-            {
-                excursionId,
-                tenantId,
-                resolvedAt = now,
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
-        }
-
-        logger.LogInformation("Excursion {ExcursionId} resolved, {Count} instances closed", excursionId, instances.Count);
-    }
+        CancellationToken ct) =>
+        resolutionHandler.HandleClosedAsync(transition, tenantId, ct);
 
     private async Task HandleExcursionContinues(
         ExcursionTransition transition,

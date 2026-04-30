@@ -27,6 +27,7 @@ public class AlertOrchestratorTests
     private readonly Mock<ISignalRBroadcastService> _broadcastService;
     private readonly Mock<ISensorContextEnricher> _contextEnricher;
     private readonly Mock<IAlertAcknowledgementService> _acknowledgementService;
+    private readonly Mock<IExcursionResolutionHandler> _resolutionHandler;
     private readonly FakeTimeProvider _timeProvider;
     private readonly ILogger<AlertOrchestrator> _logger;
     private readonly AlertOrchestrator _sut;
@@ -50,6 +51,7 @@ public class AlertOrchestratorTests
         _broadcastService = new Mock<ISignalRBroadcastService>();
         _contextEnricher = new Mock<ISensorContextEnricher>();
         _acknowledgementService = new Mock<IAlertAcknowledgementService>();
+        _resolutionHandler = new Mock<IExcursionResolutionHandler>();
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         _logger = NullLoggerFactory.Instance.CreateLogger<AlertOrchestrator>();
 
@@ -68,6 +70,7 @@ public class AlertOrchestratorTests
             _broadcastService.Object,
             _contextEnricher.Object,
             _acknowledgementService.Object,
+            _resolutionHandler.Object,
             _timeProvider,
             _logger);
     }
@@ -194,9 +197,12 @@ public class AlertOrchestratorTests
 
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
-        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(_excursionId, It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
-        _repository.Verify(r => r.ExpirePendingDeliveriesAsync(
-            It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(instanceId)),
+        // Orchestrator delegates the close cleanup to IExcursionResolutionHandler;
+        // resolution_reason / instance resolution / delivery expiry / broadcast all live there.
+        _resolutionHandler.Verify(h => h.HandleClosedAsync(
+            It.Is<ExcursionTransition>(t => t.ExcursionId == _excursionId
+                                            && t.Type == ExcursionTransitionType.ExcursionClosed),
+            _tenantId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -311,9 +317,12 @@ public class AlertOrchestratorTests
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
         _excursionTracker.Verify(t => t.ForceCloseAsync(_ruleId, ExcursionCloseReason.AutoResolve, It.IsAny<CancellationToken>()), Times.Once);
-        // Resolution reason flows through to the repository write.
-        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+        // Resolution-reason propagation is the handler's responsibility; assert it received the transition.
+        _resolutionHandler.Verify(h => h.HandleClosedAsync(
+            It.Is<ExcursionTransition>(t => t.CloseReason == ExcursionCloseReason.AutoResolve
+                                            && t.ExcursionId == _excursionId),
+            _tenantId,
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -449,9 +458,11 @@ public class AlertOrchestratorTests
 
         await _sut.EvaluateAsync(MakeContext(), CancellationToken.None);
 
-        // Hysteresis reason flows through; auto-resolve never queries.
-        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
-            _excursionId, It.IsAny<DateTime>(), "hysteresis", It.IsAny<CancellationToken>()), Times.Once);
+        // Hysteresis-flavoured transition flows to the handler; auto-resolve never queries.
+        _resolutionHandler.Verify(h => h.HandleClosedAsync(
+            It.Is<ExcursionTransition>(t => t.CloseReason == ExcursionCloseReason.Hysteresis),
+            _tenantId,
+            It.IsAny<CancellationToken>()), Times.Once);
         _excursionTracker.Verify(
             t => t.GetActiveExcursionIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
