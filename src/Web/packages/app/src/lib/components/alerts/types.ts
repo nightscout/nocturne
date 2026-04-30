@@ -267,6 +267,11 @@ export interface SnoozeConfig {
 	maxCount: number;
 	smartSnooze: boolean;
 	smartSnoozeExtendMinutes: number;
+	/**
+	 * Optional conditions that must all hold for the snooze to extend. When
+	 * empty, the backend falls back to the trend-favorable heuristic.
+	 */
+	conditions: ConditionNode[];
 }
 
 export interface ClientConfiguration {
@@ -360,6 +365,7 @@ export function defaultClientConfig(): ClientConfiguration {
 			maxCount: 5,
 			smartSnooze: false,
 			smartSnoozeExtendMinutes: 10,
+			conditions: [],
 		},
 	};
 }
@@ -377,6 +383,24 @@ function defaultState(): RuleEditorState {
 		clientConfig: defaultClientConfig(),
 		schedules: [defaultSchedule()],
 	};
+}
+
+/**
+ * Snooze conditions are a frontend-only client-config extension. NSwag's
+ * generated type for `clientConfiguration.snooze` doesn't model them, so we
+ * read them off the raw object defensively.
+ */
+function parseSnoozeConditions(snooze: unknown): ConditionNode[] {
+	if (!snooze || typeof snooze !== "object") return [];
+	const raw = (snooze as Record<string, unknown>).conditions;
+	if (!Array.isArray(raw)) return [];
+	const out: ConditionNode[] = [];
+	for (const entry of raw) {
+		if (entry && typeof entry === "object" && typeof (entry as { type?: unknown }).type === "string") {
+			out.push(entry as ConditionNode);
+		}
+	}
+	return out;
 }
 
 export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
@@ -411,6 +435,7 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 					maxCount: cc.snooze?.maxCount ?? 5,
 					smartSnooze: cc.snooze?.smartSnooze ?? false,
 					smartSnoozeExtendMinutes: cc.snooze?.smartSnoozeExtendMinutes ?? 10,
+					conditions: parseSnoozeConditions(cc.snooze),
 				},
 			}
 		: defaultClientConfig();
