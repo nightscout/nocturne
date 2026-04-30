@@ -209,9 +209,15 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Check snoozed instances whose snooze has expired.
-    /// If smart snooze is enabled and the glucose trend is favorable, extend the snooze.
-    /// Otherwise, clear the snooze so the alert re-fires and escalation resumes.
+    /// Check snoozed instances whose snooze has expired. Per-instance snooze
+    /// configuration may include either:
+    /// <list type="bullet">
+    ///   <item><c>conditions</c> — an array of <see cref="ConditionNode"/> evaluated as
+    ///         <c>composite{and, conditions}</c> against an enriched context. If true, extend; else re-fire.</item>
+    ///   <item><c>smartSnooze=true</c> with no conditions — fall back to glucose-trend
+    ///         heuristic <see cref="IsTrendFavorable"/>.</item>
+    /// </list>
+    /// Otherwise clear the snooze so the alert re-fires and escalation resumes.
     /// </summary>
     private async Task CheckSnoozedInstancesAsync(CancellationToken ct)
     {
@@ -226,59 +232,58 @@ public class AlertSweepService : BackgroundService
 
         _logger.LogDebug("Processing {Count} expired snoozed instances", instances.Count);
 
-        // Gather distinct tenant IDs so we can batch-load latest trend rates
-        var tenantIds = instances.Select(i => i.TenantId).Distinct().ToList();
-        var latestTrendByTenant = new Dictionary<Guid, double?>();
-
-        foreach (var tenantId in tenantIds)
-        {
-            latestTrendByTenant[tenantId] = await repository.GetLatestTrendRateAsync(tenantId, ct);
-        }
-
+        // Parse per-instance snooze configuration once.
+        var configsByInstance = instances.ToDictionary(i => i.InstanceId, i => ParseSnoozeConfig(i));
         var modifiedCount = 0;
 
-        foreach (var instance in instances)
+        // Group by tenant so we batch-load trend rates and (if any conditions are configured)
+        // build a single enriched context per tenant.
+        var instancesByTenant = instances.GroupBy(i => i.TenantId);
+
+        foreach (var tenantGroup in instancesByTenant)
         {
-            // Parse client configuration for snooze settings
-            var smartSnooze = false;
-            var smartSnoozeExtendMinutes = 15;
-            var maxCount = 3;
+            var tenantId = tenantGroup.Key;
+            var latestTrend = await repository.GetLatestTrendRateAsync(tenantId, ct);
+            var anyConditions = tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is { Count: > 0 });
 
-            try
+            SensorContext? enrichedContext = null;
+            if (anyConditions)
             {
-                using var doc = JsonDocument.Parse(instance.ClientConfiguration);
-                if (doc.RootElement.TryGetProperty("snooze", out var snoozeEl))
+                enrichedContext = await BuildSnoozeContextAsync(tenantId, latestTrend, tenantGroup, configsByInstance, ct);
+            }
+
+            foreach (var instance in tenantGroup)
+            {
+                var cfg = configsByInstance[instance.InstanceId];
+                var canExtend = cfg.SmartSnooze && instance.SnoozeCount < cfg.MaxCount;
+
+                bool extend;
+                string? extendReason = null;
+                if (!canExtend)
                 {
-                    if (snoozeEl.TryGetProperty("smartSnooze", out var smartEl))
-                        smartSnooze = smartEl.GetBoolean();
-                    if (snoozeEl.TryGetProperty("smartSnoozeExtendMinutes", out var extendEl))
-                        smartSnoozeExtendMinutes = extendEl.GetInt32();
-                    if (snoozeEl.TryGetProperty("maxCount", out var maxEl))
-                        maxCount = maxEl.GetInt32();
+                    extend = false;
                 }
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Failed to parse client configuration for rule {RuleId}", instance.AlertRuleId);
-            }
+                else if (cfg.Conditions is { Count: > 0 } conditions && enrichedContext is not null)
+                {
+                    extend = await EvaluateSnoozeConditionsAsync(instance, conditions, enrichedContext, ct);
+                    extendReason = extend ? "conditions" : "conditions-failed";
+                }
+                else
+                {
+                    extend = IsTrendFavorable(instance.ConditionType, instance.ConditionParams, latestTrend);
+                    extendReason = extend ? "trend-favorable" : "trend-unfavorable";
+                }
 
-            if (smartSnooze && instance.SnoozeCount < maxCount)
-            {
-                // Determine if glucose trend is favorable
-                var favorable = IsTrendFavorable(
-                    instance.ConditionType, instance.ConditionParams,
-                    latestTrendByTenant.GetValueOrDefault(instance.TenantId));
-
-                if (favorable)
+                if (extend)
                 {
                     await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
                         instance.InstanceId,
-                        SnoozedUntil: now.AddMinutes(smartSnoozeExtendMinutes),
+                        SnoozedUntil: now.AddMinutes(cfg.ExtendMinutes),
                         SnoozeCount: instance.SnoozeCount + 1), ct);
 
                     _logger.LogDebug(
-                        "Smart snooze extended instance {InstanceId} by {Minutes}m (count: {Count})",
-                        instance.InstanceId, smartSnoozeExtendMinutes, instance.SnoozeCount + 1);
+                        "Smart snooze extended instance {InstanceId} by {Minutes}m (count: {Count}, reason: {Reason})",
+                        instance.InstanceId, cfg.ExtendMinutes, instance.SnoozeCount + 1, extendReason);
                 }
                 else
                 {
@@ -287,23 +292,12 @@ public class AlertSweepService : BackgroundService
                         SnoozedUntil: DateTime.MinValue), ct);
 
                     _logger.LogDebug(
-                        "Smart snooze cleared for instance {InstanceId} — trend not favorable",
-                        instance.InstanceId);
+                        "Snooze cleared for instance {InstanceId} (smartSnooze={Smart}, count={Count}/{Max}, reason: {Reason})",
+                        instance.InstanceId, cfg.SmartSnooze, instance.SnoozeCount, cfg.MaxCount, extendReason ?? "max-count");
                 }
-            }
-            else
-            {
-                // Smart snooze disabled or max count reached — clear snooze
-                await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
-                    instance.InstanceId,
-                    SnoozedUntil: DateTime.MinValue), ct);
 
-                _logger.LogDebug(
-                    "Snooze expired for instance {InstanceId} (smartSnooze={Smart}, count={Count}/{Max})",
-                    instance.InstanceId, smartSnooze, instance.SnoozeCount, maxCount);
+                modifiedCount++;
             }
-
-            modifiedCount++;
         }
 
         if (modifiedCount > 0)
@@ -311,6 +305,140 @@ public class AlertSweepService : BackgroundService
             _logger.LogInformation("Processed {Count} expired snoozed instances", modifiedCount);
         }
     }
+
+    private async Task<SensorContext?> BuildSnoozeContextAsync(
+        Guid tenantId,
+        double? latestTrend,
+        IEnumerable<SnoozedInstanceSnapshot> tenantInstances,
+        Dictionary<Guid, SnoozeConfig> configsByInstance,
+        CancellationToken ct)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
+        var enricher = scope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
+        var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+
+        var tenantContext = await repository.GetTenantAlertContextAsync(tenantId, ct);
+        if (tenantContext is null) return null;
+
+        tenantAccessor.SetTenant(new TenantContext(
+            tenantContext.TenantId,
+            tenantContext.Slug ?? string.Empty,
+            tenantContext.DisplayName ?? string.Empty,
+            true));
+
+        // Wrap each instance's snooze conditions in a synthetic composite{and, conditions}
+        // rule. RuleDataNeeds.Walk inspects the trees to decide what to enrich; rule identity
+        // is not used during enrichment.
+        var syntheticRules = new List<AlertRuleSnapshot>();
+        foreach (var instance in tenantInstances)
+        {
+            var conditions = configsByInstance[instance.InstanceId].Conditions;
+            if (conditions is null || conditions.Count == 0) continue;
+
+            var composite = new CompositeCondition("and", conditions);
+            var json = JsonSerializer.Serialize(composite, AutoResolveJsonOptions);
+            syntheticRules.Add(new AlertRuleSnapshot(
+                instance.AlertRuleId,
+                tenantId,
+                "<snooze>",
+                AlertConditionType.Composite,
+                json,
+                AlertRuleSeverity.Info,
+                "{}",
+                0,
+                AutoResolveEnabled: false,
+                AutoResolveParams: null));
+        }
+
+        var baseContext = new SensorContext
+        {
+            LatestValue = null,
+            LatestTimestamp = tenantContext.LastReadingAt,
+            TrendRate = (decimal?)latestTrend,
+            LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
+        };
+
+        try
+        {
+            return await enricher.EnrichAsync(baseContext, syntheticRules, tenantId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to enrich sensor context for snooze evaluation on tenant {TenantId}", tenantId);
+            return null;
+        }
+    }
+
+    private async Task<bool> EvaluateSnoozeConditionsAsync(
+        SnoozedInstanceSnapshot instance,
+        List<ConditionNode> conditions,
+        SensorContext enrichedContext,
+        CancellationToken ct)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<ConditionEvaluatorRegistry>();
+
+        var node = new ConditionNode(
+            "composite",
+            Composite: new CompositeCondition("and", conditions));
+
+        var ruleContext = enrichedContext with
+        {
+            CurrentRuleId = instance.AlertRuleId,
+            CurrentPath = "snooze",
+        };
+
+        try
+        {
+            return await registry.EvaluateNodeAsync(node, ruleContext, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Snooze conditions evaluation failed for instance {InstanceId}", instance.InstanceId);
+            return false;
+        }
+    }
+
+    private SnoozeConfig ParseSnoozeConfig(SnoozedInstanceSnapshot instance)
+    {
+        var smartSnooze = false;
+        var extendMinutes = 15;
+        var maxCount = 3;
+        List<ConditionNode>? conditions = null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(instance.ClientConfiguration);
+            if (doc.RootElement.TryGetProperty("snooze", out var snoozeEl))
+            {
+                if (snoozeEl.TryGetProperty("smartSnooze", out var smartEl))
+                    smartSnooze = smartEl.GetBoolean();
+                if (snoozeEl.TryGetProperty("smartSnoozeExtendMinutes", out var extendEl))
+                    extendMinutes = extendEl.GetInt32();
+                if (snoozeEl.TryGetProperty("maxCount", out var maxEl))
+                    maxCount = maxEl.GetInt32();
+                if (snoozeEl.TryGetProperty("conditions", out var conditionsEl)
+                    && conditionsEl.ValueKind == JsonValueKind.Array)
+                {
+                    conditions = JsonSerializer.Deserialize<List<ConditionNode>>(
+                        conditionsEl.GetRawText(), AutoResolveJsonOptions);
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse client configuration for rule {RuleId}", instance.AlertRuleId);
+        }
+
+        return new SnoozeConfig(smartSnooze, extendMinutes, maxCount, conditions);
+    }
+
+    private readonly record struct SnoozeConfig(
+        bool SmartSnooze,
+        int ExtendMinutes,
+        int MaxCount,
+        List<ConditionNode>? Conditions);
 
     private static readonly JsonSerializerOptions AutoResolveJsonOptions = new()
     {
