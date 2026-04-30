@@ -82,6 +82,14 @@ public interface IAlertRepository
     Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(CancellationToken ct);
 
     /// <summary>
+    /// Returns the distinct InApp delivery <c>Destination</c> values (user identifiers) that
+    /// received any delivery for this excursion's instances. Used by
+    /// <c>ExcursionResolutionHandler</c> to auto-archive in-app notifications when the
+    /// excursion closes.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid excursionId, CancellationToken ct);
+
+    /// <summary>
     /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).
     /// </summary>
     /// <param name="request">The update request containing the fields to change.</param>

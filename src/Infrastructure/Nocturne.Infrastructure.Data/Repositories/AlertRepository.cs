@@ -270,6 +270,27 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(
+        Guid excursionId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Cross-tenant safe: the excursionId is unique and the InApp destination is just the
+        // userId. IgnoreQueryFilters mirrors the pattern in GetAutoResolveExcursionsAsync.
+        return await context.AlertDeliveries
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(d => d.ChannelType == ChannelType.InApp)
+            .Join(context.AlertInstances.AsNoTracking().IgnoreQueryFilters(),
+                d => d.AlertInstanceId, i => i.Id, (d, i) => new { d, i })
+            .Where(x => x.i.AlertExcursionId == excursionId
+                        && !string.IsNullOrEmpty(x.d.Destination))
+            .Select(x => x.d.Destination)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(
         CancellationToken ct)
     {

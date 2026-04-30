@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -16,6 +17,7 @@ public class ExcursionResolutionHandlerTests
 {
     private readonly Mock<IAlertRepository> _repository = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<IInAppNotificationService> _notification = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 4, 30, 14, 0, 0, TimeSpan.Zero));
     private readonly ExcursionResolutionHandler _sut;
 
@@ -24,9 +26,13 @@ public class ExcursionResolutionHandlerTests
 
     public ExcursionResolutionHandlerTests()
     {
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<string>());
+
         _sut = new ExcursionResolutionHandler(
             _repository.Object,
             _broadcast.Object,
+            _notification.Object,
             _timeProvider,
             NullLogger<ExcursionResolutionHandler>.Instance);
     }
@@ -106,6 +112,47 @@ public class ExcursionResolutionHandlerTests
 
         _repository.VerifyNoOtherCalls();
         _broadcast.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task HandleClosed_AutoArchivesInAppNotificationsForEachRecipient()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { "user-a", "user-b" });
+
+        var transition = new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve);
+
+        await _sut.HandleClosedAsync(transition, _tenantId, CancellationToken.None);
+
+        _notification.Verify(n => n.ArchiveBySourceAsync(
+            "user-a",
+            Nocturne.API.Services.Alerts.Providers.InAppProvider.NotificationType,
+            _excursionId.ToString(),
+            NotificationArchiveReason.ConditionMet,
+            It.IsAny<CancellationToken>()), Times.Once);
+        _notification.Verify(n => n.ArchiveBySourceAsync(
+            "user-b",
+            Nocturne.API.Services.Alerts.Providers.InAppProvider.NotificationType,
+            _excursionId.ToString(),
+            NotificationArchiveReason.ConditionMet,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleClosed_NoInAppRecipients_SkipsArchive()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+
+        var transition = new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve);
+
+        await _sut.HandleClosedAsync(transition, _tenantId, CancellationToken.None);
+
+        _notification.VerifyNoOtherCalls();
     }
 
     [Fact]

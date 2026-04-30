@@ -628,6 +628,7 @@ public static class ServiceRegistrationExtensions
         // Notification action handlers (scoped -- they may depend on scoped services)
         services.AddScoped<INotificationActionHandler, MealMatchActionHandler>();
         services.AddScoped<INotificationActionHandler, TrackerSuggestionActionHandler>();
+        services.AddScoped<INotificationActionHandler, AlertActionHandler>();
 
         return services;
     }
