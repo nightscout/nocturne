@@ -92,15 +92,8 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> CreateRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
-        // Cycle detection on create is a no-op (server generates the new id), but kept here
-        // as the seam for future direct-id assignment.
-        var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
-        if (rootForCycle is not null
-            && await _referenceService.DetectCycleAsync(ruleId: null, rootForCycle, ct))
-        {
-            return BadRequest("Cyclical alert_state reference detected.");
-        }
-
+        // No cycle detection on create: the new id is server-generated, so the proposed tree
+        // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
 
         var tenantId = db.TenantId;
@@ -174,13 +167,6 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
-        var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
-        if (rootForCycle is not null
-            && await _referenceService.DetectCycleAsync(id, rootForCycle, ct))
-        {
-            return BadRequest("Cyclical alert_state reference detected.");
-        }
-
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
 
         var rule = await db.AlertRules
@@ -191,6 +177,15 @@ public class AlertRulesController : ControllerBase
 
         if (rule is null)
             return NotFound();
+
+        // Cycle detection runs after the existence check so a non-existent id always 404s
+        // rather than masking with a 400 when the proposed tree happens to walk a cycle.
+        var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
+        if (rootForCycle is not null
+            && await _referenceService.DetectCycleAsync(id, rootForCycle, ct))
+        {
+            return BadRequest("Cyclical alert_state reference detected.");
+        }
 
         var tenantId = db.TenantId;
 

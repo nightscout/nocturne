@@ -80,24 +80,25 @@ internal sealed class AlertReferenceService(
         // Direct self-reference in the proposed tree is the simplest cycle.
         if (TreeReferences(proposedRoot, ruleId.Value)) return true;
 
-        // BFS through alert_state edges: queue every id reachable from the proposed tree, mark
-        // visited, expand each via the loaded tenant rule trees. If we ever land on ruleId, cycle.
+        // BFS through alert_state edges: queue every id reachable from the proposed tree.
+        // We mark visited at enqueue time so a node is queued at most once even when many
+        // peers reference the same id — keeps the loop linear in the rule graph size.
         var visited = new HashSet<Guid>();
-        var queue = new Queue<Guid>(ExtractAlertStateRefs(proposedRoot));
+        var queue = new Queue<Guid>();
+        foreach (var refId in ExtractAlertStateRefs(proposedRoot))
+        {
+            if (visited.Add(refId)) queue.Enqueue(refId);
+        }
 
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
             if (current == ruleId.Value) return true;
-            if (!visited.Add(current)) continue;
             if (!byId.TryGetValue(current, out var nextRoot) || nextRoot is null) continue;
 
             foreach (var nextRef in ExtractAlertStateRefs(nextRoot))
             {
-                if (!visited.Contains(nextRef))
-                {
-                    queue.Enqueue(nextRef);
-                }
+                if (visited.Add(nextRef)) queue.Enqueue(nextRef);
             }
         }
 
@@ -106,11 +107,17 @@ internal sealed class AlertReferenceService(
 
     private async Task<IReadOnlyList<(Guid Id, ConditionNode? Root)>> LoadTenantRulesAsync(CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        if (tenantAccessor.IsResolved)
+        // Cycle detection and reference scanning are exclusively called from request-scoped
+        // controllers — tenant must be resolved. Failing loud here prevents a misconfigured
+        // DI seam from silently doing a cross-tenant scan.
+        if (!tenantAccessor.IsResolved)
         {
-            db.TenantId = tenantAccessor.TenantId;
+            throw new InvalidOperationException(
+                "AlertReferenceService requires a resolved tenant context.");
         }
+
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantAccessor.TenantId;
 
         var rows = await db.AlertRules
             .AsNoTracking()

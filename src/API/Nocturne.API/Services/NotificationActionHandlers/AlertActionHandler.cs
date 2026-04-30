@@ -11,12 +11,19 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// <see cref="InAppProvider"/>. <c>ack</c> calls
 /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/> for the underlying
 /// excursion (sourceId), then archives the notification. <c>dismiss</c> archives only — it
-/// does not silence the alert; another delivery for the same excursion will create a fresh
-/// notification.
+/// does not silence the alert; the next escalation step's delivery creates a fresh
+/// notification (CreateNotificationAsync does not dedupe by sourceId).
 /// </summary>
+/// <remarks>
+/// Authorisation: <see cref="Notifications.IInAppNotificationService.ExecuteActionAsync"/>
+/// verifies <c>notification.UserId == userId</c> before dispatching here, so a forwarded
+/// notificationId from another user is rejected upstream. Tenant scope for the ack call
+/// comes from the request-scoped <see cref="ITenantAccessor"/>, never from the
+/// notification payload.
+/// </remarks>
 /// <seealso cref="INotificationActionHandler"/>
 /// <seealso cref="InAppProvider"/>
-public class AlertActionHandler(
+internal sealed class AlertActionHandler(
     IAlertAcknowledgementService acknowledgementService,
     IInAppNotificationService notificationService,
     ITenantAccessor tenantAccessor,

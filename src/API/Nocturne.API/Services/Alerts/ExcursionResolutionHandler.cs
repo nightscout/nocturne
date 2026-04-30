@@ -86,7 +86,9 @@ internal sealed class ExcursionResolutionHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex,
+            // Bumped to Error: a query-shape failure here would leak toast notifications across
+            // every close — needs to be visible. Per-recipient archive failures stay Warning.
+            logger.LogError(ex,
                 "Failed to load InApp destinations for excursion {ExcursionId}; skipping auto-archive",
                 excursionId);
             return;

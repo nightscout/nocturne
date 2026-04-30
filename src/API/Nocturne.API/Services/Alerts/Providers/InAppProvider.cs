@@ -11,11 +11,13 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// acknowledge, dismiss, or the excursion auto-archives on resolve.
 /// </summary>
 /// <remarks>
-/// The notification's <c>type</c> is the discriminator <see cref="NotificationType"/>;
-/// <c>sourceId</c> is the excursion id so multiple firings on the same excursion (e.g.
-/// escalation steps) collapse rather than stack. The pair (<c>type</c>, <c>sourceId</c>)
-/// is also used by <c>AlertActionHandler</c> (Task 23) to archive the notification when
-/// the excursion resolves.
+/// The notification's <c>type</c> is the discriminator <see cref="NotificationType"/> and
+/// <c>sourceId</c> is the excursion id. <c>CreateNotificationAsync</c> does NOT dedupe by
+/// (type, sourceId), so each escalation step appends a fresh row — the user sees one
+/// notification per step. The pair is consumed by <c>AlertActionHandler</c> (action
+/// archival on ack/dismiss) and by <c>ExcursionResolutionHandler</c>
+/// (<c>ArchiveBySourceAsync</c> on close, which clears the most-recently-active row per
+/// recipient).
 /// </remarks>
 internal sealed class InAppProvider(
     IInAppNotificationService notificationService,
