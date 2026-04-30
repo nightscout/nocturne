@@ -107,7 +107,7 @@ public class AlertRulesController : ControllerBase
             ConfirmationReadings = request.ConfirmationReadings > 0 ? request.ConfirmationReadings : 1,
             IsEnabled = request.IsEnabled,
             SortOrder = request.SortOrder,
-            Severity = request.Severity ?? AlertRuleSeverity.Normal,
+            Severity = request.Severity ?? AlertRuleSeverity.Warning,
             ClientConfiguration = request.ClientConfiguration is not null
                 ? JsonSerializer.Serialize(request.ClientConfiguration)
                 : "{}",
@@ -187,7 +187,7 @@ public class AlertRulesController : ControllerBase
         rule.ConfirmationReadings = request.ConfirmationReadings > 0 ? request.ConfirmationReadings : 1;
         rule.IsEnabled = request.IsEnabled;
         rule.SortOrder = request.SortOrder;
-        rule.Severity = request.Severity ?? AlertRuleSeverity.Normal;
+        rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
         rule.ClientConfiguration = request.ClientConfiguration is not null
             ? JsonSerializer.Serialize(request.ClientConfiguration)
             : "{}";
@@ -412,7 +412,7 @@ public class AlertRuleResponse
     public int ConfirmationReadings { get; set; }
     public bool IsEnabled { get; set; }
     public int SortOrder { get; set; }
-    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Normal;
+    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
     public object ClientConfiguration { get; set; } = new { };
     public List<AlertScheduleResponse> Schedules { get; set; } = [];
 }

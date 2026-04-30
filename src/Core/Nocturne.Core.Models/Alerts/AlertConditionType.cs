@@ -26,4 +26,52 @@ public enum AlertConditionType
     /// <summary>Logical combination of multiple child conditions (AND/OR).</summary>
     [EnumMember(Value = "composite"), JsonStringEnumMemberName("composite")]
     Composite,
+
+    /// <summary>Logical negation of a child condition.</summary>
+    [EnumMember(Value = "not"), JsonStringEnumMemberName("not")]
+    Not,
+
+    /// <summary>Child condition must remain true for a sustained duration before firing.</summary>
+    [EnumMember(Value = "sustained"), JsonStringEnumMemberName("sustained")]
+    Sustained,
+
+    /// <summary>The most recent reading is older than the configured staleness threshold.</summary>
+    [EnumMember(Value = "staleness"), JsonStringEnumMemberName("staleness")]
+    Staleness,
+
+    /// <summary>Predicted glucose crosses a threshold within a forecast horizon.</summary>
+    [EnumMember(Value = "predicted"), JsonStringEnumMemberName("predicted")]
+    Predicted,
+
+    /// <summary>Glucose trend matches a configured direction bucket (e.g., rising fast).</summary>
+    [EnumMember(Value = "trend"), JsonStringEnumMemberName("trend")]
+    Trend,
+
+    /// <summary>Current local time falls within a configured window.</summary>
+    [EnumMember(Value = "time_of_day"), JsonStringEnumMemberName("time_of_day")]
+    TimeOfDay,
+
+    /// <summary>Insulin on board (units) compared against a threshold.</summary>
+    [EnumMember(Value = "iob"), JsonStringEnumMemberName("iob")]
+    Iob,
+
+    /// <summary>Carbs on board (grams) compared against a threshold.</summary>
+    [EnumMember(Value = "cob"), JsonStringEnumMemberName("cob")]
+    Cob,
+
+    /// <summary>Pump reservoir level (units) compared against a threshold.</summary>
+    [EnumMember(Value = "reservoir"), JsonStringEnumMemberName("reservoir")]
+    Reservoir,
+
+    /// <summary>Days since last infusion site change compared against a threshold.</summary>
+    [EnumMember(Value = "site_age"), JsonStringEnumMemberName("site_age")]
+    SiteAge,
+
+    /// <summary>Days since CGM sensor start compared against a threshold.</summary>
+    [EnumMember(Value = "sensor_age"), JsonStringEnumMemberName("sensor_age")]
+    SensorAge,
+
+    /// <summary>Cross-references the live state of another alert (e.g., active for N minutes).</summary>
+    [EnumMember(Value = "alert_state"), JsonStringEnumMemberName("alert_state")]
+    AlertState,
 }

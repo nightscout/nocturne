@@ -67,7 +67,7 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("severity")]
     [MaxLength(16)]
-    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Normal;
+    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
 
     /// <summary>
     /// Client-side presentation config (audio, visual, snooze). Stored as JSONB.
