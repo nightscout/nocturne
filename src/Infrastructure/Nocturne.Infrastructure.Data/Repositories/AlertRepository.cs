@@ -401,6 +401,38 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <summary>
+    /// Returns a snapshot of every active excursion for the tenant, keyed by alert rule id.
+    /// Materialises the projection in memory rather than via EF's expression tree so the
+    /// <see cref="ActiveAlertSnapshot"/> record constructor can be used directly.
+    /// </summary>
+    /// <param name="tenantId">The unique identifier of the tenant.</param>
+    /// <param name="ct">The cancellation token.</param>
+    public virtual async Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var rows = await context.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.TenantId == tenantId && e.EndedAt == null)
+            .Select(e => new { e.AlertRuleId, e.StartedAt, e.AcknowledgedAt })
+            .ToListAsync(ct);
+
+        var dict = new Dictionary<Guid, ActiveAlertSnapshot>(rows.Count);
+        foreach (var row in rows)
+        {
+            // If the same rule has multiple active excursions, keep the earliest — matches the
+            // semantics of "the alert is firing" rather than "the latest excursion fires".
+            if (!dict.TryGetValue(row.AlertRuleId, out var existing) || row.StartedAt < existing.TriggeredAt)
+            {
+                dict[row.AlertRuleId] = new ActiveAlertSnapshot("firing", row.StartedAt, row.AcknowledgedAt);
+            }
+        }
+
+        return dict;
+    }
+
+    /// <summary>
     /// Saves all changes made in this repository to the database.
     /// </summary>
     /// <param name="ct">The cancellation token.</param>

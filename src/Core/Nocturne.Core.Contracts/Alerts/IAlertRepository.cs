@@ -147,6 +147,21 @@ public interface IAlertRepository
     Task<IReadOnlyList<SnoozedInstanceSnapshot>> GetExpiredSnoozedInstancesAsync(DateTime asOf, CancellationToken ct);
 
     /// <summary>
+    /// Returns a snapshot of every active <see cref="AlertExcursion"/> for the tenant, keyed by
+    /// the <see cref="AlertRule"/> id that owns it. Used by <c>alert_state</c> conditions to
+    /// reference live alerts cross-rule.
+    /// </summary>
+    /// <param name="tenantId">The tenant identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// Dictionary keyed by alert rule id. Each value's <see cref="ActiveAlertSnapshot.State"/> is
+    /// always <c>"firing"</c>; downstream evaluators decide acknowledgement state from
+    /// <see cref="ActiveAlertSnapshot.AcknowledgedAt"/>.
+    /// </returns>
+    Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(
+        Guid tenantId, CancellationToken ct);
+
+    /// <summary>
     /// Persists all pending changes tracked by the underlying context.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>

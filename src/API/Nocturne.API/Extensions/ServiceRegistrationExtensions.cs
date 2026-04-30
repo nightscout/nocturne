@@ -682,6 +682,7 @@ public static class ServiceRegistrationExtensions
         // Alert engine core
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IEscalationAdvancer, EscalationAdvancer>();
+        services.AddScoped<ISensorContextEnricher, SensorContextEnricher>();
         services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
         services.AddScoped<IAlertDeliveryService, AlertDeliveryService>();
         services.AddScoped<IAlertAcknowledgementService, AlertAcknowledgementService>();
