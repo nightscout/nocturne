@@ -658,6 +658,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IConditionEvaluator, RateOfChangeEvaluator>();
         services.AddSingleton<IConditionEvaluator, StalenessEvaluator>();
         services.AddSingleton<IConditionEvaluator, CompositeEvaluator>();
+        services.AddSingleton<IConditionEvaluator, NotEvaluator>();
         services.AddSingleton<ConditionEvaluatorRegistry>();
 
         // Excursion tracker
