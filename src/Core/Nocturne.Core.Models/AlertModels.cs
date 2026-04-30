@@ -215,7 +215,7 @@ public record SensorAgeCondition(string Operator, decimal Value);
 /// </summary>
 /// <param name="AlertId">The alert (rule) id to inspect.</param>
 /// <param name="State">One of "firing", "unacknowledged", "acknowledged".</param>
-/// <param name="ForMinutes">Optional minimum duration in the state, in minutes.</param>
+/// <param name="ForMinutes">When non-null, the condition is true only if the referenced alert has been in the matching state for at least this many minutes — i.e. now - TriggeredAt &gt;= ForMinutes for "firing"/"unacknowledged", or now - AcknowledgedAt &gt;= ForMinutes for "acknowledged".</param>
 public record AlertStateCondition(Guid AlertId, string State, int? ForMinutes);
 
 /// <summary>

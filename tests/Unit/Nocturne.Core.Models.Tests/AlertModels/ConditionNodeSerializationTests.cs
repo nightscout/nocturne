@@ -3,7 +3,7 @@ using FluentAssertions;
 using Nocturne.Core.Models;
 using Xunit;
 
-namespace Nocturne.API.Tests.Services.Alerts;
+namespace Nocturne.Core.Models.Tests.AlertModels;
 
 /// <summary>
 /// Round-trip JSON serialization tests for the recursive <see cref="ConditionNode"/> tree.
@@ -266,5 +266,35 @@ public class ConditionNodeSerializationTests
         thresholdNode.Type.Should().Be("threshold");
         thresholdNode.Threshold!.Direction.Should().Be("below");
         thresholdNode.Threshold.Value.Should().Be(70m);
+    }
+
+    [Fact]
+    public void Composite_MultiChild_OrThresholdAndPredicted_RoundTrips()
+    {
+        // composite { or, [ threshold(below, 70), predicted(<, 70, withinMinutes 20) ] }
+        var threshold = new ConditionNode("threshold", Threshold: new ThresholdCondition("below", 70m));
+        var predicted = new ConditionNode("predicted", Predicted: new PredictedCondition("<", 70m, 20));
+        var composite = new ConditionNode("composite",
+            Composite: new CompositeCondition("or", new List<ConditionNode> { threshold, predicted }));
+
+        var result = RoundTrip(composite);
+
+        result.Type.Should().Be("composite");
+        result.Composite.Should().NotBeNull();
+        result.Composite!.Operator.Should().Be("or");
+        result.Composite.Conditions.Should().HaveCount(2);
+
+        var first = result.Composite.Conditions[0];
+        first.Type.Should().Be("threshold");
+        first.Threshold.Should().NotBeNull();
+        first.Threshold!.Direction.Should().Be("below");
+        first.Threshold.Value.Should().Be(70m);
+
+        var second = result.Composite.Conditions[1];
+        second.Type.Should().Be("predicted");
+        second.Predicted.Should().NotBeNull();
+        second.Predicted!.Operator.Should().Be("<");
+        second.Predicted.Value.Should().Be(70m);
+        second.Predicted.WithinMinutes.Should().Be(20);
     }
 }
