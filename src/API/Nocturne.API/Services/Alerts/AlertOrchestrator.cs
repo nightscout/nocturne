@@ -1,4 +1,3 @@
-using System.Runtime.Serialization;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -79,7 +78,7 @@ internal sealed class AlertOrchestrator(
         var rootContext = context with
         {
             CurrentRuleId = rule.Id,
-            CurrentPath = GetEnumMemberValue(rule.ConditionType),
+            CurrentPath = AlertConditionTypeNames.ToWireString(rule.ConditionType),
         };
         var conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
         var transition = await excursionTracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
@@ -230,12 +229,4 @@ internal sealed class AlertOrchestrator(
         }
     }
 
-    private static string GetEnumMemberValue(AlertConditionType type)
-    {
-        var memberInfo = typeof(AlertConditionType).GetMember(type.ToString()).FirstOrDefault();
-        var attr = memberInfo?.GetCustomAttributes(typeof(EnumMemberAttribute), false)
-            .Cast<EnumMemberAttribute>()
-            .FirstOrDefault();
-        return attr?.Value ?? type.ToString().ToLowerInvariant();
-    }
 }

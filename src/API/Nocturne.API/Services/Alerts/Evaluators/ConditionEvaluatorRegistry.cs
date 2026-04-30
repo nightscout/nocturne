@@ -6,7 +6,8 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 
 /// <summary>
 /// Resolves an <see cref="AlertConditionType"/> to the corresponding <see cref="IConditionEvaluator"/>.
-/// Registered as singleton; constructor takes all registered evaluators via DI.
+/// Registered as scoped because evaluators that touch <see cref="IConditionTimerStore"/> are
+/// DbContext-backed; the constructor takes all registered evaluators via DI.
 /// </summary>
 public class ConditionEvaluatorRegistry
 {
@@ -39,19 +40,12 @@ public class ConditionEvaluatorRegistry
     /// </summary>
     public IConditionEvaluator? GetEvaluator(string conditionTypeString)
     {
+        var byWire = AlertConditionTypeNames.FromWireString(conditionTypeString);
+        if (byWire is not null)
+            return GetEvaluator(byWire.Value);
+
         if (Enum.TryParse<AlertConditionType>(conditionTypeString, ignoreCase: true, out var parsed))
             return GetEvaluator(parsed);
-
-        // Try matching by EnumMember value (e.g. "rate_of_change")
-        foreach (var (type, evaluator) in _evaluators)
-        {
-            var memberInfo = typeof(AlertConditionType).GetMember(type.ToString()).FirstOrDefault();
-            var attr = memberInfo?.GetCustomAttributes(typeof(System.Runtime.Serialization.EnumMemberAttribute), false)
-                .Cast<System.Runtime.Serialization.EnumMemberAttribute>()
-                .FirstOrDefault();
-            if (attr?.Value?.Equals(conditionTypeString, StringComparison.OrdinalIgnoreCase) == true)
-                return evaluator;
-        }
 
         return null;
     }

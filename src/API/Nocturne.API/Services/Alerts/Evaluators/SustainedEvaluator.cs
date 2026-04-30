@@ -66,7 +66,7 @@ public class SustainedEvaluator : IConditionEvaluator
     public async Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
         var condition = JsonSerializer.Deserialize<SustainedCondition>(conditionParamsJson, JsonOptions);
-        if (condition?.Child is null)
+        if (condition?.Child is null || condition.Minutes <= 0)
             return false;
 
         var ruleId = context.CurrentRuleId;
