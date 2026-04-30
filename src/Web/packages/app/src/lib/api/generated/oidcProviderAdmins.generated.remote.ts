@@ -17,6 +17,9 @@ export const getAll = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.getAll:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get all');
   }
 });
@@ -34,6 +37,9 @@ export const create = command(CreateOidcProviderRequestSchema, async (request) =
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.create:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create');
   }
 });
@@ -47,6 +53,9 @@ export const getConfigManaged = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.getConfigManaged:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get config managed');
   }
 });
@@ -60,6 +69,9 @@ export const getById = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.getById:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get by id');
   }
 });
@@ -78,6 +90,9 @@ export const update = command(z.object({ id: z.string(), request: UpdateOidcProv
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.update:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update');
   }
 });
@@ -95,6 +110,9 @@ export const remove = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.delete:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to remove');
   }
 });
@@ -113,6 +131,9 @@ export const enable = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.enable:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to enable');
   }
 });
@@ -131,6 +152,9 @@ export const disable = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.disable:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to disable');
   }
 });
@@ -145,6 +169,9 @@ export const testExisting = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.testExisting:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to test existing');
   }
 });
@@ -159,6 +186,9 @@ export const testUnsaved = command(TestProviderRequestSchema, async (request) =>
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.testUnsaved:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to test unsaved');
   }
 });

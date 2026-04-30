@@ -6,36 +6,36 @@ import { getRequestEvent, query } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
-/** Lists records with pagination, optional date range, device, and source filtering. */
-export const getAll = query(z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional(), limit: z.number().optional(), offset: z.number().optional(), sort: z.string().optional(), device: z.string().optional(), source: z.string().optional() }).optional(), async (params) => {
+/** Get activity records with pagination */
+export const getActivities = query(z.object({ limit: z.number().optional(), offset: z.number().optional() }).optional(), async (params) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
-    return await apiClient.uploaderSnapshot.getAll(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
+    return await apiClient.activity.getActivities(params?.limit, params?.offset);
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in uploaderSnapshot.getAll:', err);
+    console.error('Error in activity.getActivities:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
     const message = body?.message ?? body?.title ?? body?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get all');
+    throw error(500, 'Failed to get activities');
   }
 });
 
-/** Retrieves a single record by its unique identifier. */
-export const getById = query(z.string(), async (id) => {
+/** Get a specific activity record by ID */
+export const getActivity = query(z.string(), async (id) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
-    return await apiClient.uploaderSnapshot.getById(id);
+    return await apiClient.activity.getActivity(id);
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in uploaderSnapshot.getById:', err);
+    console.error('Error in activity.getActivity:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
     const message = body?.message ?? body?.title ?? body?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get by id');
+    throw error(500, 'Failed to get activity');
   }
 });

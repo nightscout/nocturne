@@ -114,6 +114,13 @@ export interface AlertStatePayload {
 
 export interface ConditionNode {
 	type: ConditionKind;
+	/**
+	 * Editor-only stable identity for keyed `{#each}` blocks. Set on construction
+	 * (`defaultPayload`/`nodeFromApi`); stripped before the node is sent over the
+	 * wire by `stripEditorFields`. Index-based keys cause Svelte 5 to re-bind the
+	 * wrong nested editor instance after a sibling is removed; this avoids that.
+	 */
+	_uid?: string;
 	composite?: CompositePayload;
 	not?: NotPayload;
 	sustained?: SustainedPayload;
@@ -131,11 +138,24 @@ export interface ConditionNode {
 	alert_state?: AlertStatePayload;
 }
 
+function newUid(): string {
+	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+		return crypto.randomUUID();
+	}
+	return Math.random().toString(36).slice(2);
+}
+
 // ---------------------------------------------------------------------------
 // Default payloads per kind
 // ---------------------------------------------------------------------------
 
 export function defaultPayload(kind: ConditionKind): ConditionNode {
+	const node = makeDefault(kind);
+	node._uid = newUid();
+	return node;
+}
+
+function makeDefault(kind: ConditionKind): ConditionNode {
 	switch (kind) {
 		case "composite":
 			return {
@@ -222,9 +242,53 @@ export function nodeFromApi(
 	if (!kind) return null;
 	if (params === null || params === undefined) return null;
 	const k = kind as ConditionKind;
-	const node: ConditionNode = { type: k };
+	const node: ConditionNode = { type: k, _uid: newUid() };
 	(node as Record<string, unknown>)[k] = params;
+	// Recursively assign uids to nested nodes so keyed each-blocks have stable
+	// identity for every level of the tree, not just the root.
+	assignUidsRecursive(node);
 	return node;
+}
+
+function assignUidsRecursive(node: ConditionNode): void {
+	if (!node._uid) node._uid = newUid();
+	if (node.composite?.conditions) {
+		for (const child of node.composite.conditions) assignUidsRecursive(child);
+	}
+	if (node.not?.child) assignUidsRecursive(node.not.child);
+	if (node.sustained?.child) assignUidsRecursive(node.sustained.child);
+}
+
+/**
+ * Returns a deep copy of `node` with every editor-only `_uid` field stripped.
+ * Use this when sending the full ConditionNode envelope to the backend (e.g.
+ * `autoResolveParams`) so the editor's internal identity doesn't leak into
+ * stored configuration.
+ */
+export function stripEditorFields(node: ConditionNode): ConditionNode {
+	const cleaned: ConditionNode = { type: node.type };
+	for (const k of Object.keys(node) as (keyof ConditionNode)[]) {
+		if (k === "_uid" || k === "type") continue;
+		const value = node[k];
+		if (value === undefined) continue;
+		// Recurse into nested children so uids in the subtree are also stripped.
+		if (k === "composite" && node.composite) {
+			cleaned.composite = {
+				operator: node.composite.operator,
+				conditions: node.composite.conditions.map(stripEditorFields),
+			};
+		} else if (k === "not" && node.not) {
+			cleaned.not = { child: stripEditorFields(node.not.child) };
+		} else if (k === "sustained" && node.sustained) {
+			cleaned.sustained = {
+				minutes: node.sustained.minutes,
+				child: stripEditorFields(node.sustained.child),
+			};
+		} else {
+			(cleaned as Record<string, unknown>)[k] = value;
+		}
+	}
+	return cleaned;
 }
 
 /**

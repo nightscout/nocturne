@@ -4,19 +4,21 @@
 
 import { getRequestEvent, query } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
+import { z } from 'zod';
 
-export const getLinkedPlatforms = query(async () => {
+/** Get actogram report data for a time window. */
+export const getActogram = query(z.object({ startTime: z.number().optional(), endTime: z.number().optional() }).optional(), async (params) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
-    return await apiClient.linkedPlatforms.getLinkedPlatforms();
+    return await apiClient.actogram.getActogram(params?.startTime, params?.endTime);
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in linkedPlatforms.getLinkedPlatforms:', err);
+    console.error('Error in actogram.getActogram:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
     const message = body?.message ?? body?.title ?? body?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get linked platforms');
+    throw error(500, 'Failed to get actogram');
   }
 });

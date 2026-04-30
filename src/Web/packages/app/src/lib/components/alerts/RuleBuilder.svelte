@@ -160,7 +160,7 @@
         </Select.Root>
       </div>
       <div class="space-y-2 pl-3 border-l">
-        {#each payload.conditions as _child, i (i)}
+        {#each payload.conditions as child, i (child._uid)}
           <Self
             bind:node={payload.conditions[i]}
             {availableRules}

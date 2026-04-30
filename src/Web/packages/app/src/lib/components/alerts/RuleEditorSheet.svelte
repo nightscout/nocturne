@@ -37,6 +37,7 @@
     defaultSchedule,
     nodeToApi,
     parseRule,
+    stripEditorFields,
   } from "./types";
   import type {
     ClientConfiguration,
@@ -183,17 +184,23 @@
       );
 
       const conditionApi = nodeToApi(condition);
-      const autoResolveApi = autoResolveEnabled
-        ? nodeToApi(autoResolveCondition)
-        : null;
 
+      // ASYMMETRY: the rule's main condition stores `conditionType` + `conditionParams`
+      // (kind discriminator + kind-specific payload, two columns). Auto-resolve stores
+      // a single `autoResolveParams` blob that the backend deserialises directly into
+      // a `ConditionNode` envelope — so it must include the `type` discriminator and
+      // the kind's payload field side by side, NOT just the inner payload. Strip the
+      // editor-only `_uid` so it doesn't leak into stored configuration.
       const payload = {
         name,
         description: description || undefined,
         conditionType: conditionApi?.conditionType,
         conditionParams: conditionApi?.conditionParams,
         autoResolveEnabled,
-        autoResolveParams: autoResolveApi?.conditionParams ?? undefined,
+        autoResolveParams:
+          autoResolveEnabled && autoResolveCondition
+            ? stripEditorFields(autoResolveCondition)
+            : undefined,
         isEnabled,
         sortOrder,
         severity: severity || undefined,

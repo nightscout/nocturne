@@ -18,6 +18,9 @@ export const getRules = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.getRules:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get rules');
   }
 });
@@ -36,6 +39,9 @@ export const createRule = command(CreateAlertRuleRequestSchema, async (request) 
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.createRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create rule');
   }
 });
@@ -50,6 +56,9 @@ export const getRule = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.getRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get rule');
   }
 });
@@ -69,6 +78,9 @@ export const updateRule = command(z.object({ id: z.string(), request: UpdateAler
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.updateRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update rule');
   }
 });
@@ -87,6 +99,9 @@ export const deleteRule = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.deleteRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete rule');
   }
 });
@@ -106,6 +121,9 @@ export const toggleRule = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.toggleRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to toggle rule');
   }
 });

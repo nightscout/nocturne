@@ -6,56 +6,54 @@ import { getRequestEvent, query, command } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
-/** List OIDC identities linked to the currently-authenticated subject. */
-export const getLinkedIdentities = query(async () => {
+export const createIssue = command(async () => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
-    return await apiClient.oidc.getLinkedIdentities();
-  } catch (err) {
-    const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in oidc.getLinkedIdentities:', err);
-    const body = (err as any)?.body ?? (err as any)?.response;
-    const message = body?.message ?? body?.title ?? body?.detail;
-    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get linked identities');
-  }
-});
-
-/** Unlink an OIDC identity from the currently-authenticated subject.
-Blocked if this would leave the subject with zero primary auth factors. */
-export const unlinkIdentity = command(z.string(), async (identityId) => {
-  const apiClient = getRequestEvent().locals.apiClient;
-  try {
-    await apiClient.oidc.unlinkIdentity(identityId);
-    return { success: true };
-  } catch (err) {
-    const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in oidc.unlinkIdentity:', err);
-    const body = (err as any)?.body ?? (err as any)?.response;
-    const message = body?.message ?? body?.title ?? body?.detail;
-    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to unlink identity');
-  }
-});
-
-/** Logout and revoke the session. */
-export const logout = command(z.object({ providerId: z.string().optional() }).optional(), async (params) => {
-  const apiClient = getRequestEvent().locals.apiClient;
-  try {
-    const result = await apiClient.oidc.logout(params?.providerId);
+    const result = await apiClient.support.createIssue();
     return result;
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
-    console.error('Error in oidc.logout:', err);
+    console.error('Error in support.createIssue:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
     const message = body?.message ?? body?.title ?? body?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to logout');
+    throw error(500, 'Failed to create issue');
+  }
+});
+
+/** Returns a pre-filled GitHub new-issue URL for fallback when the API is unavailable. */
+export const getFallbackUrl = query(z.object({ template: z.string().optional(), title: z.string().optional(), body: z.string().optional() }).optional(), async (params) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    return await apiClient.support.getFallbackUrl(params?.template, params?.title, params?.body);
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in support.getFallbackUrl:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, 'Failed to get fallback url');
+  }
+});
+
+/** Returns operator support configuration for the frontend.
+When no operator is configured, accountBilling is null and the default GitHub flow applies. */
+export const getSupportConfig = query(async () => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    return await apiClient.support.getSupportConfig();
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in support.getSupportConfig:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, 'Failed to get support config');
   }
 });

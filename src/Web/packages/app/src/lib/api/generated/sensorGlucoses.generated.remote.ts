@@ -18,6 +18,9 @@ export const getAll = query(z.object({ from: z.coerce.date().optional(), to: z.c
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in sensorGlucose.getAll:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get all');
   }
 });
@@ -32,6 +35,9 @@ export const create = form(formCoerce(UpsertSensorGlucoseRequestSchema) as any, 
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in sensorGlucose.create:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create');
   }
 });
@@ -46,6 +52,9 @@ export const getById = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in sensorGlucose.getById:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get by id');
   }
 });
@@ -60,6 +69,9 @@ export const update = form(formCoerce(z.object({ id: z.string(), request: Upsert
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in sensorGlucose.update:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update');
   }
 });
@@ -75,6 +87,9 @@ export const remove = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in sensorGlucose.delete:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to remove');
   }
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { createRule } from "$api/generated/alertRules.generated.remote";
   import type {
     CreateAlertRuleRequest,
@@ -30,7 +31,7 @@
     Loader2,
   } from "lucide-svelte";
   import ChannelPicker from "$lib/components/alerts/ChannelPicker.svelte";
-  import { nodeToApi } from "$lib/components/alerts/types";
+  import { nodeToApi, stripEditorFields } from "$lib/components/alerts/types";
   import type { ConditionNode } from "$lib/components/alerts/types";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
@@ -262,17 +263,17 @@
   function buildRequest(preset: Preset): CreateAlertRuleRequest {
     const built = preset.buildRule(preset);
     const conditionApi = nodeToApi(built.condition);
-    const autoResolveApi = built.autoResolveEnabled
-      ? nodeToApi(built.autoResolveCondition)
-      : null;
 
     const isInfo = preset.severity === AlertRuleSeverity.Info;
+    // Info-severity rules default to InApp-only delivery (Task 19b convention).
+    // The InAppProvider keys notifications by the recipient's auth subjectId;
+    // empty destination would skip delivery silently.
     const channelsForPreset = isInfo
       ? [
           {
             channelType: ChannelType.InApp,
-            destination: "",
-            destinationLabel: "",
+            destination: page.data.user?.subjectId ?? "",
+            destinationLabel: page.data.user?.displayName ?? "Me",
           },
         ]
       : selectedChannels;
@@ -285,13 +286,20 @@
         destinationLabel: c.destinationLabel || undefined,
       }));
 
+    // ASYMMETRY: conditionType + conditionParams are persisted as separate columns
+    // (the params is just the kind-specific payload). autoResolveParams is a single
+    // jsonb column the backend deserialises directly into a ConditionNode envelope —
+    // it must include the `type` discriminator alongside the kind's payload field.
     return {
       name: preset.name,
       description: preset.description,
       conditionType: conditionApi?.conditionType,
       conditionParams: conditionApi?.conditionParams,
       autoResolveEnabled: built.autoResolveEnabled,
-      autoResolveParams: autoResolveApi?.conditionParams ?? undefined,
+      autoResolveParams:
+        built.autoResolveEnabled && built.autoResolveCondition
+          ? stripEditorFields(built.autoResolveCondition)
+          : undefined,
       isEnabled: true,
       sortOrder: presets.indexOf(preset),
       severity: preset.severity,
