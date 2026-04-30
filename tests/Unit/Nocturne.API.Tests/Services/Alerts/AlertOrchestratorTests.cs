@@ -112,8 +112,8 @@ public class AlertOrchestratorTests
         var rule = MakeRule();
         _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
-        _mockEvaluator.Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<SensorContext>()))
-            .Returns(false);
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
         _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.None));
 
@@ -136,8 +136,8 @@ public class AlertOrchestratorTests
 
         _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
-        _mockEvaluator.Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<SensorContext>()))
-            .Returns(true);
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.ExcursionOpened, _excursionId));
         _repository.Setup(r => r.GetSchedulesForRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
@@ -176,8 +176,8 @@ public class AlertOrchestratorTests
 
         _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
-        _mockEvaluator.Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<SensorContext>()))
-            .Returns(false);
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
         _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId));
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
@@ -201,8 +201,8 @@ public class AlertOrchestratorTests
 
         _repository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { rule });
-        _mockEvaluator.Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<SensorContext>()))
-            .Returns(true);
+        _mockEvaluator.Setup(e => e.EvaluateAsync(It.IsAny<string>(), It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         _excursionTracker.Setup(t => t.ProcessEvaluationAsync(_ruleId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ExcursionTransition(ExcursionTransitionType.ExcursionContinues, _excursionId));
         _repository.Setup(r => r.GetEscalatingInstancesDueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))

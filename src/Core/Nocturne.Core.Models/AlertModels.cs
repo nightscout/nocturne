@@ -68,6 +68,18 @@ public record SensorContext
     /// </summary>
     public IReadOnlyDictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; init; } =
         new Dictionary<Guid, ActiveAlertSnapshot>();
+
+    /// <summary>
+    /// Identifier of the rule currently being evaluated. Set by the orchestrator;
+    /// consumed by stateful evaluators (e.g. sustained) to key persistent timers.
+    /// </summary>
+    public Guid CurrentRuleId { get; init; }
+
+    /// <summary>
+    /// Path identifying the current node within the rule's condition tree (e.g. "composite[0].sustained").
+    /// Updated as recursive evaluators descend; consumed by stateful evaluators to key persistent timers.
+    /// </summary>
+    public string CurrentPath { get; init; } = string.Empty;
 }
 
 /// <summary>

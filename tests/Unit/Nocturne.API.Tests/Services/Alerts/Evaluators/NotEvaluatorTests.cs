@@ -52,7 +52,7 @@ public class NotEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_NotOfLeafThreshold_NegatesResult()
+    public async Task Evaluate_NotOfLeafThreshold_NegatesResult()
     {
         // Threshold "below 70" against value 60 = true; Not = false.
         var notTrue = new NotCondition(
@@ -60,15 +60,15 @@ public class NotEvaluatorTests
         var json = JsonSerializer.Serialize(notTrue, SnakeCaseOptions);
         var contextTrue = MakeContext(latestValue: 60m);
 
-        _sut.Evaluate(json, contextTrue).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, contextTrue, CancellationToken.None)).Should().BeFalse();
 
         // Threshold against value 100 = false; Not = true.
         var contextFalse = MakeContext(latestValue: 100m);
-        _sut.Evaluate(json, contextFalse).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, contextFalse, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Evaluate_NotOfCompositeAndOfTwoTrues_ReturnsFalse()
+    public async Task Evaluate_NotOfCompositeAndOfTwoTrues_ReturnsFalse()
     {
         var inner = new CompositeCondition("and", new List<ConditionNode>
         {
@@ -81,11 +81,11 @@ public class NotEvaluatorTests
         // value 60 < 70 (true) AND rate -4 <= -3 (true) => composite true => Not false
         var context = MakeContext(latestValue: 60m, trendRate: -4.0m);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Evaluate_NotOfCompositeOrOfTwoFalses_ReturnsTrue()
+    public async Task Evaluate_NotOfCompositeOrOfTwoFalses_ReturnsTrue()
     {
         var inner = new CompositeCondition("or", new List<ConditionNode>
         {
@@ -98,21 +98,21 @@ public class NotEvaluatorTests
         // value 100 not below 70, rate -1 not falling fast => composite false => Not true
         var context = MakeContext(latestValue: 100m, trendRate: -1.0m);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Evaluate_WithMissingChild_ReturnsFalse()
+    public async Task Evaluate_WithMissingChild_ReturnsFalse()
     {
         // NotCondition serialised with a null Child — defensive guard.
         var json = """{"child": null}""";
         var context = MakeContext();
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Evaluate_WithUnregisteredChildType_ReturnsTrue()
+    public async Task Evaluate_WithUnregisteredChildType_ReturnsTrue()
     {
         // Child type "iob" is not registered in this registry.
         // CompositeEvaluator-style fail-mode: missing evaluator => child evaluates false
@@ -121,7 +121,7 @@ public class NotEvaluatorTests
         var json = JsonSerializer.Serialize(notNode, SnakeCaseOptions);
         var context = MakeContext();
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     private static SensorContext MakeContext(decimal? latestValue = 100m, decimal? trendRate = 0m) => new()

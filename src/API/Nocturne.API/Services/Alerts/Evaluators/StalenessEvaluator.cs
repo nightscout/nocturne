@@ -45,28 +45,30 @@ public class StalenessEvaluator : IConditionEvaluator
     /// <inheritdoc/>
     /// <param name="conditionParamsJson">JSON representation of a <see cref="StalenessCondition"/>.</param>
     /// <param name="context">Current sensor context including <see cref="SensorContext.LastReadingAt"/>.</param>
-    public bool Evaluate(string conditionParamsJson, SensorContext context)
+    /// <param name="ct">Cancellation token (unused; this evaluator performs no I/O).</param>
+    public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
         var condition = JsonSerializer.Deserialize<StalenessCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
-            return false;
+            return Task.FromResult(false);
 
         // No reading at all: elapsed time is effectively infinite. Short-circuit on
         // operator before doing decimal math, since "infinity > N" is always true,
         // "infinity < N" always false, and "infinity == N" always false.
         if (context.LastReadingAt is null)
         {
-            return condition.Operator switch
+            var noReadingResult = condition.Operator switch
             {
                 ">" => true,
                 ">=" => true,
                 _ => false
             };
+            return Task.FromResult(noReadingResult);
         }
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var elapsedMinutes = (decimal)(now - context.LastReadingAt.Value).TotalMinutes;
 
-        return ComparisonOps.Compare(elapsedMinutes, condition.Operator, condition.Value);
+        return Task.FromResult(ComparisonOps.Compare(elapsedMinutes, condition.Operator, condition.Value));
     }
 }

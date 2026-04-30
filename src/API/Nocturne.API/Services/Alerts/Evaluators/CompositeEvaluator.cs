@@ -49,25 +49,45 @@ public class CompositeEvaluator : IConditionEvaluator
     /// <inheritdoc/>
     /// <param name="conditionParamsJson">JSON representation of a <see cref="CompositeCondition"/>.</param>
     /// <param name="context">Current sensor reading context passed to each sub-evaluator.</param>
+    /// <param name="ct">Cancellation token forwarded to each sub-evaluator.</param>
     /// <returns>
     /// <see langword="true"/> when all (AND) or any (OR) sub-conditions evaluate to <see langword="true"/>;
     /// <see langword="false"/> if the condition is null, empty, or has an unrecognised operator.
     /// </returns>
-    public bool Evaluate(string conditionParamsJson, SensorContext context)
+    public async Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
         var condition = JsonSerializer.Deserialize<CompositeCondition>(conditionParamsJson, JsonOptions);
         if (condition is null || condition.Conditions.Count == 0)
             return false;
 
-        return condition.Operator.ToLowerInvariant() switch
+        var op = condition.Operator.ToLowerInvariant();
+
+        // Manual short-circuit foreach: LINQ All/Any don't compose with async predicates without
+        // additional libraries, and we want to await each child before deciding to recurse.
+        if (op == "and")
         {
-            "and" => condition.Conditions.All(node => EvaluateNode(node, context)),
-            "or" => condition.Conditions.Any(node => EvaluateNode(node, context)),
-            _ => false
-        };
+            for (var i = 0; i < condition.Conditions.Count; i++)
+            {
+                if (!await EvaluateNodeAsync(condition.Conditions[i], i, context, ct))
+                    return false;
+            }
+            return true;
+        }
+
+        if (op == "or")
+        {
+            for (var i = 0; i < condition.Conditions.Count; i++)
+            {
+                if (await EvaluateNodeAsync(condition.Conditions[i], i, context, ct))
+                    return true;
+            }
+            return false;
+        }
+
+        return false;
     }
 
-    private bool EvaluateNode(ConditionNode node, SensorContext context)
+    private async Task<bool> EvaluateNodeAsync(ConditionNode node, int index, SensorContext context, CancellationToken ct)
     {
         var evaluator = Registry.GetEvaluator(node.Type);
         if (evaluator is null)
@@ -80,9 +100,14 @@ public class CompositeEvaluator : IConditionEvaluator
             "rate_of_change" => JsonSerializer.Serialize(node.RateOfChange, JsonOptions),
             "signal_loss" => JsonSerializer.Serialize(node.SignalLoss, JsonOptions),
             "composite" => JsonSerializer.Serialize(node.Composite, JsonOptions),
+            "not" => JsonSerializer.Serialize(node.Not, JsonOptions),
+            "sustained" => JsonSerializer.Serialize(node.Sustained, JsonOptions),
+            "staleness" => JsonSerializer.Serialize(node.Staleness, JsonOptions),
             _ => "{}"
         };
 
-        return evaluator.Evaluate(paramsJson, context);
+        // Path threading: descend into child[index] of kind <node.Type> (matches ConditionPath.Walk).
+        var childContext = context with { CurrentPath = $"{context.CurrentPath}[{index}].{node.Type}" };
+        return await evaluator.EvaluateAsync(paramsJson, childContext, ct);
     }
 }

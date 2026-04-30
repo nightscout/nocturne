@@ -33,104 +33,104 @@ public class StalenessEvaluatorTests
     [InlineData("<", false)]
     [InlineData("<=", false)]
     [InlineData("==", false)]
-    public void NoReading_OperatorSemantics(string op, bool expected)
+    public async Task NoReading_OperatorSemantics(string op, bool expected)
     {
         var json = $$"""{"operator": "{{op}}", "value": 15}""";
         var context = MakeContext(lastReadingAt: null);
 
-        _sut.Evaluate(json, context).Should().Be(expected);
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().Be(expected);
     }
 
     // ----- Finite-elapsed comparisons -----
 
     [Fact]
-    public void GreaterThan_TriggersWhenElapsedExceedsValue()
+    public async Task GreaterThan_TriggersWhenElapsedExceedsValue()
     {
         var json = """{"operator": ">", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-20));
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void GreaterThan_DoesNotTriggerAtBoundary()
+    public async Task GreaterThan_DoesNotTriggerAtBoundary()
     {
         var json = """{"operator": ">", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-15));
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void GreaterThan_DoesNotTriggerForFreshReading()
+    public async Task GreaterThan_DoesNotTriggerForFreshReading()
     {
         var json = """{"operator": ">", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-2));
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void GreaterThanOrEqual_TriggersAtBoundary()
+    public async Task GreaterThanOrEqual_TriggersAtBoundary()
     {
         var json = """{"operator": ">=", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-15));
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void LessThan_TriggersWhenWithinWindow()
+    public async Task LessThan_TriggersWhenWithinWindow()
     {
         var json = """{"operator": "<", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-10));
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void LessThan_DoesNotTriggerAtBoundary()
+    public async Task LessThan_DoesNotTriggerAtBoundary()
     {
         var json = """{"operator": "<", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-15));
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void LessThanOrEqual_TriggersAtBoundary()
+    public async Task LessThanOrEqual_TriggersAtBoundary()
     {
         var json = """{"operator": "<=", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-15));
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Equal_TriggersAtExactElapsed()
+    public async Task Equal_TriggersAtExactElapsed()
     {
         var json = """{"operator": "==", "value": 10}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-10));
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Equal_DoesNotTriggerWhenElapsedDiffers()
+    public async Task Equal_DoesNotTriggerWhenElapsedDiffers()
     {
         var json = """{"operator": "==", "value": 10}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-12));
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void UnknownOperator_ReturnsFalse()
+    public async Task UnknownOperator_ReturnsFalse()
     {
         var json = """{"operator": "~", "value": 15}""";
         var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-20));
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     private static SensorContext MakeContext(DateTime? lastReadingAt) => new()

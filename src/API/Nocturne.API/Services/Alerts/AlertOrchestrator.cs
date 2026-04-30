@@ -1,7 +1,9 @@
+using System.Runtime.Serialization;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Alerts;
@@ -70,7 +72,16 @@ internal sealed class AlertOrchestrator(
             return;
         }
 
-        var conditionMet = evaluator.Evaluate(rule.ConditionParams, context);
+        // Seed CurrentRuleId / CurrentPath so stateful evaluators (sustained) can key persistent
+        // timers, and recursive evaluators (composite/not/sustained) can extend the path as they
+        // descend. Root path is the rule's condition kind, e.g. "composite" — matching the
+        // convention in ConditionPath.Walk.
+        var rootContext = context with
+        {
+            CurrentRuleId = rule.Id,
+            CurrentPath = GetEnumMemberValue(rule.ConditionType),
+        };
+        var conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
         var transition = await excursionTracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
 
         switch (transition.Type)
@@ -217,5 +228,14 @@ internal sealed class AlertOrchestrator(
         {
             await escalationAdvancer.AdvanceAsync(instance, ct);
         }
+    }
+
+    private static string GetEnumMemberValue(AlertConditionType type)
+    {
+        var memberInfo = typeof(AlertConditionType).GetMember(type.ToString()).FirstOrDefault();
+        var attr = memberInfo?.GetCustomAttributes(typeof(EnumMemberAttribute), false)
+            .Cast<EnumMemberAttribute>()
+            .FirstOrDefault();
+        return attr?.Value ?? type.ToString().ToLowerInvariant();
     }
 }

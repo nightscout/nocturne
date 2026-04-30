@@ -49,16 +49,17 @@ public class NotEvaluator : IConditionEvaluator
     /// <inheritdoc/>
     /// <param name="conditionParamsJson">JSON representation of a <see cref="NotCondition"/>.</param>
     /// <param name="context">Current sensor reading context forwarded to the child evaluator.</param>
-    public bool Evaluate(string conditionParamsJson, SensorContext context)
+    /// <param name="ct">Cancellation token forwarded to the child evaluator.</param>
+    public async Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
         var condition = JsonSerializer.Deserialize<NotCondition>(conditionParamsJson, JsonOptions);
         if (condition?.Child is null)
             return false;
 
-        return !EvaluateChild(condition.Child, context);
+        return !await EvaluateChildAsync(condition.Child, context, ct);
     }
 
-    private bool EvaluateChild(ConditionNode node, SensorContext context)
+    private async Task<bool> EvaluateChildAsync(ConditionNode node, SensorContext context, CancellationToken ct)
     {
         var evaluator = Registry.GetEvaluator(node.Type);
         if (evaluator is null)
@@ -71,10 +72,13 @@ public class NotEvaluator : IConditionEvaluator
             "signal_loss" => JsonSerializer.Serialize(node.SignalLoss, JsonOptions),
             "composite" => JsonSerializer.Serialize(node.Composite, JsonOptions),
             "not" => JsonSerializer.Serialize(node.Not, JsonOptions),
+            "sustained" => JsonSerializer.Serialize(node.Sustained, JsonOptions),
             "staleness" => JsonSerializer.Serialize(node.Staleness, JsonOptions),
             _ => "{}"
         };
 
-        return evaluator.Evaluate(paramsJson, context);
+        // Path threading: a Not wrapper has a single child, indexed as [0].
+        var childContext = context with { CurrentPath = $"{context.CurrentPath}[0].{node.Type}" };
+        return await evaluator.EvaluateAsync(paramsJson, childContext, ct);
     }
 }

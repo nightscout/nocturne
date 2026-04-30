@@ -653,13 +653,19 @@ public static class ServiceRegistrationExtensions
         // Webhook infrastructure (reused by new alert engine)
         services.AddScoped<WebhookRequestSender>();
 
-        // Condition evaluators
-        services.AddSingleton<IConditionEvaluator, ThresholdEvaluator>();
-        services.AddSingleton<IConditionEvaluator, RateOfChangeEvaluator>();
-        services.AddSingleton<IConditionEvaluator, StalenessEvaluator>();
-        services.AddSingleton<IConditionEvaluator, CompositeEvaluator>();
-        services.AddSingleton<IConditionEvaluator, NotEvaluator>();
-        services.AddSingleton<ConditionEvaluatorRegistry>();
+        // Condition evaluators. Scoped because SustainedEvaluator depends on the scoped
+        // IConditionTimerStore (DbContext-backed); the registry is also scoped because it captures
+        // IEnumerable<IConditionEvaluator>.
+        services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
+        services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
+        services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
+        services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
+        services.AddScoped<IConditionEvaluator, NotEvaluator>();
+        services.AddScoped<IConditionEvaluator, SustainedEvaluator>();
+        services.AddScoped<ConditionEvaluatorRegistry>();
+
+        // Sustained-condition timer store
+        services.AddScoped<IConditionTimerStore, ConditionTimerRepository>();
 
         // Excursion tracker
         services.AddScoped<IExcursionTracker, ExcursionTracker>();
