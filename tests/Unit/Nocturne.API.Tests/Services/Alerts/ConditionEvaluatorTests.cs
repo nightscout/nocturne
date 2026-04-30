@@ -1,6 +1,5 @@
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
@@ -203,78 +202,6 @@ public class RateOfChangeEvaluatorTests
 
 #endregion
 
-#region SignalLossEvaluator
-
-[Trait("Category", "Unit")]
-public class SignalLossEvaluatorTests
-{
-    // Use a fixed "now" so tests are deterministic.
-    // FakeTimeProvider is set to this exact instant.
-    private static readonly DateTime FixedNow = new(2026, 3, 22, 12, 0, 0, DateTimeKind.Utc);
-    private readonly SignalLossEvaluator _sut;
-
-    public SignalLossEvaluatorTests()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(FixedNow));
-        _sut = new SignalLossEvaluator(timeProvider);
-    }
-
-    [Fact]
-    public void ConditionType_ShouldBeSignalLoss()
-    {
-        _sut.ConditionType.Should().Be(AlertConditionType.SignalLoss);
-    }
-
-    [Fact]
-    public void TriggersWhenElapsedExceedsTimeout()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        // Last reading was 20 minutes ago
-        var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-20));
-
-        _sut.Evaluate(json, context).Should().BeTrue();
-    }
-
-    [Fact]
-    public void DoesNotTriggerWhenWithinWindow()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        // Last reading was 10 minutes ago
-        var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-10));
-
-        _sut.Evaluate(json, context).Should().BeFalse();
-    }
-
-    [Fact]
-    public void DoesNotTriggerAtExactBoundary()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        // Last reading was exactly 15 minutes ago — not exceeded, so no alert
-        var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-15));
-
-        _sut.Evaluate(json, context).Should().BeFalse();
-    }
-
-    [Fact]
-    public void NullLastReadingAt_ReturnsTrue()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        var context = MakeContext(lastReadingAt: null);
-
-        _sut.Evaluate(json, context).Should().BeTrue();
-    }
-
-    private static SensorContext MakeContext(DateTime? lastReadingAt) => new()
-    {
-        LatestValue = 100m,
-        LatestTimestamp = FixedNow,
-        TrendRate = 0m,
-        LastReadingAt = lastReadingAt
-    };
-}
-
-#endregion
-
 #region CompositeEvaluator
 
 [Trait("Category", "Unit")]
@@ -291,12 +218,10 @@ public class CompositeEvaluatorTests
 
     public CompositeEvaluatorTests()
     {
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         var evaluators = new IConditionEvaluator[]
         {
             new ThresholdEvaluator(),
-            new RateOfChangeEvaluator(),
-            new SignalLossEvaluator(timeProvider)
+            new RateOfChangeEvaluator()
         };
 
         _registry = new ConditionEvaluatorRegistry(evaluators);
@@ -416,12 +341,10 @@ public class CompositeEvaluatorTests
     public void NestedComposite_Works()
     {
         // Register the composite evaluator itself in the registry
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         var evaluators = new List<IConditionEvaluator>
         {
             new ThresholdEvaluator(),
-            new RateOfChangeEvaluator(),
-            new SignalLossEvaluator(timeProvider)
+            new RateOfChangeEvaluator()
         };
         var registry = new ConditionEvaluatorRegistry(evaluators);
         var sp = new Mock<IServiceProvider>();

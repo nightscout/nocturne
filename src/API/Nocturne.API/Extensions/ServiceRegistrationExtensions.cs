@@ -656,7 +656,7 @@ public static class ServiceRegistrationExtensions
         // Condition evaluators
         services.AddSingleton<IConditionEvaluator, ThresholdEvaluator>();
         services.AddSingleton<IConditionEvaluator, RateOfChangeEvaluator>();
-        services.AddSingleton<IConditionEvaluator, SignalLossEvaluator>();
+        services.AddSingleton<IConditionEvaluator, StalenessEvaluator>();
         services.AddSingleton<IConditionEvaluator, CompositeEvaluator>();
         services.AddSingleton<ConditionEvaluatorRegistry>();
 
