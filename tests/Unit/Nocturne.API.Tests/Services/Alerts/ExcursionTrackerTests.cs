@@ -6,6 +6,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -518,6 +519,196 @@ public class ExcursionTrackerTests
         var r7 = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
         r7.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
         currentState!.State.Should().Be("idle");
+    }
+
+    #endregion
+
+    #region ForceCloseAsync
+
+    [Fact]
+    public async Task ForceClose_FromActive_ClosesExcursionAndResetsToIdle()
+    {
+        var excursionId = Guid.NewGuid();
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "active",
+            ActiveExcursionId = excursionId,
+            ConfirmationCount = 0,
+        });
+
+        AlertTrackerState? savedState = null;
+        _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
+            .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
+            .Returns(Task.CompletedTask);
+
+        var result = await _tracker.ForceCloseAsync(_ruleId, ExcursionCloseReason.AutoResolve, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+        result.ExcursionId.Should().Be(excursionId);
+        result.CloseReason.Should().Be(ExcursionCloseReason.AutoResolve);
+
+        savedState!.State.Should().Be("idle");
+        savedState.ActiveExcursionId.Should().BeNull();
+        savedState.ConfirmationCount.Should().Be(0);
+
+        _mockRepo.Verify(
+            x => x.CloseExcursionAsync(excursionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ForceClose_FromHysteresis_ClosesExcursionAndResetsToIdle()
+    {
+        var excursionId = Guid.NewGuid();
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "hysteresis",
+            ActiveExcursionId = excursionId,
+        });
+
+        AlertTrackerState? savedState = null;
+        _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
+            .Callback<AlertTrackerState, CancellationToken>((s, _) => savedState = s)
+            .Returns(Task.CompletedTask);
+
+        var result = await _tracker.ForceCloseAsync(_ruleId, ExcursionCloseReason.Manual, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+        result.ExcursionId.Should().Be(excursionId);
+        result.CloseReason.Should().Be(ExcursionCloseReason.Manual);
+        savedState!.State.Should().Be("idle");
+
+        _mockRepo.Verify(
+            x => x.CloseExcursionAsync(excursionId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ForceClose_FromIdle_NoOp()
+    {
+        SetupTrackerState(null);
+
+        var result = await _tracker.ForceCloseAsync(_ruleId, ExcursionCloseReason.AutoResolve, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.None);
+        result.ExcursionId.Should().BeNull();
+        result.CloseReason.Should().BeNull();
+
+        _mockRepo.Verify(
+            x => x.CloseExcursionAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockRepo.Verify(
+            x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ForceClose_FromConfirming_NoOp()
+    {
+        // confirming has no excursion id yet
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "confirming",
+            ConfirmationCount = 2,
+            ActiveExcursionId = null,
+        });
+
+        var result = await _tracker.ForceCloseAsync(_ruleId, ExcursionCloseReason.RuleDisabled, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.None);
+
+        _mockRepo.Verify(
+            x => x.CloseExcursionAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task HysteresisExpiry_Close_CarriesHysteresisReason()
+    {
+        SetupRule(); // hysteresis_minutes = 5
+        var excursionId = Guid.NewGuid();
+        var hysteresisStart = _timeProvider.GetUtcNow().UtcDateTime;
+
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "hysteresis",
+            ActiveExcursionId = excursionId,
+            UpdatedAt = hysteresisStart,
+        });
+        _mockRepo.Setup(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _timeProvider.Advance(TimeSpan.FromMinutes(6));
+
+        var result = await _tracker.ProcessEvaluationAsync(_ruleId, false, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.ExcursionClosed);
+        result.CloseReason.Should().Be(ExcursionCloseReason.Hysteresis);
+    }
+
+    #endregion
+
+    #region GetActiveExcursionIdAsync
+
+    [Fact]
+    public async Task GetActiveExcursionId_FromActive_ReturnsId()
+    {
+        var excursionId = Guid.NewGuid();
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "active",
+            ActiveExcursionId = excursionId,
+        });
+
+        var result = await _tracker.GetActiveExcursionIdAsync(_ruleId, CancellationToken.None);
+
+        result.Should().Be(excursionId);
+    }
+
+    [Fact]
+    public async Task GetActiveExcursionId_FromHysteresis_ReturnsId()
+    {
+        var excursionId = Guid.NewGuid();
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "hysteresis",
+            ActiveExcursionId = excursionId,
+        });
+
+        var result = await _tracker.GetActiveExcursionIdAsync(_ruleId, CancellationToken.None);
+
+        result.Should().Be(excursionId);
+    }
+
+    [Fact]
+    public async Task GetActiveExcursionId_FromIdle_ReturnsNull()
+    {
+        SetupTrackerState(null);
+
+        var result = await _tracker.GetActiveExcursionIdAsync(_ruleId, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetActiveExcursionId_FromConfirming_ReturnsNull()
+    {
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "confirming",
+            ConfirmationCount = 2,
+        });
+
+        var result = await _tracker.GetActiveExcursionIdAsync(_ruleId, CancellationToken.None);
+
+        result.Should().BeNull();
     }
 
     #endregion
