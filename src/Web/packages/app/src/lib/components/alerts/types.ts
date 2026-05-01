@@ -1,6 +1,11 @@
 import { AlertRuleSeverity, ChannelType } from "$api-clients";
 import type { AlertRuleResponse } from "$api-clients";
 
+// Wire format convention: all condition payload field names are snake_case to match
+// the backend's JsonNamingPolicy.SnakeCaseLower (see Nocturne.API/Services/Alerts/
+// Evaluators/EvaluatorJson.cs). This applies to every payload below — do not introduce
+// camelCase fields here.
+
 // ---------------------------------------------------------------------------
 // Recursive ConditionNode shape
 // ---------------------------------------------------------------------------
@@ -69,7 +74,7 @@ export interface StalenessPayload {
 export interface PredictedPayload {
 	operator: ComparisonOperator;
 	value: number;
-	withinMinutes: number;
+	within_minutes: number;
 }
 
 export type TrendBucket =
@@ -115,9 +120,9 @@ export interface SensorAgePayload {
 }
 
 export interface AlertStatePayload {
-	alertId: string;
+	alert_id: string;
 	state: "firing" | "acknowledged";
-	forMinutes?: number;
+	for_minutes?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +262,7 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 		case "predicted":
 			return {
 				type: "predicted",
-				predicted: { operator: "<=", value: 70, withinMinutes: 30 },
+				predicted: { operator: "<=", value: 70, within_minutes: 30 },
 			};
 		case "trend":
 			return { type: "trend", trend: { bucket: "falling" } };
@@ -288,7 +293,7 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 		case "alert_state":
 			return {
 				type: "alert_state",
-				alert_state: { alertId: "", state: "firing" },
+				alert_state: { alert_id: "", state: "firing" },
 			};
 		case "loop_stale":
 			return {

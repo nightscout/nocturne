@@ -349,11 +349,11 @@
         <Input
           id="predicted-within"
           type="number"
-          value={payload.withinMinutes}
+          value={payload.within_minutes}
           oninput={(e) => {
-            payload.withinMinutes = parseNumber(
+            payload.within_minutes = parseNumber(
               e.currentTarget.value,
-              payload.withinMinutes,
+              payload.within_minutes,
             );
           }}
         />
@@ -462,14 +462,14 @@
     </div>
   {:else if node.type === "alert_state"}
     {@const payload = ensurePayload("alert_state")}
-    {@const selectedRule = availableRules.find((r) => r.id === payload.alertId)}
+    {@const selectedRule = availableRules.find((r) => r.id === payload.alert_id)}
     <div class="space-y-2">
       <Label>Other rule</Label>
       <Select.Root
         type="single"
-        value={payload.alertId}
+        value={payload.alert_id}
         onValueChange={(v) => {
-          payload.alertId = v;
+          payload.alert_id = v;
         }}
       >
         <Select.Trigger>
@@ -506,10 +506,10 @@
         <Input
           id="alert-state-for"
           type="number"
-          value={payload.forMinutes ?? ""}
+          value={payload.for_minutes ?? ""}
           oninput={(e) => {
             const v = e.currentTarget.value;
-            payload.forMinutes = v.length > 0 ? parseNumber(v, 0) : undefined;
+            payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
           }}
         />
       </div>
