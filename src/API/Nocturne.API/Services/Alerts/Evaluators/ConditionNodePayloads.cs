@@ -43,6 +43,14 @@ internal static class ConditionNodePayloads
             "site_age" => node.SiteAge,
             "sensor_age" => node.SensorAge,
             "alert_state" => node.AlertState,
+            "loop_stale" => node.LoopStale,
+            "loop_enaction_stale" => node.LoopEnactionStale,
+            "pump_suspended" => node.PumpSuspended,
+            "pump_battery" => node.PumpBattery,
+            "temp_basal" => node.TempBasal,
+            "uploader_battery" => node.UploaderBattery,
+            "override_active" => node.OverrideActive,
+            "sensitivity_ratio" => node.SensitivityRatio,
             _ => null,
         };
 
