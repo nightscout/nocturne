@@ -52,12 +52,6 @@ public sealed record DataNeedsSet(
 /// </remarks>
 public static class RuleDataNeeds
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-    };
-
     /// <summary>
     /// Walks <paramref name="rules"/> and returns a <see cref="DataNeedsSet"/> with a flag
     /// set for every kind of optional context any rule depends on.
@@ -158,7 +152,7 @@ public static class RuleDataNeeds
     {
         try
         {
-            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+            return JsonSerializer.Deserialize<T>(json, EvaluatorJson.Options);
         }
         catch (JsonException)
         {

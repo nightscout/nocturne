@@ -23,12 +23,6 @@ namespace Nocturne.API.Services.Alerts;
 /// </remarks>
 public static class RuleReferenceResolver
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-    };
-
     /// <summary>
     /// Returns the subset of <paramref name="rules"/> that have no <c>alert_state</c> references
     /// to rule ids outside the input set. Order is preserved.
@@ -100,7 +94,7 @@ public static class RuleReferenceResolver
 
     private static T? TryDeserialize<T>(string json) where T : class
     {
-        try { return JsonSerializer.Deserialize<T>(json, JsonOptions); }
+        try { return JsonSerializer.Deserialize<T>(json, EvaluatorJson.Options); }
         catch (JsonException) { return null; }
     }
 

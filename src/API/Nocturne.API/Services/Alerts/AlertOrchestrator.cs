@@ -38,12 +38,6 @@ internal sealed class AlertOrchestrator(
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
 {
-    private static readonly JsonSerializerOptions AutoResolveJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-    };
-
     public async Task EvaluateAsync(SensorContext context, CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
@@ -141,7 +135,7 @@ internal sealed class AlertOrchestrator(
         ConditionNode? node;
         try
         {
-            node = JsonSerializer.Deserialize<ConditionNode>(rule.AutoResolveParams, AutoResolveJsonOptions);
+            node = JsonSerializer.Deserialize<ConditionNode>(rule.AutoResolveParams, EvaluatorJson.Options);
         }
         catch (JsonException ex)
         {

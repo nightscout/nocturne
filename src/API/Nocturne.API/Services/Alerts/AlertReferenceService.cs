@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -44,12 +45,6 @@ internal sealed class AlertReferenceService(
     ILogger<AlertReferenceService> logger)
     : IAlertReferenceService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-    };
-
     public async Task<IReadOnlyList<Guid>> FindReferencingRulesAsync(Guid ruleId, CancellationToken ct)
     {
         var rules = await LoadTenantRulesAsync(ct);
@@ -144,13 +139,13 @@ internal sealed class AlertReferenceService(
             return type switch
             {
                 AlertConditionType.Composite => new ConditionNode("composite",
-                    Composite: JsonSerializer.Deserialize<CompositeCondition>(conditionParams, JsonOptions)),
+                    Composite: JsonSerializer.Deserialize<CompositeCondition>(conditionParams, EvaluatorJson.Options)),
                 AlertConditionType.Not => new ConditionNode("not",
-                    Not: JsonSerializer.Deserialize<NotCondition>(conditionParams, JsonOptions)),
+                    Not: JsonSerializer.Deserialize<NotCondition>(conditionParams, EvaluatorJson.Options)),
                 AlertConditionType.Sustained => new ConditionNode("sustained",
-                    Sustained: JsonSerializer.Deserialize<SustainedCondition>(conditionParams, JsonOptions)),
+                    Sustained: JsonSerializer.Deserialize<SustainedCondition>(conditionParams, EvaluatorJson.Options)),
                 AlertConditionType.AlertState => new ConditionNode("alert_state",
-                    AlertState: JsonSerializer.Deserialize<AlertStateCondition>(conditionParams, JsonOptions)),
+                    AlertState: JsonSerializer.Deserialize<AlertStateCondition>(conditionParams, EvaluatorJson.Options)),
                 // Leaf kinds with no children — they cannot host alert_state references, so
                 // the wrapper shape doesn't matter for the walker; return any matching node.
                 _ => new ConditionNode(type.ToString().ToLowerInvariant()),

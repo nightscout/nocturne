@@ -376,7 +376,7 @@ public class AlertSweepService : BackgroundService
             if (conditions is null || conditions.Count == 0) continue;
 
             var composite = new CompositeCondition("and", conditions);
-            var json = JsonSerializer.Serialize(composite, AutoResolveJsonOptions);
+            var json = JsonSerializer.Serialize(composite, EvaluatorJson.Options);
             syntheticRules.Add(new AlertRuleSnapshot(
                 instance.AlertRuleId,
                 tenantId,
@@ -461,7 +461,7 @@ public class AlertSweepService : BackgroundService
                     && conditionsEl.ValueKind == JsonValueKind.Array)
                 {
                     conditions = JsonSerializer.Deserialize<List<ConditionNode>>(
-                        conditionsEl.GetRawText(), AutoResolveJsonOptions);
+                        conditionsEl.GetRawText(), EvaluatorJson.Options);
                 }
             }
         }
@@ -478,12 +478,6 @@ public class AlertSweepService : BackgroundService
         int ExtendMinutes,
         int MaxCount,
         List<ConditionNode>? Conditions);
-
-    private static readonly JsonSerializerOptions AutoResolveJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-    };
 
     /// <summary>
     /// Periodic counterpart to the orchestrator's per-reading auto-resolve. Catches
@@ -555,7 +549,7 @@ public class AlertSweepService : BackgroundService
                 ConditionNode? node;
                 try
                 {
-                    node = JsonSerializer.Deserialize<ConditionNode>(entry.Rule.AutoResolveParams, AutoResolveJsonOptions);
+                    node = JsonSerializer.Deserialize<ConditionNode>(entry.Rule.AutoResolveParams, EvaluatorJson.Options);
                 }
                 catch (JsonException ex)
                 {

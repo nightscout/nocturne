@@ -288,9 +288,7 @@ public record LoopStaleCondition(string Operator, int Minutes);
 public record LoopEnactionStaleCondition(string Operator, int Minutes);
 
 /// <summary>Pump suspension state. Optional ForMinutes measures from the StateSpan start.</summary>
-public record PumpSuspendedCondition(
-    [property: JsonPropertyName("is_active")] bool IsActive,
-    int? ForMinutes);
+public record PumpSuspendedCondition(bool IsActive, int? ForMinutes);
 
 /// <summary>Pump battery comparison (percent).</summary>
 public record PumpBatteryCondition(string Operator, decimal Value);
@@ -303,9 +301,7 @@ public record TempBasalCondition(TempBasalMetric Metric, string Operator, decima
 public record UploaderBatteryCondition(string Operator, decimal Value);
 
 /// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
-public record OverrideActiveCondition(
-    [property: JsonPropertyName("is_active")] bool IsActive,
-    int? ForMinutes);
+public record OverrideActiveCondition(bool IsActive, int? ForMinutes);
 
 /// <summary>OpenAPS sensitivity ratio (autosens) comparison. AAPS/Trio only;
 /// silently false on Loop iOS via null-suppression.</summary>
