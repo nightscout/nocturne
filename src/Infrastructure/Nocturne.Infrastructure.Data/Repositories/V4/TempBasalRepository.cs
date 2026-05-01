@@ -292,4 +292,15 @@ public class TempBasalRepository : ITempBasalRepository
             _context.TempBasals.Where(e => e.DataSource == source && e.StartTimestamp >= from && e.StartTimestamp <= to),
             _auditContext, ct);
     }
+
+    /// <inheritdoc />
+    public async Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default)
+    {
+        var entity = await _context.TempBasals
+            .AsNoTracking()
+            .Where(t => t.StartTimestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
+            .OrderByDescending(t => t.StartTimestamp)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
+    }
 }
