@@ -672,6 +672,14 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, SiteAgeEvaluator>();
         services.AddScoped<IConditionEvaluator, SensorAgeEvaluator>();
         services.AddScoped<IConditionEvaluator, AlertStateEvaluator>();
+        services.AddScoped<IConditionEvaluator, LoopStaleEvaluator>();
+        services.AddScoped<IConditionEvaluator, LoopEnactionStaleEvaluator>();
+        services.AddScoped<IConditionEvaluator, PumpSuspendedEvaluator>();
+        services.AddScoped<IConditionEvaluator, PumpBatteryEvaluator>();
+        services.AddScoped<IConditionEvaluator, TempBasalEvaluator>();
+        services.AddScoped<IConditionEvaluator, UploaderBatteryEvaluator>();
+        services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
+        services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
         services.AddScoped<ConditionEvaluatorRegistry>();
 
         // Sustained-condition timer store
