@@ -45,9 +45,6 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// only ever decays carbs over a similar horizon.</summary>
     private const int TreatmentLookbackHours = 24;
 
-    /// <summary>Hard cap on treatments returned by the underlying paged service.</summary>
-    private const int TreatmentFetchLimit = 500;
-
     /// <summary>Predictions are produced at fixed intervals from "now"; this is the cadence
     /// used by both AID device-status uploads and the oref WASM curve.</summary>
     private const int PredictionIntervalMinutes = 5;
@@ -296,18 +293,18 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
     /// <summary>
     /// Fetches treatments within the IOB/COB lookback window ending at <paramref name="now"/>.
-    /// The treatment service does not currently support an arbitrary as-of cutoff in its
-    /// pagination API, so we fetch a bounded page (newest-first) and slice client-side.
-    /// For the live path that's identical to the previous behaviour; for replay the upper
-    /// bound is the replay tick rather than wall-clock now.
+    /// Uses <c>ITreatmentService.GetTreatmentsByRangeAsync</c> so the read is bounded by
+    /// <c>[now - 24h, now]</c> directly at the data layer — replay paths land on the correct
+    /// historical window regardless of how many newer treatments the tenant has logged after
+    /// <paramref name="now"/>.
     /// </summary>
     private async Task<List<Treatment>> FetchRecentTreatmentsAsync(DateTime now, CancellationToken ct)
     {
         var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
         var cutoffMills = nowMills - (TreatmentLookbackHours * 60L * 60L * 1000L);
 
-        var page = await _deps.Treatments.GetTreatmentsAsync(TreatmentFetchLimit, 0, ct);
-        return page.Where(t => t.Mills >= cutoffMills && t.Mills <= nowMills).ToList();
+        var treatments = await _deps.Treatments.GetTreatmentsByRangeAsync(cutoffMills, nowMills, ct);
+        return treatments.ToList();
     }
 
     private async Task<decimal?> ComputeIobAsync(List<Treatment> treatments, CancellationToken ct)

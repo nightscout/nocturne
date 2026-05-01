@@ -51,6 +51,35 @@ public class TreatmentServiceTests
     }
 
     [Fact]
+    public async Task GetTreatmentsByRangeAsync_DelegatesToStoreWithBounds()
+    {
+        var expected = new List<Treatment>
+        {
+            new() { Id = "1", Mills = 1_700_000_500_000L, EventType = "Meal Bolus" },
+            new() { Id = "2", Mills = 1_700_000_100_000L, EventType = "Carb Correction" },
+        };
+        _mockStore.Setup(x => x.GetByRangeAsync(1_700_000_000_000L, 1_700_000_999_000L, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected.AsReadOnly());
+
+        var result = await _treatmentService.GetTreatmentsByRangeAsync(
+            1_700_000_000_000L, 1_700_000_999_000L, CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        _mockStore.Verify(x => x.GetByRangeAsync(1_700_000_000_000L, 1_700_000_999_000L, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTreatmentsByRangeAsync_EmptyRange_ReturnsEmpty()
+    {
+        _mockStore.Setup(x => x.GetByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Treatment>());
+
+        var result = await _treatmentService.GetTreatmentsByRangeAsync(0L, 0L, CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CreateTreatmentsAsync_ShouldInvalidateCacheAndPublishEvents()
     {
         var created = new List<Treatment> { new Treatment { Id = "1" } };

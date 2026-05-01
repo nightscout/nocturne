@@ -82,6 +82,19 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Treatment>> GetByRangeAsync(
+        long fromMills, long toMills, CancellationToken ct = default)
+    {
+        // Project across all V4 treatment repositories; bounds are inclusive on both ends.
+        // The projection service already orders newest-first internally, but we re-sort here
+        // to make the contract explicit at the read boundary.
+        var projected = await _projection.GetProjectedTreatmentsAsync(
+            fromMills, toMills, limit: int.MaxValue, nativeOnly: false, ct: ct);
+
+        return projected.OrderByDescending(t => t.Mills).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> GetModifiedSinceAsync(
         long lastModifiedMills, int limit, CancellationToken ct = default)
     {

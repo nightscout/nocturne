@@ -45,7 +45,7 @@ public class SensorContextEnricherTests
 
         await enricher.EnrichAsync(BaseContext(trendRate: 1.5m), new[] { rule }, _tenantId, CancellationToken.None);
 
-        _treatmentService.Verify(s => s.GetTreatmentsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
         _iobService.Verify(s => s.CalculateTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<CancellationToken>()), Times.Never);
         _cobService.Verify(s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -63,7 +63,7 @@ public class SensorContextEnricherTests
         var enriched = await enricher.EnrichAsync(BaseContext(trendRate: 4.5m), new[] { rule }, _tenantId, CancellationToken.None);
 
         enriched.TrendBucket.Should().Be(TrendBucket.RisingFast);
-        _treatmentService.Verify(s => s.GetTreatmentsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
         _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -71,8 +71,8 @@ public class SensorContextEnricherTests
     public async Task IobAndCob_share_one_treatment_fetch()
     {
         var enricher = BuildEnricher();
-        _treatmentService.Setup(s => s.GetTreatmentsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment>());
+        _treatmentService.Setup(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Treatment>());
         _iobService.Setup(s => s.CalculateTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobResult { Iob = 1.5 });
         _cobService.Setup(s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -93,7 +93,7 @@ public class SensorContextEnricherTests
 
         enriched.IobUnits.Should().Be(1.5m);
         enriched.CobGrams.Should().Be(24.0m);
-        _treatmentService.Verify(s => s.GetTreatmentsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+        _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
