@@ -237,6 +237,160 @@ public class ConditionNodeSerializationTests
     }
 
     [Fact]
+    public void LoopStale_RoundTrips()
+    {
+        var node = new ConditionNode("loop_stale", LoopStale: new LoopStaleCondition(">", 10));
+
+        var result = RoundTrip(node);
+
+        result.Type.Should().Be("loop_stale");
+        result.LoopStale.Should().NotBeNull();
+        result.LoopStale!.Operator.Should().Be(">");
+        result.LoopStale.Minutes.Should().Be(10);
+        result.LoopEnactionStale.Should().BeNull();
+    }
+
+    [Fact]
+    public void LoopEnactionStale_RoundTrips()
+    {
+        var node = new ConditionNode("loop_enaction_stale",
+            LoopEnactionStale: new LoopEnactionStaleCondition(">=", 15));
+
+        var result = RoundTrip(node);
+
+        result.LoopEnactionStale.Should().NotBeNull();
+        result.LoopEnactionStale!.Operator.Should().Be(">=");
+        result.LoopEnactionStale.Minutes.Should().Be(15);
+    }
+
+    [Fact]
+    public void PumpSuspended_RoundTrips()
+    {
+        var node = new ConditionNode("pump_suspended",
+            PumpSuspended: new PumpSuspendedCondition(true, 30));
+
+        var result = RoundTrip(node);
+
+        result.PumpSuspended.Should().NotBeNull();
+        result.PumpSuspended!.EqualsValue.Should().BeTrue();
+        result.PumpSuspended.ForMinutes.Should().Be(30);
+    }
+
+    [Fact]
+    public void PumpSuspended_WireUsesEqualsField()
+    {
+        var node = new ConditionNode("pump_suspended",
+            PumpSuspended: new PumpSuspendedCondition(true, null));
+
+        var json = JsonSerializer.Serialize(node, Options);
+
+        json.Should().Contain("\"equals\":true");
+    }
+
+    [Fact]
+    public void PumpBattery_RoundTrips()
+    {
+        var node = new ConditionNode("pump_battery", PumpBattery: new PumpBatteryCondition("<", 20m));
+
+        var result = RoundTrip(node);
+
+        result.PumpBattery.Should().NotBeNull();
+        result.PumpBattery!.Operator.Should().Be("<");
+        result.PumpBattery.Value.Should().Be(20m);
+    }
+
+    [Fact]
+    public void TempBasal_RoundTrips()
+    {
+        var node = new ConditionNode("temp_basal",
+            TempBasal: new TempBasalCondition(TempBasalMetric.PercentOfScheduled, ">", 150m));
+
+        var result = RoundTrip(node);
+
+        result.TempBasal.Should().NotBeNull();
+        result.TempBasal!.Metric.Should().Be(TempBasalMetric.PercentOfScheduled);
+        result.TempBasal.Operator.Should().Be(">");
+        result.TempBasal.Value.Should().Be(150m);
+    }
+
+    [Fact]
+    public void TempBasal_MetricWireIsSnakeCase()
+    {
+        var node = new ConditionNode("temp_basal",
+            TempBasal: new TempBasalCondition(TempBasalMetric.PercentOfScheduled, ">", 150m));
+
+        var json = JsonSerializer.Serialize(node, Options);
+
+        json.Should().Contain("\"metric\":\"percent_of_scheduled\"");
+    }
+
+    [Fact]
+    public void UploaderBattery_RoundTrips()
+    {
+        var node = new ConditionNode("uploader_battery",
+            UploaderBattery: new UploaderBatteryCondition("<=", 15m));
+
+        var result = RoundTrip(node);
+
+        result.UploaderBattery.Should().NotBeNull();
+        result.UploaderBattery!.Operator.Should().Be("<=");
+        result.UploaderBattery.Value.Should().Be(15m);
+    }
+
+    [Fact]
+    public void OverrideActive_RoundTrips()
+    {
+        var node = new ConditionNode("override_active",
+            OverrideActive: new OverrideActiveCondition(true, 60));
+
+        var result = RoundTrip(node);
+
+        result.OverrideActive.Should().NotBeNull();
+        result.OverrideActive!.EqualsValue.Should().BeTrue();
+        result.OverrideActive.ForMinutes.Should().Be(60);
+    }
+
+    [Fact]
+    public void SensitivityRatio_RoundTrips()
+    {
+        var node = new ConditionNode("sensitivity_ratio",
+            SensitivityRatio: new SensitivityRatioCondition("<", 0.8m));
+
+        var result = RoundTrip(node);
+
+        result.SensitivityRatio.Should().NotBeNull();
+        result.SensitivityRatio!.Operator.Should().Be("<");
+        result.SensitivityRatio.Value.Should().Be(0.8m);
+    }
+
+    [Fact]
+    public void Composite_OfNotSustainedLoopStale_RoundTrips()
+    {
+        // composite { not { sustained { loop_stale } } } — validates wrapper recursion
+        // continues to round-trip with new leaf kinds.
+        var loopStale = new ConditionNode("loop_stale", LoopStale: new LoopStaleCondition(">", 10));
+        var sustained = new ConditionNode("sustained", Sustained: new SustainedCondition(5, loopStale));
+        var not = new ConditionNode("not", Not: new NotCondition(sustained));
+        var composite = new ConditionNode("composite",
+            Composite: new CompositeCondition("and", new List<ConditionNode> { not }));
+
+        var result = RoundTrip(composite);
+
+        result.Type.Should().Be("composite");
+        result.Composite!.Conditions.Should().HaveCount(1);
+        var notNode = result.Composite.Conditions[0];
+        notNode.Type.Should().Be("not");
+        var sustainedNode = notNode.Not!.Child;
+        sustainedNode.Type.Should().Be("sustained");
+        sustainedNode.Sustained!.Minutes.Should().Be(5);
+        var leaf = sustainedNode.Sustained.Child;
+        leaf.Type.Should().Be("loop_stale");
+        leaf.LoopStale.Should().NotBeNull();
+        leaf.LoopStale!.Operator.Should().Be(">");
+        leaf.LoopStale.Minutes.Should().Be(10);
+    }
+
+    [Fact]
     public void Composite_OfNotSustainedThreshold_RoundTrips()
     {
         // composite { not { sustained { threshold } } }
