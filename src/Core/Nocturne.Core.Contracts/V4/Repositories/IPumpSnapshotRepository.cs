@@ -78,6 +78,21 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the latest <see cref="PumpSnapshot"/> for the current tenant, or <c>null</c>
+    /// if none exists. Powers <c>PumpBattery</c> evaluation and acts as the freshness gate
+    /// for the pump-suspension projection.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="GetLatestBeforeAsync"/>, which uses a strict <c>&lt;</c>
+    /// comparison for transition detection. This method uses inclusive <c>&lt;=</c> so
+    /// callers can pin replay to a specific timestamp.
+    /// </remarks>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
+    /// when <c>null</c>, returns the absolute latest.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<PumpSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
+
     /// <summary>Count <see cref="PumpSnapshot"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
