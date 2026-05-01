@@ -158,14 +158,18 @@ public class RuleDataNeedsTests
     }
 
     [Fact]
-    public void LoopEnactionStale_rule_sets_LastApsEnacted_only()
+    public void LoopEnactionStale_rule_sets_LastApsEnacted_and_LastApsCycle()
     {
+        // Co-fetch invariant: LoopEnactionStale's evaluator reads HasEverApsCycled (the
+        // shared cold-start guard, since there is no separate HasEverApsEnacted flag), so
+        // RuleDataNeeds must request both timestamps. Without LastApsCycle, a tenant whose
+        // only enabled looping rule is LoopEnactionStale would never fire on a healthy loop.
         var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"operator":">","minutes":15}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
         result.NeedsLastApsEnacted.Should().BeTrue();
-        result.NeedsLastApsCycle.Should().BeFalse();
+        result.NeedsLastApsCycle.Should().BeTrue();
     }
 
     [Fact]

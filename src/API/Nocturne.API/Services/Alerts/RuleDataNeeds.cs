@@ -135,7 +135,14 @@ public static class RuleDataNeeds
             case AlertConditionType.Trend: b.Trend = true; break;
             case AlertConditionType.AlertState: b.ActiveAlerts = true; break;
             case AlertConditionType.LoopStale: b.LastApsCycle = true; break;
-            case AlertConditionType.LoopEnactionStale: b.LastApsEnacted = true; break;
+            case AlertConditionType.LoopEnactionStale:
+                b.LastApsEnacted = true;
+                // Co-fetch LastApsCycle so HasEverApsCycled is populated. The evaluator's
+                // cold-start guard reads HasEverApsCycled (there is no separate
+                // HasEverApsEnacted flag); without this co-fetch a tenant whose only
+                // enabled rule is LoopEnactionStale would never fire.
+                b.LastApsCycle = true;
+                break;
             case AlertConditionType.PumpSuspended: b.PumpStatus = true; break;
             case AlertConditionType.PumpBattery: b.PumpStatus = true; break;
             case AlertConditionType.TempBasal: b.TempBasal = true; break;

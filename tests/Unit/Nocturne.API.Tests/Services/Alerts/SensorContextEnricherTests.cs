@@ -229,6 +229,27 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
+    public async Task LoopEnactionStale_only_rule_populates_HasEverApsCycled_when_snapshot_exists()
+    {
+        // Regression: LoopEnactionStaleEvaluator's cold-start guard reads HasEverApsCycled
+        // (there is no separate HasEverApsEnacted flag). RuleDataNeeds must therefore
+        // co-fetch LastApsCycle for LoopEnactionStale rules, otherwise a tenant whose
+        // only enabled looping rule is LoopEnactionStale would never fire on a healthy loop.
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(now.AddMinutes(-3));
+        _apsSnapshotRepository.Setup(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(now.AddMinutes(-3));
+        var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"operator":">","minutes":15}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.HasEverApsCycled.Should().BeTrue("the enricher must populate the cold-start guard for LoopEnactionStale's evaluator");
+        enriched.LastApsEnactedAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task PumpStatus_need_fetches_pump_snapshot_and_state_span()
     {
         var enricher = BuildEnricher();
