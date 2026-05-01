@@ -77,10 +77,12 @@ describe("defaultPayload", () => {
 describe("nodeFromApi / nodeToApi", () => {
 	it("wraps API kind + payload into a ConditionNode", () => {
 		const node = nodeFromApi("threshold", { direction: "below", value: 70 });
-		expect(node).toEqual({
+		// nodeFromApi stamps _uid for editor-side React-keying; assert ignoring it.
+		expect(node).toMatchObject({
 			type: "threshold",
 			threshold: { direction: "below", value: 70 },
 		});
+		expect(node?._uid).toBeDefined();
 	});
 
 	it("returns null when kind or params are missing", () => {
