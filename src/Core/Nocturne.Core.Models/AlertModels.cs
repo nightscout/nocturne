@@ -81,6 +81,51 @@ public record SensorContext
     /// Updated as recursive evaluators descend; consumed by stateful evaluators to key persistent timers.
     /// </summary>
     public string CurrentPath { get; init; } = string.Empty;
+
+    // ----- Looping facts -----
+
+    /// <summary>Timestamp of the latest APS cycle (suggested or enacted), or null when none observed.</summary>
+    public DateTime? LastApsCycleAt { get; init; }
+
+    /// <summary>Timestamp of the latest enacted APS cycle, or null when none observed.</summary>
+    public DateTime? LastApsEnactedAt { get; init; }
+
+    /// <summary>Latest pump battery level in percent, when available.</summary>
+    public decimal? PumpBatteryPercent { get; init; }
+
+    /// <summary>Currently active temp basal projection, or null when no temp is active.</summary>
+    public TempBasalSnapshot? ActiveTempBasal { get; init; }
+
+    /// <summary>Latest uploader (phone) battery level in percent, when available.</summary>
+    public decimal? UploaderBatteryPercent { get; init; }
+
+    /// <summary>Currently active override projection, or null when no override is active.</summary>
+    public OverrideSnapshot? ActiveOverride { get; init; }
+
+    /// <summary>
+    /// Currently active pump-suspension projection, or null when not suspended OR when the
+    /// latest pump snapshot is itself stale (preventing latched suspension on offline uploaders).
+    /// </summary>
+    public PumpSuspensionSnapshot? ActivePumpSuspension { get; init; }
+
+    /// <summary>Latest non-null APS sensitivity ratio (autosens), when available.</summary>
+    public decimal? SensitivityRatio { get; init; }
+
+    // ----- Cold-start null-suppression flags -----
+    // False ⇒ the underlying fact has never been observed for this tenant; the evaluator
+    // should return false rather than treat null as "infinity stale" or similar.
+
+    /// <summary>True when the tenant has at least one ApsSnapshot recorded.</summary>
+    public bool HasEverApsCycled { get; init; }
+
+    /// <summary>True when the tenant has at least one PumpSnapshot recorded.</summary>
+    public bool HasEverPumpSnapshot { get; init; }
+
+    /// <summary>True when the tenant has at least one UploaderSnapshot recorded.</summary>
+    public bool HasEverUploaderSnapshot { get; init; }
+
+    /// <summary>True when the tenant has at least one ApsSnapshot with a non-null sensitivity ratio.</summary>
+    public bool HasEverApsSensitivity { get; init; }
 }
 
 /// <summary>
