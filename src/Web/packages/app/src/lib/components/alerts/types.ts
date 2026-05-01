@@ -135,13 +135,21 @@ export interface AlertStatePayload {
 
 export type TempBasalMetric = "rate" | "percent_of_scheduled";
 
+/**
+ * Staleness is conceptually directional ("more than N minutes since…"), so the
+ * loop-staleness kinds only accept `>` and `>=`. The wider `StalenessPayload`
+ * (BG staleness) was shipped accepting all four operators and predates this
+ * narrowing; widening would break stored rules using `<` for auto-resolve.
+ */
+export type StalenessOperator = ">" | ">=";
+
 export interface LoopStalePayload {
-	operator: ComparisonOperator;
+	operator: StalenessOperator;
 	minutes: number;
 }
 
 export interface LoopEnactionStalePayload {
-	operator: ComparisonOperator;
+	operator: StalenessOperator;
 	minutes: number;
 }
 
@@ -356,10 +364,32 @@ export function nodeFromApi(
 	const k = kind as ConditionKind;
 	const node: ConditionNode = { type: k, _uid: newUid() };
 	(node as Record<string, unknown>)[k] = params;
+	// Defensive: a malformed loop-staleness rule with a `<`/`<=` operator would
+	// render an unselectable value in the editor (the dropdown only offers `>`
+	// and `>=`). Coerce on inbound and warn so we notice if it ever happens.
+	coerceStalenessOperator(node);
 	// Recursively assign uids to nested nodes so keyed each-blocks have stable
 	// identity for every level of the tree, not just the root.
 	assignUidsRecursive(node);
 	return node;
+}
+
+function coerceStalenessOperator(node: ConditionNode): void {
+	const payload =
+		node.type === "loop_stale"
+			? node.loop_stale
+			: node.type === "loop_enaction_stale"
+				? node.loop_enaction_stale
+				: null;
+	if (!payload) return;
+	const op = payload.operator as ComparisonOperator;
+	if (op === "<" || op === "<=") {
+		// eslint-disable-next-line no-console
+		console.warn(
+			`[alerts] coercing ${node.type} operator '${op}' → '>' (staleness only supports '>' / '>=')`,
+		);
+		payload.operator = ">";
+	}
 }
 
 function assignUidsRecursive(node: ConditionNode): void {
