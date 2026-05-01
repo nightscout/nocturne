@@ -5,7 +5,6 @@ namespace Nocturne.Core.Models.Alerts;
 public sealed record TempBasalSnapshot(
     decimal Rate,
     decimal? ScheduledRate,
-    decimal? PercentOfScheduled,
     DateTime StartedAt);
 
 /// <summary>Lightweight projection of an active override for alert evaluation.</summary>
@@ -16,5 +15,6 @@ public sealed record OverrideSnapshot(
     string? Name);
 
 /// <summary>Lightweight projection of an active pump-suspension StateSpan for alert evaluation.
-/// Set to null when the latest PumpSnapshot is itself stale (see design §7).</summary>
+/// Set to null when the underlying pump snapshot is stale, so suspension conditions don't latch
+/// on stale data after the uploader goes offline.</summary>
 public sealed record PumpSuspensionSnapshot(DateTime StartedAt);

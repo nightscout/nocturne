@@ -272,19 +272,19 @@ public class ConditionNodeSerializationTests
         var result = RoundTrip(node);
 
         result.PumpSuspended.Should().NotBeNull();
-        result.PumpSuspended!.EqualsValue.Should().BeTrue();
+        result.PumpSuspended!.IsActive.Should().BeTrue();
         result.PumpSuspended.ForMinutes.Should().Be(30);
     }
 
     [Fact]
-    public void PumpSuspended_WireUsesEqualsField()
+    public void PumpSuspended_WireUsesIsActiveField()
     {
         var node = new ConditionNode("pump_suspended",
             PumpSuspended: new PumpSuspendedCondition(true, null));
 
         var json = JsonSerializer.Serialize(node, Options);
 
-        json.Should().Contain("\"equals\":true");
+        json.Should().Contain("\"is_active\":true");
     }
 
     [Fact]
@@ -346,7 +346,7 @@ public class ConditionNodeSerializationTests
         var result = RoundTrip(node);
 
         result.OverrideActive.Should().NotBeNull();
-        result.OverrideActive!.EqualsValue.Should().BeTrue();
+        result.OverrideActive!.IsActive.Should().BeTrue();
         result.OverrideActive.ForMinutes.Should().Be(60);
     }
 

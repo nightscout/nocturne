@@ -239,10 +239,8 @@ public record LoopStaleCondition(string Operator, int Minutes);
 public record LoopEnactionStaleCondition(string Operator, int Minutes);
 
 /// <summary>Pump suspension state. Optional ForMinutes measures from the StateSpan start.</summary>
-/// <remarks>The wire field is <c>equals</c>; the C# property is renamed to avoid colliding with
-/// the record-generated <see cref="object.Equals(object?)"/>.</remarks>
 public record PumpSuspendedCondition(
-    [property: JsonPropertyName("equals")] bool EqualsValue,
+    [property: JsonPropertyName("is_active")] bool IsActive,
     int? ForMinutes);
 
 /// <summary>Pump battery comparison (percent).</summary>
@@ -256,10 +254,8 @@ public record TempBasalCondition(TempBasalMetric Metric, string Operator, decima
 public record UploaderBatteryCondition(string Operator, decimal Value);
 
 /// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
-/// <remarks>The wire field is <c>equals</c>; the C# property is renamed to avoid colliding with
-/// the record-generated <see cref="object.Equals(object?)"/>.</remarks>
 public record OverrideActiveCondition(
-    [property: JsonPropertyName("equals")] bool EqualsValue,
+    [property: JsonPropertyName("is_active")] bool IsActive,
     int? ForMinutes);
 
 /// <summary>OpenAPS sensitivity ratio (autosens) comparison. AAPS/Trio only;
