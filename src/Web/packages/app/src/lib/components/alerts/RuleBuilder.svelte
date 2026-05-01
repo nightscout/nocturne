@@ -3,6 +3,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
+  import { Switch } from "$lib/components/ui/switch";
   import { Plus, X } from "lucide-svelte";
   import Self from "./RuleBuilder.svelte";
   import {
@@ -11,6 +12,7 @@
     type ConditionNode,
     type ComparisonOperator,
     type TrendBucket,
+    type TempBasalMetric,
   } from "./types";
 
   interface AvailableRule {
@@ -46,6 +48,14 @@
     site_age: "Site age",
     sensor_age: "Sensor age",
     alert_state: "Other rule state",
+    loop_stale: "Loop has stopped",
+    loop_enaction_stale: "Loop not enacting",
+    pump_suspended: "Pump suspended",
+    pump_battery: "Pump battery",
+    temp_basal: "Temp basal",
+    uploader_battery: "Phone battery",
+    override_active: "Override active",
+    sensitivity_ratio: "Insulin sensitivity",
   };
 
   const kinds: ConditionKind[] = [
@@ -64,7 +74,20 @@
     "site_age",
     "sensor_age",
     "alert_state",
+    "loop_stale",
+    "loop_enaction_stale",
+    "pump_suspended",
+    "pump_battery",
+    "temp_basal",
+    "uploader_battery",
+    "override_active",
+    "sensitivity_ratio",
   ];
+
+  const tempBasalMetricLabels: Record<TempBasalMetric, string> = {
+    rate: "Rate (U/hr)",
+    percent_of_scheduled: "Percent of scheduled",
+  };
 
   const operatorLabels: Record<ComparisonOperator, string> = {
     ">=": "≥",
@@ -491,5 +514,287 @@
         />
       </div>
     </div>
+  {:else if node.type === "loop_stale"}
+    {@const payload = ensurePayload("loop_stale")}
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <Label>Operator</Label>
+        <Select.Root
+          type="single"
+          value={payload.operator}
+          onValueChange={(v) => {
+            payload.operator = v as ComparisonOperator;
+          }}
+        >
+          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
+          <Select.Content>
+            <Select.Item value=">" label=">" />
+            <Select.Item value=">=" label="≥" />
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="loop-stale-minutes">Minutes</Label>
+        <Input
+          id="loop-stale-minutes"
+          type="number"
+          min="1"
+          value={payload.minutes}
+          oninput={(e) => {
+            payload.minutes = parseNumber(e.currentTarget.value, payload.minutes);
+          }}
+        />
+      </div>
+    </div>
+  {:else if node.type === "loop_enaction_stale"}
+    {@const payload = ensurePayload("loop_enaction_stale")}
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <Label>Operator</Label>
+        <Select.Root
+          type="single"
+          value={payload.operator}
+          onValueChange={(v) => {
+            payload.operator = v as ComparisonOperator;
+          }}
+        >
+          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
+          <Select.Content>
+            <Select.Item value=">" label=">" />
+            <Select.Item value=">=" label="≥" />
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="loop-enaction-stale-minutes">Minutes</Label>
+        <Input
+          id="loop-enaction-stale-minutes"
+          type="number"
+          min="1"
+          value={payload.minutes}
+          oninput={(e) => {
+            payload.minutes = parseNumber(e.currentTarget.value, payload.minutes);
+          }}
+        />
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground">
+      For closed-loop users only. Open-loop users should use "Loop has stopped" instead.
+    </p>
+  {:else if node.type === "pump_suspended"}
+    {@const payload = ensurePayload("pump_suspended")}
+    <div class="space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <Label for="pump-suspended-active">Pump is currently suspended</Label>
+        <Switch
+          id="pump-suspended-active"
+          checked={payload.is_active}
+          onCheckedChange={(checked) => {
+            payload.is_active = checked;
+            if (!checked) payload.for_minutes = null;
+          }}
+        />
+      </div>
+      {#if payload.is_active}
+        <div class="space-y-2">
+          <Label for="pump-suspended-for">For at least (min, optional)</Label>
+          <Input
+            id="pump-suspended-for"
+            type="number"
+            min="1"
+            value={payload.for_minutes ?? ""}
+            oninput={(e) => {
+              const v = e.currentTarget.value;
+              payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : null;
+            }}
+          />
+        </div>
+      {/if}
+    </div>
+  {:else if node.type === "pump_battery"}
+    {@const payload = ensurePayload("pump_battery")}
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <Label>Operator</Label>
+        <Select.Root
+          type="single"
+          value={payload.operator}
+          onValueChange={(v) => {
+            payload.operator = v as ComparisonOperator;
+          }}
+        >
+          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
+          <Select.Content>
+            {#each Object.entries(operatorLabels) as [op, label] (op)}
+              <Select.Item value={op} {label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="pump-battery-value">Percent</Label>
+        <Input
+          id="pump-battery-value"
+          type="number"
+          min="0"
+          max="100"
+          value={payload.value}
+          oninput={(e) => {
+            payload.value = parseNumber(e.currentTarget.value, payload.value);
+          }}
+        />
+      </div>
+    </div>
+  {:else if node.type === "temp_basal"}
+    {@const payload = ensurePayload("temp_basal")}
+    {@const valueLabel = payload.metric === "rate" ? "U/hr" : "%"}
+    <div class="space-y-2">
+      <Label>Metric</Label>
+      <Select.Root
+        type="single"
+        value={payload.metric}
+        onValueChange={(v) => {
+          payload.metric = v as TempBasalMetric;
+        }}
+      >
+        <Select.Trigger>{tempBasalMetricLabels[payload.metric]}</Select.Trigger>
+        <Select.Content>
+          {#each Object.entries(tempBasalMetricLabels) as [m, label] (m)}
+            <Select.Item value={m} {label} />
+          {/each}
+        </Select.Content>
+      </Select.Root>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <Label>Operator</Label>
+        <Select.Root
+          type="single"
+          value={payload.operator}
+          onValueChange={(v) => {
+            payload.operator = v as ComparisonOperator;
+          }}
+        >
+          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
+          <Select.Content>
+            {#each Object.entries(operatorLabels) as [op, label] (op)}
+              <Select.Item value={op} {label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="temp-basal-value">{valueLabel}</Label>
+        <Input
+          id="temp-basal-value"
+          type="number"
+          step="0.1"
+          value={payload.value}
+          oninput={(e) => {
+            payload.value = parseNumber(e.currentTarget.value, payload.value);
+          }}
+        />
+      </div>
+    </div>
+  {:else if node.type === "uploader_battery"}
+    {@const payload = ensurePayload("uploader_battery")}
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <Label>Operator</Label>
+        <Select.Root
+          type="single"
+          value={payload.operator}
+          onValueChange={(v) => {
+            payload.operator = v as ComparisonOperator;
+          }}
+        >
+          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
+          <Select.Content>
+            {#each Object.entries(operatorLabels) as [op, label] (op)}
+              <Select.Item value={op} {label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="uploader-battery-value">Percent</Label>
+        <Input
+          id="uploader-battery-value"
+          type="number"
+          min="0"
+          max="100"
+          value={payload.value}
+          oninput={(e) => {
+            payload.value = parseNumber(e.currentTarget.value, payload.value);
+          }}
+        />
+      </div>
+    </div>
+  {:else if node.type === "override_active"}
+    {@const payload = ensurePayload("override_active")}
+    <div class="space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <Label for="override-active-active">Override is currently active</Label>
+        <Switch
+          id="override-active-active"
+          checked={payload.is_active}
+          onCheckedChange={(checked) => {
+            payload.is_active = checked;
+            if (!checked) payload.for_minutes = null;
+          }}
+        />
+      </div>
+      {#if payload.is_active}
+        <div class="space-y-2">
+          <Label for="override-active-for">For at least (min, optional)</Label>
+          <Input
+            id="override-active-for"
+            type="number"
+            min="1"
+            value={payload.for_minutes ?? ""}
+            oninput={(e) => {
+              const v = e.currentTarget.value;
+              payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : null;
+            }}
+          />
+        </div>
+      {/if}
+    </div>
+  {:else if node.type === "sensitivity_ratio"}
+    {@const payload = ensurePayload("sensitivity_ratio")}
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-2">
+        <Label>Operator</Label>
+        <Select.Root
+          type="single"
+          value={payload.operator}
+          onValueChange={(v) => {
+            payload.operator = v as ComparisonOperator;
+          }}
+        >
+          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
+          <Select.Content>
+            {#each Object.entries(operatorLabels) as [op, label] (op)}
+              <Select.Item value={op} {label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      <div class="space-y-2">
+        <Label for="sensitivity-ratio-value">Ratio</Label>
+        <Input
+          id="sensitivity-ratio-value"
+          type="number"
+          step="0.01"
+          value={payload.value}
+          oninput={(e) => {
+            payload.value = parseNumber(e.currentTarget.value, payload.value);
+          }}
+        />
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground">
+      Available for AAPS and Trio. Loop iOS does not report this value.
+    </p>
   {/if}
 </div>
