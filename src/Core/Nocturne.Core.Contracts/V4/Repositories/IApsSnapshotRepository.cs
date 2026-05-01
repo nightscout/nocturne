@@ -90,4 +90,21 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// when <c>null</c>, returns the absolute latest. Enables replay against historical state.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the latest <see cref="ApsSnapshot"/> with <c>Enacted = true</c>
+    /// for the current tenant, or <c>null</c> if none exists. Powers <c>LoopEnactionStale</c>.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestEnactedTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the latest non-null <see cref="ApsSnapshot.SensitivityRatio"/> for the current
+    /// tenant, or <c>null</c> if no snapshot has ever recorded one. Powers the
+    /// <c>SensitivityRatio</c> condition.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
 }

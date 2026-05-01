@@ -107,4 +107,108 @@ public class ApsSnapshotRepositoryTests : IDisposable
 
         result.Should().Be(ourRow);
     }
+
+    // --- GetLatestEnactedTimestampAsync ---
+
+    [Fact]
+    public async Task GetLatestEnactedTimestampAsync_returns_null_when_no_rows()
+    {
+        var result = await _repository.GetLatestEnactedTimestampAsync(asOf: null, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetLatestEnactedTimestampAsync_ignores_non_enacted_snapshots()
+    {
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc); // newer but not enacted
+        var t3 = new DateTime(2026, 4, 30, 11, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA,
+            (t1, true, null),
+            (t2, false, null),
+            (t3, true, null));
+
+        var result = await _repository.GetLatestEnactedTimestampAsync(asOf: null, CancellationToken.None);
+
+        result.Should().Be(t3);
+    }
+
+    [Fact]
+    public async Task GetLatestEnactedTimestampAsync_filters_by_asOf()
+    {
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 13, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA,
+            (t1, true, null),
+            (t2, true, null));
+
+        var asOf = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        var result = await _repository.GetLatestEnactedTimestampAsync(asOf, CancellationToken.None);
+
+        result.Should().Be(t1);
+    }
+
+    [Fact]
+    public async Task GetLatestEnactedTimestampAsync_respects_tenant_isolation()
+    {
+        var theirRow = new DateTime(2026, 4, 30, 23, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantB, (theirRow, true, null));
+
+        var result = await _repository.GetLatestEnactedTimestampAsync(asOf: null, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    // --- GetLatestSensitivityRatioAsync ---
+
+    [Fact]
+    public async Task GetLatestSensitivityRatioAsync_returns_null_when_no_rows()
+    {
+        var result = await _repository.GetLatestSensitivityRatioAsync(asOf: null, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetLatestSensitivityRatioAsync_skips_null_sensitivity()
+    {
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc); // newer but null sensitivity
+        var t3 = new DateTime(2026, 4, 30, 11, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA,
+            (t1, false, 0.8),
+            (t2, false, null),
+            (t3, false, 1.2));
+
+        var result = await _repository.GetLatestSensitivityRatioAsync(asOf: null, CancellationToken.None);
+
+        result.Should().Be(1.2m);
+    }
+
+    [Fact]
+    public async Task GetLatestSensitivityRatioAsync_filters_by_asOf()
+    {
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 13, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA,
+            (t1, false, 0.9),
+            (t2, false, 1.1));
+
+        var asOf = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        var result = await _repository.GetLatestSensitivityRatioAsync(asOf, CancellationToken.None);
+
+        result.Should().Be(0.9m);
+    }
+
+    [Fact]
+    public async Task GetLatestSensitivityRatioAsync_respects_tenant_isolation()
+    {
+        var ts = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantB, (ts, false, 1.5));
+
+        var result = await _repository.GetLatestSensitivityRatioAsync(asOf: null, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
 }
