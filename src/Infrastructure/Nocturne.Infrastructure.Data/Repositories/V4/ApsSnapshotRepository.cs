@@ -186,4 +186,16 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
             .Where(e => e.LegacyId == legacyId)
             .ExecuteDeleteAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.ApsSnapshots.AsNoTracking().AsQueryable();
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        return await query
+            .OrderByDescending(e => e.Timestamp)
+            .Select(e => (DateTime?)e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+    }
+
 }

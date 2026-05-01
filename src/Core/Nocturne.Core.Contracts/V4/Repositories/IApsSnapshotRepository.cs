@@ -80,4 +80,14 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the latest <see cref="ApsSnapshot"/> for the current tenant,
+    /// or <c>null</c> if none exists. Used for <c>LoopStale</c> evaluation and cold-start
+    /// null-suppression.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
+    /// when <c>null</c>, returns the absolute latest. Enables replay against historical state.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
 }
