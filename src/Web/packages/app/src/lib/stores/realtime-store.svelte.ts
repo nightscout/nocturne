@@ -151,7 +151,7 @@ export class RealtimeStore {
 
   /** Delta calculation - prefer entry delta, fallback to computed */
   bgDelta = $derived.by(() => {
-    if (this.currentEntry?.delta !== undefined) {
+    if (this.currentEntry?.delta != null) {
       return this.currentEntry.delta;
     }
     return this.currentBG - this.previousBG;
