@@ -137,10 +137,14 @@ public class UploaderSnapshotRepositoryTests : IDisposable
     public async Task GetLatestAsync_respects_tenant_isolation()
     {
         var ts = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        // Seed both tenants: prove TenantB's lower-battery row is rejected AND TenantA's row surfaces.
         await SeedAsync(TenantB, (ts, 5, "phone"));
+        await SeedAsync(TenantA, (ts, 75, "tablet"));
 
         var result = await _repository.GetLatestAsync(asOf: null, CancellationToken.None);
 
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Battery.Should().Be(75);
+        result.Device.Should().Be("tablet");
     }
 }

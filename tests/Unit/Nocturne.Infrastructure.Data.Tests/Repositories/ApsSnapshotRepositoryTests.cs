@@ -211,4 +211,26 @@ public class ApsSnapshotRepositoryTests : IDisposable
 
         result.Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetLatestSensitivityRatioAsync_returns_null_for_positive_infinity()
+    {
+        var ts = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA, (ts, false, double.PositiveInfinity));
+
+        var result = await _repository.GetLatestSensitivityRatioAsync(asOf: null, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetLatestSensitivityRatioAsync_returns_null_for_nan()
+    {
+        var ts = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA, (ts, false, double.NaN));
+
+        var result = await _repository.GetLatestSensitivityRatioAsync(asOf: null, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
 }

@@ -111,8 +111,7 @@ public interface IStateSpanService
     /// Returns the <see cref="StateSpan"/> of <paramref name="category"/> that contains
     /// <paramref name="at"/> (<c>StartTimestamp &lt;= at &lt; EndTimestamp</c>),
     /// optionally filtered by <paramref name="state"/>. Latest <c>StartTimestamp</c> wins
-    /// on overlap; returns <c>null</c> if no span is active. Used by the alerts enricher
-    /// to project active <c>Override</c>, <c>PumpMode</c>, and similar lifecycle states.
+    /// on overlap; returns <c>null</c> if no span is active.
     /// </summary>
     /// <param name="category">The category to filter by.</param>
     /// <param name="state">Optional <c>State</c> filter; <c>null</c> matches any state.</param>

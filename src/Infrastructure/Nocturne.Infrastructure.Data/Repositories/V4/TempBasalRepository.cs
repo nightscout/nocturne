@@ -296,9 +296,14 @@ public class TempBasalRepository : ITempBasalRepository
     /// <inheritdoc />
     public async Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default)
     {
+        var nonPrimaryIds = _context.LinkedRecords
+            .Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
+            .Select(lr => lr.RecordId);
+
         var entity = await _context.TempBasals
             .AsNoTracking()
             .Where(t => t.StartTimestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
+            .Where(t => !nonPrimaryIds.Contains(t.Id))
             .OrderByDescending(t => t.StartTimestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);

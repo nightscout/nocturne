@@ -89,7 +89,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     /// <inheritdoc />
     public async Task<PumpSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
     {
-        var query = _context.PumpSnapshots.AsNoTracking().AsQueryable();
+        var query = _context.PumpSnapshots.AsNoTracking();
         if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
         var entity = await query
             .OrderByDescending(e => e.Timestamp)

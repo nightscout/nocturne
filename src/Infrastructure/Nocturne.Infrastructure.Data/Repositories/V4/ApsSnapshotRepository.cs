@@ -190,7 +190,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     /// <inheritdoc />
     public async Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default)
     {
-        var query = _context.ApsSnapshots.AsNoTracking().AsQueryable();
+        var query = _context.ApsSnapshots.AsNoTracking();
         if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
         return await query
             .OrderByDescending(e => e.Timestamp)
@@ -210,6 +210,9 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Non-finite (Infinity/NaN) values from corrupt connector payloads are coerced to null rather than throwing.
+    /// </remarks>
     public async Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default)
     {
         var query = _context.ApsSnapshots.AsNoTracking().Where(e => e.SensitivityRatio != null);
@@ -218,6 +221,6 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
             .OrderByDescending(e => e.Timestamp)
             .Select(e => e.SensitivityRatio)
             .FirstOrDefaultAsync(ct);
-        return value.HasValue ? (decimal)value.Value : null;
+        return value is double v && double.IsFinite(v) ? (decimal)v : null;
     }
 }

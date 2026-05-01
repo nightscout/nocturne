@@ -169,7 +169,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     /// <inheritdoc />
     public async Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
     {
-        var query = _context.UploaderSnapshots.AsNoTracking().AsQueryable();
+        var query = _context.UploaderSnapshots.AsNoTracking();
         if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
         var entity = await query
             .OrderBy(e => e.Battery == null)        // false (has battery) before true (null) — nulls last

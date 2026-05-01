@@ -82,27 +82,25 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the timestamp of the latest <see cref="ApsSnapshot"/> for the current tenant,
-    /// or <c>null</c> if none exists. Used for <c>LoopStale</c> evaluation and cold-start
-    /// null-suppression.
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
+    /// or <c>null</c> if none exist. When <paramref name="asOf"/> is non-null, restricts to
+    /// snapshots with <c>Timestamp &lt;= asOf</c>.
     /// </summary>
-    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
-    /// when <c>null</c>, returns the absolute latest. Enables replay against historical state.</param>
+    /// <param name="asOf">Optional inclusive upper bound on Timestamp.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the timestamp of the latest <see cref="ApsSnapshot"/> with <c>Enacted = true</c>
-    /// for the current tenant, or <c>null</c> if none exists. Powers <c>LoopEnactionStale</c>.
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> with <c>Enacted = true</c>
+    /// for the current tenant, or <c>null</c> if none exist.
     /// </summary>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestEnactedTimestampAsync(DateTime? asOf, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the latest non-null <see cref="ApsSnapshot.SensitivityRatio"/> for the current
-    /// tenant, or <c>null</c> if no snapshot has ever recorded one. Powers the
-    /// <c>SensitivityRatio</c> condition.
+    /// Returns the most recent non-null <see cref="ApsSnapshot.SensitivityRatio"/> for the current
+    /// tenant, or <c>null</c> if no snapshot has recorded one.
     /// </summary>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     /// <param name="ct">Cancellation token.</param>

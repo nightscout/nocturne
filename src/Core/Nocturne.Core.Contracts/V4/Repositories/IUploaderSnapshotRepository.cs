@@ -77,10 +77,9 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// among the most recent telemetry — or <c>null</c> if none exists.
     /// </summary>
     /// <remarks>
-    /// Multi-uploader semantics: when a tenant has multiple uploaders (e.g. xDrip+ on phone
-    /// plus a Nightscout uploader on a tablet), alerting on the weakest battery raises the
-    /// most actionable signal. Rows with <c>Battery = null</c> sort last (no signal worse
-    /// than a known-low battery), then ties break by most-recent <c>Timestamp</c>.
+    /// When multiple uploaders report telemetry, returns the one with the lowest battery so
+    /// alerts reflect the weakest device. Rows with <c>Battery = null</c> sort last; ties
+    /// break by most-recent <c>Timestamp</c>.
     /// </remarks>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
     /// when <c>null</c>, returns the absolute latest snapshot per the lowest-battery rule.</param>

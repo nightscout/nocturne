@@ -71,8 +71,8 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// </summary>
     /// <remarks>
     /// Strict less-than comparison so callers can pass a freshly upserted snapshot's timestamp
-    /// without retrieving the snapshot they just wrote. Used by the pump-suspension transition
-    /// detector to find the prior state.
+    /// without retrieving the snapshot they just wrote.
+    /// Use <see cref="GetLatestAsync"/> for inclusive freshness reads.
     /// </remarks>
     /// <param name="timestamp">Exclusive upper bound on Timestamp.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -80,13 +80,11 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
 
     /// <summary>
     /// Returns the latest <see cref="PumpSnapshot"/> for the current tenant, or <c>null</c>
-    /// if none exists. Powers <c>PumpBattery</c> evaluation and acts as the freshness gate
-    /// for the pump-suspension projection.
+    /// if none exists.
     /// </summary>
     /// <remarks>
-    /// Distinct from <see cref="GetLatestBeforeAsync"/>, which uses a strict <c>&lt;</c>
-    /// comparison for transition detection. This method uses inclusive <c>&lt;=</c> so
-    /// callers can pin replay to a specific timestamp.
+    /// Uses inclusive <c>&lt;=</c> comparison so callers can pin replay to a specific timestamp.
+    /// Use <see cref="GetLatestBeforeAsync"/> for strict-prior transition detection.
     /// </remarks>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
     /// when <c>null</c>, returns the absolute latest.</param>
