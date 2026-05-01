@@ -55,28 +55,15 @@ public static class RuleDataNeeds
     /// </summary>
     public static DataNeedsSet Walk(IEnumerable<AlertRuleSnapshot> rules)
     {
-        var iob = false;
-        var cob = false;
-        var predicted = false;
-        var reservoir = false;
-        var siteAge = false;
-        var sensorAge = false;
-        var trend = false;
-        var activeAlerts = false;
-
+        var b = new NeedsBuilder();
         foreach (var rule in rules)
         {
-            VisitTopLevel(rule, ref iob, ref cob, ref predicted, ref reservoir,
-                ref siteAge, ref sensorAge, ref trend, ref activeAlerts);
+            VisitTopLevel(rule, b);
         }
-
-        return new DataNeedsSet(iob, cob, predicted, reservoir, siteAge, sensorAge, trend, activeAlerts);
+        return b.Build();
     }
 
-    private static void VisitTopLevel(
-        AlertRuleSnapshot rule,
-        ref bool iob, ref bool cob, ref bool predicted, ref bool reservoir,
-        ref bool siteAge, ref bool sensorAge, ref bool trend, ref bool activeAlerts)
+    private static void VisitTopLevel(AlertRuleSnapshot rule, NeedsBuilder b)
     {
         switch (rule.ConditionType)
         {
@@ -86,8 +73,7 @@ public static class RuleDataNeeds
                     if (composite is null) return;
                     foreach (var child in composite.Conditions)
                     {
-                        VisitNode(child, ref iob, ref cob, ref predicted, ref reservoir,
-                            ref siteAge, ref sensorAge, ref trend, ref activeAlerts);
+                        VisitNode(child, b);
                     }
                     return;
                 }
@@ -95,79 +81,50 @@ public static class RuleDataNeeds
                 {
                     var not = TryDeserialize<NotCondition>(rule.ConditionParams);
                     if (not is null) return;
-                    VisitNode(not.Child, ref iob, ref cob, ref predicted, ref reservoir,
-                        ref siteAge, ref sensorAge, ref trend, ref activeAlerts);
+                    VisitNode(not.Child, b);
                     return;
                 }
             case AlertConditionType.Sustained:
                 {
                     var sustained = TryDeserialize<SustainedCondition>(rule.ConditionParams);
                     if (sustained is null) return;
-                    VisitNode(sustained.Child, ref iob, ref cob, ref predicted, ref reservoir,
-                        ref siteAge, ref sensorAge, ref trend, ref activeAlerts);
+                    VisitNode(sustained.Child, b);
                     return;
                 }
             default:
-                ApplyLeaf(rule.ConditionType, ref iob, ref cob, ref predicted, ref reservoir,
-                    ref siteAge, ref sensorAge, ref trend, ref activeAlerts);
+                ApplyLeaf(rule.ConditionType, b);
                 return;
         }
     }
 
-    private static void VisitNode(
-        ConditionNode node,
-        ref bool iob, ref bool cob, ref bool predicted, ref bool reservoir,
-        ref bool siteAge, ref bool sensorAge, ref bool trend, ref bool activeAlerts)
+    private static void VisitNode(ConditionNode node, NeedsBuilder b)
     {
         // ConditionPath.Walk recurses through composite/not/sustained wrappers and visits every
-        // node — exactly what we want; we only ever need the node's Type to update flags.
-        // Captures all eight flags by ref via the closure parameters below, hence the local
-        // shadow assignments after Walk returns.
-        var localIob = iob;
-        var localCob = cob;
-        var localPredicted = predicted;
-        var localReservoir = reservoir;
-        var localSiteAge = siteAge;
-        var localSensorAge = sensorAge;
-        var localTrend = trend;
-        var localActiveAlerts = activeAlerts;
-
+        // node; we only need the node's Type to update flags. The builder closes over the call
+        // directly — no ref-bool plumbing required.
         ConditionPath.Walk<object>(node, (visited, _) =>
         {
             var kind = AlertConditionTypeNames.FromWireString(visited.Type);
             if (kind is not null)
             {
-                ApplyLeaf(kind.Value, ref localIob, ref localCob, ref localPredicted, ref localReservoir,
-                    ref localSiteAge, ref localSensorAge, ref localTrend, ref localActiveAlerts);
+                ApplyLeaf(kind.Value, b);
             }
             return null;
         });
-
-        iob = localIob;
-        cob = localCob;
-        predicted = localPredicted;
-        reservoir = localReservoir;
-        siteAge = localSiteAge;
-        sensorAge = localSensorAge;
-        trend = localTrend;
-        activeAlerts = localActiveAlerts;
     }
 
-    private static void ApplyLeaf(
-        AlertConditionType type,
-        ref bool iob, ref bool cob, ref bool predicted, ref bool reservoir,
-        ref bool siteAge, ref bool sensorAge, ref bool trend, ref bool activeAlerts)
+    private static void ApplyLeaf(AlertConditionType type, NeedsBuilder b)
     {
         switch (type)
         {
-            case AlertConditionType.Iob: iob = true; break;
-            case AlertConditionType.Cob: cob = true; break;
-            case AlertConditionType.Predicted: predicted = true; break;
-            case AlertConditionType.Reservoir: reservoir = true; break;
-            case AlertConditionType.SiteAge: siteAge = true; break;
-            case AlertConditionType.SensorAge: sensorAge = true; break;
-            case AlertConditionType.Trend: trend = true; break;
-            case AlertConditionType.AlertState: activeAlerts = true; break;
+            case AlertConditionType.Iob: b.Iob = true; break;
+            case AlertConditionType.Cob: b.Cob = true; break;
+            case AlertConditionType.Predicted: b.Predicted = true; break;
+            case AlertConditionType.Reservoir: b.Reservoir = true; break;
+            case AlertConditionType.SiteAge: b.SiteAge = true; break;
+            case AlertConditionType.SensorAge: b.SensorAge = true; break;
+            case AlertConditionType.Trend: b.Trend = true; break;
+            case AlertConditionType.AlertState: b.ActiveAlerts = true; break;
             // Threshold, RateOfChange, SignalLoss, Staleness, TimeOfDay, Composite, Not, Sustained
             // require no extra context — handled by base SensorContext or recursed by VisitNode.
         }
@@ -183,5 +140,24 @@ public static class RuleDataNeeds
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Mutable accumulator used by <see cref="Walk"/>. Avoids passing each flag through
+    /// the recursion as a <c>ref bool</c>.
+    /// </summary>
+    private sealed class NeedsBuilder
+    {
+        public bool Iob;
+        public bool Cob;
+        public bool Predicted;
+        public bool Reservoir;
+        public bool SiteAge;
+        public bool SensorAge;
+        public bool Trend;
+        public bool ActiveAlerts;
+
+        public DataNeedsSet Build() =>
+            new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, Trend, ActiveAlerts);
     }
 }
