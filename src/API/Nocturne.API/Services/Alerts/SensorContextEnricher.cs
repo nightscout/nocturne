@@ -382,10 +382,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     private async Task<decimal?> FetchReservoirAsync(DateTime? asOf, CancellationToken ct)
     {
         // Pin the upper bound to `asOf` for replay; live path leaves both bounds null and gets
-        // the absolute latest. The `to` filter in IPumpSnapshotRepository.GetAsync is exclusive,
-        // so we add one tick to keep `asOf` itself in scope for replay.
+        // the absolute latest. `to: asOf` upper-bounds the read to the replay tick (inclusive).
         var snapshots = await _deps.PumpSnapshots.GetAsync(
-            from: null, to: asOf?.AddTicks(1), device: null, source: null,
+            from: null, to: asOf, device: null, source: null,
             limit: 1, offset: 0, descending: true, ct: ct);
 
         var reservoir = snapshots.FirstOrDefault()?.Reservoir;
