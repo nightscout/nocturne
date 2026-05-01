@@ -265,18 +265,98 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             ? await _pumpRepo.GetByLegacyIdAsync(legacyId, ct)
             : null;
 
+        V4Models.PumpSnapshot persisted;
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _pumpRepo.UpdateAsync(existing.Id, model, ct);
-            result.UpdatedRecords.Add(updated);
+            persisted = await _pumpRepo.UpdateAsync(existing.Id, model, ct);
+            result.UpdatedRecords.Add(persisted);
             _logger.LogDebug("Updated existing PumpSnapshot {Id} from legacy device status {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _pumpRepo.CreateAsync(model, ct);
-            result.CreatedRecords.Add(created);
+            persisted = await _pumpRepo.CreateAsync(model, ct);
+            result.CreatedRecords.Add(persisted);
             _logger.LogDebug("Created PumpSnapshot from legacy device status {LegacyId}", legacyId);
+        }
+
+        await DecomposePumpSuspensionAsync(ds, persisted, result, ct);
+    }
+
+    /// <summary>
+    /// Detects pump-suspension transitions and emits/closes a
+    /// <see cref="StateSpanCategory.PumpMode"/> / <see cref="PumpModeState.Suspended"/> state span.
+    /// </summary>
+    /// <remarks>
+    /// <para>Compares the just-upserted <see cref="V4Models.PumpSnapshot"/> against the most-recent
+    /// prior snapshot strictly before its timestamp. On a <c>false → true</c> transition (or first
+    /// observation with <c>Suspended == true</c>), opens a new span. On <c>true → false</c>, closes
+    /// the open span. Equal-state comparisons are no-ops.</para>
+    /// <para>First observation: per design, opening on first observation means the
+    /// <see cref="StateSpan.StartTimestamp"/> reflects the first observed time, not the true onset
+    /// of suspension — there is no transition signal to anchor on.</para>
+    /// <para>Idempotency: the open span carries a deterministic
+    /// <c>OriginalId = "pump-suspended:{snapshotId}"</c> so re-decomposing the same legacy
+    /// <see cref="DeviceStatus"/> will upsert (not duplicate) the row.</para>
+    /// </remarks>
+    private async Task DecomposePumpSuspensionAsync(
+        DeviceStatus ds,
+        V4Models.PumpSnapshot newSnapshot,
+        V4Models.DecompositionResult result,
+        CancellationToken ct)
+    {
+        var prior = await _pumpRepo.GetLatestBeforeAsync(newSnapshot.Timestamp, ct);
+        var priorSuspended = prior?.Suspended ?? false;
+        var nowSuspended = newSnapshot.Suspended ?? false;
+
+        if (priorSuspended == nowSuspended)
+            return;
+
+        // Prefer pump's own clock for the transition timestamp; fall back to ingestion timestamp.
+        var transitionAt = ParseTimestampToDateTime(newSnapshot.Clock) ?? newSnapshot.Timestamp;
+
+        if (!priorSuspended && nowSuspended)
+        {
+            var span = new StateSpan
+            {
+                Category = StateSpanCategory.PumpMode,
+                State = PumpModeState.Suspended.ToString(),
+                StartTimestamp = transitionAt,
+                EndTimestamp = null,
+                Source = ds.Device,
+                OriginalId = $"pump-suspended:{newSnapshot.Id}",
+            };
+
+            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
+            result.CreatedRecords.Add(upserted);
+            _logger.LogDebug(
+                "Opened PumpMode/Suspended StateSpan for snapshot {SnapshotId} (legacy {LegacyId})",
+                newSnapshot.Id, newSnapshot.LegacyId);
+        }
+        else // priorSuspended && !nowSuspended
+        {
+            var openSpans = await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.PumpMode,
+                state: PumpModeState.Suspended.ToString(),
+                active: true,
+                count: 1,
+                cancellationToken: ct);
+
+            var openSpan = openSpans.FirstOrDefault();
+            if (openSpan is null)
+            {
+                _logger.LogDebug(
+                    "PumpMode/Suspended transition false→true detected but no open StateSpan to close (snapshot {SnapshotId})",
+                    newSnapshot.Id);
+                return;
+            }
+
+            openSpan.EndTimestamp = transitionAt;
+            var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
+            result.UpdatedRecords.Add(closed);
+            _logger.LogDebug(
+                "Closed PumpMode/Suspended StateSpan {SpanId} at {EndTimestamp}",
+                openSpan.Id, transitionAt);
         }
     }
 

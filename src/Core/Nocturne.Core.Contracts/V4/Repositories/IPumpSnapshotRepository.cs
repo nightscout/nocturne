@@ -65,6 +65,19 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the most recent <see cref="PumpSnapshot"/> with <c>Timestamp &lt; <paramref name="timestamp"/></c>
+    /// for the current tenant, or <c>null</c> if none exists.
+    /// </summary>
+    /// <remarks>
+    /// Strict less-than comparison so callers can pass a freshly upserted snapshot's timestamp
+    /// without retrieving the snapshot they just wrote. Used by the pump-suspension transition
+    /// detector to find the prior state.
+    /// </remarks>
+    /// <param name="timestamp">Exclusive upper bound on Timestamp.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default);
+
     /// <summary>Count <see cref="PumpSnapshot"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>

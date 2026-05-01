@@ -75,6 +75,17 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.PumpSnapshots
+            .AsNoTracking()
+            .Where(e => e.Timestamp < timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Creates a new pump snapshot record.
     /// </summary>
