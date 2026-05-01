@@ -1,11 +1,11 @@
 flowchart TD
-    Reading["New glucose reading<br/>(V4 entries POST)"] --> Orchestrator
+    Reading["New glucose reading<br/>(V4 entries POST)<br/><i>Looping conditions read pump/APS/override/<br/>temp-basal state at this tick — DeviceStatus<br/>uploads are not their own trigger.</i>"] --> Orchestrator
 
     subgraph perreading ["Per-reading pipeline (AlertOrchestrator.EvaluateAsync)"]
         direction TB
         Orchestrator["<b>AlertOrchestrator</b><br/>Loads enabled rules for tenant"]
         Filter["<b>RuleReferenceResolver</b><br/>FilterEvaluable: drops chained rules<br/>whose alert_state parent is disabled"]
-        Enricher["<b>ISensorContextEnricher</b><br/>Lazy: walks rule trees, fetches only<br/>IOB/COB/predictions/active-alerts/etc<br/>actually consulted this pass"]
+        Enricher["<b>ISensorContextEnricher</b><br/>Lazy: walks rule trees, fetches only<br/>IOB/COB/predictions/active-alerts/<br/>looping (loop staleness, pump/uploader/<br/>temp-basal/override/sensitivity) actually<br/>consulted this pass.<br/>HasEver* flags suppress cold-start firing.<br/>Pump-suspension projection nulled when<br/>latest pump snapshot is itself stale.<br/>EnrichAsOfAsync threads asOf for replay."]
         Loop["For each surviving rule"]
         Eval["<b>ConditionEvaluatorRegistry</b><br/>EvaluateNodeAsync(node, context)<br/>Single dispatch entrypoint shared by<br/>composite/not/sustained recursion"]
         Tracker["<b>IExcursionTracker</b><br/>ProcessEvaluationAsync(ruleId, met)<br/>State machine: idle → confirming →<br/>active → hysteresis → idle"]
@@ -64,7 +64,7 @@ flowchart TD
         direction LR
         SAdvance["AdvanceEscalationsAsync<br/>(escalating + due)"]
         SHyst["CloseHysteresisWindowsAsync<br/>tracker.ForceCloseAsync<br/>(Hysteresis)"]
-        SSignalLoss["EvaluateSignalLossAsync<br/>(legacy signal-loss rules)"]
+        SSignalLoss["EvaluateSignalLossAsync<br/>(legacy signal-loss rules — superseded<br/>by Staleness/LoopStale conditions)"]
         SSnooze["CheckSnoozedInstancesAsync<br/>conditions tree (composite{and,...})<br/>or trend-favorable heuristic"]
         SAutoResolve["EvaluateAutoResolveAsync<br/>catches time-of-day / IOB /<br/>conditions that don't depend on<br/>the latest reading"]
     end
