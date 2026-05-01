@@ -21,11 +21,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class LoopEnactionStaleEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly TimeProvider _timeProvider;
 
@@ -50,7 +45,7 @@ public class LoopEnactionStaleEvaluator : IConditionEvaluator
         if (!context.HasEverApsCycled)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<LoopEnactionStaleCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<LoopEnactionStaleCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

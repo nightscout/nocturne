@@ -17,11 +17,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class RateOfChangeEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.RateOfChange;
@@ -38,7 +33,7 @@ public class RateOfChangeEvaluator : IConditionEvaluator
         if (context.TrendRate is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<RateOfChangeCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<RateOfChangeCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

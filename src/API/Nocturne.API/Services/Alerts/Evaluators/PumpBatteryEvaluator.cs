@@ -19,11 +19,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class PumpBatteryEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.PumpBattery;
@@ -40,7 +35,7 @@ public class PumpBatteryEvaluator : IConditionEvaluator
         if (context.PumpBatteryPercent is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<PumpBatteryCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<PumpBatteryCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

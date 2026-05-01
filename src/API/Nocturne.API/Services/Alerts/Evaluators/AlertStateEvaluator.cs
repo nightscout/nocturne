@@ -24,11 +24,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class AlertStateEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly TimeProvider _timeProvider;
 
@@ -50,7 +45,7 @@ public class AlertStateEvaluator : IConditionEvaluator
     /// <param name="ct">Cancellation token (unused; this evaluator performs no I/O).</param>
     public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
-        var condition = JsonSerializer.Deserialize<AlertStateCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<AlertStateCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

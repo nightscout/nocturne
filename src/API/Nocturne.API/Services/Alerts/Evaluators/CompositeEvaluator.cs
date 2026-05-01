@@ -20,11 +20,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ConditionEvaluatorRegistry"/>
 public class CompositeEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly IServiceProvider _serviceProvider;
     private ConditionEvaluatorRegistry? _registry;
@@ -56,7 +51,7 @@ public class CompositeEvaluator : IConditionEvaluator
     /// </returns>
     public async Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
-        var condition = JsonSerializer.Deserialize<CompositeCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<CompositeCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null || condition.Conditions.Count == 0)
             return false;
 

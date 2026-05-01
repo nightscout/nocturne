@@ -16,11 +16,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class IobEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.Iob;
@@ -34,7 +29,7 @@ public class IobEvaluator : IConditionEvaluator
         if (context.IobUnits is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<IobCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<IobCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -14,12 +13,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// </summary>
 public class ConditionEvaluatorRegistry
 {
-    private static readonly JsonSerializerOptions NodeJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-    };
-
     private readonly Dictionary<AlertConditionType, IConditionEvaluator> _evaluators;
 
     /// <summary>
@@ -76,7 +69,7 @@ public class ConditionEvaluatorRegistry
         if (evaluator is null)
             return false;
 
-        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, NodeJsonOptions);
+        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, EvaluatorJson.Options);
         return await evaluator.EvaluateAsync(paramsJson, context, ct);
     }
 }

@@ -25,11 +25,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class TempBasalEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.TempBasal;
@@ -43,7 +38,7 @@ public class TempBasalEvaluator : IConditionEvaluator
         if (context.ActiveTempBasal is not { } temp)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<TempBasalCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<TempBasalCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

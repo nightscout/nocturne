@@ -20,11 +20,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class PumpSuspendedEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly TimeProvider _timeProvider;
 
@@ -49,7 +44,7 @@ public class PumpSuspendedEvaluator : IConditionEvaluator
         if (!context.HasEverPumpSnapshot)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<PumpSuspendedCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<PumpSuspendedCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

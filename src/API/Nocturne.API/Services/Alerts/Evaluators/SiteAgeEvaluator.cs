@@ -17,11 +17,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class SiteAgeEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly TimeProvider _timeProvider;
 
@@ -46,7 +41,7 @@ public class SiteAgeEvaluator : IConditionEvaluator
         if (context.LastSiteChangeAt is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<SiteAgeCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<SiteAgeCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

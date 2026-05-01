@@ -16,11 +16,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class CobEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.Cob;
@@ -34,7 +29,7 @@ public class CobEvaluator : IConditionEvaluator
         if (context.CobGrams is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<CobCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<CobCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

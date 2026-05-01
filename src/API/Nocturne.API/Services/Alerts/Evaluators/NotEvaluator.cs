@@ -20,11 +20,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ConditionEvaluatorRegistry"/>
 public class NotEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly IServiceProvider _serviceProvider;
     private ConditionEvaluatorRegistry? _registry;
@@ -52,7 +47,7 @@ public class NotEvaluator : IConditionEvaluator
     /// <param name="ct">Cancellation token forwarded to the child evaluator.</param>
     public async Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
-        var condition = JsonSerializer.Deserialize<NotCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<NotCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition?.Child is null)
             return false;
 

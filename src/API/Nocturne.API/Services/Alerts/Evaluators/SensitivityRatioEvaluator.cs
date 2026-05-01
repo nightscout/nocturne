@@ -19,11 +19,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class SensitivityRatioEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.SensitivityRatio;
@@ -40,7 +35,7 @@ public class SensitivityRatioEvaluator : IConditionEvaluator
         if (context.SensitivityRatio is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<SensitivityRatioCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<SensitivityRatioCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

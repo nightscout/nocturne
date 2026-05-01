@@ -21,11 +21,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class TrendEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     private static readonly Dictionary<TrendBucket, string> BucketWire = BuildWire();
 
@@ -41,7 +36,7 @@ public class TrendEvaluator : IConditionEvaluator
         if (context.TrendBucket is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<TrendCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<TrendCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null || string.IsNullOrEmpty(condition.Bucket))
             return Task.FromResult(false);
 

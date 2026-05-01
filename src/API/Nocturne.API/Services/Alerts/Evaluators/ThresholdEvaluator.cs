@@ -16,11 +16,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class ThresholdEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.Threshold;
@@ -38,7 +33,7 @@ public class ThresholdEvaluator : IConditionEvaluator
         if (context.LatestValue is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<ThresholdCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<ThresholdCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 

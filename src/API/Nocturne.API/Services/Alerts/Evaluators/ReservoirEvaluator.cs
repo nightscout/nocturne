@@ -16,11 +16,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="ComparisonOps"/>
 public class ReservoirEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.Reservoir;
@@ -34,7 +29,7 @@ public class ReservoirEvaluator : IConditionEvaluator
         if (context.ReservoirUnits is null)
             return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<ReservoirCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<ReservoirCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
             return Task.FromResult(false);
 
