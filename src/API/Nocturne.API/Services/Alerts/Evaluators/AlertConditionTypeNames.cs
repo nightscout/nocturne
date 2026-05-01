@@ -6,8 +6,11 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 
 /// <summary>
 /// Caches the wire-format string for each <see cref="AlertConditionType"/> value (the
-/// <see cref="EnumMemberAttribute"/> value, e.g. <c>"composite"</c>, <c>"rate_of_change"</c>).
+/// <see cref="EnumMemberAttribute"/> value, e.g. <c>"composite"</c>, <c>"rate_of_change"</c>,
+/// <c>"loop_stale"</c>, <c>"pump_suspended"</c>).
 /// Avoids per-call reflection in hot paths like the alert orchestrator and the evaluator registry.
+/// New values added to <see cref="AlertConditionType"/> are picked up automatically as long as
+/// they carry <see cref="EnumMemberAttribute"/>.
 /// </summary>
 internal static class AlertConditionTypeNames
 {
