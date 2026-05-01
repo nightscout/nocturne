@@ -231,10 +231,55 @@ public record SensorAgeCondition(string Operator, decimal Value);
 /// <param name="ForMinutes">When non-null, the condition is true only if the referenced alert has been in the matching state for at least this many minutes — i.e. now - TriggeredAt &gt;= ForMinutes for "firing"/"unacknowledged", or now - AcknowledgedAt &gt;= ForMinutes for "acknowledged".</param>
 public record AlertStateCondition(Guid AlertId, string State, int? ForMinutes);
 
+/// <summary>Loop liveness — minutes since the latest APS cycle (suggested or enacted).</summary>
+public record LoopStaleCondition(string Operator, int Minutes);
+
+/// <summary>Loop enaction liveness — minutes since the latest enacted APS cycle.
+/// Open-loop users should not enable this; it would be permanently true.</summary>
+public record LoopEnactionStaleCondition(string Operator, int Minutes);
+
+/// <summary>Pump suspension state. Optional ForMinutes measures from the StateSpan start.</summary>
+/// <remarks>The wire field is <c>equals</c>; the C# property is renamed to avoid colliding with
+/// the record-generated <see cref="object.Equals(object?)"/>.</remarks>
+public record PumpSuspendedCondition(
+    [property: JsonPropertyName("equals")] bool EqualsValue,
+    int? ForMinutes);
+
+/// <summary>Pump battery comparison (percent).</summary>
+public record PumpBatteryCondition(string Operator, decimal Value);
+
+/// <summary>Active temp basal comparison. Metric selects rate (U/hr) or percent of scheduled.
+/// Returns false when no temp basal is active — the condition concerns active temps only.</summary>
+public record TempBasalCondition(TempBasalMetric Metric, string Operator, decimal Value);
+
+/// <summary>Uploader (phone) battery comparison (percent).</summary>
+public record UploaderBatteryCondition(string Operator, decimal Value);
+
+/// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
+/// <remarks>The wire field is <c>equals</c>; the C# property is renamed to avoid colliding with
+/// the record-generated <see cref="object.Equals(object?)"/>.</remarks>
+public record OverrideActiveCondition(
+    [property: JsonPropertyName("equals")] bool EqualsValue,
+    int? ForMinutes);
+
+/// <summary>OpenAPS sensitivity ratio (autosens) comparison. AAPS/Trio only;
+/// silently false on Loop iOS via null-suppression.</summary>
+public record SensitivityRatioCondition(string Operator, decimal Value);
+
+/// <summary>Selects which TempBasal field a TempBasalCondition compares.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<TempBasalMetric>))]
+public enum TempBasalMetric
+{
+    /// <summary>Compare absolute rate in U/hr.</summary>
+    [JsonStringEnumMemberName("rate")] Rate,
+    /// <summary>Compare percent of scheduled basal (100 = at schedule).</summary>
+    [JsonStringEnumMemberName("percent_of_scheduled")] PercentOfScheduled,
+}
+
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
@@ -254,7 +299,15 @@ public record ConditionNode(
     ReservoirCondition? Reservoir = null,
     SiteAgeCondition? SiteAge = null,
     SensorAgeCondition? SensorAge = null,
-    AlertStateCondition? AlertState = null
+    AlertStateCondition? AlertState = null,
+    LoopStaleCondition? LoopStale = null,
+    LoopEnactionStaleCondition? LoopEnactionStale = null,
+    PumpSuspendedCondition? PumpSuspended = null,
+    PumpBatteryCondition? PumpBattery = null,
+    TempBasalCondition? TempBasal = null,
+    UploaderBatteryCondition? UploaderBattery = null,
+    OverrideActiveCondition? OverrideActive = null,
+    SensitivityRatioCondition? SensitivityRatio = null
 );
 
 /// <summary>
