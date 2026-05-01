@@ -74,4 +74,36 @@ public enum AlertConditionType
     /// <summary>Cross-references the live state of another alert (e.g., active for N minutes).</summary>
     [EnumMember(Value = "alert_state"), JsonStringEnumMemberName("alert_state")]
     AlertState,
+
+    /// <summary>Minutes since the latest APS cycle (suggested or enacted) — loop liveness.</summary>
+    [EnumMember(Value = "loop_stale"), JsonStringEnumMemberName("loop_stale")]
+    LoopStale,
+
+    /// <summary>Minutes since the latest enacted APS cycle — closed-loop enaction liveness.</summary>
+    [EnumMember(Value = "loop_enaction_stale"), JsonStringEnumMemberName("loop_enaction_stale")]
+    LoopEnactionStale,
+
+    /// <summary>Pump suspension state, optionally for a sustained duration.</summary>
+    [EnumMember(Value = "pump_suspended"), JsonStringEnumMemberName("pump_suspended")]
+    PumpSuspended,
+
+    /// <summary>Pump battery percent comparison.</summary>
+    [EnumMember(Value = "pump_battery"), JsonStringEnumMemberName("pump_battery")]
+    PumpBattery,
+
+    /// <summary>Active temp basal rate (U/hr) or percent of scheduled comparison.</summary>
+    [EnumMember(Value = "temp_basal"), JsonStringEnumMemberName("temp_basal")]
+    TempBasal,
+
+    /// <summary>Uploader (phone) battery percent comparison.</summary>
+    [EnumMember(Value = "uploader_battery"), JsonStringEnumMemberName("uploader_battery")]
+    UploaderBattery,
+
+    /// <summary>Active override state, optionally for a sustained duration.</summary>
+    [EnumMember(Value = "override_active"), JsonStringEnumMemberName("override_active")]
+    OverrideActive,
+
+    /// <summary>OpenAPS sensitivity ratio (autosens) comparison.</summary>
+    [EnumMember(Value = "sensitivity_ratio"), JsonStringEnumMemberName("sensitivity_ratio")]
+    SensitivityRatio,
 }
