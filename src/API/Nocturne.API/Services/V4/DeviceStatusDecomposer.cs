@@ -292,12 +292,15 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     /// prior snapshot strictly before its timestamp. On a <c>false → true</c> transition (or first
     /// observation with <c>Suspended == true</c>), opens a new span. On <c>true → false</c>, closes
     /// the open span. Equal-state comparisons are no-ops.</para>
-    /// <para>First observation: per design, opening on first observation means the
-    /// <see cref="StateSpan.StartTimestamp"/> reflects the first observed time, not the true onset
-    /// of suspension — there is no transition signal to anchor on.</para>
+    /// <para>First observation: when there is no prior snapshot, opening on
+    /// <c>Suspended == true</c> anchors the span at the first observed timestamp — there is no
+    /// transition signal to anchor on otherwise.</para>
     /// <para>Idempotency: the open span carries a deterministic
     /// <c>OriginalId = "pump-suspended:{snapshotId}"</c> so re-decomposing the same legacy
     /// <see cref="DeviceStatus"/> will upsert (not duplicate) the row.</para>
+    /// <para>Assumes a single insulin pump per tenant — the open-span lookup does not filter by
+    /// <c>Source</c>, so a second pump's resume could close a first pump's open span. Out of scope
+    /// per the alerting model (one tenant = one diabetic person).</para>
     /// </remarks>
     private async Task DecomposePumpSuspensionAsync(
         DeviceStatus ds,
@@ -345,8 +348,8 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             var openSpan = openSpans.FirstOrDefault();
             if (openSpan is null)
             {
-                _logger.LogDebug(
-                    "PumpMode/Suspended transition false→true detected but no open StateSpan to close (snapshot {SnapshotId})",
+                _logger.LogWarning(
+                    "PumpMode/Suspended transition true→false detected but no open StateSpan to close (snapshot {SnapshotId})",
                     newSnapshot.Id);
                 return;
             }

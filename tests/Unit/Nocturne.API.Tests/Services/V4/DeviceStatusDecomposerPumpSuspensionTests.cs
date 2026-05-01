@@ -17,7 +17,8 @@ namespace Nocturne.API.Tests.Services.V4;
 /// <summary>
 /// Tests for the pump-suspension transition detection inside <see cref="DeviceStatusDecomposer"/>.
 /// Verifies <c>false → true</c> opens, <c>true → false</c> closes, equal-state no-ops, first-observation
-/// behaviour, idempotency under retry, and pump-clock preference for transition timestamps.
+/// behaviour, idempotency under retry, pump-clock preference for transition timestamps, and the
+/// strict-`&lt;` ordering used when out-of-order uploads arrive.
 /// </summary>
 public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
 {
@@ -228,7 +229,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
     }
 
     [Fact]
-    public async Task OutOfOrderUpload_UsesPumpClockWhenPresent()
+    public async Task PumpClockPreferred_OverIngestTimestamp()
     {
         // Prior says "not suspended". New record has earlier ingest timestamp but pump clock matches a real wall-clock.
         var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
@@ -246,6 +247,51 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             It.Is<StateSpan>(span =>
                 span.StartTimestamp == expectedTransitionAt),
             It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task OutOfOrderIngestion_UsesLatestPriorByTimestamp()
+    {
+        // Scenario: a delayed upload arrives whose timestamp falls *between* two existing snapshots.
+        // The decomposer must compare against the latest snapshot strictly before the new one
+        // (T=10:00, suspended=false) — NOT against the most recent overall (T=12:00, suspended=true).
+        //
+        // Existing rows (conceptually):
+        //   T=10:00 suspended=false
+        //   T=12:00 suspended=true   [open span exists]
+        // New incoming snapshot:
+        //   T=11:00 suspended=false  (delayed upload)
+        //
+        // GetLatestBeforeAsync(11:00) returns the T=10:00 row. Prior=false, now=false → no-op.
+        // The pre-existing open span at T=12:00 must NOT be closed by this delayed arrival.
+        //
+        // This pins the strict-`<` filter behaviour. Out-of-order ingestion of this exact shape
+        // shouldn't happen in normal operation, but the test documents the assumption explicitly:
+        // the decomposer is keyed on the latest snapshot strictly before the new one's timestamp.
+        var ingestAt = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc);
+        var priorBefore = new V4Models.PumpSnapshot
+        {
+            Suspended = false,
+            Timestamp = new DateTime(2024, 1, 1, 10, 0, 0, DateTimeKind.Utc),
+        };
+        _pumpRepoMock
+            .Setup(r => r.GetLatestBeforeAsync(
+                It.Is<DateTime>(t => t == ingestAt),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(priorBefore);
+
+        // 2024-01-01T11:00:00Z = 1704106800000 mills
+        var ds = MakeDeviceStatus("legacy-ooo", 1704106800000, suspended: false);
+
+        await _decomposer.DecomposeAsync(ds);
+
+        // Strict-`<` filter selected the T=10:00 row, both sides false → no transition, no upsert.
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _pumpRepoMock.Verify(
+            r => r.GetLatestBeforeAsync(ingestAt, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

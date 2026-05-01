@@ -66,8 +66,8 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the most recent <see cref="PumpSnapshot"/> with <c>Timestamp &lt; <paramref name="timestamp"/></c>
-    /// for the current tenant, or <c>null</c> if none exists.
+    /// Returns the most recent <see cref="PumpSnapshot"/> with <c>Timestamp &lt; <paramref name="timestamp"/></c>,
+    /// or <c>null</c> if none exists.
     /// </summary>
     /// <remarks>
     /// Strict less-than comparison so callers can pass a freshly upserted snapshot's timestamp
