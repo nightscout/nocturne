@@ -23,10 +23,19 @@ public sealed record DataNeedsSet(
     bool NeedsSiteAge,
     bool NeedsSensorAge,
     bool NeedsTrendBucket,
-    bool NeedsActiveAlerts)
+    bool NeedsActiveAlerts,
+    bool NeedsLastApsCycle,
+    bool NeedsLastApsEnacted,
+    bool NeedsPumpStatus,
+    bool NeedsTempBasal,
+    bool NeedsUploaderStatus,
+    bool NeedsOverride,
+    bool NeedsSensitivityRatio)
 {
     /// <summary>An empty needs set with all flags false.</summary>
-    public static DataNeedsSet None { get; } = new(false, false, false, false, false, false, false, false);
+    public static DataNeedsSet None { get; } =
+        new(false, false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false);
 }
 
 /// <summary>
@@ -125,6 +134,14 @@ public static class RuleDataNeeds
             case AlertConditionType.SensorAge: b.SensorAge = true; break;
             case AlertConditionType.Trend: b.Trend = true; break;
             case AlertConditionType.AlertState: b.ActiveAlerts = true; break;
+            case AlertConditionType.LoopStale: b.LastApsCycle = true; break;
+            case AlertConditionType.LoopEnactionStale: b.LastApsEnacted = true; break;
+            case AlertConditionType.PumpSuspended: b.PumpStatus = true; break;
+            case AlertConditionType.PumpBattery: b.PumpStatus = true; break;
+            case AlertConditionType.TempBasal: b.TempBasal = true; break;
+            case AlertConditionType.UploaderBattery: b.UploaderStatus = true; break;
+            case AlertConditionType.OverrideActive: b.Override = true; break;
+            case AlertConditionType.SensitivityRatio: b.SensitivityRatio = true; break;
             // Threshold, RateOfChange, SignalLoss, Staleness, TimeOfDay, Composite, Not, Sustained
             // require no extra context — handled by base SensorContext or recursed by VisitNode.
         }
@@ -156,8 +173,16 @@ public static class RuleDataNeeds
         public bool SensorAge;
         public bool Trend;
         public bool ActiveAlerts;
+        public bool LastApsCycle;
+        public bool LastApsEnacted;
+        public bool PumpStatus; // PumpSuspended OR PumpBattery — both share a PumpSnapshot fetch.
+        public bool TempBasal;
+        public bool UploaderStatus;
+        public bool Override;
+        public bool SensitivityRatio;
 
         public DataNeedsSet Build() =>
-            new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, Trend, ActiveAlerts);
+            new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, Trend, ActiveAlerts,
+                LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, Override, SensitivityRatio);
     }
 }

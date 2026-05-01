@@ -139,6 +139,127 @@ public class RuleDataNeedsTests
         result.NeedsIob.Should().BeTrue();
     }
 
+    // ----- Looping kinds -----
+
+    [Fact]
+    public void LoopStale_rule_sets_LastApsCycle_only()
+    {
+        var rule = MakeRule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsLastApsCycle.Should().BeTrue();
+        result.NeedsLastApsEnacted.Should().BeFalse();
+        result.NeedsPumpStatus.Should().BeFalse();
+        result.NeedsTempBasal.Should().BeFalse();
+        result.NeedsUploaderStatus.Should().BeFalse();
+        result.NeedsOverride.Should().BeFalse();
+        result.NeedsSensitivityRatio.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LoopEnactionStale_rule_sets_LastApsEnacted_only()
+    {
+        var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"operator":">","minutes":15}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsLastApsEnacted.Should().BeTrue();
+        result.NeedsLastApsCycle.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PumpSuspended_rule_sets_PumpStatus_only()
+    {
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsPumpStatus.Should().BeTrue();
+        result.NeedsLastApsCycle.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PumpBattery_rule_sets_PumpStatus_only()
+    {
+        var rule = MakeRule(AlertConditionType.PumpBattery, """{"operator":"<","value":20}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsPumpStatus.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TempBasal_rule_sets_TempBasal_only()
+    {
+        var rule = MakeRule(AlertConditionType.TempBasal,
+            """{"metric":"rate","operator":">","value":1.5}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsTempBasal.Should().BeTrue();
+        result.NeedsPumpStatus.Should().BeFalse();
+    }
+
+    [Fact]
+    public void UploaderBattery_rule_sets_UploaderStatus_only()
+    {
+        var rule = MakeRule(AlertConditionType.UploaderBattery, """{"operator":"<","value":20}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsUploaderStatus.Should().BeTrue();
+    }
+
+    [Fact]
+    public void OverrideActive_rule_sets_Override_only()
+    {
+        var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsOverride.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SensitivityRatio_rule_sets_SensitivityRatio_only()
+    {
+        var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"operator":"<","value":0.8}""");
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsSensitivityRatio.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Composite_with_loop_stale_inside_not_sustained_sets_LastApsCycle()
+    {
+        var json = """
+        {
+          "operator": "and",
+          "conditions": [
+            {
+              "type": "not",
+              "not": {
+                "child": {
+                  "type": "sustained",
+                  "sustained": {
+                    "minutes": 5,
+                    "child": { "type": "loop_stale", "loop_stale": { "operator": ">", "minutes": 15 } }
+                  }
+                }
+              }
+            }
+          ]
+        }
+        """;
+        var rule = MakeRule(AlertConditionType.Composite, json);
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsLastApsCycle.Should().BeTrue();
+    }
+
     private static AlertRuleSnapshot MakeRule(AlertConditionType type, string json) =>
         new(Id: Guid.NewGuid(),
             TenantId: Guid.NewGuid(),
