@@ -203,7 +203,7 @@
     {
       key: "pump_suspended",
       name: "Pump suspended",
-      description: "Alert when the pump has been suspended for 30 minutes.",
+      description: "Alert when the pump has been suspended for an extended period.",
       icon: PauseCircle,
       kind: "duration",
       severity: AlertRuleSeverity.Warning,
