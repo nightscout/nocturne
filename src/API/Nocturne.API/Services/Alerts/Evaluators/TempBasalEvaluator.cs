@@ -43,15 +43,7 @@ public class TempBasalEvaluator : IConditionEvaluator
         if (context.ActiveTempBasal is not { } temp)
             return Task.FromResult(false);
 
-        TempBasalCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<TempBasalCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<TempBasalCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 

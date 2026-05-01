@@ -50,15 +50,7 @@ public class LoopEnactionStaleEvaluator : IConditionEvaluator
         if (!context.HasEverApsCycled)
             return Task.FromResult(false);
 
-        LoopEnactionStaleCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<LoopEnactionStaleCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<LoopEnactionStaleCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 

@@ -40,15 +40,7 @@ public class PumpBatteryEvaluator : IConditionEvaluator
         if (context.PumpBatteryPercent is null)
             return Task.FromResult(false);
 
-        PumpBatteryCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<PumpBatteryCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<PumpBatteryCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 

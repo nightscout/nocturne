@@ -44,15 +44,7 @@ public class OverrideActiveEvaluator : IConditionEvaluator
     /// <param name="ct">Cancellation token (unused; this evaluator performs no I/O).</param>
     public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
-        OverrideActiveCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<OverrideActiveCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<OverrideActiveCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 

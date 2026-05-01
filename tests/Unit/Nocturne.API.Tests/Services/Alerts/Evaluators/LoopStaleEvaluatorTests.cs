@@ -60,15 +60,6 @@ public class LoopStaleEvaluatorTests
         (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task MalformedJson_ReturnsFalse()
-    {
-        var json = "{not json";
-        var context = MakeContext(lastApsCycleAt: FixedNow.AddMinutes(-30), hasEverApsCycled: true);
-
-        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
-    }
-
     private static SensorContext MakeContext(DateTime? lastApsCycleAt, bool hasEverApsCycled) => new()
     {
         LatestValue = 100m,

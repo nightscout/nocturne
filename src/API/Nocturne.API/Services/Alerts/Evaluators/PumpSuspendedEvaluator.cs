@@ -49,15 +49,7 @@ public class PumpSuspendedEvaluator : IConditionEvaluator
         if (!context.HasEverPumpSnapshot)
             return Task.FromResult(false);
 
-        PumpSuspendedCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<PumpSuspendedCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<PumpSuspendedCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 

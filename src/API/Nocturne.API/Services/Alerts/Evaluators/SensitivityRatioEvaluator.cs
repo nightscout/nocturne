@@ -40,15 +40,7 @@ public class SensitivityRatioEvaluator : IConditionEvaluator
         if (context.SensitivityRatio is null)
             return Task.FromResult(false);
 
-        SensitivityRatioCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<SensitivityRatioCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<SensitivityRatioCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 

@@ -40,15 +40,7 @@ public class UploaderBatteryEvaluator : IConditionEvaluator
         if (context.UploaderBatteryPercent is null)
             return Task.FromResult(false);
 
-        UploaderBatteryCondition? condition;
-        try
-        {
-            condition = JsonSerializer.Deserialize<UploaderBatteryCondition>(conditionParamsJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return Task.FromResult(false);
-        }
+        var condition = JsonSerializer.Deserialize<UploaderBatteryCondition>(conditionParamsJson, JsonOptions);
         if (condition is null)
             return Task.FromResult(false);
 
