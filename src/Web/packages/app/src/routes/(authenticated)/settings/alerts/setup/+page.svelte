@@ -29,6 +29,8 @@
     AlertTriangle,
     Shield,
     Loader2,
+    Activity,
+    PauseCircle,
   } from "lucide-svelte";
   import ChannelPicker from "$lib/components/alerts/ChannelPicker.svelte";
   import { nodeToApi, stripEditorFields } from "$lib/components/alerts/types";
@@ -177,6 +179,43 @@
         },
         autoResolveEnabled: true,
         autoResolveCondition: autoResolveAbove(p.threshold + 20),
+      }),
+    },
+    {
+      key: "loop_stopped",
+      name: "Loop has stopped",
+      description:
+        "Alert when the closed loop has not enacted a recommendation in 15 minutes.",
+      icon: Activity,
+      kind: "duration",
+      severity: AlertRuleSeverity.Warning,
+      threshold: 15,
+      enabled: false,
+      buildRule: (p) => ({
+        condition: compositeOf({
+          type: "loop_enaction_stale",
+          loop_enaction_stale: { operator: ">", minutes: p.threshold },
+        }),
+        autoResolveEnabled: false,
+        autoResolveCondition: null,
+      }),
+    },
+    {
+      key: "pump_suspended",
+      name: "Pump suspended",
+      description: "Alert when the pump has been suspended for 30 minutes.",
+      icon: PauseCircle,
+      kind: "duration",
+      severity: AlertRuleSeverity.Warning,
+      threshold: 30,
+      enabled: false,
+      buildRule: (p) => ({
+        condition: compositeOf({
+          type: "pump_suspended",
+          pump_suspended: { is_active: true, for_minutes: p.threshold },
+        }),
+        autoResolveEnabled: false,
+        autoResolveCondition: null,
       }),
     },
     {
