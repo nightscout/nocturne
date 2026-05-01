@@ -27221,6 +27221,14 @@ export enum AlertConditionType {
     SiteAge = "site_age",
     SensorAge = "sensor_age",
     AlertState = "alert_state",
+    LoopStale = "loop_stale",
+    LoopEnactionStale = "loop_enaction_stale",
+    PumpSuspended = "pump_suspended",
+    PumpBattery = "pump_battery",
+    TempBasal = "temp_basal",
+    UploaderBattery = "uploader_battery",
+    OverrideActive = "override_active",
+    SensitivityRatio = "sensitivity_ratio",
 }
 
 export interface AlertScheduleResponse {

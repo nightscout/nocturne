@@ -31577,7 +31577,15 @@
           "Reservoir",
           "SiteAge",
           "SensorAge",
-          "AlertState"
+          "AlertState",
+          "LoopStale",
+          "LoopEnactionStale",
+          "PumpSuspended",
+          "PumpBattery",
+          "TempBasal",
+          "UploaderBattery",
+          "OverrideActive",
+          "SensitivityRatio"
         ],
         "enum": [
           "threshold",
@@ -31595,7 +31603,15 @@
           "reservoir",
           "site_age",
           "sensor_age",
-          "alert_state"
+          "alert_state",
+          "loop_stale",
+          "loop_enaction_stale",
+          "pump_suspended",
+          "pump_battery",
+          "temp_basal",
+          "uploader_battery",
+          "override_active",
+          "sensitivity_ratio"
         ]
       },
       "AlertScheduleResponse": {
