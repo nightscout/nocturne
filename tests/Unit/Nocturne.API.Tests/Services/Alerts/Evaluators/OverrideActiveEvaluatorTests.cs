@@ -8,6 +8,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Evaluators;
 
 [Trait("Category", "Unit")]
+// No cold-start (HasEver*) test: OverrideActive intentionally has no HasEver guard because
+// "no active override" is the legitimate empty-value state. See OverrideActiveEvaluator <remarks>.
 public class OverrideActiveEvaluatorTests
 {
     private static readonly DateTime FixedNow = new(2026, 3, 22, 12, 0, 0, DateTimeKind.Utc);

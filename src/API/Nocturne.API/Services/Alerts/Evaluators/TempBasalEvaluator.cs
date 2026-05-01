@@ -42,23 +42,18 @@ public class TempBasalEvaluator : IConditionEvaluator
         if (condition is null)
             return Task.FromResult(false);
 
-        decimal actual;
-        switch (condition.Metric)
+        var actual = condition.Metric switch
         {
-            case TempBasalMetric.Rate:
-                actual = temp.Rate;
-                break;
+            TempBasalMetric.Rate => (decimal?)temp.Rate,
+            TempBasalMetric.PercentOfScheduled
+                when temp.ScheduledRate is decimal scheduled && scheduled != 0m
+                    => temp.Rate / scheduled * 100m,
+            _ => null,
+        };
 
-            case TempBasalMetric.PercentOfScheduled:
-                if (temp.ScheduledRate is not { } scheduled || scheduled == 0m)
-                    return Task.FromResult(false);
-                actual = temp.Rate / scheduled * 100m;
-                break;
+        if (actual is null)
+            return Task.FromResult(false);
 
-            default:
-                return Task.FromResult(false);
-        }
-
-        return Task.FromResult(ComparisonOps.Compare(actual, condition.Operator, condition.Value));
+        return Task.FromResult(ComparisonOps.Compare(actual.Value, condition.Operator, condition.Value));
     }
 }

@@ -657,29 +657,7 @@ public static class ServiceRegistrationExtensions
         // Condition evaluators. Scoped because SustainedEvaluator depends on the scoped
         // IConditionTimerStore (DbContext-backed); the registry is also scoped because it captures
         // IEnumerable<IConditionEvaluator>.
-        services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
-        services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
-        services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
-        services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
-        services.AddScoped<IConditionEvaluator, NotEvaluator>();
-        services.AddScoped<IConditionEvaluator, SustainedEvaluator>();
-        services.AddScoped<IConditionEvaluator, PredictedEvaluator>();
-        services.AddScoped<IConditionEvaluator, TrendEvaluator>();
-        services.AddScoped<IConditionEvaluator, TimeOfDayEvaluator>();
-        services.AddScoped<IConditionEvaluator, IobEvaluator>();
-        services.AddScoped<IConditionEvaluator, CobEvaluator>();
-        services.AddScoped<IConditionEvaluator, ReservoirEvaluator>();
-        services.AddScoped<IConditionEvaluator, SiteAgeEvaluator>();
-        services.AddScoped<IConditionEvaluator, SensorAgeEvaluator>();
-        services.AddScoped<IConditionEvaluator, AlertStateEvaluator>();
-        services.AddScoped<IConditionEvaluator, LoopStaleEvaluator>();
-        services.AddScoped<IConditionEvaluator, LoopEnactionStaleEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpSuspendedEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpBatteryEvaluator>();
-        services.AddScoped<IConditionEvaluator, TempBasalEvaluator>();
-        services.AddScoped<IConditionEvaluator, UploaderBatteryEvaluator>();
-        services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
-        services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
+        services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
 
         // Sustained-condition timer store
@@ -755,6 +733,41 @@ public static class ServiceRegistrationExtensions
         services.AddHttpClient("DemoServiceHealth");
         services.AddHostedService<DemoServiceHealthMonitor>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers every <see cref="IConditionEvaluator"/> implementation that the
+    /// <see cref="ConditionEvaluatorRegistry"/> resolves at runtime. Extracted from
+    /// <see cref="AddAlertingAndMonitoring"/> so production wiring and the registry
+    /// coverage tests can share the same single source of truth — adding a new
+    /// evaluator here automatically updates both.
+    /// </summary>
+    public static IServiceCollection AddAlertEvaluators(this IServiceCollection services)
+    {
+        services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
+        services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
+        services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
+        services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
+        services.AddScoped<IConditionEvaluator, NotEvaluator>();
+        services.AddScoped<IConditionEvaluator, SustainedEvaluator>();
+        services.AddScoped<IConditionEvaluator, PredictedEvaluator>();
+        services.AddScoped<IConditionEvaluator, TrendEvaluator>();
+        services.AddScoped<IConditionEvaluator, TimeOfDayEvaluator>();
+        services.AddScoped<IConditionEvaluator, IobEvaluator>();
+        services.AddScoped<IConditionEvaluator, CobEvaluator>();
+        services.AddScoped<IConditionEvaluator, ReservoirEvaluator>();
+        services.AddScoped<IConditionEvaluator, SiteAgeEvaluator>();
+        services.AddScoped<IConditionEvaluator, SensorAgeEvaluator>();
+        services.AddScoped<IConditionEvaluator, AlertStateEvaluator>();
+        services.AddScoped<IConditionEvaluator, LoopStaleEvaluator>();
+        services.AddScoped<IConditionEvaluator, LoopEnactionStaleEvaluator>();
+        services.AddScoped<IConditionEvaluator, PumpSuspendedEvaluator>();
+        services.AddScoped<IConditionEvaluator, PumpBatteryEvaluator>();
+        services.AddScoped<IConditionEvaluator, TempBasalEvaluator>();
+        services.AddScoped<IConditionEvaluator, UploaderBatteryEvaluator>();
+        services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
+        services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
         return services;
     }
 

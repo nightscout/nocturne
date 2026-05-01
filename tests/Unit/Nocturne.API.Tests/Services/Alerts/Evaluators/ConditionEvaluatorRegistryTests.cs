@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
@@ -55,34 +56,14 @@ public class ConditionEvaluatorRegistryTests
         // then assert that GetEvaluator returns non-null for every leaf AlertConditionType.
         // The recursive wrappers (Composite/Not/Sustained) and the legacy SignalLoss are
         // intentionally excluded — they don't have leaf evaluators in the same sense.
+        // Drive the registration off the same extension method production uses so this
+        // test fails the moment a new evaluator ships without a corresponding DI entry.
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(new FakeTimeProvider(
             new DateTimeOffset(new DateTime(2026, 3, 22, 12, 0, 0, DateTimeKind.Utc))));
         services.AddSingleton(Mock.Of<IConditionTimerStore>());
 
-        services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
-        services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
-        services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
-        services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
-        services.AddScoped<IConditionEvaluator, NotEvaluator>();
-        services.AddScoped<IConditionEvaluator, SustainedEvaluator>();
-        services.AddScoped<IConditionEvaluator, PredictedEvaluator>();
-        services.AddScoped<IConditionEvaluator, TrendEvaluator>();
-        services.AddScoped<IConditionEvaluator, TimeOfDayEvaluator>();
-        services.AddScoped<IConditionEvaluator, IobEvaluator>();
-        services.AddScoped<IConditionEvaluator, CobEvaluator>();
-        services.AddScoped<IConditionEvaluator, ReservoirEvaluator>();
-        services.AddScoped<IConditionEvaluator, SiteAgeEvaluator>();
-        services.AddScoped<IConditionEvaluator, SensorAgeEvaluator>();
-        services.AddScoped<IConditionEvaluator, AlertStateEvaluator>();
-        services.AddScoped<IConditionEvaluator, LoopStaleEvaluator>();
-        services.AddScoped<IConditionEvaluator, LoopEnactionStaleEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpSuspendedEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpBatteryEvaluator>();
-        services.AddScoped<IConditionEvaluator, TempBasalEvaluator>();
-        services.AddScoped<IConditionEvaluator, UploaderBatteryEvaluator>();
-        services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
-        services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
+        services.AddAlertEvaluators();
 
         using var sp = services.BuildServiceProvider();
         using var scope = sp.CreateScope();
