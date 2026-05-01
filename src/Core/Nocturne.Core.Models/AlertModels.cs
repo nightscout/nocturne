@@ -112,6 +112,10 @@ public record SensorContext
     public decimal? SensitivityRatio { get; init; }
 
     // ----- Cold-start null-suppression flags -----
+    // These exist for facts where "no data yet" must be distinguished from "data is just
+    // very old" — i.e. where a missing/old timestamp would otherwise satisfy a `>=`
+    // operator (LoopStale > 15min on a brand-new tenant). Facts whose projection is
+    // naturally null when absent (ActiveOverride, ActiveTempBasal) need no flag.
     // False ⇒ the underlying fact has never been observed for this tenant; the evaluator
     // should return false rather than treat null as "infinity stale" or similar.
 

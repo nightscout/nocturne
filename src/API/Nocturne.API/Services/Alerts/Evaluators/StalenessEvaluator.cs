@@ -10,11 +10,16 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// last CGM reading against a configured value using a relational operator.
 /// </summary>
 /// <remarks>
-/// When <see cref="SensorContext.LastReadingAt"/> is <see langword="null"/> the elapsed time
+/// <para>When <see cref="SensorContext.LastReadingAt"/> is <see langword="null"/> the elapsed time
 /// is treated as "infinity": operators that mean "elapsed greater than threshold"
 /// (<c>&gt;</c>, <c>&gt;=</c>) return <see langword="true"/>; "elapsed less than threshold"
 /// operators (<c>&lt;</c>, <c>&lt;=</c>) return <see langword="false"/>; <c>==</c> returns
-/// <see langword="false"/> because infinity is never equal to a finite threshold.
+/// <see langword="false"/> because infinity is never equal to a finite threshold.</para>
+/// <para>Returns <see langword="false"/> when the tenant has no reading history at all
+/// (both <see cref="SensorContext.LastReadingAt"/> and <see cref="SensorContext.LatestTimestamp"/>
+/// are <see langword="null"/>) — a brand-new tenant should not page itself the moment
+/// they configure a <c>&gt; 15 minutes</c> rule. This cold-start short-circuit takes
+/// precedence over the infinity convention above.</para>
 /// </remarks>
 /// <seealso cref="IConditionEvaluator"/>
 /// <seealso cref="ComparisonOps"/>
