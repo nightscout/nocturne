@@ -70,4 +70,20 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the <see cref="UploaderSnapshot"/> representing the weakest uploader for the
+    /// current tenant — i.e. the row with the lowest <see cref="UploaderSnapshot.Battery"/>
+    /// among the most recent telemetry — or <c>null</c> if none exists.
+    /// </summary>
+    /// <remarks>
+    /// Multi-uploader semantics: when a tenant has multiple uploaders (e.g. xDrip+ on phone
+    /// plus a Nightscout uploader on a tablet), alerting on the weakest battery raises the
+    /// most actionable signal. Rows with <c>Battery = null</c> sort last (no signal worse
+    /// than a known-low battery), then ties break by most-recent <c>Timestamp</c>.
+    /// </remarks>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
+    /// when <c>null</c>, returns the absolute latest snapshot per the lowest-battery rule.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
 }
