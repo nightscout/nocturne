@@ -25,7 +25,15 @@ export type ConditionKind =
 	| "reservoir"
 	| "site_age"
 	| "sensor_age"
-	| "alert_state";
+	| "alert_state"
+	| "loop_stale"
+	| "loop_enaction_stale"
+	| "pump_suspended"
+	| "pump_battery"
+	| "temp_basal"
+	| "uploader_battery"
+	| "override_active"
+	| "sensitivity_ratio";
 
 export type ComparisonOperator = ">=" | ">" | "<=" | "<";
 
@@ -112,6 +120,57 @@ export interface AlertStatePayload {
 	forMinutes?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Looping conditions (loop_stale, pump_suspended, temp_basal, ...)
+// ---------------------------------------------------------------------------
+//
+// Wire transport for these payloads is snake_case (the alerts subsystem uses
+// `JsonNamingPolicy.SnakeCaseLower`). Field names below match what the
+// backend produces over the wire.
+
+export type TempBasalMetric = "rate" | "percent_of_scheduled";
+
+export interface LoopStalePayload {
+	operator: ComparisonOperator;
+	minutes: number;
+}
+
+export interface LoopEnactionStalePayload {
+	operator: ComparisonOperator;
+	minutes: number;
+}
+
+export interface PumpSuspendedPayload {
+	is_active: boolean;
+	for_minutes?: number | null;
+}
+
+export interface PumpBatteryPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface TempBasalPayload {
+	metric: TempBasalMetric;
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface UploaderBatteryPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
+export interface OverrideActivePayload {
+	is_active: boolean;
+	for_minutes?: number | null;
+}
+
+export interface SensitivityRatioPayload {
+	operator: ComparisonOperator;
+	value: number;
+}
+
 export interface ConditionNode {
 	type: ConditionKind;
 	/**
@@ -136,6 +195,14 @@ export interface ConditionNode {
 	site_age?: SiteAgePayload;
 	sensor_age?: SensorAgePayload;
 	alert_state?: AlertStatePayload;
+	loop_stale?: LoopStalePayload;
+	loop_enaction_stale?: LoopEnactionStalePayload;
+	pump_suspended?: PumpSuspendedPayload;
+	pump_battery?: PumpBatteryPayload;
+	temp_basal?: TempBasalPayload;
+	uploader_battery?: UploaderBatteryPayload;
+	override_active?: OverrideActivePayload;
+	sensitivity_ratio?: SensitivityRatioPayload;
 }
 
 function newUid(): string {
@@ -222,6 +289,46 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 			return {
 				type: "alert_state",
 				alert_state: { alertId: "", state: "firing" },
+			};
+		case "loop_stale":
+			return {
+				type: "loop_stale",
+				loop_stale: { operator: ">", minutes: 15 },
+			};
+		case "loop_enaction_stale":
+			return {
+				type: "loop_enaction_stale",
+				loop_enaction_stale: { operator: ">", minutes: 15 },
+			};
+		case "pump_suspended":
+			return {
+				type: "pump_suspended",
+				pump_suspended: { is_active: true },
+			};
+		case "pump_battery":
+			return {
+				type: "pump_battery",
+				pump_battery: { operator: "<=", value: 20 },
+			};
+		case "temp_basal":
+			return {
+				type: "temp_basal",
+				temp_basal: { metric: "rate", operator: ">=", value: 1 },
+			};
+		case "uploader_battery":
+			return {
+				type: "uploader_battery",
+				uploader_battery: { operator: "<=", value: 20 },
+			};
+		case "override_active":
+			return {
+				type: "override_active",
+				override_active: { is_active: true },
+			};
+		case "sensitivity_ratio":
+			return {
+				type: "sensitivity_ratio",
+				sensitivity_ratio: { operator: "<", value: 0.8 },
 			};
 	}
 }
