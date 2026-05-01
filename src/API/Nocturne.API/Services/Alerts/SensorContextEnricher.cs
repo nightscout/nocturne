@@ -1,11 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Glucose;
-using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -29,6 +27,10 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="IPredictionService"/> is resolved through the service provider so the alert
 /// engine continues to function in deployments where prediction is not configured (the type
 /// is registered conditionally based on <c>PredictionOptions</c>).
+///
+/// Data-source dependencies are bundled into <see cref="SensorContextEnricherDependencies"/>
+/// so this constructor stays focused on orchestration concerns (service provider for the
+/// optional prediction service, time, logging) rather than plumbing.
 /// </remarks>
 internal sealed class SensorContextEnricher : ISensorContextEnricher
 {
@@ -44,51 +46,19 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// used by both AID device-status uploads and the oref WASM curve.</summary>
     private const int PredictionIntervalMinutes = 5;
 
-    /// <summary>How fresh the latest <see cref="PumpSnapshot"/> must be before we project an
-    /// active pump-suspension StateSpan into the <see cref="SensorContext"/>. Twice the typical
-    /// AID upload cadence — when uploads stop, suspension state is unknown, not "still suspended".</summary>
-    private static readonly TimeSpan PumpFreshnessThreshold = TimeSpan.FromMinutes(10);
-
+    private readonly SensorContextEnricherDependencies _deps;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IIobService _iobService;
-    private readonly ICobService _cobService;
-    private readonly ITreatmentService _treatmentService;
-    private readonly IDeviceEventRepository _deviceEventRepository;
-    private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
-    private readonly IApsSnapshotRepository _apsSnapshotRepository;
-    private readonly ITempBasalRepository _tempBasalRepository;
-    private readonly IUploaderSnapshotRepository _uploaderSnapshotRepository;
-    private readonly IStateSpanService _stateSpanService;
-    private readonly IAlertRepository _alertRepository;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SensorContextEnricher> _logger;
 
     public SensorContextEnricher(
+        SensorContextEnricherDependencies deps,
         IServiceProvider serviceProvider,
-        IIobService iobService,
-        ICobService cobService,
-        ITreatmentService treatmentService,
-        IDeviceEventRepository deviceEventRepository,
-        IPumpSnapshotRepository pumpSnapshotRepository,
-        IApsSnapshotRepository apsSnapshotRepository,
-        ITempBasalRepository tempBasalRepository,
-        IUploaderSnapshotRepository uploaderSnapshotRepository,
-        IStateSpanService stateSpanService,
-        IAlertRepository alertRepository,
         TimeProvider timeProvider,
         ILogger<SensorContextEnricher> logger)
     {
+        _deps = deps;
         _serviceProvider = serviceProvider;
-        _iobService = iobService;
-        _cobService = cobService;
-        _treatmentService = treatmentService;
-        _deviceEventRepository = deviceEventRepository;
-        _pumpSnapshotRepository = pumpSnapshotRepository;
-        _apsSnapshotRepository = apsSnapshotRepository;
-        _tempBasalRepository = tempBasalRepository;
-        _uploaderSnapshotRepository = uploaderSnapshotRepository;
-        _stateSpanService = stateSpanService;
-        _alertRepository = alertRepository;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -151,36 +121,50 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsActiveAlerts)
         {
-            var activeAlerts = await _alertRepository.GetActiveAlertSnapshotsAsync(tenantId, ct);
+            var activeAlerts = await _deps.Alerts.GetActiveAlertSnapshotsAsync(tenantId, ct);
             enriched = enriched with { ActiveAlerts = activeAlerts };
         }
 
-        // ----- Looping facts -----
-
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        enriched = await EnrichLoopingFactsAsync(enriched, needs, now, ct);
+
+        return enriched;
+    }
+
+    /// <summary>
+    /// Populates the looping-related facts (APS cycle/enaction/sensitivity, pump status and
+    /// suspension, temp basal, uploader, override) when their corresponding needs flags are
+    /// set. Extracted from <see cref="EnrichAsync"/> to keep that method focused on
+    /// dispatch — this section grew to ~90 LOC of fetch-and-project once cold-start flags
+    /// and freshness gating landed.
+    /// </summary>
+    private async Task<SensorContext> EnrichLoopingFactsAsync(
+        SensorContext baseCtx, DataNeedsSet needs, DateTime now, CancellationToken ct)
+    {
+        var enriched = baseCtx;
 
         if (needs.NeedsLastApsCycle || needs.NeedsLastApsEnacted || needs.NeedsSensitivityRatio)
         {
             if (needs.NeedsLastApsCycle)
             {
-                var t = await _apsSnapshotRepository.GetLatestTimestampAsync(asOf: null, ct);
+                var t = await _deps.ApsSnapshots.GetLatestTimestampAsync(asOf: null, ct);
                 enriched = enriched with { LastApsCycleAt = t, HasEverApsCycled = t.HasValue };
             }
             if (needs.NeedsLastApsEnacted)
             {
-                var t = await _apsSnapshotRepository.GetLatestEnactedTimestampAsync(asOf: null, ct);
+                var t = await _deps.ApsSnapshots.GetLatestEnactedTimestampAsync(asOf: null, ct);
                 enriched = enriched with { LastApsEnactedAt = t };
             }
             if (needs.NeedsSensitivityRatio)
             {
-                var s = await _apsSnapshotRepository.GetLatestSensitivityRatioAsync(asOf: null, ct);
+                var s = await _deps.ApsSnapshots.GetLatestSensitivityRatioAsync(asOf: null, ct);
                 enriched = enriched with { SensitivityRatio = s, HasEverApsSensitivity = s.HasValue };
             }
         }
 
         if (needs.NeedsPumpStatus)
         {
-            var pump = await _pumpSnapshotRepository.GetLatestAsync(asOf: null, ct);
+            var pump = await _deps.PumpSnapshots.GetLatestAsync(asOf: null, ct);
             if (pump is not null)
             {
                 enriched = enriched with
@@ -192,10 +176,12 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 // Freshness gate: only project active pump-suspension when the underlying pump
                 // snapshot is itself fresh — prevents suspension state latching after the
                 // uploader goes offline.
-                var pumpFresh = (now - pump.Timestamp) < PumpFreshnessThreshold;
+                // Strictly less-than: a snapshot exactly at the threshold is treated as stale,
+                // biasing toward "unknown" rather than "still suspended" at the edge of upload timing.
+                var pumpFresh = (now - pump.Timestamp) < _deps.Options.Value.PumpFreshnessThreshold;
                 if (pumpFresh)
                 {
-                    var span = await _stateSpanService.GetActiveAtAsync(
+                    var span = await _deps.StateSpans.GetActiveAtAsync(
                         StateSpanCategory.PumpMode,
                         state: PumpModeState.Suspended.ToString(),
                         at: now,
@@ -213,7 +199,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsTempBasal)
         {
-            var temp = await _tempBasalRepository.GetActiveAtAsync(now, ct);
+            var temp = await _deps.TempBasals.GetActiveAtAsync(now, ct);
             if (temp is not null)
             {
                 enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp) };
@@ -222,7 +208,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsUploaderStatus)
         {
-            var uploader = await _uploaderSnapshotRepository.GetLatestAsync(asOf: null, ct);
+            var uploader = await _deps.UploaderSnapshots.GetLatestAsync(asOf: null, ct);
             if (uploader is not null)
             {
                 enriched = enriched with
@@ -235,12 +221,12 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsOverride)
         {
-            var span = await _stateSpanService.GetActiveAtAsync(
+            var span = await _deps.StateSpans.GetActiveAtAsync(
                 StateSpanCategory.Override, state: null, at: now, ct);
             if (span is not null)
             {
-                var multiplier = TryReadDecimal(span.Metadata, "insulinNeedsScaleFactor");
-                var name = TryReadString(span.Metadata, "reasonDisplay");
+                var multiplier = span.Metadata.TryReadDecimal("insulinNeedsScaleFactor");
+                var name = span.Metadata.TryReadString("reasonDisplay");
                 enriched = enriched with
                 {
                     ActiveOverride = new OverrideSnapshot(
@@ -258,47 +244,12 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             ScheduledRate: t.ScheduledRate.HasValue ? (decimal?)t.ScheduledRate.Value : null,
             StartedAt: t.StartTimestamp);
 
-    private static decimal? TryReadDecimal(Dictionary<string, object>? metadata, string key)
-    {
-        if (metadata is null) return null;
-        if (!metadata.TryGetValue(key, out var v) || v is null) return null;
-        return v switch
-        {
-            decimal d => d,
-            double dbl when double.IsFinite(dbl) => (decimal)dbl,
-            float f when float.IsFinite(f) => (decimal)f,
-            int i => i,
-            long l => l,
-            string s when decimal.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out var p) => p,
-            System.Text.Json.JsonElement je => je.ValueKind switch
-            {
-                System.Text.Json.JsonValueKind.Number when je.TryGetDecimal(out var dec) => dec,
-                System.Text.Json.JsonValueKind.String when decimal.TryParse(
-                    je.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var parsed) => parsed,
-                _ => (decimal?)null,
-            },
-            _ => null,
-        };
-    }
-
-    private static string? TryReadString(Dictionary<string, object>? metadata, string key)
-    {
-        if (metadata is null) return null;
-        if (!metadata.TryGetValue(key, out var v) || v is null) return null;
-        return v switch
-        {
-            string s => s,
-            System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.String => je.GetString(),
-            _ => v.ToString(),
-        };
-    }
-
     private async Task<List<Treatment>> FetchRecentTreatmentsAsync(CancellationToken ct)
     {
         var nowMills = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var cutoffMills = nowMills - (TreatmentLookbackHours * 60L * 60L * 1000L);
 
-        var page = await _treatmentService.GetTreatmentsAsync(TreatmentFetchLimit, 0, ct);
+        var page = await _deps.Treatments.GetTreatmentsAsync(TreatmentFetchLimit, 0, ct);
         return page.Where(t => t.Mills >= cutoffMills).ToList();
     }
 
@@ -306,7 +257,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         try
         {
-            var result = await _iobService.CalculateTotalAsync(treatments, ct: ct);
+            var result = await _deps.Iob.CalculateTotalAsync(treatments, ct: ct);
             return (decimal)result.Iob;
         }
         catch (Exception ex)
@@ -320,7 +271,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         try
         {
-            var result = await _cobService.CobTotalAsync(treatments, ct: ct);
+            var result = await _deps.Cob.CobTotalAsync(treatments, ct: ct);
             return (decimal)result.Cob;
         }
         catch (Exception ex)
@@ -373,7 +324,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
     private async Task<decimal?> FetchReservoirAsync(CancellationToken ct)
     {
-        var snapshots = await _pumpSnapshotRepository.GetAsync(
+        var snapshots = await _deps.PumpSnapshots.GetAsync(
             from: null, to: null, device: null, source: null,
             limit: 1, offset: 0, descending: true, ct: ct);
 
@@ -383,7 +334,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
     private async Task<DateTime?> FetchLatestEventAsync(DeviceEventType eventType, CancellationToken ct)
     {
-        var evt = await _deviceEventRepository.GetLatestByEventTypeAsync(eventType, ct);
+        var evt = await _deps.DeviceEvents.GetLatestByEventTypeAsync(eventType, ct);
         return evt?.Timestamp;
     }
 

@@ -1,8 +1,10 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Glucose;
@@ -250,6 +252,10 @@ public class SensorContextEnricherTests
         enriched.PumpBatteryPercent.Should().Be(65m);
         enriched.ActivePumpSuspension.Should().NotBeNull();
         enriched.ActivePumpSuspension!.StartedAt.Should().Be(now.AddMinutes(-3));
+        // Bidirectional contract: a fresh snapshot MUST drive a state-span lookup.
+        _stateSpanService.Verify(s => s.GetActiveAtAsync(
+            StateSpanCategory.PumpMode, It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -257,7 +263,7 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        // 11 minutes is beyond the 10-minute freshness threshold.
+        // 11 minutes is past the configured PumpFreshnessThreshold (default 10 minutes).
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-11), BatteryPercent = 50 });
         _stateSpanService.Setup(s => s.GetActiveAtAsync(
@@ -352,12 +358,15 @@ public class SensorContextEnricherTests
         var apsRepo2 = new Mock<IApsSnapshotRepository>();
         apsRepo2.Setup(r => r.GetLatestSensitivityRatioAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync((decimal?)null);
-        var enricher2 = new SensorContextEnricher(
-            new ServiceCollection().BuildServiceProvider(),
+        var deps2 = new SensorContextEnricherDependencies(
             _iobService.Object, _cobService.Object, _treatmentService.Object,
             _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
             apsRepo2.Object, _tempBasalRepository.Object, _uploaderSnapshotRepository.Object,
             _stateSpanService.Object, _alertRepository.Object,
+            Options.Create(new AlertEvaluationOptions()));
+        var enricher2 = new SensorContextEnricher(
+            deps2,
+            new ServiceCollection().BuildServiceProvider(),
             _timeProvider, new NullLogger<SensorContextEnricher>());
 
         var enriched2 = await enricher2.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
@@ -411,7 +420,58 @@ public class SensorContextEnricherTests
             It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private SensorContextEnricher BuildEnricher(bool includePredictionService = true)
+    [Fact]
+    public async Task PumpFreshnessThreshold_option_drives_suspension_projection()
+    {
+        // Configure a 30-minute threshold; an 11-minute-old snapshot is still fresh under it.
+        var enricher = BuildEnricher(
+            options: new AlertEvaluationOptions { PumpFreshnessThreshold = TimeSpan.FromMinutes(30) });
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-11), BatteryPercent = 50 });
+        _stateSpanService.Setup(s => s.GetActiveAtAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan
+            {
+                Category = StateSpanCategory.PumpMode,
+                State = PumpModeState.Suspended.ToString(),
+                StartTimestamp = now.AddMinutes(-15),
+            });
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActivePumpSuspension.Should().NotBeNull();
+        enriched.ActivePumpSuspension!.StartedAt.Should().Be(now.AddMinutes(-15));
+    }
+
+    [Fact]
+    public async Task TempBasal_need_projects_with_null_scheduled_rate_when_not_present()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _tempBasalRepository.Setup(r => r.GetActiveAtAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TempBasal
+            {
+                StartTimestamp = now.AddMinutes(-5),
+                EndTimestamp = now.AddMinutes(25),
+                Rate = 1.0,
+                ScheduledRate = null,
+            });
+        var rule = MakeRule(AlertConditionType.TempBasal,
+            """{"metric":"rate","operator":">","value":0.5}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveTempBasal.Should().NotBeNull();
+        enriched.ActiveTempBasal!.Rate.Should().Be(1.0m);
+        enriched.ActiveTempBasal.ScheduledRate.Should().BeNull();
+    }
+
+    private SensorContextEnricher BuildEnricher(
+        bool includePredictionService = true,
+        AlertEvaluationOptions? options = null)
     {
         var services = new ServiceCollection();
         if (includePredictionService)
@@ -420,8 +480,7 @@ public class SensorContextEnricherTests
         }
         var provider = services.BuildServiceProvider();
 
-        return new SensorContextEnricher(
-            provider,
+        var deps = new SensorContextEnricherDependencies(
             _iobService.Object,
             _cobService.Object,
             _treatmentService.Object,
@@ -432,6 +491,11 @@ public class SensorContextEnricherTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            Options.Create(options ?? new AlertEvaluationOptions()));
+
+        return new SensorContextEnricher(
+            deps,
+            provider,
             _timeProvider,
             new NullLogger<SensorContextEnricher>());
     }
