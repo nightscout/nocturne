@@ -8,6 +8,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -25,6 +26,10 @@ public class SensorContextEnricherTests
     private readonly Mock<ITreatmentService> _treatmentService = new();
     private readonly Mock<IDeviceEventRepository> _deviceEventRepository = new();
     private readonly Mock<IPumpSnapshotRepository> _pumpSnapshotRepository = new();
+    private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepository = new();
+    private readonly Mock<ITempBasalRepository> _tempBasalRepository = new();
+    private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
+    private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly Mock<IAlertRepository> _alertRepository = new();
     private readonly Mock<IPredictionService> _predictionService = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
@@ -200,6 +205,212 @@ public class SensorContextEnricherTests
         enriched.TrendBucket.Should().Be(expected);
     }
 
+    // ----- Looping facts -----
+
+    [Fact]
+    public async Task LoopStale_need_fetches_only_aps_timestamp()
+    {
+        var enricher = BuildEnricher();
+        var lastCycle = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-7);
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(lastCycle);
+        var rule = MakeRule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.LastApsCycleAt.Should().Be(lastCycle);
+        enriched.HasEverApsCycled.Should().BeTrue();
+        _apsSnapshotRepository.Verify(r => r.GetLatestTimestampAsync(null, It.IsAny<CancellationToken>()), Times.Once);
+        _apsSnapshotRepository.Verify(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _apsSnapshotRepository.Verify(r => r.GetLatestSensitivityRatioAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _pumpSnapshotRepository.Verify(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PumpStatus_need_fetches_pump_snapshot_and_state_span()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-2), BatteryPercent = 65 });
+        _stateSpanService.Setup(s => s.GetActiveAtAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan
+            {
+                Category = StateSpanCategory.PumpMode,
+                State = PumpModeState.Suspended.ToString(),
+                StartTimestamp = now.AddMinutes(-3),
+            });
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.HasEverPumpSnapshot.Should().BeTrue();
+        enriched.PumpBatteryPercent.Should().Be(65m);
+        enriched.ActivePumpSuspension.Should().NotBeNull();
+        enriched.ActivePumpSuspension!.StartedAt.Should().Be(now.AddMinutes(-3));
+    }
+
+    [Fact]
+    public async Task Stale_pump_snapshot_nulls_active_suspension_projection()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        // 11 minutes is beyond the 10-minute freshness threshold.
+        _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-11), BatteryPercent = 50 });
+        _stateSpanService.Setup(s => s.GetActiveAtAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan
+            {
+                Category = StateSpanCategory.PumpMode,
+                State = PumpModeState.Suspended.ToString(),
+                StartTimestamp = now.AddMinutes(-30),
+            });
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.HasEverPumpSnapshot.Should().BeTrue();
+        enriched.ActivePumpSuspension.Should().BeNull();
+        // State span should not even be queried when the pump snapshot is stale.
+        _stateSpanService.Verify(s => s.GetActiveAtAsync(
+            StateSpanCategory.PumpMode, It.IsAny<string>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task OverrideActive_need_projects_metadata_correctly()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _stateSpanService.Setup(s => s.GetActiveAtAsync(
+                StateSpanCategory.Override, null, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan
+            {
+                Category = StateSpanCategory.Override,
+                StartTimestamp = now.AddMinutes(-15),
+                EndTimestamp = now.AddMinutes(45),
+                Metadata = new Dictionary<string, object>
+                {
+                    ["insulinNeedsScaleFactor"] = 1.5,
+                    ["reasonDisplay"] = "Eating Soon",
+                },
+            });
+        var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveOverride.Should().NotBeNull();
+        enriched.ActiveOverride!.Multiplier.Should().Be(1.5m);
+        enriched.ActiveOverride.Name.Should().Be("Eating Soon");
+        enriched.ActiveOverride.StartedAt.Should().Be(now.AddMinutes(-15));
+        enriched.ActiveOverride.EndsAt.Should().Be(now.AddMinutes(45));
+    }
+
+    [Fact]
+    public async Task TempBasal_need_projects_rate_and_scheduled_when_both_present()
+    {
+        var enricher = BuildEnricher();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        _tempBasalRepository.Setup(r => r.GetActiveAtAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TempBasal
+            {
+                StartTimestamp = now.AddMinutes(-10),
+                EndTimestamp = now.AddMinutes(20),
+                Rate = 1.2,
+                ScheduledRate = 0.8,
+            });
+        var rule = MakeRule(AlertConditionType.TempBasal,
+            """{"metric":"rate","operator":">","value":1.0}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveTempBasal.Should().NotBeNull();
+        enriched.ActiveTempBasal!.Rate.Should().Be(1.2m);
+        enriched.ActiveTempBasal.ScheduledRate.Should().Be(0.8m);
+        enriched.ActiveTempBasal.StartedAt.Should().Be(now.AddMinutes(-10));
+    }
+
+    [Fact]
+    public async Task Sensitivity_need_sets_HasEver_flag_correctly_on_null_vs_value()
+    {
+        // Case 1: repo returns a value → HasEverApsSensitivity = true.
+        var enricher1 = BuildEnricher();
+        _apsSnapshotRepository.Setup(r => r.GetLatestSensitivityRatioAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0.85m);
+        var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"operator":"<","value":0.9}""");
+
+        var enriched1 = await enricher1.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched1.SensitivityRatio.Should().Be(0.85m);
+        enriched1.HasEverApsSensitivity.Should().BeTrue();
+
+        // Case 2: repo returns null → HasEverApsSensitivity stays false.
+        var apsRepo2 = new Mock<IApsSnapshotRepository>();
+        apsRepo2.Setup(r => r.GetLatestSensitivityRatioAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((decimal?)null);
+        var enricher2 = new SensorContextEnricher(
+            new ServiceCollection().BuildServiceProvider(),
+            _iobService.Object, _cobService.Object, _treatmentService.Object,
+            _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
+            apsRepo2.Object, _tempBasalRepository.Object, _uploaderSnapshotRepository.Object,
+            _stateSpanService.Object, _alertRepository.Object,
+            _timeProvider, new NullLogger<SensorContextEnricher>());
+
+        var enriched2 = await enricher2.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched2.SensitivityRatio.Should().BeNull();
+        enriched2.HasEverApsSensitivity.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Cold_start_HasEver_flags_all_false_when_repos_empty()
+    {
+        var enricher = BuildEnricher();
+        // All repositories return null/empty by default — Moq returns default(T) without setup.
+        var json = """
+        {
+          "operator": "and",
+          "conditions": [
+            { "type": "loop_stale", "loop_stale": { "operator": ">", "minutes": 15 } },
+            { "type": "pump_battery", "pump_battery": { "operator": "<", "value": 20 } },
+            { "type": "uploader_battery", "uploader_battery": { "operator": "<", "value": 20 } },
+            { "type": "sensitivity_ratio", "sensitivity_ratio": { "operator": "<", "value": 0.9 } }
+          ]
+        }
+        """;
+        var rule = MakeRule(AlertConditionType.Composite, json);
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.HasEverApsCycled.Should().BeFalse();
+        enriched.HasEverPumpSnapshot.Should().BeFalse();
+        enriched.HasEverUploaderSnapshot.Should().BeFalse();
+        enriched.HasEverApsSensitivity.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Lazy_no_fetches_when_no_rule_needs_loop_data()
+    {
+        var enricher = BuildEnricher();
+        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+
+        await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        _apsSnapshotRepository.Verify(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _apsSnapshotRepository.Verify(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _apsSnapshotRepository.Verify(r => r.GetLatestSensitivityRatioAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _pumpSnapshotRepository.Verify(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tempBasalRepository.Verify(r => r.GetActiveAtAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uploaderSnapshotRepository.Verify(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _stateSpanService.Verify(s => s.GetActiveAtAsync(
+            It.IsAny<StateSpanCategory>(), It.IsAny<string?>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private SensorContextEnricher BuildEnricher(bool includePredictionService = true)
     {
         var services = new ServiceCollection();
@@ -216,6 +427,10 @@ public class SensorContextEnricherTests
             _treatmentService.Object,
             _deviceEventRepository.Object,
             _pumpSnapshotRepository.Object,
+            _apsSnapshotRepository.Object,
+            _tempBasalRepository.Object,
+            _uploaderSnapshotRepository.Object,
+            _stateSpanService.Object,
             _alertRepository.Object,
             _timeProvider,
             new NullLogger<SensorContextEnricher>());

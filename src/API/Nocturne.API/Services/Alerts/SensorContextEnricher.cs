@@ -3,9 +3,11 @@ using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Alerts;
@@ -42,12 +44,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// used by both AID device-status uploads and the oref WASM curve.</summary>
     private const int PredictionIntervalMinutes = 5;
 
+    /// <summary>How fresh the latest <see cref="PumpSnapshot"/> must be before we project an
+    /// active pump-suspension StateSpan into the <see cref="SensorContext"/>. Twice the typical
+    /// AID upload cadence — when uploads stop, suspension state is unknown, not "still suspended".</summary>
+    private static readonly TimeSpan PumpFreshnessThreshold = TimeSpan.FromMinutes(10);
+
     private readonly IServiceProvider _serviceProvider;
     private readonly IIobService _iobService;
     private readonly ICobService _cobService;
     private readonly ITreatmentService _treatmentService;
     private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
+    private readonly IApsSnapshotRepository _apsSnapshotRepository;
+    private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly IUploaderSnapshotRepository _uploaderSnapshotRepository;
+    private readonly IStateSpanService _stateSpanService;
     private readonly IAlertRepository _alertRepository;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SensorContextEnricher> _logger;
@@ -59,6 +70,10 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         ITreatmentService treatmentService,
         IDeviceEventRepository deviceEventRepository,
         IPumpSnapshotRepository pumpSnapshotRepository,
+        IApsSnapshotRepository apsSnapshotRepository,
+        ITempBasalRepository tempBasalRepository,
+        IUploaderSnapshotRepository uploaderSnapshotRepository,
+        IStateSpanService stateSpanService,
         IAlertRepository alertRepository,
         TimeProvider timeProvider,
         ILogger<SensorContextEnricher> logger)
@@ -69,6 +84,10 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         _treatmentService = treatmentService;
         _deviceEventRepository = deviceEventRepository;
         _pumpSnapshotRepository = pumpSnapshotRepository;
+        _apsSnapshotRepository = apsSnapshotRepository;
+        _tempBasalRepository = tempBasalRepository;
+        _uploaderSnapshotRepository = uploaderSnapshotRepository;
+        _stateSpanService = stateSpanService;
         _alertRepository = alertRepository;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -136,7 +155,142 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             enriched = enriched with { ActiveAlerts = activeAlerts };
         }
 
+        // ----- Looping facts -----
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (needs.NeedsLastApsCycle || needs.NeedsLastApsEnacted || needs.NeedsSensitivityRatio)
+        {
+            if (needs.NeedsLastApsCycle)
+            {
+                var t = await _apsSnapshotRepository.GetLatestTimestampAsync(asOf: null, ct);
+                enriched = enriched with { LastApsCycleAt = t, HasEverApsCycled = t.HasValue };
+            }
+            if (needs.NeedsLastApsEnacted)
+            {
+                var t = await _apsSnapshotRepository.GetLatestEnactedTimestampAsync(asOf: null, ct);
+                enriched = enriched with { LastApsEnactedAt = t };
+            }
+            if (needs.NeedsSensitivityRatio)
+            {
+                var s = await _apsSnapshotRepository.GetLatestSensitivityRatioAsync(asOf: null, ct);
+                enriched = enriched with { SensitivityRatio = s, HasEverApsSensitivity = s.HasValue };
+            }
+        }
+
+        if (needs.NeedsPumpStatus)
+        {
+            var pump = await _pumpSnapshotRepository.GetLatestAsync(asOf: null, ct);
+            if (pump is not null)
+            {
+                enriched = enriched with
+                {
+                    PumpBatteryPercent = pump.BatteryPercent.HasValue ? (decimal?)pump.BatteryPercent.Value : null,
+                    HasEverPumpSnapshot = true,
+                };
+
+                // Freshness gate: only project active pump-suspension when the underlying pump
+                // snapshot is itself fresh — prevents suspension state latching after the
+                // uploader goes offline.
+                var pumpFresh = (now - pump.Timestamp) < PumpFreshnessThreshold;
+                if (pumpFresh)
+                {
+                    var span = await _stateSpanService.GetActiveAtAsync(
+                        StateSpanCategory.PumpMode,
+                        state: PumpModeState.Suspended.ToString(),
+                        at: now,
+                        ct);
+                    if (span is not null)
+                    {
+                        enriched = enriched with
+                        {
+                            ActivePumpSuspension = new PumpSuspensionSnapshot(span.StartTimestamp)
+                        };
+                    }
+                }
+            }
+        }
+
+        if (needs.NeedsTempBasal)
+        {
+            var temp = await _tempBasalRepository.GetActiveAtAsync(now, ct);
+            if (temp is not null)
+            {
+                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp) };
+            }
+        }
+
+        if (needs.NeedsUploaderStatus)
+        {
+            var uploader = await _uploaderSnapshotRepository.GetLatestAsync(asOf: null, ct);
+            if (uploader is not null)
+            {
+                enriched = enriched with
+                {
+                    UploaderBatteryPercent = uploader.Battery.HasValue ? (decimal?)uploader.Battery.Value : null,
+                    HasEverUploaderSnapshot = true,
+                };
+            }
+        }
+
+        if (needs.NeedsOverride)
+        {
+            var span = await _stateSpanService.GetActiveAtAsync(
+                StateSpanCategory.Override, state: null, at: now, ct);
+            if (span is not null)
+            {
+                var multiplier = TryReadDecimal(span.Metadata, "insulinNeedsScaleFactor");
+                var name = TryReadString(span.Metadata, "reasonDisplay");
+                enriched = enriched with
+                {
+                    ActiveOverride = new OverrideSnapshot(
+                        span.StartTimestamp, span.EndTimestamp, multiplier, name)
+                };
+            }
+        }
+
         return enriched;
+    }
+
+    private static TempBasalSnapshot ProjectTempBasal(TempBasal t) =>
+        new(
+            Rate: (decimal)t.Rate,
+            ScheduledRate: t.ScheduledRate.HasValue ? (decimal?)t.ScheduledRate.Value : null,
+            StartedAt: t.StartTimestamp);
+
+    private static decimal? TryReadDecimal(Dictionary<string, object>? metadata, string key)
+    {
+        if (metadata is null) return null;
+        if (!metadata.TryGetValue(key, out var v) || v is null) return null;
+        return v switch
+        {
+            decimal d => d,
+            double dbl when double.IsFinite(dbl) => (decimal)dbl,
+            float f when float.IsFinite(f) => (decimal)f,
+            int i => i,
+            long l => l,
+            string s when decimal.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out var p) => p,
+            System.Text.Json.JsonElement je => je.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Number when je.TryGetDecimal(out var dec) => dec,
+                System.Text.Json.JsonValueKind.String when decimal.TryParse(
+                    je.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => (decimal?)null,
+            },
+            _ => null,
+        };
+    }
+
+    private static string? TryReadString(Dictionary<string, object>? metadata, string key)
+    {
+        if (metadata is null) return null;
+        if (!metadata.TryGetValue(key, out var v) || v is null) return null;
+        return v switch
+        {
+            string s => s,
+            System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.String => je.GetString(),
+            _ => v.ToString(),
+        };
     }
 
     private async Task<List<Treatment>> FetchRecentTreatmentsAsync(CancellationToken ct)

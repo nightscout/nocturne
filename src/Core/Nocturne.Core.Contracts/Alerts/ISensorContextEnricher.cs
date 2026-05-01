@@ -10,9 +10,11 @@ namespace Nocturne.Core.Contracts.Alerts;
 /// The orchestrator hands the enricher the base context (latest reading, trend rate, last
 /// reading time) along with the rules being evaluated this pass. The enricher walks the
 /// rules' condition trees, decides which optional fields any rule actually needs, and then
-/// fetches only those — IOB/COB/predictions/reservoir/site-age/sensor-age/active-alerts —
-/// from their respective sources. A rule set that only consults BG and trend triggers no
-/// downstream fetches; the trend bucket is derived from the existing <see cref="SensorContext.TrendRate"/>.
+/// fetches only those — IOB/COB/predictions/reservoir/site-age/sensor-age/active-alerts plus
+/// the looping facts (APS cycle/enaction timestamps, pump/uploader status, active temp basal,
+/// active override, sensitivity ratio) — from their respective sources. A rule set that only
+/// consults BG and trend triggers no downstream fetches; the trend bucket is derived from the
+/// existing <see cref="SensorContext.TrendRate"/>.
 /// </remarks>
 public interface ISensorContextEnricher
 {
