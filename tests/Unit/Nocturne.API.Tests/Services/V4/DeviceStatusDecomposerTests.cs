@@ -2065,4 +2065,102 @@ public class DeviceStatusDecomposerTests : IDisposable
     }
 
     #endregion
+
+    #region Pump Suspension Sequence (integration-style)
+
+    [Fact]
+    public async Task DecomposeAsync_PumpSuspensionSequence_OpensThenClosesStateSpan()
+    {
+        // Arrange — minimal in-memory state span "service" backed by a list, since
+        // _stateSpanServiceMock is unconfigured here and the suspension transition
+        // logic depends on UpsertStateSpanAsync + GetStateSpansAsync being coherent.
+        var spans = new List<StateSpan>();
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan span, CancellationToken _) =>
+            {
+                if (!string.IsNullOrEmpty(span.OriginalId))
+                {
+                    var existing = spans.FirstOrDefault(s => s.OriginalId == span.OriginalId);
+                    if (existing is not null)
+                    {
+                        existing.EndTimestamp = span.EndTimestamp ?? existing.EndTimestamp;
+                        existing.StartTimestamp = span.StartTimestamp;
+                        existing.Source = span.Source ?? existing.Source;
+                        return existing;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(span.Id))
+                {
+                    var existing = spans.FirstOrDefault(s => s.Id == span.Id);
+                    if (existing is not null)
+                    {
+                        existing.EndTimestamp = span.EndTimestamp ?? existing.EndTimestamp;
+                        return existing;
+                    }
+                }
+
+                span.Id ??= Guid.NewGuid().ToString();
+                spans.Add(span);
+                return span;
+            });
+
+        _stateSpanServiceMock
+            .Setup(s => s.GetStateSpansAsync(
+                It.IsAny<StateSpanCategory?>(),
+                It.IsAny<string?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<string?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpanCategory? cat, string? state, DateTime? from, DateTime? to,
+                           string? source, bool? active, int count, int skip, bool desc, CancellationToken _) =>
+            {
+                IEnumerable<StateSpan> q = spans;
+                if (cat.HasValue) q = q.Where(s => s.Category == cat.Value);
+                if (state != null) q = q.Where(s => s.State == state);
+                if (active == true) q = q.Where(s => s.EndTimestamp == null);
+                if (active == false) q = q.Where(s => s.EndTimestamp != null);
+                return q.Take(count).ToArray();
+            });
+
+        DeviceStatus MakeDs(string id, long mills, bool suspended) => new()
+        {
+            Id = id,
+            Mills = mills,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus
+            {
+                Manufacturer = "Insulet",
+                Model = "Omnipod",
+                Status = new PumpStatusDetails { Suspended = suspended },
+            },
+        };
+
+        var t0 = 1700000000000L;
+        var minute = 60_000L;
+
+        // Act — three sequential uploads: not suspended, suspended, not suspended
+        await _decomposer.DecomposeAsync(MakeDs("ds-1", t0, suspended: false));
+        await _decomposer.DecomposeAsync(MakeDs("ds-2", t0 + minute, suspended: true));
+        await _decomposer.DecomposeAsync(MakeDs("ds-3", t0 + 2 * minute, suspended: false));
+
+        // Assert — exactly one PumpMode/Suspended span, opened then closed
+        var pumpModeSpans = spans.Where(s => s.Category == StateSpanCategory.PumpMode).ToList();
+        pumpModeSpans.Should().HaveCount(1);
+
+        var span = pumpModeSpans[0];
+        span.State.Should().Be(PumpModeState.Suspended.ToString());
+        span.OriginalId.Should().StartWith("pump-suspended:");
+        span.StartTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(t0 + minute).UtcDateTime);
+        span.EndTimestamp.Should().NotBeNull();
+        span.EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(t0 + 2 * minute).UtcDateTime);
+    }
+
+    #endregion
 }
