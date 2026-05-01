@@ -1,9 +1,16 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -18,6 +25,18 @@ public class AlertReplayServiceTests
     private readonly Mock<IAlertRepository> _alertRepository = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepository = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
+    // Looping-fact mocks plumbed through the real SensorContextEnricher so replay walks
+    // the same code path as the live engine. Default-empty Moq returns mean cold-start
+    // semantics by default; individual tests override what they care about.
+    private readonly Mock<IIobService> _iobService = new();
+    private readonly Mock<ICobService> _cobService = new();
+    private readonly Mock<ITreatmentService> _treatmentService = new();
+    private readonly Mock<IDeviceEventRepository> _deviceEventRepository = new();
+    private readonly Mock<IPumpSnapshotRepository> _pumpSnapshotRepository = new();
+    private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepository = new();
+    private readonly Mock<ITempBasalRepository> _tempBasalRepository = new();
+    private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
+    private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly AlertReplayService _sut;
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -25,9 +44,29 @@ public class AlertReplayServiceTests
     public AlertReplayServiceTests()
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+
+        var enricherDeps = new SensorContextEnricherDependencies(
+            _iobService.Object,
+            _cobService.Object,
+            _treatmentService.Object,
+            _deviceEventRepository.Object,
+            _pumpSnapshotRepository.Object,
+            _apsSnapshotRepository.Object,
+            _tempBasalRepository.Object,
+            _uploaderSnapshotRepository.Object,
+            _stateSpanService.Object,
+            _alertRepository.Object,
+            Options.Create(new AlertEvaluationOptions()));
+        var enricher = new SensorContextEnricher(
+            enricherDeps,
+            new ServiceCollection().BuildServiceProvider(),
+            TimeProvider.System,
+            NullLogger<SensorContextEnricher>.Instance);
+
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
+            enricher,
             _tenantAccessor.Object,
             NullLogger<AlertReplayService>.Instance);
     }
@@ -169,5 +208,91 @@ public class AlertReplayServiceTests
         var result = await _sut.ReplayAsync(null, null, CancellationToken.None);
 
         (result.WindowEnd - result.WindowStart).Should().BeCloseTo(TimeSpan.FromHours(24), TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task LoopStale_fires_at_correct_replay_tick()
+    {
+        // ApsSnapshot at dayStart+02:00; thereafter loop is silent. A loop_stale > 5 rule
+        // should first fire at the leading edge once 5+ minutes have elapsed since the last
+        // cycle (i.e. 02:10, the first tick after 02:00 + 5min).
+        var ruleId = Guid.NewGuid();
+        var rule = new AlertRuleSnapshot(ruleId, _tenantId, "loop-stale-5",
+            AlertConditionType.LoopStale,
+            """{"operator":">","minutes":5}""",
+            AlertRuleSeverity.Warning, "{}", 0, false, null);
+
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        var lastCycle = dayStart.AddHours(2);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        // The enricher uses GetLatestTimestampAsync(asOf) — pinned to each replay tick. We
+        // emulate "no cycle ever happened before lastCycle, then lastCycle is the only one"
+        // by returning lastCycle when asOf >= lastCycle and null otherwise.
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
+                asOf is not null && asOf.Value >= lastCycle ? lastCycle : null);
+
+        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+
+        result.Events.Should().NotBeEmpty();
+        result.Events[0].RuleId.Should().Be(ruleId);
+        // Tick cadence is 5 minutes; the first tick where elapsed > 5 min is 02:10.
+        result.Events[0].At.Should().Be(dayStart.AddHours(2).AddMinutes(10));
+    }
+
+    [Fact]
+    public async Task PumpSuspended_fires_at_correct_replay_tick()
+    {
+        // A pump-suspended StateSpan opens at 03:00 with no end. Rule: pump_suspended is_active=true.
+        // The freshness gate requires a recent PumpSnapshot — we provide one at every replay
+        // tick (Timestamp = asOf - 1 min) so the suspension projection isn't suppressed.
+        var ruleId = Guid.NewGuid();
+        var rule = new AlertRuleSnapshot(ruleId, _tenantId, "pump-suspended",
+            AlertConditionType.PumpSuspended,
+            """{"is_active":true}""",
+            AlertRuleSeverity.Warning, "{}", 0, false, null);
+
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        var spanStart = dayStart.AddHours(3);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
+                asOf is null ? null : new PumpSnapshot { Timestamp = asOf.Value.AddMinutes(-1), BatteryPercent = 80 });
+
+        _stateSpanService.Setup(s => s.GetActiveAtAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpanCategory _, string? _, DateTime at, CancellationToken _) =>
+                at >= spanStart
+                    ? new StateSpan
+                    {
+                        Category = StateSpanCategory.PumpMode,
+                        State = PumpModeState.Suspended.ToString(),
+                        StartTimestamp = spanStart,
+                    }
+                    : null);
+
+        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+
+        result.Events.Should().HaveCount(1);
+        result.Events[0].RuleId.Should().Be(ruleId);
+        // First tick at-or-after spanStart is exactly 03:00 since 5-min ticks land on 0/5/10/...
+        result.Events[0].At.Should().Be(spanStart);
     }
 }

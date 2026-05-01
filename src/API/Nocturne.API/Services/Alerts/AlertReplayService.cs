@@ -12,14 +12,18 @@ namespace Nocturne.API.Services.Alerts;
 /// <summary>
 /// Replays the tenant's enabled rule set over a historical glucose window using a
 /// self-contained <see cref="ConditionEvaluatorRegistry"/> so the live tenant timer table
-/// is never touched. Sustained timers, time-of-day, staleness, and alert_state references
-/// (against rules that fired earlier in the same replay pass) are simulated; IOB/COB/
-/// predictions/treatments/pump events are not reconstructed and surface as
+/// is never touched. Sustained timers, time-of-day, staleness, alert_state, and the
+/// looping conditions (loop staleness/enaction, pump suspended/battery, temp basal,
+/// uploader battery, override active, sensitivity ratio) are reconstructed via the same
+/// <see cref="ISensorContextEnricher"/> the live engine uses, pinned per tick to the
+/// replay timestamp via <see cref="ISensorContextEnricher.EnrichAsOfAsync"/>. Predictions
+/// remain unmodelled (the prediction service is forward-from-now only) and surface as
 /// <see cref="AlertReplayResult.Limitations"/>.
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
     ISensorGlucoseRepository glucoseRepository,
+    ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
     ILogger<AlertReplayService> logger)
     : IAlertReplayService
@@ -32,9 +36,11 @@ internal sealed class AlertReplayService(
 
     private const string LimitationsBanner =
         "Replay simulates threshold, rate-of-change, trend, time-of-day, staleness, sustained, " +
-        "and alert_state references — based solely on historical CGM readings. IOB, COB, " +
-        "predictions, treatments, pump reservoir, and site/sensor age are not reconstructed. " +
-        "Auto-resolve, escalation, quiet hours, and smart-snooze are not modelled.";
+        "alert_state references, and looping conditions (loop staleness, pump suspended/battery, " +
+        "temp basal, uploader battery, override active, sensitivity ratio) by reconstructing " +
+        "tenant state at each replay tick. Predictions are not reconstructed (the prediction " +
+        "service is forward-from-now only). Auto-resolve, escalation, quiet hours, and " +
+        "smart-snooze are not modelled.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -78,7 +84,9 @@ internal sealed class AlertReplayService(
         // one event at its leading edge rather than one per tick.
         var firing = new Dictionary<Guid, bool>(rules.Count);
         // ActiveAlerts snapshot threaded into the SensorContext so alert_state references
-        // resolve against rules that already fired earlier in the replay's timeline.
+        // resolve against rules that already fired earlier in the replay's timeline. The
+        // enricher's EnrichAsOfAsync skips its own active-alerts repo fetch and reads this
+        // dict from baseContext.ActiveAlerts — letting the walker own the running tally.
         var activeAlerts = new Dictionary<Guid, ActiveAlertSnapshot>();
 
         var events = new List<AlertReplayEvent>();
@@ -89,7 +97,8 @@ internal sealed class AlertReplayService(
             ct.ThrowIfCancellationRequested();
 
             // Advance the replay clock so any TimeProvider-aware evaluator (staleness,
-            // time_of_day, site_age, sensor_age, alert_state for-minutes) sees `tick` as "now".
+            // time_of_day, site_age, sensor_age, alert_state for-minutes, loop_stale,
+            // pump_suspended, override_active) sees `tick` as "now".
             fakeTime.SetUtcNow(DateTime.SpecifyKind(tick, DateTimeKind.Utc));
 
             // Walk the readings list once across the whole replay rather than re-scanning per
@@ -116,12 +125,17 @@ internal sealed class AlertReplayService(
                 ActiveAlerts = activeAlerts,
             };
 
+            // Pin every fact in the per-tick context to `tick` — APS / pump / uploader /
+            // state-span / temp-basal / device-event repos all support an as-of cutoff.
+            var enrichedBase = await enricher.EnrichAsOfAsync(
+                baseContext, ordered, tenantId, DateTime.SpecifyKind(tick, DateTimeKind.Utc), ct);
+
             foreach (var rule in ordered)
             {
                 var node = BuildNodeForRule(rule);
                 if (node is null) continue;
 
-                var ruleContext = baseContext with
+                var ruleContext = enrichedBase with
                 {
                     CurrentRuleId = rule.Id,
                     CurrentPath = AlertConditionTypeNames.ToWireString(rule.ConditionType),
@@ -233,6 +247,22 @@ internal sealed class AlertReplayService(
                     SiteAge: JsonSerializer.Deserialize<SiteAgeCondition>(rule.ConditionParams, JsonOptions)),
                 AlertConditionType.SensorAge => new ConditionNode("sensor_age",
                     SensorAge: JsonSerializer.Deserialize<SensorAgeCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.LoopStale => new ConditionNode("loop_stale",
+                    LoopStale: JsonSerializer.Deserialize<LoopStaleCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.LoopEnactionStale => new ConditionNode("loop_enaction_stale",
+                    LoopEnactionStale: JsonSerializer.Deserialize<LoopEnactionStaleCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.PumpSuspended => new ConditionNode("pump_suspended",
+                    PumpSuspended: JsonSerializer.Deserialize<PumpSuspendedCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.PumpBattery => new ConditionNode("pump_battery",
+                    PumpBattery: JsonSerializer.Deserialize<PumpBatteryCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.TempBasal => new ConditionNode("temp_basal",
+                    TempBasal: JsonSerializer.Deserialize<TempBasalCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.UploaderBattery => new ConditionNode("uploader_battery",
+                    UploaderBattery: JsonSerializer.Deserialize<UploaderBatteryCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.OverrideActive => new ConditionNode("override_active",
+                    OverrideActive: JsonSerializer.Deserialize<OverrideActiveCondition>(rule.ConditionParams, JsonOptions)),
+                AlertConditionType.SensitivityRatio => new ConditionNode("sensitivity_ratio",
+                    SensitivityRatio: JsonSerializer.Deserialize<SensitivityRatioCondition>(rule.ConditionParams, JsonOptions)),
                 _ => null,
             };
         }
@@ -268,6 +298,14 @@ internal sealed class AlertReplayService(
             new SiteAgeEvaluator(time),
             new SensorAgeEvaluator(time),
             new AlertStateEvaluator(time),
+            new LoopStaleEvaluator(time),
+            new LoopEnactionStaleEvaluator(time),
+            new PumpSuspendedEvaluator(time),
+            new PumpBatteryEvaluator(),
+            new TempBasalEvaluator(),
+            new UploaderBatteryEvaluator(),
+            new OverrideActiveEvaluator(time),
+            new SensitivityRatioEvaluator(),
             new CompositeEvaluator(sp),
             new NotEvaluator(sp),
             new SustainedEvaluator(sp, timerStore, time),
