@@ -50,7 +50,7 @@ public class SensorContextEnricherTests
         _cobService.Verify(s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _pumpSnapshotRepository.Verify(s => s.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
-        _deviceEventRepository.Verify(s => s.GetLatestByEventTypeAsync(It.IsAny<DeviceEventType>(), It.IsAny<CancellationToken>()), Times.Never);
+        _deviceEventRepository.Verify(s => s.GetLatestByEventTypeAsync(It.IsAny<DeviceEventType>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _alertRepository.Verify(s => s.GetActiveAlertSnapshotsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -158,14 +158,14 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         var siteChangeAt = new DateTime(2026, 3, 20, 8, 0, 0, DateTimeKind.Utc);
-        _deviceEventRepository.Setup(r => r.GetLatestByEventTypeAsync(DeviceEventType.SiteChange, It.IsAny<CancellationToken>()))
+        _deviceEventRepository.Setup(r => r.GetLatestByEventTypeAsync(DeviceEventType.SiteChange, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceEvent { Timestamp = siteChangeAt, EventType = DeviceEventType.SiteChange });
         var rule = MakeRule(AlertConditionType.SiteAge, """{"operator":">","value":72}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
 
         enriched.LastSiteChangeAt.Should().Be(siteChangeAt);
-        _deviceEventRepository.Verify(r => r.GetLatestByEventTypeAsync(DeviceEventType.SensorStart, It.IsAny<CancellationToken>()), Times.Never);
+        _deviceEventRepository.Verify(r => r.GetLatestByEventTypeAsync(DeviceEventType.SensorStart, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
