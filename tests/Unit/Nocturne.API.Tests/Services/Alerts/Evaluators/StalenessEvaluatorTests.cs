@@ -133,6 +133,21 @@ public class StalenessEvaluatorTests
         (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Returns_false_when_no_reading_history_at_all()
+    {
+        var json = """{"operator": ">", "value": 15}""";
+        var context = new SensorContext
+        {
+            LatestValue = null,
+            LatestTimestamp = null,
+            TrendRate = null,
+            LastReadingAt = null,
+        };
+
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
+    }
+
     private static SensorContext MakeContext(DateTime? lastReadingAt) => new()
     {
         LatestValue = 100m,

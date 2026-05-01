@@ -52,6 +52,12 @@ public class StalenessEvaluator : IConditionEvaluator
         if (condition is null)
             return Task.FromResult(false);
 
+        // Cold-start null-suppression: a tenant that has never received any reading at all
+        // shouldn't fire a staleness alert — there's no history to be stale against. Both
+        // LastReadingAt and LatestTimestamp null is the unambiguous "no data ever" signal.
+        if (context.LastReadingAt is null && context.LatestTimestamp is null)
+            return Task.FromResult(false);
+
         // No reading at all: elapsed time is effectively infinite. Short-circuit on
         // operator before doing decimal math, since "infinity > N" is always true,
         // "infinity < N" always false, and "infinity == N" always false.
