@@ -2,6 +2,7 @@ using System.Text.Json;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.Core.Contracts.Monitoring;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -202,7 +203,7 @@ public class TrackerSuggestionService : ITrackerSuggestionService
     }
 
     /// <inheritdoc />
-    public async Task<bool> AcceptSuggestionAsync(
+    public async Task<NotificationActionResult> AcceptSuggestionAsync(
         Guid notificationId,
         string userId,
         CancellationToken cancellationToken = default
@@ -213,7 +214,7 @@ public class TrackerSuggestionService : ITrackerSuggestionService
         if (notification == null)
         {
             _logger.LogWarning("Notification {NotificationId} not found", notificationId);
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         if (notification.UserId != userId)
@@ -223,7 +224,7 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                 userId,
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         if (notification.Type != "tracker.suggested_match")
@@ -232,7 +233,7 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                 "Notification {NotificationId} is not a SuggestedTrackerMatch type",
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         // Parse the metadata to get the tracker definition ID
@@ -243,7 +244,7 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                 "Notification {NotificationId} metadata missing trackerDefinitionId",
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         if (!Guid.TryParse(definitionIdObj?.ToString(), out var definitionId))
@@ -252,21 +253,16 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                 "Notification {NotificationId} has invalid trackerDefinitionId",
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         // Get the tracker definition
         var definition = await _trackerRepository.GetDefinitionByIdAsync(definitionId, cancellationToken);
         if (definition == null)
         {
+            // Tracker no longer exists — archive the stale notification but report failure.
             _logger.LogWarning("Tracker definition {DefinitionId} not found", definitionId);
-            // Still archive the notification since the tracker no longer exists
-            await ArchiveNotificationDirectlyAsync(
-                notification,
-                NotificationArchiveReason.Completed,
-                cancellationToken
-            );
-            return false;
+            return new NotificationActionResult(false, NotificationArchiveReason.Completed);
         }
 
         // Get active instances for this definition
@@ -326,18 +322,11 @@ public class TrackerSuggestionService : ITrackerSuggestionService
             TrackerInstanceDto.FromEntity(newInstance)
         );
 
-        // Archive the notification
-        await ArchiveNotificationDirectlyAsync(
-            notification,
-            NotificationArchiveReason.Completed,
-            cancellationToken
-        );
-
-        return true;
+        return NotificationActionResult.Completed;
     }
 
     /// <inheritdoc />
-    public async Task<bool> DismissSuggestionAsync(
+    public async Task<NotificationActionResult> DismissSuggestionAsync(
         Guid notificationId,
         string userId,
         CancellationToken cancellationToken = default
@@ -348,7 +337,7 @@ public class TrackerSuggestionService : ITrackerSuggestionService
         if (notification == null)
         {
             _logger.LogWarning("Notification {NotificationId} not found", notificationId);
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         if (notification.UserId != userId)
@@ -358,14 +347,10 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                 userId,
                 notificationId
             );
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
-        return await ArchiveNotificationDirectlyAsync(
-            notification,
-            NotificationArchiveReason.Dismissed,
-            cancellationToken
-        );
+        return NotificationActionResult.Dismissed;
     }
 
     /// <inheritdoc />
@@ -557,51 +542,6 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                 dto.Id
             );
         }
-    }
-
-    /// <summary>
-    /// Archives a notification directly using the repository and broadcasts the event.
-    /// This avoids circular dependency with IInAppNotificationService.
-    /// </summary>
-    private async Task<bool> ArchiveNotificationDirectlyAsync(
-        InAppNotificationEntity notification,
-        NotificationArchiveReason reason,
-        CancellationToken cancellationToken
-    )
-    {
-        var archived = await _notificationRepository.ArchiveAsync(notification.Id, reason, cancellationToken);
-
-        if (archived == null)
-        {
-            _logger.LogWarning(
-                "Failed to archive notification {NotificationId}",
-                notification.Id
-            );
-            return false;
-        }
-
-        _logger.LogInformation(
-            "Archived notification {NotificationId} with reason {Reason}",
-            notification.Id,
-            reason
-        );
-
-        // Broadcast the notification archived event
-        var dto = InAppNotificationRepository.ToDto(archived);
-        try
-        {
-            await _broadcastService.BroadcastNotificationArchivedAsync(archived.UserId, dto, reason);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to broadcast notification archived event for {NotificationId}",
-                notification.Id
-            );
-        }
-
-        return true;
     }
 
     private static Dictionary<string, object>? ParseMetadata(string? json)

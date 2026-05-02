@@ -2,7 +2,6 @@ using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
-using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.NotificationActionHandlers;
 
@@ -10,7 +9,7 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// Handles user actions on <c>alert.firing</c> in-app notifications produced by
 /// <see cref="InAppProvider"/>. <c>ack</c> calls
 /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/> for the underlying
-/// excursion (sourceId), then archives the notification. <c>dismiss</c> archives only — it
+/// excursion (sourceId), then signals archive-as-completed. <c>dismiss</c> archives only — it
 /// does not silence the alert; the next escalation step's delivery creates a fresh
 /// notification (CreateNotificationAsync does not dedupe by sourceId).
 /// </summary>
@@ -25,14 +24,13 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// <seealso cref="InAppProvider"/>
 internal sealed class AlertActionHandler(
     IAlertAcknowledgementService acknowledgementService,
-    IInAppNotificationService notificationService,
     ITenantAccessor tenantAccessor,
     ILogger<AlertActionHandler> logger
 ) : INotificationActionHandler
 {
     public string NotificationType => InAppProvider.NotificationType;
 
-    public async Task<bool> HandleAsync(
+    public async Task<NotificationActionResult> HandleAsync(
         Guid notificationId,
         string actionId,
         string userId,
@@ -45,7 +43,7 @@ internal sealed class AlertActionHandler(
             logger.LogWarning(
                 "Notification {NotificationId} has invalid sourceId '{SourceId}'; cannot resolve excursion",
                 notificationId, sourceId);
-            return false;
+            return NotificationActionResult.NotHandled;
         }
 
         switch (actionId.ToLowerInvariant())
@@ -56,7 +54,7 @@ internal sealed class AlertActionHandler(
                     logger.LogWarning(
                         "Cannot acknowledge excursion {ExcursionId} — no tenant context",
                         excursionId);
-                    return false;
+                    return NotificationActionResult.NotHandled;
                 }
 
                 await acknowledgementService.AcknowledgeExcursionAsync(
@@ -66,20 +64,16 @@ internal sealed class AlertActionHandler(
                     broadcast: true,
                     cancellationToken);
 
-                await notificationService.ArchiveNotificationAsync(
-                    notificationId, NotificationArchiveReason.Completed, cancellationToken);
-                return true;
+                return NotificationActionResult.Completed;
 
             case InAppProvider.DismissActionId:
-                await notificationService.ArchiveNotificationAsync(
-                    notificationId, NotificationArchiveReason.Dismissed, cancellationToken);
-                return true;
+                return NotificationActionResult.Dismissed;
 
             default:
                 logger.LogWarning(
                     "Unknown action {ActionId} for alert.firing notification {NotificationId}",
                     actionId, notificationId);
-                return false;
+                return NotificationActionResult.NotHandled;
         }
     }
 }
