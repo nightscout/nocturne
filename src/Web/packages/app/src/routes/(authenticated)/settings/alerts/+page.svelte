@@ -53,7 +53,9 @@
   let editorOpen = $state(false);
   let editingRule = $state<AlertRuleResponse | null>(null);
 
-  function getConditionLabel(conditionType: AlertConditionType | undefined): string {
+  function getConditionLabel(
+    conditionType: AlertConditionType | undefined
+  ): string {
     switch (conditionType) {
       case AlertConditionType.Threshold:
         return "Threshold";
@@ -181,11 +183,22 @@
   <title>Alerts - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.alerts", title: "Don't miss highs or lows", description: "Set up at least one alert rule so Nocturne can notify you when glucose goes out of range. Use the Setup Wizard for the fastest start.", completedWhen: () => alertsConfigured })}>
+<div
+  class="container mx-auto max-w-4xl p-6 space-y-6"
+  {@attach coachmark({
+    key: "onboarding.alerts",
+    title: "Don't miss highs or lows",
+    description:
+      "Set up at least one alert rule so Nocturne can notify you when glucose goes out of range. Use the Setup Wizard for the fastest start.",
+    completedWhen: () => alertsConfigured,
+  })}
+>
   <!-- Header -->
   <div class="flex items-start justify-between">
     <div class="flex items-center gap-3">
-      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <div
+        class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
+      >
         <Bell class="h-6 w-6 text-primary" />
       </div>
       <div>
@@ -195,12 +208,25 @@
         </p>
       </div>
     </div>
-    <div class="flex items-center gap-2" {@attach coachmark({ key: "power-user.alert-rules", title: "Custom alert rules", description: "Build custom alert rules with threshold, rate-of-change, or signal-loss conditions." })}>
-      <Button variant="outline" onclick={() => goto("/settings/alerts/setup")} {@attach coachmark({
-        key: "setup-alerts.wizard",
-        title: "Quickest way to start",
-        description: "The wizard walks you through creating your first high and low alerts.",
-      })}>
+    <div
+      class="flex items-center gap-2"
+      {@attach coachmark({
+        key: "power-user.alert-rules",
+        title: "Custom alert rules",
+        description:
+          "Build custom alert rules with threshold, rate-of-change, or signal-loss conditions.",
+      })}
+    >
+      <Button
+        variant="outline"
+        onclick={() => goto("/settings/alerts/setup")}
+        {@attach coachmark({
+          key: "setup-alerts.wizard",
+          title: "Quickest way to start",
+          description:
+            "The wizard walks you through creating your first high and low alerts.",
+        })}
+      >
         <Zap class="h-4 w-4 mr-2" />
         Setup Wizard
       </Button>
@@ -259,7 +285,9 @@
                   {alert.ruleName ?? "Alert"}
                 </p>
                 <p class="text-xs text-muted-foreground">
-                  {getConditionLabel(alert.conditionType)} — Started {formatDate(alert.startedAt)}
+                  {getConditionLabel(alert.conditionType)} — Started {formatDate(
+                    alert.startedAt
+                  )}
                 </p>
               </div>
               {#if alert.acknowledgedAt}
@@ -326,4 +354,8 @@
   {/if}
 </div>
 
-<RuleEditorSheet bind:open={editorOpen} rule={editingRule} onSave={handleEditorSave} />
+<RuleEditorSheet
+  bind:open={editorOpen}
+  rule={editingRule}
+  onSave={handleEditorSave}
+/>

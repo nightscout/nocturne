@@ -747,7 +747,7 @@ export class SetupClient {
 
     /**
      * Check whether a username is available for the owner account.
-     * @param username (optional) 
+     * @param username (optional)
      */
     validateUsername(username?: string | undefined, signal?: AbortSignal): Promise<SlugValidationResult> {
         let url_ = this.baseUrl + "/api/v4/setup/validate-username?";
@@ -952,10 +952,10 @@ export class SetupClient {
     /**
      * OIDC callback for setup owner creation. Called by the OIDC provider after authentication.
     Links the identity, issues session cookies, and redirects to /setup.
-     * @param code (optional) 
-     * @param state (optional) 
-     * @param error (optional) 
-     * @param error_description (optional) 
+     * @param code (optional)
+     * @param state (optional)
+     * @param error (optional)
+     * @param error_description (optional)
      */
     oidcCallback(code?: string | null | undefined, state?: string | null | undefined, error?: string | null | undefined, error_description?: string | null | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/setup/oidc/callback?";
@@ -1544,8 +1544,8 @@ export class BolusClient {
 
     /**
      * Delete a bolus by its external sync identifier (dataSource + syncIdentifier pair).
-     * @param dataSource (optional) 
-     * @param syncIdentifier (optional) 
+     * @param dataSource (optional)
+     * @param syncIdentifier (optional)
      */
     deleteBySyncIdentifier(dataSource?: string | undefined, syncIdentifier?: string | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/insulin/boluses/by-sync-id?";
@@ -1664,9 +1664,9 @@ export class FoodsClient {
     /**
      * List foods with optional filtering and pagination.
     This is a V4 endpoint (not Nightscout-legacy) used by the meal attribution UI.
-     * @param find (optional) 
-     * @param count (optional) 
-     * @param skip (optional) 
+     * @param find (optional)
+     * @param count (optional)
+     * @param skip (optional)
      */
     getFoods(find?: string | null | undefined, count?: number | null | undefined, skip?: number | null | undefined, signal?: AbortSignal): Promise<Food[]> {
         let url_ = this.baseUrl + "/api/v4/foods?";
@@ -2035,7 +2035,7 @@ export class FoodsClient {
 
     /**
      * Get recently used foods (excluding favorites).
-     * @param limit (optional) 
+     * @param limit (optional)
      */
     getRecentFoods(limit?: number | undefined, signal?: AbortSignal): Promise<Food[]> {
         let url_ = this.baseUrl + "/api/v4/foods/recent?";
@@ -2180,8 +2180,8 @@ export class MealMatchingClient {
 
     /**
      * Get suggested meal matches for a date range
-     * @param from (optional) 
-     * @param to (optional) 
+     * @param from (optional)
+     * @param to (optional)
      */
     getSuggestions(from?: Date | null | undefined, to?: Date | null | undefined, signal?: AbortSignal): Promise<SuggestedMealMatch[]> {
         let url_ = this.baseUrl + "/api/v4/meal-matching/suggestions?";
@@ -2316,8 +2316,8 @@ export class NoteClient {
 
     /**
      * Delete a note by its external sync identifier (dataSource + syncIdentifier pair).
-     * @param dataSource (optional) 
-     * @param syncIdentifier (optional) 
+     * @param dataSource (optional)
+     * @param syncIdentifier (optional)
      */
     deleteBySyncIdentifier(dataSource?: string | undefined, syncIdentifier?: string | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/observations/notes/by-sync-id?";
@@ -2650,13 +2650,13 @@ export class NutritionClient {
 
     /**
      * Get carb intakes with optional filtering
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
-     * @param device (optional) 
-     * @param source (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
+     * @param device (optional)
+     * @param source (optional)
      */
     getCarbIntakes(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, device?: string | null | undefined, source?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfCarbIntake> {
         let url_ = this.baseUrl + "/api/v4/nutrition/carbs?";
@@ -2912,8 +2912,8 @@ export class NutritionClient {
 
     /**
      * Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).
-     * @param dataSource (optional) 
-     * @param syncIdentifier (optional) 
+     * @param dataSource (optional)
+     * @param syncIdentifier (optional)
      */
     deleteCarbIntakeBySyncIdentifier(dataSource?: string | undefined, syncIdentifier?: string | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/nutrition/carbs/by-sync-id?";
@@ -3232,9 +3232,9 @@ export class NutritionClient {
     own carb intakes, correlated boluses, food attribution rows, and
     aggregated totals. Carb intakes with a null CorrelationId become
     single-member events on their own (they are NOT collapsed together).
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param attributed (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param attributed (optional)
      */
     getMeals(from?: Date | null | undefined, to?: Date | null | undefined, attributed?: boolean | null | undefined, signal?: AbortSignal): Promise<MealEvent[]> {
         let url_ = this.baseUrl + "/api/v4/nutrition/meals?";
@@ -3289,8 +3289,8 @@ export class CompressionLowClient {
 
     /**
      * Get compression low suggestions with optional filtering
-     * @param status (optional) 
-     * @param nightOf (optional) 
+     * @param status (optional)
+     * @param nightOf (optional)
      */
     getSuggestions(status?: CompressionLowStatus | null | undefined, nightOf?: string | null | undefined, signal?: AbortSignal): Promise<CompressionLowSuggestion[]> {
         let url_ = this.baseUrl + "/api/v4/compression-lows/suggestions?";
@@ -5666,8 +5666,8 @@ export class ProfileClient {
     /**
      * Get a consolidated summary of all profile data across all profile names.
     Optionally provide a date range to include schedule change detection info.
-     * @param from (optional) 
-     * @param to (optional) 
+     * @param from (optional)
+     * @param to (optional)
      */
     getProfileSummary(from?: Date | null | undefined, to?: Date | null | undefined, signal?: AbortSignal): Promise<ProfileSummary> {
         let url_ = this.baseUrl + "/api/v4/profile/summary?";
@@ -5711,8 +5711,8 @@ export class ProfileClient {
      * Get legacy Nightscout-shaped profile records projected from V4 schedule data.
     Intended for connector consumption where the caller needs the monolithic
     Profile shape (store with basal/carbratio/sens/target arrays).
-     * @param limit (optional) 
-     * @param offset (optional) 
+     * @param limit (optional)
+     * @param offset (optional)
      */
     getProfileRecords(limit?: number | undefined, offset?: number | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfProfile> {
         let url_ = this.baseUrl + "/api/v4/profile/records?";
@@ -5758,13 +5758,13 @@ export class ProfileClient {
 
     /**
      * Get all therapy settings with optional filtering
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
-     * @param device (optional) 
-     * @param source (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
+     * @param device (optional)
+     * @param source (optional)
      */
     getTherapySettings(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, device?: string | null | undefined, source?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfTherapySettings> {
         let url_ = this.baseUrl + "/api/v4/profile/settings?";
@@ -7555,8 +7555,8 @@ export class CompatibilityClient {
 
     /**
      * Get overall compatibility metrics
-     * @param fromDate (optional) 
-     * @param toDate (optional) 
+     * @param fromDate (optional)
+     * @param toDate (optional)
      */
     getMetrics(fromDate?: Date | null | undefined, toDate?: Date | null | undefined, signal?: AbortSignal): Promise<CompatibilityMetrics> {
         let url_ = this.baseUrl + "/api/v4/compatibility/metrics?";
@@ -7598,8 +7598,8 @@ export class CompatibilityClient {
 
     /**
      * Get per-endpoint compatibility metrics
-     * @param fromDate (optional) 
-     * @param toDate (optional) 
+     * @param fromDate (optional)
+     * @param toDate (optional)
      */
     getEndpointMetrics(fromDate?: Date | null | undefined, toDate?: Date | null | undefined, signal?: AbortSignal): Promise<EndpointMetrics[]> {
         let url_ = this.baseUrl + "/api/v4/compatibility/endpoints?";
@@ -7641,13 +7641,13 @@ export class CompatibilityClient {
 
     /**
      * Get list of analyses with filtering and pagination
-     * @param requestPath (optional) 
-     * @param overallMatch (optional) 
-     * @param requestMethod (optional) 
-     * @param fromDate (optional) 
-     * @param toDate (optional) 
-     * @param count (optional) 
-     * @param skip (optional) 
+     * @param requestPath (optional)
+     * @param overallMatch (optional)
+     * @param requestMethod (optional)
+     * @param fromDate (optional)
+     * @param toDate (optional)
+     * @param count (optional)
+     * @param skip (optional)
      */
     getAnalyses(requestPath?: string | null | undefined, overallMatch?: ResponseMatchType | null | undefined, requestMethod?: string | null | undefined, fromDate?: Date | null | undefined, toDate?: Date | null | undefined, count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<AnalysesListResponse> {
         let url_ = this.baseUrl + "/api/v4/compatibility/analyses?";
@@ -8857,9 +8857,9 @@ export class SupportClient {
 
     /**
      * Returns a pre-filled GitHub new-issue URL for fallback when the API is unavailable.
-     * @param template (optional) 
-     * @param title (optional) 
-     * @param body (optional) 
+     * @param template (optional)
+     * @param title (optional)
+     * @param body (optional)
      */
     getFallbackUrl(template?: string | undefined, title?: string | undefined, body?: string | undefined, signal?: AbortSignal): Promise<FallbackUrlResponse> {
         let url_ = this.baseUrl + "/api/v4/support/issues/fallback-url?";
@@ -9038,13 +9038,13 @@ export class SystemEventsClient {
 
     /**
      * Query system events with optional filtering.
-     * @param type (optional) 
-     * @param category (optional) 
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param source (optional) 
-     * @param count (optional) 
-     * @param skip (optional) 
+     * @param type (optional)
+     * @param category (optional)
+     * @param from (optional)
+     * @param to (optional)
+     * @param source (optional)
+     * @param count (optional)
+     * @param skip (optional)
      */
     getSystemEvents(type?: SystemEventType | null | undefined, category?: SystemEventCategory | null | undefined, from?: Date | null | undefined, to?: Date | null | undefined, source?: string | null | undefined, count?: number | undefined, skip?: number | undefined, signal?: AbortSignal): Promise<SystemEvent[]> {
         let url_ = this.baseUrl + "/api/v4/system-events?";
@@ -10046,12 +10046,12 @@ export class AlertCustomSoundsClient {
 
     /**
      * Upload a custom alert sound file.
-     * @param contentType (optional) 
-     * @param contentDisposition (optional) 
-     * @param headers (optional) 
-     * @param length (optional) 
-     * @param name (optional) 
-     * @param fileName (optional) 
+     * @param contentType (optional)
+     * @param contentDisposition (optional)
+     * @param headers (optional)
+     * @param length (optional)
+     * @param name (optional)
+     * @param fileName (optional)
      */
     uploadSound(contentType?: string | null | undefined, contentDisposition?: string | null | undefined, headers?: any[] | null | undefined, length?: number | undefined, name?: string | null | undefined, fileName?: string | null | undefined, signal?: AbortSignal): Promise<AlertCustomSoundResponse> {
         let url_ = this.baseUrl + "/api/v4/alert-sounds";
@@ -10836,8 +10836,8 @@ export class AlertsClient {
 
     /**
      * Get paginated history of resolved excursions.
-     * @param page (optional) 
-     * @param pageSize (optional) 
+     * @param page (optional)
+     * @param pageSize (optional)
      */
     getAlertHistory(page?: number | undefined, pageSize?: number | undefined, signal?: AbortSignal): Promise<AlertHistoryResponse> {
         let url_ = this.baseUrl + "/api/v4/alerts/history?";
@@ -11054,7 +11054,7 @@ export class AlertsClient {
     /**
      * Get pending deliveries for the specified channel types.
     Used by bot/adapter services to poll for work.
-     * @param channelType (optional) 
+     * @param channelType (optional)
      */
     getPendingDeliveries(channelType?: ChannelType[] | undefined, signal?: AbortSignal): Promise<PendingDeliveryResponse[]> {
         let url_ = this.baseUrl + "/api/v4/alerts/deliveries/pending?";
@@ -11396,7 +11396,7 @@ export class TrackersClient {
     /**
      * Get all tracker definitions. Returns public trackers for unauthenticated users,
     or all visible trackers for authenticated users.
-     * @param category (optional) 
+     * @param category (optional)
      */
     getDefinitions(category?: TrackerCategory | null | undefined, signal?: AbortSignal): Promise<TrackerDefinitionDto[]> {
         let url_ = this.baseUrl + "/api/v4/trackers/definitions?";
@@ -11676,7 +11676,7 @@ export class TrackersClient {
 
     /**
      * Get completed tracker instances (history)
-     * @param limit (optional) 
+     * @param limit (optional)
      */
     getInstanceHistory(limit?: number | undefined, signal?: AbortSignal): Promise<TrackerInstanceDto[]> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/history?";
@@ -11718,8 +11718,8 @@ export class TrackersClient {
 
     /**
      * Get upcoming tracker expirations for calendar
-     * @param from (optional) 
-     * @param to (optional) 
+     * @param from (optional)
+     * @param to (optional)
      */
     getUpcomingInstances(from?: Date | null | undefined, to?: Date | null | undefined, signal?: AbortSignal): Promise<TrackerInstanceDto[]> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/upcoming?";
@@ -11961,7 +11961,7 @@ export class TrackersClient {
 
     /**
      * Apply a preset (starts a new instance)
-     * @param request (optional) 
+     * @param request (optional)
      */
     applyPreset(id: string, request?: ApplyPresetRequest | undefined, signal?: AbortSignal): Promise<TrackerInstanceDto> {
         let url_ = this.baseUrl + "/api/v4/trackers/presets/{id}/apply";
@@ -13581,8 +13581,8 @@ export class ActivityClient {
 
     /**
      * Get activity records with pagination
-     * @param limit (optional) 
-     * @param offset (optional) 
+     * @param limit (optional)
+     * @param offset (optional)
      */
     getActivities(limit?: number | undefined, offset?: number | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfActivity> {
         let url_ = this.baseUrl + "/api/v4/Activity?";
@@ -16913,11 +16913,11 @@ export class DeviceAgeClient {
 
     /**
      * Get cannula/site age (CAGE)
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
+     * @param info (optional)
+     * @param warn (optional)
+     * @param urgent (optional)
+     * @param display (optional)
+     * @param enableAlerts (optional)
      */
     getCannulaAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
         let url_ = this.baseUrl + "/api/v4/deviceage/cannula?";
@@ -16966,11 +16966,11 @@ export class DeviceAgeClient {
     /**
      * Get sensor age (SAGE)
     Returns both Sensor Start and Sensor Change events
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
+     * @param info (optional)
+     * @param warn (optional)
+     * @param urgent (optional)
+     * @param display (optional)
+     * @param enableAlerts (optional)
      */
     getSensorAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<SensorAgeInfo> {
         let url_ = this.baseUrl + "/api/v4/deviceage/sensor?";
@@ -17018,11 +17018,11 @@ export class DeviceAgeClient {
 
     /**
      * Get insulin reservoir age (IAGE)
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
+     * @param info (optional)
+     * @param warn (optional)
+     * @param urgent (optional)
+     * @param display (optional)
+     * @param enableAlerts (optional)
      */
     getInsulinAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
         let url_ = this.baseUrl + "/api/v4/deviceage/insulin?";
@@ -17070,11 +17070,11 @@ export class DeviceAgeClient {
 
     /**
      * Get pump battery age (BAGE)
-     * @param info (optional) 
-     * @param warn (optional) 
-     * @param urgent (optional) 
-     * @param display (optional) 
-     * @param enableAlerts (optional) 
+     * @param info (optional)
+     * @param warn (optional)
+     * @param urgent (optional)
+     * @param display (optional)
+     * @param enableAlerts (optional)
      */
     getBatteryAge(info?: number | null | undefined, warn?: number | null | undefined, urgent?: number | null | undefined, display?: string | null | undefined, enableAlerts?: boolean | null | undefined, signal?: AbortSignal): Promise<DeviceAgeInfo> {
         let url_ = this.baseUrl + "/api/v4/deviceage/battery?";
@@ -17167,8 +17167,8 @@ export class DeviceEventClient {
 
     /**
      * Delete a device event by its external sync identifier (dataSource + syncIdentifier pair).
-     * @param dataSource (optional) 
-     * @param syncIdentifier (optional) 
+     * @param dataSource (optional)
+     * @param syncIdentifier (optional)
      */
     deleteBySyncIdentifier(dataSource?: string | undefined, syncIdentifier?: string | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/observations/device-events/by-sync-id?";
@@ -18293,15 +18293,15 @@ export class AuditClient {
 
     /**
      * Query mutation audit log entries for the current tenant.
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
-     * @param subjectId (optional) 
-     * @param entityType (optional) 
-     * @param action (optional) 
-     * @param entityId (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
+     * @param subjectId (optional)
+     * @param entityType (optional)
+     * @param action (optional)
+     * @param entityId (optional)
      */
     getMutationAuditLog(from?: Date | undefined, to?: Date | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, subjectId?: string | null | undefined, entityType?: string | null | undefined, action?: string | null | undefined, entityId?: string | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfMutationAuditDto> {
         let url_ = this.baseUrl + "/api/v4/audit/mutations?";
@@ -18373,15 +18373,15 @@ export class AuditClient {
 
     /**
      * Query read access audit log entries for the current tenant.
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
-     * @param subjectId (optional) 
-     * @param entityType (optional) 
-     * @param endpoint (optional) 
-     * @param statusCode (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
+     * @param subjectId (optional)
+     * @param entityType (optional)
+     * @param endpoint (optional)
+     * @param statusCode (optional)
      */
     getReadAccessAuditLog(from?: Date | undefined, to?: Date | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, subjectId?: string | null | undefined, entityType?: string | null | undefined, endpoint?: string | null | undefined, statusCode?: number | null | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfReadAccessAuditDto> {
         let url_ = this.baseUrl + "/api/v4/audit/reads?";
@@ -19566,15 +19566,15 @@ export class StateSpansClient {
 
     /**
      * Query all state spans with optional filtering
-     * @param category (optional) 
-     * @param state (optional) 
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param source (optional) 
-     * @param active (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param category (optional)
+     * @param state (optional)
+     * @param from (optional)
+     * @param to (optional)
+     * @param source (optional)
+     * @param active (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getStateSpans(category?: StateSpanCategory | null | undefined, state?: string | null | undefined, from?: Date | null | undefined, to?: Date | null | undefined, source?: string | null | undefined, active?: boolean | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans?";
@@ -19683,11 +19683,11 @@ export class StateSpansClient {
 
     /**
      * Get pump mode state spans
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getPumpModes(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/pump-modes?";
@@ -19747,11 +19747,11 @@ export class StateSpansClient {
 
     /**
      * Get connectivity state spans
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getConnectivity(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/connectivity?";
@@ -19811,11 +19811,11 @@ export class StateSpansClient {
 
     /**
      * Get override state spans
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getOverrides(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/overrides?";
@@ -19875,11 +19875,11 @@ export class StateSpansClient {
 
     /**
      * Get temporary target state spans (AAPS temporary glucose targets)
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getTemporaryTargets(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/temporary-targets?";
@@ -19939,11 +19939,11 @@ export class StateSpansClient {
 
     /**
      * Get profile state spans
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getProfiles(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/profiles?";
@@ -20003,11 +20003,11 @@ export class StateSpansClient {
 
     /**
      * Get sleep state spans (user-annotated sleep periods)
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getSleep(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/sleep?";
@@ -20067,11 +20067,11 @@ export class StateSpansClient {
 
     /**
      * Get exercise state spans (user-annotated activity periods)
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getExercise(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/exercise?";
@@ -20131,11 +20131,11 @@ export class StateSpansClient {
 
     /**
      * Get illness state spans (user-annotated illness periods)
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getIllness(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/illness?";
@@ -20195,11 +20195,11 @@ export class StateSpansClient {
 
     /**
      * Get travel state spans (user-annotated travel/timezone change periods)
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getTravel(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/travel?";
@@ -20259,11 +20259,11 @@ export class StateSpansClient {
 
     /**
      * Get all activity state spans (sleep, exercise, illness, travel)
-     * @param from (optional) 
-     * @param to (optional) 
-     * @param limit (optional) 
-     * @param offset (optional) 
-     * @param sort (optional) 
+     * @param from (optional)
+     * @param to (optional)
+     * @param limit (optional)
+     * @param offset (optional)
+     * @param sort (optional)
      */
     getActivities(from?: Date | null | undefined, to?: Date | null | undefined, limit?: number | undefined, offset?: number | undefined, sort?: string | undefined, signal?: AbortSignal): Promise<PaginatedResponseOfStateSpan> {
         let url_ = this.baseUrl + "/api/v4/state-spans/activities?";
@@ -21703,12 +21703,12 @@ export class AvatarClient {
 
     /**
      * Upload or replace the current subject's avatar. Image is resized to 256x256 WebP.
-     * @param contentType (optional) 
-     * @param contentDisposition (optional) 
-     * @param headers (optional) 
-     * @param length (optional) 
-     * @param name (optional) 
-     * @param fileName (optional) 
+     * @param contentType (optional)
+     * @param contentDisposition (optional)
+     * @param headers (optional)
+     * @param length (optional)
+     * @param name (optional)
+     * @param fileName (optional)
      */
     upload(contentType?: string | null | undefined, contentDisposition?: string | null | undefined, headers?: any[] | null | undefined, length?: number | undefined, name?: string | null | undefined, fileName?: string | null | undefined, signal?: AbortSignal): Promise<AvatarUploadResponse> {
         let url_ = this.baseUrl + "/api/v4/me/avatar";
@@ -21769,7 +21769,7 @@ export class AvatarClient {
 
     /**
      * Serve the current subject's avatar image.
-     * @param id (optional) 
+     * @param id (optional)
      */
     get(id?: string | null | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/me/avatar?";
@@ -22089,13 +22089,13 @@ export class OAuthClient {
 
     /**
      * Consent approval endpoint. Called by the consent page when the user approves.
-     * @param client_id (optional) 
-     * @param redirect_uri (optional) 
-     * @param scope (optional) 
-     * @param state (optional) 
-     * @param code_challenge (optional) 
-     * @param approved (optional) 
-     * @param limit_to_24_hours (optional) 
+     * @param client_id (optional)
+     * @param redirect_uri (optional)
+     * @param scope (optional)
+     * @param state (optional)
+     * @param code_challenge (optional)
+     * @param approved (optional)
+     * @param limit_to_24_hours (optional)
      */
     approveConsent(client_id?: string | null | undefined, redirect_uri?: string | null | undefined, scope?: string | null | undefined, state?: string | null | undefined, code_challenge?: string | null | undefined, approved?: boolean | undefined, limit_to_24_hours?: boolean | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/oauth/authorize";
@@ -22158,7 +22158,7 @@ export class OAuthClient {
     /**
      * Token endpoint. Handles authorization code exchange, refresh token rotation,
     and device code polling.
-     * @param body (optional) 
+     * @param body (optional)
      * @return An OAuthTokenResponse on success, or an OAuthError on failure.
      */
     token(body?: Body | undefined, signal?: AbortSignal): Promise<OAuthTokenResponse> {
@@ -22210,7 +22210,7 @@ export class OAuthClient {
     /**
      * Device Authorization endpoint (RFC 8628).
     Used by headless clients (CLI tools, scripts, IoT devices, pump rigs).
-     * @param body (optional) 
+     * @param body (optional)
      * @return An OAuthDeviceAuthorizationResponse containing the device code, user code, and polling interval.
      */
     deviceAuthorization(body?: Body2 | undefined, signal?: AbortSignal): Promise<OAuthDeviceAuthorizationResponse> {
@@ -22311,7 +22311,7 @@ export class OAuthClient {
     /**
      * Approve or deny a device authorization request.
     Called by the device approval page.
-     * @param body (optional) 
+     * @param body (optional)
      * @return 200 OK with approved: true/false, or 400 if the code is invalid or already processed.
      */
     deviceApprove(body?: Body3 | undefined, signal?: AbortSignal): Promise<void> {
@@ -22360,7 +22360,7 @@ export class OAuthClient {
     /**
      * Token revocation endpoint (RFC 7009). Per the specification, always returns 200 OK
     regardless of whether the token was found or already revoked.
-     * @param body (optional) 
+     * @param body (optional)
      */
     revoke(body?: Body4 | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/oauth/revoke";
@@ -22582,7 +22582,7 @@ export class OAuthClient {
      * Token introspection endpoint (RFC 7662).
     Returns metadata about a token including its active status, scopes, and subject.
     Per RFC 7662, always returns 200 OK; invalid tokens get active=false.
-     * @param body (optional) 
+     * @param body (optional)
      * @return A TokenIntrospectionResponse with active=false for invalid, expired, or revoked tokens.
      */
     introspect(body?: Body5 | undefined, signal?: AbortSignal): Promise<TokenIntrospectionResponse> {
@@ -22830,8 +22830,8 @@ export class OidcClient {
      * Initiate the OIDC link flow.
     Redirects an already-authenticated caller to the OIDC provider's authorization
     endpoint so they can attach the external identity to their current account.
-     * @param provider (optional) 
-     * @param returnUrl (optional) 
+     * @param provider (optional)
+     * @param returnUrl (optional)
      */
     link(provider?: string | undefined, returnUrl?: string | null | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/auth/oidc/link?";
@@ -22886,10 +22886,10 @@ export class OidcClient {
      * Handle the OIDC link callback. Verifies the authorization code against the IdP,
     then attaches the external identity to the currently-authenticated subject.
     Does NOT issue new session cookies.
-     * @param code (optional) 
-     * @param state (optional) 
-     * @param error (optional) 
-     * @param error_description (optional) 
+     * @param code (optional)
+     * @param state (optional)
+     * @param error (optional)
+     * @param error_description (optional)
      */
     linkCallback(code?: string | null | undefined, state?: string | null | undefined, error?: string | null | undefined, error_description?: string | null | undefined, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/auth/oidc/link/callback?";

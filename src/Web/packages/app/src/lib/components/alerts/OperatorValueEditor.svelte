@@ -44,7 +44,7 @@
   }
 
   let {
-    payload = $bindable(),
+    payload,
     field,
     valueLabel,
     step = 1,

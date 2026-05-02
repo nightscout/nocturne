@@ -285,7 +285,7 @@
   {:else if node.type === "staleness"}
     {@const payload = ensurePayload("staleness")}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="value"
       valueLabel="Minutes"
       idPrefix="staleness"
@@ -407,7 +407,7 @@
               ? "Hours"
               : "Days"}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="value"
       {valueLabel}
       step="0.1"
@@ -470,7 +470,7 @@
   {:else if node.type === "loop_stale"}
     {@const payload = ensurePayload("loop_stale")}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="minutes"
       valueLabel="Minutes"
       min={1}
@@ -480,7 +480,7 @@
   {:else if node.type === "loop_enaction_stale"}
     {@const payload = ensurePayload("loop_enaction_stale")}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="minutes"
       valueLabel="Minutes"
       min={1}
@@ -523,7 +523,7 @@
   {:else if node.type === "pump_battery"}
     {@const payload = ensurePayload("pump_battery")}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="value"
       valueLabel="Percent"
       min={0}
@@ -584,7 +584,7 @@
   {:else if node.type === "uploader_battery"}
     {@const payload = ensurePayload("uploader_battery")}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="value"
       valueLabel="Percent"
       min={0}
@@ -624,7 +624,7 @@
   {:else if node.type === "sensitivity_ratio"}
     {@const payload = ensurePayload("sensitivity_ratio")}
     <OperatorValueEditor
-      bind:payload
+      {payload}
       field="value"
       valueLabel="Ratio"
       step="0.01"

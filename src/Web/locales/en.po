@@ -1206,9 +1206,6 @@ msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Threshold"
@@ -1216,17 +1213,13 @@ msgstr "Threshold"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Rate of Change"
 msgstr "Rate of Change"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Signal Loss"
 msgstr "Signal Loss"
 
@@ -1276,6 +1269,8 @@ msgid "Duration"
 msgstr "Duration"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Acknowledged"
 msgstr "Acknowledged"
@@ -1355,21 +1350,21 @@ msgid "Threshold: {0} {1}"
 msgstr "Threshold: {0} {1}"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Falling"
 msgstr "Falling"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Rising"
 msgstr "Rising"
 
-#. placeholder {0}: (params as Record<string, unknown>)["minutes"] ?? "?"
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "No data for {0} minutes"
-msgstr "No data for {0} minutes"
+#~ msgid "No data for {0} minutes"
+#~ msgstr "No data for {0} minutes"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
 msgid "Multiple conditions combined"
@@ -1395,29 +1390,20 @@ msgstr "<0/> {0} schedule{1}"
 msgid "<0/> {0} escalation step{1}"
 msgstr "<0/> {0} escalation step{1}"
 
-#. placeholder {0}: rule.confirmationReadings
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "{0} confirmations"
-msgstr "{0} confirmations"
+#~ msgid "{0} confirmations"
+#~ msgstr "{0} confirmations"
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "Hysteresis"
-msgstr "Hysteresis"
+#~ msgid "Hysteresis"
+#~ msgstr "Hysteresis"
 
-#. placeholder {0}: rule.hysteresisMinutes ?? 0
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "{0} minutes"
-msgstr "{0} minutes"
+#~ msgid "{0} minutes"
+#~ msgstr "{0} minutes"
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "Confirmations"
-msgstr "Confirmations"
+#~ msgid "Confirmations"
+#~ msgstr "Confirmations"
 
-#. placeholder {0}: rule.confirmationReadings ?? 1
-#. placeholder {1}: (rule.confirmationReadings ?? 1) !== 1 ? "s" : ""
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "{0} reading{1}"
-msgstr "{0} reading{1}"
+#~ msgid "{0} reading{1}"
+#~ msgstr "{0} reading{1}"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
@@ -1761,9 +1747,6 @@ msgstr ""
 "Account not linked. Use /connect in {0} to\n"
 "enable delivery."
 
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Normal"
@@ -1771,6 +1754,7 @@ msgstr "Normal"
 
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/reports/GlucoseScoreCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
@@ -1778,16 +1762,17 @@ msgstr "Normal"
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Critical"
 msgstr "Critical"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Below"
 msgstr "Below"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Above"
 msgstr "Above"
 
@@ -1807,6 +1792,7 @@ msgstr "Description (optional)"
 msgid "Brief description"
 msgstr "Brief description"
 
+#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
 msgid "Severity"
 msgstr "Severity"
@@ -1816,40 +1802,31 @@ msgstr "Severity"
 msgid "Critical alerts bypass quiet hours"
 msgstr "Critical alerts bypass quiet hours"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Condition Type"
-msgstr "Condition Type"
+#~ msgid "Condition Type"
+#~ msgstr "Condition Type"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Composite -- editing not available"
-msgstr "Composite -- editing not available"
+#~ msgid "Composite -- editing not available"
+#~ msgstr "Composite -- editing not available"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Direction"
 msgstr "Direction"
 
-#. placeholder {0}: unitLabel
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Value ({0})"
-msgstr "Value ({0})"
+#~ msgid "Value ({0})"
+#~ msgstr "Value ({0})"
 
-#. placeholder {0}: unitLabel
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Rate ({0}/min)"
-msgstr "Rate ({0}/min)"
+#~ msgid "Rate ({0}/min)"
+#~ msgstr "Rate ({0}/min)"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Timeout (minutes)"
-msgstr "Timeout (minutes)"
+#~ msgid "Timeout (minutes)"
+#~ msgstr "Timeout (minutes)"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Hysteresis (minutes)"
-msgstr "Hysteresis (minutes)"
+#~ msgid "Hysteresis (minutes)"
+#~ msgstr "Hysteresis (minutes)"
 
-#: src/lib/components/alerts/GeneralTab.svelte
-msgid "Confirmation Readings"
-msgstr "Confirmation Readings"
+#~ msgid "Confirmation Readings"
+#~ msgstr "Confirmation Readings"
 
 #: src/lib/components/alerts/QuietHoursCard.svelte
 msgid "<0/> Quiet Hours"
@@ -1948,6 +1925,7 @@ msgstr "Days of Week"
 msgid "Every day"
 msgstr "Every day"
 
+#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
@@ -2003,6 +1981,10 @@ msgstr "Snooze Options"
 msgid "{0}m <0/>"
 msgstr "{0}m <0/>"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/alerts/SnoozeTab.svelte
 msgid "Minutes"
 msgstr "Minutes"
@@ -2034,9 +2016,8 @@ msgstr "Smart Snooze"
 msgid "Smart Snooze Extend (minutes)"
 msgstr "Smart Snooze Extend (minutes)"
 
-#: src/lib/components/alerts/SnoozeTab.svelte
-msgid "Automatically extends snooze when glucose trend is favorable"
-msgstr "Automatically extends snooze when glucose trend is favorable"
+#~ msgid "Automatically extends snooze when glucose trend is favorable"
+#~ msgstr "Automatically extends snooze when glucose trend is favorable"
 
 #: src/lib/components/alerts/VisualSection.svelte
 msgid "Visual"
@@ -2770,6 +2751,7 @@ msgstr "<0/> Reset to default"
 msgid "Show units"
 msgstr "Show units"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
@@ -3311,12 +3293,14 @@ msgstr "This connector only supports recent syncs."
 msgid "Select a date range to re-sync specific data."
 msgstr "Select a date range to re-sync specific data."
 
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "From"
 msgstr "From"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
@@ -3379,6 +3363,7 @@ msgstr "<0/> Downloading..."
 msgid "<0/> Download Food Definitions"
 msgstr "<0/> Download Food Definitions"
 
+#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/connectors/DemoDataSection.svelte
@@ -4708,6 +4693,8 @@ msgstr "Sensor"
 msgid "<0/> BG Check"
 msgstr "<0/> BG Check"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
@@ -4742,6 +4729,7 @@ msgstr "Bolus Type"
 msgid "Duration (min)"
 msgstr "Duration (min)"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/entries/BolusSection.svelte
 msgid "Rate (U/hr)"
 msgstr "Rate (U/hr)"
@@ -6438,6 +6426,7 @@ msgstr "Basal Rates"
 msgid "Background insulin delivery rates throughout the day"
 msgstr "Background insulin delivery rates throughout the day"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/routes/(authenticated)/reports/basal-analysis/+page.svelte
@@ -6801,6 +6790,7 @@ msgstr "Daily Summary"
 msgid "Daily glucose statistics and time in range data."
 msgstr "Daily glucose statistics and time in range data."
 
+#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/reports/DailySummaryTable.svelte
 msgid "Date"
 msgstr "Date"
@@ -8823,11 +8813,19 @@ msgstr "Start a tracker from your definitions"
 msgid "{0} old · Started {1} <0/>"
 msgstr "{0} old · Started {1} <0/>"
 
+#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Info"
 msgstr "Info"
 
+#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/GeneralTab.svelte
+#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Warning"
 msgstr "Warning"
@@ -9768,6 +9766,7 @@ msgstr "Recent Requests ({0}{1})"
 msgid "Path"
 msgstr "Path"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 msgid "Match"
@@ -11504,6 +11503,8 @@ msgstr "Zoomed view"
 msgid "Auto Basal"
 msgstr "Auto Basal"
 
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Percent"
 msgstr "Percent"
@@ -15151,7 +15152,7 @@ msgid "<0/> Acknowledge All"
 msgstr "<0/> Acknowledge All"
 
 #. placeholder {0}: getConditionLabel(alert.conditionType)
-#. placeholder {1}: formatDate(alert.startedAt)
+#. placeholder {1}: formatDate( alert.startedAt )
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "{0} — Started {1}"
 msgstr "{0} — Started {1}"
@@ -17892,21 +17893,17 @@ msgstr "Urgent High"
 msgid "Critical high glucose alert requiring prompt action"
 msgstr "Critical high glucose alert requiring prompt action"
 
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "Fast Drop"
-msgstr "Fast Drop"
+#~ msgid "Fast Drop"
+#~ msgstr "Fast Drop"
 
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "Rapid glucose decline combined with low threshold"
-msgstr "Rapid glucose decline combined with low threshold"
+#~ msgid "Rapid glucose decline combined with low threshold"
+#~ msgstr "Rapid glucose decline combined with low threshold"
 
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "Sensor Lost"
-msgstr "Sensor Lost"
+#~ msgid "Sensor Lost"
+#~ msgstr "Sensor Lost"
 
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "Alert when CGM signal is lost for an extended period"
-msgstr "Alert when CGM signal is lost for an extended period"
+#~ msgid "Alert when CGM signal is lost for an extended period"
+#~ msgstr "Alert when CGM signal is lost for an extended period"
 
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Failed to create alert rules"
@@ -17955,16 +17952,11 @@ msgstr ""
 "Select the alerts you want to enable. You can customize thresholds for\n"
 "each one."
 
-#. placeholder {0}: preset.confirmationReadings
-#. placeholder {1}: preset.confirmationReadings !== 1 ? "s" : ""
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "{0} confirmation{1}"
-msgstr "{0} confirmation{1}"
+#~ msgid "{0} confirmation{1}"
+#~ msgstr "{0} confirmation{1}"
 
-#. placeholder {0}: preset.hysteresisMinutes
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "{0}m hysteresis"
-msgstr "{0}m hysteresis"
+#~ msgid "{0}m hysteresis"
+#~ msgstr "{0}m hysteresis"
 
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Choose how you want to receive alert notifications."
@@ -17987,11 +17979,8 @@ msgstr ""
 "No presets selected. Go back to step 1 to select at least one\n"
 "alert."
 
-#. placeholder {0}: preset.confirmationReadings
-#. placeholder {1}: preset.hysteresisMinutes
-#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
-msgid "{0} conf. / {1}m hyst."
-msgstr "{0} conf. / {1}m hyst."
+#~ msgid "{0} conf. / {1}m hyst."
+#~ msgstr "{0} conf. / {1}m hyst."
 
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid ""
@@ -18279,3 +18268,412 @@ msgstr "Back to Settings"
 #: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
 msgid "Link failed"
 msgstr "Link failed"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "The rule failed validation. Cyclical references between rules are not allowed."
+msgstr "The rule failed validation. Cyclical references between rules are not allowed."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Another rule references this one. Disable or remove the dependants first."
+msgstr "Another rule references this one. Disable or remove the dependants first."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Failed to save rule. Please try again."
+msgstr "Failed to save rule. Please try again."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Condition"
+msgstr "Condition"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Auto-Resolve"
+msgstr "Auto-Resolve"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Condition tree"
+msgstr "Condition tree"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid ""
+"Build the condition that fires this alert. Group conditions\n"
+"with AND/OR, negate them, or require sustained truth before\n"
+"firing."
+msgstr ""
+"Build the condition that fires this alert. Group conditions\n"
+"with AND/OR, negate them, or require sustained truth before\n"
+"firing."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "No condition configured."
+msgstr "No condition configured."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Add condition"
+msgstr "Add condition"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "A condition is required before saving."
+msgstr "A condition is required before saving."
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Auto-resolve"
+msgstr "Auto-resolve"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid ""
+"Automatically close active alerts when a separate condition is\n"
+"true. Useful for mirroring \"alert clears when value returns to\n"
+"range\"."
+msgstr ""
+"Automatically close active alerts when a separate condition is\n"
+"true. Useful for mirroring \"alert clears when value returns to\n"
+"range\"."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Auto-resolve is enabled — add a condition or turn it off."
+msgstr "Auto-resolve is enabled — add a condition or turn it off."
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "Replay enabled rules over a window"
+msgstr "Replay enabled rules over a window"
+
+#: src/lib/components/alerts/RuleEditorSheet.svelte
+msgid "<0/> Replay"
+msgstr "<0/> Replay"
+
+#. placeholder {0}: opt
+#: src/lib/components/alerts/SnoozeTab.svelte
+msgid "Remove {0} minute option"
+msgstr "Remove {0} minute option"
+
+#: src/lib/components/alerts/SnoozeTab.svelte
+msgid ""
+"How long to extend the snooze when conditions hold. With no\n"
+"conditions configured, the backend falls back to a trend-favorable\n"
+"heuristic."
+msgstr ""
+"How long to extend the snooze when conditions hold. With no\n"
+"conditions configured, the backend falls back to a trend-favorable\n"
+"heuristic."
+
+#: src/lib/components/alerts/SnoozeTab.svelte
+msgid "Conditions to extend snooze"
+msgstr "Conditions to extend snooze"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/SnoozeTab.svelte
+msgid "<0/> Add condition"
+msgstr "<0/> Add condition"
+
+#: src/lib/components/alerts/SnoozeTab.svelte
+msgid ""
+"All conditions must hold for the snooze to extend. Leave empty to use\n"
+"the default trend-favorable heuristic."
+msgstr ""
+"All conditions must hold for the snooze to extend. Leave empty to use\n"
+"the default trend-favorable heuristic."
+
+#: src/lib/components/alerts/SnoozeTab.svelte
+msgid "No conditions configured."
+msgstr "No conditions configured."
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Group (and/or)"
+msgstr "Group (and/or)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Not"
+msgstr "Not"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Sustained for..."
+msgstr "Sustained for..."
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Threshold (mg/dL)"
+msgstr "Threshold (mg/dL)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Rate of change"
+msgstr "Rate of change"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Data staleness"
+msgstr "Data staleness"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Predicted glucose"
+msgstr "Predicted glucose"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Trend bucket"
+msgstr "Trend bucket"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Time of day"
+msgstr "Time of day"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Insulin on board"
+msgstr "Insulin on board"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Carbs on board"
+msgstr "Carbs on board"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Reservoir level"
+msgstr "Reservoir level"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Site age"
+msgstr "Site age"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Sensor age"
+msgstr "Sensor age"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Other rule state"
+msgstr "Other rule state"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Loop has stopped"
+msgstr "Loop has stopped"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Loop not enacting"
+msgstr "Loop not enacting"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Pump suspended"
+msgstr "Pump suspended"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Pump battery"
+msgstr "Pump battery"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Temp basal"
+msgstr "Temp basal"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Phone battery"
+msgstr "Phone battery"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Override active"
+msgstr "Override active"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Insulin sensitivity"
+msgstr "Insulin sensitivity"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Percent of scheduled"
+msgstr "Percent of scheduled"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Falling fast"
+msgstr "Falling fast"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Flat"
+msgstr "Flat"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Rising fast"
+msgstr "Rising fast"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Remove condition"
+msgstr "Remove condition"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "All conditions (AND)"
+msgstr "All conditions (AND)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Any condition (OR)"
+msgstr "Any condition (OR)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Value (mg/dL)"
+msgstr "Value (mg/dL)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Rate (mg/dL per min)"
+msgstr "Rate (mg/dL per min)"
+
+#: src/lib/components/alerts/OperatorValueEditor.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Operator"
+msgstr "Operator"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Within (min)"
+msgstr "Within (min)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Bucket"
+msgstr "Bucket"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Timezone (optional)"
+msgstr "Timezone (optional)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Grams"
+msgstr "Grams"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Days"
+msgstr "Days"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Other rule"
+msgstr "Other rule"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Select a rule"
+msgstr "Select a rule"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "State"
+msgstr "State"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Firing"
+msgstr "Firing"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "For at least (min, optional)"
+msgstr "For at least (min, optional)"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "For closed-loop users only. Open-loop users should use \"Loop has stopped\" instead."
+msgstr "For closed-loop users only. Open-loop users should use \"Loop has stopped\" instead."
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Pump is currently suspended"
+msgstr "Pump is currently suspended"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Metric"
+msgstr "Metric"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Override is currently active"
+msgstr "Override is currently active"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Ratio"
+msgstr "Ratio"
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Available for AAPS and Trio. Loop iOS does not report this value."
+msgstr "Available for AAPS and Trio. Loop iOS does not report this value."
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+msgid "Close the alert automatically when this condition is true."
+msgstr "Close the alert automatically when this condition is true."
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+msgid "Add a condition that signals the alert should resolve."
+msgstr "Add a condition that signals the alert should resolve."
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "Failed to run replay. Please try again."
+msgstr "Failed to run replay. Please try again."
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "<0/> Replay alert rules"
+msgstr "<0/> Replay alert rules"
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid ""
+"See which events the currently enabled rules would have produced over\n"
+"a window. Replay does not deliver any notifications."
+msgstr ""
+"See which events the currently enabled rules would have produced over\n"
+"a window. Replay does not deliver any notifications."
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "Leave blank to replay the last 24 hours."
+msgstr "Leave blank to replay the last 24 hours."
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "Defaults to your browser timezone."
+msgstr "Defaults to your browser timezone."
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "<0/> Running…"
+msgstr "<0/> Running…"
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "Run replay"
+msgstr "Run replay"
+
+#. placeholder {0}: formatRange( result.windowStart, result.windowEnd, timezone || browserTimezone, )
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "Window: {0}"
+msgstr "Window: {0}"
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "No events would have fired in this window."
+msgstr "No events would have fired in this window."
+
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Rapid Drop"
+msgstr "Rapid Drop"
+
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Glucose falling faster than the configured rate"
+msgstr "Glucose falling faster than the configured rate"
+
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Alert when the closed loop has not enacted a recommendation in 15 minutes."
+msgstr "Alert when the closed loop has not enacted a recommendation in 15 minutes."
+
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Alert when the pump has been suspended for an extended period."
+msgstr "Alert when the pump has been suspended for an extended period."
+
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Alert when CGM data has been stale for too long"
+msgstr "Alert when CGM data has been stale for too long"
+
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Me"
+msgstr "Me"
+
+#. placeholder {0}: severityLabel(preset.severity)
+#: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
+msgid "Severity: {0}"
+msgstr "Severity: {0}"
+
+#: src/lib/components/alerts/ChannelPicker.svelte
+msgid "In-App"
+msgstr "In-App"
+
+#: src/lib/components/alerts/ChannelPicker.svelte
+msgid "Show alerts in the Nocturne notification centre"
+msgstr "Show alerts in the Nocturne notification centre"
+
+#: src/lib/components/alerts/ChannelPicker.svelte
+msgid "Routed to your account automatically."
+msgstr "Routed to your account automatically."
+
+#: src/lib/components/alerts/ChannelPicker.svelte
+msgid "Webhook URL"
+msgstr "Webhook URL"

@@ -73,7 +73,10 @@
     };
   };
 
-  function thresholdNode(direction: "above" | "below", value: number): ConditionNode {
+  function thresholdNode(
+    direction: "above" | "below",
+    value: number
+  ): ConditionNode {
     return { type: "threshold", threshold: { direction, value } };
   }
 
@@ -203,7 +206,8 @@
     {
       key: "pump_suspended",
       name: "Pump suspended",
-      description: "Alert when the pump has been suspended for an extended period.",
+      description:
+        "Alert when the pump has been suspended for an extended period.",
       icon: PauseCircle,
       kind: "duration",
       severity: AlertRuleSeverity.Warning,
@@ -263,7 +267,9 @@
   }
 
   function displayThreshold(preset: Preset): number {
-    return isGlucosePreset(preset) ? bgValue(preset.threshold) : preset.threshold;
+    return isGlucosePreset(preset)
+      ? bgValue(preset.threshold)
+      : preset.threshold;
   }
 
   function thresholdUnitLabel(preset: Preset): string {
@@ -408,7 +414,8 @@
       {@const step = i + 1}
       <div class="flex items-center gap-2 flex-1">
         <div
-          class="flex items-center justify-center h-8 w-8 rounded-full text-sm font-medium shrink-0 {step <= currentStep
+          class="flex items-center justify-center h-8 w-8 rounded-full text-sm font-medium shrink-0 {step <=
+          currentStep
             ? 'bg-primary text-primary-foreground'
             : 'bg-muted text-muted-foreground'}"
         >
@@ -433,9 +440,7 @@
         </span>
         {#if i < totalSteps - 1}
           <div
-            class="flex-1 h-px {step < currentStep
-              ? 'bg-primary'
-              : 'bg-muted'}"
+            class="flex-1 h-px {step < currentStep ? 'bg-primary' : 'bg-muted'}"
           ></div>
         {/if}
       </div>
@@ -507,9 +512,9 @@
                             isGlucosePreset(preset)
                               ? convertFromDisplayUnits(
                                   val,
-                                  glucoseUnits.current,
+                                  glucoseUnits.current
                                 )
-                              : val,
+                              : val
                           );
                         }
                       }}
