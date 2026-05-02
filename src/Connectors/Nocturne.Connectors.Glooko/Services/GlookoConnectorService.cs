@@ -10,6 +10,7 @@ using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -22,6 +23,8 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfiguration>
 {
     private readonly GlookoConnectorConfiguration _config;
+    private readonly IConnectorPublisher? _connectorPublisher;
+    private readonly IMealMatchingService? _mealMatchingService;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly GlookoProfileMapper _profileMapper;
@@ -40,11 +43,14 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         GlookoAuthTokenProvider tokenProvider,
-        IConnectorPublisher? publisher = null
+        IConnectorPublisher? publisher = null,
+        IMealMatchingService? mealMatchingService = null
     )
         : base(httpClient, logger, publisher)
     {
         _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
+        _connectorPublisher = publisher;
+        _mealMatchingService = mealMatchingService;
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
@@ -347,8 +353,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 allCarbs.AddRange(v3BolusCarbIntakes);
                 allBatches.AddRange(v3Batches);
 
-                // V2 standalone food records have no V3 equivalent
-                allCarbs.AddRange(_v4TreatmentMapper.MapFoods(batchData));
+                // V2 standalone food records have no V3 equivalent — create CarbIntake records
+                allCarbs.AddRange(_v4TreatmentMapper.MapFoodsToCarbIntakes(batchData));
                 allDeviceEvents.AddRange(_v4TreatmentMapper.MapV3DeviceEvents(v3Data));
             }
             else
@@ -390,6 +396,67 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     _logger.LogInformation("[{ConnectorSource}] Published {Count} carb intakes", ConnectorSource, allCarbs.Count);
                     await ReportMessageAsync(progressReporter, SyncMessageType.PublishingDataType,
                         new() { ["dataType"] = SyncDataType.CarbIntake.ToString(), ["count"] = allCarbs.Count.ToString() }, cancellationToken);
+                }
+            }
+
+            // Publish V2 food records as connector food entries (creates Food catalog + ConnectorFoodEntry records)
+            if (_config.UseV3Api && batchData.Foods is { Length: > 0 })
+            {
+                var foodEntryImports = _v4TreatmentMapper.MapFoodsToConnectorEntries(batchData);
+                if (foodEntryImports.Count > 0 && _connectorPublisher is { IsAvailable: true })
+                {
+                    var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
+                        foodEntryImports, ConnectorSource, cancellationToken);
+
+                    if (importedEntries is { Count: > 0 })
+                    {
+                        _logger.LogInformation(
+                            "[{ConnectorSource}] Published {Count} food entries to connector food catalog",
+                            ConnectorSource, importedEntries.Count);
+
+                        // Attribute food entries to CarbIntakes using the Glooko guid correlation:
+                        // ConnectorFoodEntry.ExternalEntryId == food.Guid
+                        // CarbIntake.LegacyId == "glooko_food_{food.Guid}"
+                        // Only process Pending entries (newly created this sync); already-matched
+                        // entries from previous syncs are skipped to avoid FK errors from
+                        // in-memory CarbIntake IDs that don't match the persisted DB IDs.
+                        if (_mealMatchingService != null && allCarbs.Count > 0)
+                        {
+                            var pendingEntries = importedEntries
+                                .Where(e => e.Status == ConnectorFoodEntryStatus.Pending)
+                                .ToList();
+
+                            if (pendingEntries.Count > 0)
+                            {
+                                var carbsByLegacyId = allCarbs
+                                    .Where(ci => ci.LegacyId != null)
+                                    .ToDictionary(ci => ci.LegacyId!, StringComparer.OrdinalIgnoreCase);
+
+                                foreach (var entry in pendingEntries)
+                                {
+                                    var legacyKey = $"glooko_food_{entry.ExternalEntryId}";
+                                    if (!carbsByLegacyId.TryGetValue(legacyKey, out var carbIntake))
+                                        continue;
+
+                                    try
+                                    {
+                                        await _mealMatchingService.AcceptMatchAsync(
+                                            entry.Id, carbIntake.Id, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex,
+                                            "[{ConnectorSource}] Failed to attribute food entry {FoodEntryId} to CarbIntake {CarbIntakeId}",
+                                            ConnectorSource, entry.Id, carbIntake.Id);
+                                    }
+                                }
+
+                                _logger.LogInformation(
+                                    "[{ConnectorSource}] Attributed {Count} food entries to carb intakes",
+                                    ConnectorSource, pendingEntries.Count);
+                            }
+                        }
+                    }
                 }
             }
 

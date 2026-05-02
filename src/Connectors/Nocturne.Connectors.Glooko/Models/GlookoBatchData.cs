@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Connectors.Glooko.Models;
@@ -29,6 +30,45 @@ public class GlookoFood
     public double CarbohydrateGrams { get; set; }
 
     [JsonPropertyName("description")] public string Description { get; set; } = string.Empty;
+
+    // -- Rich food data from v2/foods API ---------------------------------
+
+    [JsonPropertyName("guid")] public string? Guid { get; set; }
+
+    [JsonPropertyName("name")] public string? Name { get; set; }
+
+    [JsonPropertyName("fat")] public double? Fat { get; set; }
+
+    [JsonPropertyName("protein")] public double? Protein { get; set; }
+
+    [JsonPropertyName("calories")] public double? Calories { get; set; }
+
+    [JsonPropertyName("servingQuantity")] public double? ServingQuantity { get; set; }
+
+    [JsonPropertyName("servingUnit")] public string? ServingUnit { get; set; }
+
+    [JsonPropertyName("numberOfServings")] public double? NumberOfServings { get; set; }
+
+    [JsonPropertyName("imageUrl")] public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("brand")] public string? Brand { get; set; }
+
+    [JsonPropertyName("source")] public string? Source { get; set; }
+
+    [JsonPropertyName("locale")] public string? Locale { get; set; }
+
+    [JsonPropertyName("mealGuid")] public string? MealGuid { get; set; }
+
+    [JsonPropertyName("externalId")] public string? ExternalId { get; set; }
+
+    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
+
+    [JsonPropertyName("favoriteGuid")] public string? FavoriteGuid { get; set; }
+
+    [JsonPropertyName("updatedAt")] public string? UpdatedAt { get; set; }
+
+    [JsonPropertyName("manuallyEnteredText")]
+    public JsonElement? ManuallyEnteredText { get; set; }
 }
 
 public class GlookoBasal

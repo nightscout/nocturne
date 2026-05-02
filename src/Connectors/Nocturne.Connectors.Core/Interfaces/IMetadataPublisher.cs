@@ -15,7 +15,7 @@ public interface IMetadataPublisher
         string source,
         CancellationToken cancellationToken = default);
 
-    Task<bool> PublishConnectorFoodEntriesAsync(
+    Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(
         IEnumerable<ConnectorFoodEntryImport> entries,
         string source,
         CancellationToken cancellationToken = default);

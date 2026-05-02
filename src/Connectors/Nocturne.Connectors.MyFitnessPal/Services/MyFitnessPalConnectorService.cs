@@ -106,12 +106,12 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 }
                 else
                 {
-                    var published = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
+                    var imported = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
                         foodEntryImports,
                         ConnectorSource,
                         cancellationToken
                     );
-                    if (!published)
+                    if (imported == null)
                     {
                         result.Success = false;
                         result.Errors.Add("Failed to publish food entries");

@@ -99,18 +99,24 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                 {
                     try
                     {
+                        if (food.SoftDeleted == true) continue;
+
                         var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
                         var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
                         var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
 
                         if (carbValue <= 0) continue;
 
+                        var legacyId = !string.IsNullOrEmpty(food.Guid)
+                            ? $"glooko_food_{food.Guid}"
+                            : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
+
                         var now = DateTime.UtcNow;
                         carbs.Add(new CarbIntake
                         {
                             Id = Guid.CreateVersion7(),
                             Timestamp = correctedDate,
-                            LegacyId = GenerateLegacyId("food", foodDate, $"carbs:{carbValue}"),
+                            LegacyId = legacyId,
                             Device = _connectorSource,
                             DataSource = _connectorSource,
                             Carbs = carbValue,
@@ -134,10 +140,12 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     }
 
     /// <summary>
-    /// Maps only standalone V2 Food records to CarbIntake records.
-    /// Used when V3 handles boluses but V2 Foods have no V3 equivalent.
+    /// Maps standalone V2 Food records to CarbIntake records.
+    /// Used alongside <see cref="MapFoodsToConnectorEntries"/> — this creates the carb event
+    /// for the timeline, while the connector entries store the rich nutritional detail.
+    /// Filters out soft-deleted items.
     /// </summary>
-    public List<CarbIntake> MapFoods(GlookoBatchData batchData)
+    public List<CarbIntake> MapFoodsToCarbIntakes(GlookoBatchData batchData)
     {
         var carbs = new List<CarbIntake>();
         if (batchData.Foods == null) return carbs;
@@ -146,18 +154,24 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
         {
             try
             {
+                if (food.SoftDeleted == true) continue;
+
                 var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
                 var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
                 var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
 
                 if (carbValue <= 0) continue;
 
+                var legacyId = !string.IsNullOrEmpty(food.Guid)
+                    ? $"glooko_food_{food.Guid}"
+                    : GenerateLegacyId("food", foodDate, $"carbs:{carbValue}");
+
                 var now = DateTime.UtcNow;
                 carbs.Add(new CarbIntake
                 {
                     Id = Guid.CreateVersion7(),
                     Timestamp = correctedDate,
-                    LegacyId = GenerateLegacyId("food", foodDate, $"carbs:{carbValue}"),
+                    LegacyId = legacyId,
                     Device = _connectorSource,
                     DataSource = _connectorSource,
                     Carbs = carbValue,
@@ -167,11 +181,112 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 food record", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 food to CarbIntake", _connectorSource);
             }
         }
 
         return carbs;
+    }
+
+    /// <summary>
+    /// Maps standalone V2 Food records to connector food entry imports for the food catalog pipeline.
+    /// Creates ConnectorFoodEntryImport objects (with Food catalog upsert payloads) that flow through
+    /// the existing ConnectorFoodEntryService. Filters out soft-deleted items.
+    /// </summary>
+    public List<ConnectorFoodEntryImport> MapFoodsToConnectorEntries(GlookoBatchData batchData)
+    {
+        var results = new List<ConnectorFoodEntryImport>();
+        if (batchData.Foods == null) return results;
+
+        foreach (var food in batchData.Foods)
+        {
+            try
+            {
+                if (food.SoftDeleted == true) continue;
+
+                var foodDate = _timeMapper.GetRawGlookoDate(food.Timestamp, food.PumpTimestamp);
+                var correctedDate = _timeMapper.GetCorrectedGlookoTime(foodDate);
+                var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
+
+                if (carbValue <= 0) continue;
+
+                var externalEntryId = !string.IsNullOrEmpty(food.Guid)
+                    ? food.Guid
+                    : $"glooko_food_{foodDate.Ticks}_{carbValue}";
+
+                var externalFoodId = food.ExternalId ?? food.Guid ?? string.Empty;
+
+                var servingQty = food.ServingQuantity ?? 1;
+                var numServings = food.NumberOfServings ?? 1;
+                var portions = servingQty * numServings;
+                if (portions <= 0) portions = 1;
+
+                results.Add(new ConnectorFoodEntryImport
+                {
+                    ConnectorSource = _connectorSource,
+                    ExternalEntryId = externalEntryId,
+                    ExternalFoodId = externalFoodId,
+                    ConsumedAt = new DateTimeOffset(correctedDate, TimeSpan.Zero),
+                    MealName = food.Description ?? food.Name ?? string.Empty,
+                    Carbs = (decimal)carbValue,
+                    Protein = (decimal)(food.Protein ?? 0),
+                    Fat = (decimal)(food.Fat ?? 0),
+                    Energy = (decimal)(food.Calories ?? 0),
+                    Servings = (decimal)portions,
+                    ServingDescription = BuildServingDescription(food),
+                    Food = BuildFoodImport(food, externalFoodId),
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V2 food record to connector entry", _connectorSource);
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Builds a ConnectorFoodImport for upserting the food catalog record.
+    /// </summary>
+    private static ConnectorFoodImport? BuildFoodImport(GlookoFood food, string externalFoodId)
+    {
+        if (string.IsNullOrEmpty(externalFoodId) && string.IsNullOrEmpty(food.Name))
+            return null;
+
+        var carbValue = food.Carbs > 0 ? food.Carbs : food.CarbohydrateGrams;
+
+        return new ConnectorFoodImport
+        {
+            ExternalId = externalFoodId,
+            Name = food.Name ?? food.Description ?? string.Empty,
+            BrandName = food.Brand,
+            Carbs = (decimal)carbValue,
+            Protein = (decimal)(food.Protein ?? 0),
+            Fat = (decimal)(food.Fat ?? 0),
+            Energy = (decimal)(food.Calories ?? 0),
+            Portion = (decimal)(food.ServingQuantity ?? 1),
+            Unit = food.ServingUnit,
+        };
+    }
+
+    /// <summary>
+    /// Builds a human-readable serving description from Glooko food data.
+    /// </summary>
+    private static string? BuildServingDescription(GlookoFood food)
+    {
+        var qty = food.ServingQuantity;
+        var unit = food.ServingUnit;
+        var numServings = food.NumberOfServings;
+
+        if (qty == null && string.IsNullOrEmpty(unit)) return null;
+
+        var parts = new List<string>();
+        if (qty.HasValue) parts.Add(qty.Value.ToString("G"));
+        if (!string.IsNullOrEmpty(unit)) parts.Add(unit);
+        if (numServings is > 0 and not 1) parts.Add($"x{numServings.Value:G}");
+
+        return parts.Count > 0 ? string.Join(" ", parts) : null;
     }
 
     /// <summary>

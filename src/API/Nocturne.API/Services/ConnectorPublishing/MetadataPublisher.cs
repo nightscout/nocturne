@@ -85,24 +85,23 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         }
     }
 
-    public async Task<bool> PublishConnectorFoodEntriesAsync(
+    public async Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(
         IEnumerable<ConnectorFoodEntryImport> entries,
         string source,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            await _connectorFoodEntryService.ImportAsync(
+            return await _connectorFoodEntryService.ImportAsync(
                 DefaultUserId,
                 entries,
                 cancellationToken);
-            return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish connector food entries for {Source}", source);
-            return false;
+            return null;
         }
     }
 
