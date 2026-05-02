@@ -129,6 +129,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         if (response.IsSuccessStatusCode)
         {
             var json = await GlookoHttpHelper.ReadResponseAsync(response);
+            _logger.LogDebug("[{ConnectorSource}] Response {StatusCode} from {Url}: {Json}",
+                ConnectorSource, (int)response.StatusCode, absoluteUrl, json);
             return JsonSerializer.Deserialize<JsonElement>(json);
         }
 
@@ -253,7 +255,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
             var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
-            var from = request.From;
+            // Convert real UTC (from database) back to Glooko's fake-UTC format
+            // for API requests. Glooko timestamps are labeled as UTC but are actually
+            // local time, so we reverse the timezone correction applied during inbound processing.
+            var from = request.From.HasValue
+                ? _timeMapper.ToGlookoTime(request.From.Value)
+                : (DateTime?)null;
 
             await ReportMessageAsync(progressReporter, SyncMessageType.FetchingData,
                 new() { ["from"] = (from ?? DateTime.UtcNow.AddMonths(-6)).ToString("MMM dd"), ["to"] = DateTime.UtcNow.ToString("MMM dd") },
@@ -508,8 +515,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             var patientCode = EnsureAuthenticatedAndGetCode();
             if (patientCode == null) return null;
 
-            var fromDate = since ?? DateTime.UtcNow.AddDays(-1);
-            var toDate = DateTime.UtcNow;
+            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
+            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             _logger.LogInformation("Fetching comprehensive Glooko data from {From:yyyy-MM-dd} to {To:yyyy-MM-dd}", fromDate, toDate);
 
@@ -641,8 +648,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             // Ensure we have meter units
             if (string.IsNullOrEmpty(_meterUnits)) await FetchV3UserProfileAsync();
 
-            var fromDate = since ?? DateTime.UtcNow.AddDays(-1);
-            var toDate = DateTime.UtcNow;
+            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
+            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             var url = ConstructV3GraphUrl(fromDate, toDate);
             _logger.LogInformation("[{ConnectorSource}] Fetching v3 graph data from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
