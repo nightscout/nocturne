@@ -14,7 +14,7 @@ public class RuleDataNeedsTests
     {
         var result = RuleDataNeeds.Walk(Array.Empty<AlertRuleSnapshot>());
 
-        result.Should().Be(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public class RuleDataNeedsTests
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
-        result.Should().Be(DataNeedsSet.None);
+        result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class RuleDataNeedsTests
         var act = () => RuleDataNeeds.Walk(new[] { rule });
 
         act.Should().NotThrow();
-        act().Should().Be(DataNeedsSet.None);
+        act().Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
     [Fact]

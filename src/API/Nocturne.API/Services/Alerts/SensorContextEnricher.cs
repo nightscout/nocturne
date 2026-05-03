@@ -177,7 +177,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (!isReplay)
         {
             var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(tenantId, ct);
-            var projection = settings.Resolve(now);
+            // No row yet means DND has never been configured for this tenant — treat as off.
+            var projection = settings?.Resolve(now);
             enriched = enriched with
             {
                 ActiveDoNotDisturb = projection is null

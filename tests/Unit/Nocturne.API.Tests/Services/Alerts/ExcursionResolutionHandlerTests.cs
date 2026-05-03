@@ -41,8 +41,8 @@ public class ExcursionResolutionHandlerTests
     public async Task HandleClosed_StampsResolutionReason_ExpiresDeliveries_AndBroadcasts()
     {
         var instanceId = Guid.NewGuid();
-        var instance = new AlertInstanceSnapshot(instanceId, _tenantId, _excursionId, Guid.NewGuid(),
-            0, "escalating", DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5), null, 0);
+        var instance = new AlertInstanceSnapshot(instanceId, _tenantId, _excursionId,
+            "escalating", DateTime.UtcNow, SnoozedUntil: null, SnoozeCount: 0);
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { instance });
 

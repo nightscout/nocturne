@@ -64,7 +64,6 @@ public class AlertAcknowledgementServiceTests
         await using var db = new NocturneDbContext(_options);
         db.TenantId = t;
         var ruleId = Guid.NewGuid();
-        var scheduleId = Guid.NewGuid();
         var excursion = new AlertExcursionEntity
         {
             Id = Guid.NewGuid(),
@@ -79,11 +78,8 @@ public class AlertAcknowledgementServiceTests
             Id = Guid.NewGuid(),
             TenantId = t,
             AlertExcursionId = excursion.Id,
-            AlertScheduleId = scheduleId,
-            CurrentStepOrder = 0,
             Status = "triggered",
             TriggeredAt = excursion.StartedAt,
-            NextEscalationAt = DateTime.UtcNow.AddMinutes(2),
         };
         db.AlertExcursions.Add(excursion);
         db.AlertInstances.Add(instance);
@@ -109,7 +105,6 @@ public class AlertAcknowledgementServiceTests
         var instance = await db.AlertInstances.IgnoreQueryFilters()
             .FirstAsync(i => i.Id == instanceId);
         instance.Status.Should().Be("acknowledged");
-        instance.NextEscalationAt.Should().BeNull();
 
         _broadcast.Verify(
             x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()),
@@ -127,7 +122,6 @@ public class AlertAcknowledgementServiceTests
             var instance = await db.AlertInstances.IgnoreQueryFilters()
                 .FirstAsync(i => i.Id == instanceId);
             instance.Status = "acknowledged";
-            instance.NextEscalationAt = null;
             await db.SaveChangesAsync();
         }
 
