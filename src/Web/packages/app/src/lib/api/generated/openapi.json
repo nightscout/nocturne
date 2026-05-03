@@ -22993,6 +22993,54 @@
                 "$ref": "#/components/schemas/DoNotDisturbCondition"
               }
             ]
+          },
+          "glucose_bucket": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseBucketCondition"
+              }
+            ]
+          },
+          "time_since_last_carb": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeSinceLastCarbCondition"
+              }
+            ]
+          },
+          "time_since_last_bolus": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeSinceLastBolusCondition"
+              }
+            ]
+          },
+          "day_of_week": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DayOfWeekCondition"
+              }
+            ]
+          },
+          "pump_state": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpStateCondition"
+              }
+            ]
+          },
+          "state_span_active": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StateSpanActiveCondition"
+              }
+            ]
           }
         }
       },
@@ -23341,6 +23389,208 @@
             "nullable": true
           }
         }
+      },
+      "GlucoseBucketCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucoseBucket"
+            }
+          }
+        }
+      },
+      "GlucoseBucket": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "VeryLow",
+          "Low",
+          "TightRange",
+          "InRange",
+          "High",
+          "VeryHigh"
+        ],
+        "enum": [
+          "very_low",
+          "low",
+          "tight_range",
+          "in_range",
+          "high",
+          "very_high"
+        ]
+      },
+      "TimeSinceLastCarbCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/AlertComparisonOperator"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AlertComparisonOperator": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Gt",
+          "Gte",
+          "Lt",
+          "Lte",
+          "Eq"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "TimeSinceLastBolusCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/AlertComparisonOperator"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DayOfWeekCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          }
+        }
+      },
+      "DayOfWeek": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "PumpStateCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/PumpModeState"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "PumpModeState": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Automatic",
+          "Limited",
+          "Manual",
+          "Boost",
+          "EaseOff",
+          "Sleep",
+          "Exercise",
+          "Suspended",
+          "Off"
+        ],
+        "enum": [
+          "Automatic",
+          "Limited",
+          "Manual",
+          "Boost",
+          "EaseOff",
+          "Sleep",
+          "Exercise",
+          "Suspended",
+          "Off"
+        ]
+      },
+      "StateSpanActiveCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "StateSpanCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel",
+          "DataExclusion",
+          "TemporaryTarget"
+        ],
+        "enum": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel",
+          "DataExclusion",
+          "TemporaryTarget"
+        ]
       },
       "AuthErrorCodesMetadata": {
         "type": "object",
@@ -26700,34 +26950,6 @@
           }
         }
       },
-      "StateSpanCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile",
-          "Sleep",
-          "Exercise",
-          "Illness",
-          "Travel",
-          "DataExclusion",
-          "TemporaryTarget"
-        ],
-        "enum": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile",
-          "Sleep",
-          "Exercise",
-          "Illness",
-          "Travel",
-          "DataExclusion",
-          "TemporaryTarget"
-        ]
-      },
       "AcceptSuggestionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -29198,6 +29420,22 @@
           "timeAsSeconds": {
             "type": "integer",
             "format": "int32",
+            "nullable": true
+          },
+          "veryLow": {
+            "type": "integer",
+            "nullable": true
+          },
+          "tightLow": {
+            "type": "integer",
+            "nullable": true
+          },
+          "tightHigh": {
+            "type": "integer",
+            "nullable": true
+          },
+          "veryHigh": {
+            "type": "integer",
             "nullable": true
           }
         }
@@ -32420,7 +32658,13 @@
           "UploaderBattery",
           "OverrideActive",
           "SensitivityRatio",
-          "DoNotDisturb"
+          "DoNotDisturb",
+          "GlucoseBucket",
+          "TimeSinceLastCarb",
+          "TimeSinceLastBolus",
+          "DayOfWeek",
+          "PumpState",
+          "StateSpanActive"
         ],
         "enum": [
           "threshold",
@@ -32447,7 +32691,13 @@
           "uploader_battery",
           "override_active",
           "sensitivity_ratio",
-          "do_not_disturb"
+          "do_not_disturb",
+          "glucose_bucket",
+          "time_since_last_carb",
+          "time_since_last_bolus",
+          "day_of_week",
+          "pump_state",
+          "state_span_active"
         ]
       },
       "AlertRuleResponse": {
@@ -40592,28 +40842,6 @@
             "type": "string"
           }
         }
-      },
-      "DayOfWeek": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Sunday",
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday",
-          "Saturday"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ]
       },
       "DayMetrics": {
         "allOf": [

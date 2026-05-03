@@ -24647,6 +24647,12 @@ export interface ConditionNode {
     override_active?: OverrideActiveCondition | undefined;
     sensitivity_ratio?: SensitivityRatioCondition | undefined;
     do_not_disturb?: DoNotDisturbCondition | undefined;
+    glucose_bucket?: GlucoseBucketCondition | undefined;
+    time_since_last_carb?: TimeSinceLastCarbCondition | undefined;
+    time_since_last_bolus?: TimeSinceLastBolusCondition | undefined;
+    day_of_week?: DayOfWeekCondition | undefined;
+    pump_state?: PumpStateCondition | undefined;
+    state_span_active?: StateSpanActiveCondition | undefined;
 }
 
 export interface ThresholdCondition {
@@ -24778,6 +24784,89 @@ export interface SensitivityRatioCondition {
 export interface DoNotDisturbCondition {
     is_active?: boolean;
     for_minutes?: number | undefined;
+}
+
+export interface GlucoseBucketCondition {
+    buckets?: GlucoseBucket[];
+}
+
+export enum GlucoseBucket {
+    VeryLow = "very_low",
+    Low = "low",
+    TightRange = "tight_range",
+    InRange = "in_range",
+    High = "high",
+    VeryHigh = "very_high",
+}
+
+export interface TimeSinceLastCarbCondition {
+    operator?: AlertComparisonOperator;
+    minutes?: number;
+}
+
+export enum AlertComparisonOperator {
+    Gt = 0,
+    Gte = 1,
+    Lt = 2,
+    Lte = 3,
+    Eq = 4,
+}
+
+export interface TimeSinceLastBolusCondition {
+    operator?: AlertComparisonOperator;
+    minutes?: number;
+}
+
+export interface DayOfWeekCondition {
+    days?: DayOfWeek[];
+}
+
+export enum DayOfWeek {
+    Sunday = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 3,
+    Thursday = 4,
+    Friday = 5,
+    Saturday = 6,
+}
+
+export interface PumpStateCondition {
+    mode?: PumpModeState;
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export enum PumpModeState {
+    Automatic = "Automatic",
+    Limited = "Limited",
+    Manual = "Manual",
+    Boost = "Boost",
+    EaseOff = "EaseOff",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Suspended = "Suspended",
+    Off = "Off",
+}
+
+export interface StateSpanActiveCondition {
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export enum StateSpanCategory {
+    PumpMode = "PumpMode",
+    PumpConnectivity = "PumpConnectivity",
+    Override = "Override",
+    Profile = "Profile",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Illness = "Illness",
+    Travel = "Travel",
+    DataExclusion = "DataExclusion",
+    TemporaryTarget = "TemporaryTarget",
 }
 
 /** Metadata about authentication error codes for NSwag generation */
@@ -25821,19 +25910,6 @@ export interface StateSpan {
     sources?: string[] | undefined;
 }
 
-export enum StateSpanCategory {
-    PumpMode = "PumpMode",
-    PumpConnectivity = "PumpConnectivity",
-    Override = "Override",
-    Profile = "Profile",
-    Sleep = "Sleep",
-    Exercise = "Exercise",
-    Illness = "Illness",
-    Travel = "Travel",
-    DataExclusion = "DataExclusion",
-    TemporaryTarget = "TemporaryTarget",
-}
-
 export interface AcceptSuggestionRequest {
     startMills?: number;
     endMills?: number;
@@ -26584,6 +26660,10 @@ export interface TargetRangeEntry {
     low?: number;
     high?: number;
     timeAsSeconds?: number | undefined;
+    veryLow?: number | undefined;
+    tightLow?: number | undefined;
+    tightHigh?: number | undefined;
+    veryHigh?: number | undefined;
 }
 
 export interface ScheduleChangeInfo {
@@ -27685,6 +27765,12 @@ export enum AlertConditionType {
     OverrideActive = "override_active",
     SensitivityRatio = "sensitivity_ratio",
     DoNotDisturb = "do_not_disturb",
+    GlucoseBucket = "glucose_bucket",
+    TimeSinceLastCarb = "time_since_last_carb",
+    TimeSinceLastBolus = "time_since_last_bolus",
+    DayOfWeek = "day_of_week",
+    PumpState = "pump_state",
+    StateSpanActive = "state_span_active",
 }
 
 export interface AlertRuleResponse {
@@ -30244,16 +30330,6 @@ export interface DayOfWeekAnalysis {
     lowestTIRDay?: DayOfWeek | undefined;
     weekdayWeekendDifference?: boolean;
     patternDescription?: string;
-}
-
-export enum DayOfWeek {
-    Sunday = 0,
-    Monday = 1,
-    Tuesday = 2,
-    Wednesday = 3,
-    Thursday = 4,
-    Friday = 5,
-    Saturday = 6,
 }
 
 export interface DayMetrics extends PeriodMetrics {
