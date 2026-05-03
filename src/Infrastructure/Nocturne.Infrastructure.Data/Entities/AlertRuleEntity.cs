@@ -83,6 +83,14 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
+    /// When true, this rule still fires while the tenant is in Do Not Disturb mode (manual
+    /// or scheduled). Critical-severity rules implicitly bypass DND regardless of this flag —
+    /// the flag is only meaningful for non-critical rules the user wants to keep active.
+    /// </summary>
+    [Column("allow_through_dnd")]
+    public bool AllowThroughDnd { get; set; }
+
+    /// <summary>
     /// Order in which the rule should be processed or displayed
     /// </summary>
     [Column("sort_order")]
@@ -105,9 +113,10 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     // Navigation
 
     /// <summary>
-    /// Collection of schedules associated with this alert rule
+    /// Flat list of delivery channels for this rule. When the rule fires, every channel in
+    /// this collection receives a delivery in parallel.
     /// </summary>
-    public ICollection<AlertScheduleEntity> Schedules { get; set; } = [];
+    public ICollection<AlertRuleChannelEntity> Channels { get; set; } = [];
 
     /// <summary>
     /// Current state tracker for this alert rule

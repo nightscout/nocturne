@@ -15,20 +15,20 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// For each enabled rule, the orchestrator resolves the appropriate <see cref="IConditionEvaluator"/>,
-/// checks whether the condition is met, manages excursion lifecycle (open/resolve), advances
-/// escalation steps, and dispatches delivery. Errors from individual rule evaluations are caught
-/// and logged without aborting the rest of the evaluation pass.
+/// checks whether the condition is met, manages excursion lifecycle (open/resolve), applies
+/// engine-level DND suppression, and dispatches delivery to the rule's flat channel list.
+/// Errors from individual rule evaluations are caught and logged without aborting the rest of
+/// the evaluation pass. Escalation chains are no longer first-class — express delayed escalation
+/// as a separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="ConditionEvaluatorRegistry"/>
 /// <seealso cref="IExcursionTracker"/>
 /// <seealso cref="IAlertDeliveryService"/>
-/// <seealso cref="IEscalationAdvancer"/>
 internal sealed class AlertOrchestrator(
     ConditionEvaluatorRegistry evaluatorRegistry,
     IExcursionTracker excursionTracker,
     IAlertRepository repository,
-    IEscalationAdvancer escalationAdvancer,
     ITenantAccessor tenantAccessor,
     IAlertDeliveryService deliveryService,
     ISensorContextEnricher contextEnricher,
@@ -105,7 +105,8 @@ internal sealed class AlertOrchestrator(
                 return;
 
             case ExcursionTransitionType.ExcursionContinues:
-                await HandleExcursionContinues(transition, ct);
+                // Nothing to do per-reading. The dispatch happened at open; subsequent
+                // notifications-while-firing are a separate-rule concern (alert_state).
                 break;
         }
 
@@ -185,38 +186,23 @@ internal sealed class AlertOrchestrator(
         if (!transition.ExcursionId.HasValue) return;
 
         var excursionId = transition.ExcursionId.Value;
-
-        // Resolve active schedule
-        var schedules = await repository.GetSchedulesForRuleAsync(rule.Id, ct);
-
-        if (schedules.Count == 0)
-        {
-            logger.LogWarning("No schedules found for rule {AlertRuleId}; skipping instance creation", rule.Id);
-            return;
-        }
-
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var activeSchedule = ScheduleResolver.Resolve(schedules, now);
 
-        // Get escalation steps for step 0
-        var steps = await repository.GetEscalationStepsAsync(activeSchedule.Id, ct);
-
-        // Create alert instance
+        // Create alert instance with the simplified, schedule-free shape.
         var request = new CreateAlertInstanceRequest(
             TenantId: tenantId,
             ExcursionId: excursionId,
-            ScheduleId: activeSchedule.Id,
-            InitialStepOrder: 0,
-            Status: steps.Count > 1 ? "escalating" : "triggered",
-            TriggeredAt: now,
-            NextEscalationAt: steps.Count > 1 ? now.AddSeconds(steps[0].DelaySeconds) : null);
+            Status: "triggered",
+            TriggeredAt: now);
 
         var instance = await repository.CreateInstanceAsync(request, ct);
 
-        // Count active excursions for payload
-        var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
+        // Look up the rule's flat channel list; an empty list is allowed (the user explicitly
+        // chose "no delivery channels" — alert still tracked, just not pushed anywhere).
+        var channels = await repository.GetChannelsForRuleAsync(rule.Id, ct);
 
-        // Get tenant subject name
+        // Active excursion count + tenant subject for payload.
+        var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
         var payload = new AlertPayload
@@ -235,22 +221,40 @@ internal sealed class AlertOrchestrator(
             Severity = rule.Severity,
         };
 
-        // Dispatch delivery for step 0
-        if (steps.Count > 0)
+        // DND suppression: when the tenant is in Do Not Disturb, non-Critical rules without
+        // an explicit "allow through DND" opt-in still get a history row written (so Replay
+        // can show "would have fired but you were in DND"), but the dispatch is skipped.
+        // Critical rules implicitly bypass DND regardless of the per-rule flag.
+        var suppressedByDnd =
+            context.ActiveDoNotDisturb is not null
+            && rule.Severity != AlertRuleSeverity.Critical
+            && !rule.AllowThroughDnd;
+
+        if (suppressedByDnd)
         {
-            await deliveryService.DispatchAsync(instance.Id, 0, payload, ct);
+            await repository.MarkInstanceSuppressedAsync(tenantId, instance.Id, "dnd", ct);
+            logger.LogInformation(
+                "Alert instance {InstanceId} for rule {RuleName} suppressed by DND ({Source})",
+                instance.Id, rule.Name, context.ActiveDoNotDisturb!.Source);
+        }
+        else
+        {
+            await deliveryService.DispatchAsync(instance.Id, channels, payload, ct);
         }
 
         logger.LogInformation(
             "Alert instance {InstanceId} created for excursion {ExcursionId}, rule {RuleName}",
             instance.Id, excursionId, rule.Name);
 
-        // Info severity is fire-and-forget: deliver once, then auto-acknowledge so escalation
-        // halts and the alert renders as acknowledged in the UI. Channel routing for Info is
-        // a frontend default (ChannelPicker); the orchestrator does not gate channels by severity.
-        // broadcast=false avoids racing the alert_acknowledged event against the alert_dispatch
-        // we just emitted for an excursion the FE has not yet finished rendering.
-        if (rule.Severity == AlertRuleSeverity.Info)
+        // Info severity is fire-and-forget: deliver once, then auto-acknowledge so the alert
+        // renders as acknowledged in the UI. broadcast=false avoids racing the
+        // alert_acknowledged event against the alert_dispatch we just emitted for an excursion
+        // the FE has not yet finished rendering.
+        //
+        // Skipped when the instance was suppressed by DND: there was no dispatch, so there is
+        // no alert_dispatch event to "follow up" with an ack, and emitting an alert_acknowledged
+        // for a suppressed alert would race the suppression history row.
+        if (rule.Severity == AlertRuleSeverity.Info && !suppressedByDnd)
         {
             await acknowledgementService.AcknowledgeExcursionAsync(
                 tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: false, ct);
@@ -262,25 +266,4 @@ internal sealed class AlertOrchestrator(
         Guid tenantId,
         CancellationToken ct) =>
         resolutionHandler.HandleClosedAsync(transition, tenantId, ct);
-
-    private async Task HandleExcursionContinues(
-        ExcursionTransition transition,
-        CancellationToken ct)
-    {
-        if (!transition.ExcursionId.HasValue) return;
-
-        // Check for event-driven escalation advancement
-        var now = timeProvider.GetUtcNow().UtcDateTime;
-
-        var allDueInstances = await repository.GetEscalatingInstancesDueAsync(now, ct);
-        var instances = allDueInstances
-            .Where(i => i.AlertExcursionId == transition.ExcursionId.Value)
-            .ToList();
-
-        foreach (var instance in instances)
-        {
-            await escalationAdvancer.AdvanceAsync(instance, ct);
-        }
-    }
-
 }

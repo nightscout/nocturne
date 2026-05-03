@@ -26,7 +26,36 @@ public interface IAlertReplayService
         DateOnly? localDate,
         string? timezone,
         CancellationToken ct);
+
+    /// <summary>
+    /// Replay variant for the rule editor. Runs the same simulation as
+    /// <see cref="ReplayAsync"/> but with a single user-provided rule override layered in.
+    /// When <paramref name="ruleOverride"/>'s <c>Id</c> matches an existing tenant rule, the
+    /// override replaces it for the duration of the replay; when null/empty the override is
+    /// appended (so authors can preview a rule before saving). Tenant DB state is never
+    /// modified — the override lives in memory for one call.
+    /// </summary>
+    Task<AlertReplayResult> ReplayDryRunAsync(
+        DateOnly? localDate,
+        string? timezone,
+        ReplayRuleOverride ruleOverride,
+        CancellationToken ct);
 }
+
+/// <summary>
+/// In-memory rule definition layered into a dry-run replay. Mirrors the editor's pre-save
+/// shape. <see cref="Id"/> is optional: when present and matching an existing rule it
+/// replaces it for the replay; otherwise the override is appended to the rule list.
+/// </summary>
+public record ReplayRuleOverride(
+    Guid? Id,
+    string Name,
+    Nocturne.Core.Models.Alerts.AlertConditionType ConditionType,
+    string ConditionParams,
+    Nocturne.Core.Models.Alerts.AlertRuleSeverity Severity,
+    bool AllowThroughDnd,
+    bool AutoResolveEnabled,
+    string? AutoResolveParams);
 
 /// <summary>
 /// A single point at which a rule transitioned from "not firing" to "firing" during replay.

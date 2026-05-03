@@ -3,9 +3,8 @@ using Nocturne.Core.Models;
 namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
-/// Repository port for alert rule configuration, alert instances, excursion state,
-/// and escalation metadata. Provides the persistence layer consumed by
-/// <see cref="IAlertOrchestrator"/> and <see cref="IEscalationAdvancer"/>.
+/// Repository port for alert rule configuration, alert instances, and excursion state.
+/// Provides the persistence layer consumed by <see cref="IAlertOrchestrator"/>.
 /// </summary>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IExcursionTracker"/>
@@ -20,36 +19,15 @@ public interface IAlertRepository
     Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
-    /// Returns all <see cref="AlertScheduleSnapshot"/> records configured for a given rule.
+    /// Returns the flat per-rule channel list. Channels are dispatched in parallel when the
+    /// rule fires; <see cref="AlertRuleChannelSnapshot.SortOrder"/> is cosmetic only.
     /// </summary>
-    /// <param name="ruleId">The alert rule identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of schedule snapshots for the rule.</returns>
-    Task<IReadOnlyList<AlertScheduleSnapshot>> GetSchedulesForRuleAsync(Guid ruleId, CancellationToken ct);
-
-    /// <summary>
-    /// Returns the ordered <see cref="AlertEscalationStepSnapshot"/> records for a schedule.
-    /// </summary>
-    /// <param name="scheduleId">The alert schedule identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of escalation steps, ordered by <c>StepOrder</c>.</returns>
-    Task<IReadOnlyList<AlertEscalationStepSnapshot>> GetEscalationStepsAsync(Guid scheduleId, CancellationToken ct);
+    Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(Guid ruleId, CancellationToken ct);
 
     /// <summary>
     /// Creates a new <see cref="AlertInstanceSnapshot"/> for a triggered alert.
     /// </summary>
-    /// <param name="request">The creation request containing excursion, schedule, and step details.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The newly created alert instance snapshot.</returns>
     Task<AlertInstanceSnapshot> CreateInstanceAsync(CreateAlertInstanceRequest request, CancellationToken ct);
-
-    /// <summary>
-    /// Returns all escalating alert instances whose next escalation time is at or before <paramref name="asOf"/>.
-    /// </summary>
-    /// <param name="asOf">The point-in-time cutoff for due escalations.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of alert instances ready for escalation advancement.</returns>
-    Task<IReadOnlyList<AlertInstanceSnapshot>> GetEscalatingInstancesDueAsync(DateTime asOf, CancellationToken ct);
 
     /// <summary>
     /// Returns all alert instances associated with a specific excursion.
@@ -129,6 +107,23 @@ public interface IAlertRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The tenant alert context, or <c>null</c> if the tenant has no alert configuration.</returns>
     Task<TenantAlertContext?> GetTenantAlertContextAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns the tenant's <c>tenant_alert_settings</c> row as a snapshot, or
+    /// <see cref="TenantAlertSettingsSnapshot.Empty"/> when no row exists.
+    /// Used by <see cref="ISensorContextEnricher"/> to populate
+    /// <see cref="SensorContext.ActiveDoNotDisturb"/> per evaluation pass.
+    /// </summary>
+    Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Marks an alert instance as suppressed at fire time without dispatching deliveries.
+    /// Writes <paramref name="reason"/> to <c>alert_instances.suppression_reason</c> so Replay
+    /// and History can display "would have fired but suppressed" rows. Currently the only
+    /// reason emitted by the orchestrator is <c>"dnd"</c>.
+    /// </summary>
+    /// <param name="tenantId">Tenant scope for the lookup. Defence-in-depth alongside RLS.</param>
+    Task MarkInstanceSuppressedAsync(Guid tenantId, Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
     /// Returns all enabled signal-loss detection rules across all tenants.

@@ -18,3 +18,9 @@ public sealed record OverrideSnapshot(
 /// Set to null when the underlying pump snapshot is stale, so suspension conditions don't latch
 /// on stale data after the uploader goes offline.</summary>
 public sealed record PumpSuspensionSnapshot(DateTime StartedAt);
+
+/// <summary>Lightweight projection of the tenant's currently-active Do Not Disturb state.
+/// Populated by the orchestrator when DND is on for any reason (manual toggle with optional
+/// auto-expire, or scheduled window). Null when DND is off — including when a manual DND has
+/// auto-expired or the scheduled window is not currently in force.</summary>
+public sealed record DoNotDisturbSnapshot(DateTime StartedAt, string Source);

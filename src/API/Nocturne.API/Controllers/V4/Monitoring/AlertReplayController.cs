@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -34,9 +35,60 @@ public class AlertReplayController : ControllerBase
         var result = await _replayService.ReplayAsync(request.Date, request.Timezone, ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Dry-run replay variant for the rule editor. Layers a user-provided rule definition
+    /// onto the saved rule set for one call (never persisted), so authors can answer
+    /// "would my new/edited rule have woken me last night?" before saving.
+    /// </summary>
+    [HttpPost("dry-run")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
+        [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
+    {
+        var ruleOverride = new ReplayRuleOverride(
+            Id: request.Rule.Id,
+            Name: request.Rule.Name,
+            ConditionType: request.Rule.ConditionType,
+            ConditionParams: request.Rule.ConditionParams,
+            Severity: request.Rule.Severity,
+            AllowThroughDnd: request.Rule.AllowThroughDnd,
+            AutoResolveEnabled: request.Rule.AutoResolveEnabled,
+            AutoResolveParams: request.Rule.AutoResolveParams);
+
+        var result = await _replayService.ReplayDryRunAsync(
+            request.Date, request.Timezone, ruleOverride, ct);
+        return Ok(result);
+    }
 }
 
 /// <summary>
 /// Request body for the alerts replay endpoint.
 /// </summary>
 public record AlertReplayRequest(DateOnly? Date, string? Timezone);
+
+/// <summary>
+/// Request body for the dry-run replay endpoint. <see cref="ReplayRuleDefinition.Id"/> is
+/// optional: when present and matching an existing rule it replaces it for the simulation;
+/// otherwise the rule is appended for the call.
+/// </summary>
+public record AlertReplayDryRunRequest(
+    DateOnly? Date,
+    string? Timezone,
+    ReplayRuleDefinition Rule);
+
+/// <summary>
+/// In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save
+/// shape — the controller doesn't deserialise the condition tree itself, just the
+/// <see cref="ConditionParams"/> JSON blob the rule body would have stored.
+/// </summary>
+public record ReplayRuleDefinition(
+    Guid? Id,
+    string Name,
+    AlertConditionType ConditionType,
+    string ConditionParams,
+    AlertRuleSeverity Severity,
+    bool AllowThroughDnd,
+    bool AutoResolveEnabled,
+    string? AutoResolveParams);

@@ -5,7 +5,6 @@ namespace Nocturne.Core.Contracts.Alerts;
 /// until a new excursion begins.
 /// </summary>
 /// <seealso cref="IAlertOrchestrator"/>
-/// <seealso cref="IEscalationAdvancer"/>
 public interface IAlertAcknowledgementService
 {
     /// <summary>

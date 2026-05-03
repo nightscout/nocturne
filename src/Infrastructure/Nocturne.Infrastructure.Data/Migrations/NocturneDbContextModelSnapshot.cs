@@ -105,6 +105,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("alert_instance_id");
 
+                    b.Property<Guid?>("AlertRuleChannelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alert_rule_channel_id");
+
                     b.Property<string>("ChannelType")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -127,9 +131,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("destination");
 
-                    b.Property<Guid>("EscalationStepId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("escalation_step_id");
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_test");
 
                     b.Property<string>("LastError")
                         .HasColumnType("text")
@@ -174,7 +178,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("AlertInstanceId");
 
-                    b.HasIndex("EscalationStepId");
+                    b.HasIndex("AlertRuleChannelId");
 
                     b.HasIndex("TenantId");
 
@@ -182,44 +186,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_alert_deliveries_status_created_at");
 
                     b.ToTable("alert_deliveries", (string)null);
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertEscalationStepEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AlertScheduleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("alert_schedule_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<int>("DelaySeconds")
-                        .HasColumnType("integer")
-                        .HasColumnName("delay_seconds");
-
-                    b.Property<int>("StepOrder")
-                        .HasColumnType("integer")
-                        .HasColumnName("step_order");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AlertScheduleId");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("alert_escalation_steps", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertExcursionEntity", b =>
@@ -280,17 +246,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("alert_excursion_id");
 
-                    b.Property<Guid>("AlertScheduleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("alert_schedule_id");
-
-                    b.Property<int>("CurrentStepOrder")
-                        .HasColumnType("integer")
-                        .HasColumnName("current_step_order");
-
-                    b.Property<DateTime?>("NextEscalationAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("next_escalation_at");
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_test");
 
                     b.Property<string>("ResolutionReason")
                         .HasMaxLength(32)
@@ -317,6 +275,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDefaultValue("triggered")
                         .HasColumnName("status");
 
+                    b.Property<string>("SuppressionReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("suppression_reason");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -329,12 +292,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("AlertExcursionId");
 
-                    b.HasIndex("AlertScheduleId");
-
                     b.HasIndex("TenantId");
-
-                    b.HasIndex("Status", "NextEscalationAt")
-                        .HasDatabaseName("ix_alert_instances_status_next_escalation");
 
                     b.ToTable("alert_instances", (string)null);
                 });
@@ -346,6 +304,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("AlertRuleChannelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alert_rule_channel_id");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -355,10 +317,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<Guid>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<Guid>("EscalationStepId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("escalation_step_id");
 
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
@@ -392,7 +350,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EscalationStepId");
+                    b.HasIndex("AlertRuleChannelId");
 
                     b.HasIndex("TenantId");
 
@@ -403,12 +361,67 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("alert_invites", (string)null);
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleChannelEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AlertRuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alert_rule_id");
+
+                    b.Property<string>("ChannelType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("channel_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Destination")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("destination");
+
+                    b.Property<string>("DestinationLabel")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("destination_label");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlertRuleId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("alert_rule_channels", (string)null);
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<bool>("AllowThroughDnd")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_through_dnd");
 
                     b.Property<bool>("AutoResolveEnabled")
                         .HasColumnType("boolean")
@@ -486,129 +499,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("alert_rules", (string)null);
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertScheduleEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AlertRuleId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("alert_rule_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<string>("DaysOfWeek")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("days_of_week");
-
-                    b.Property<TimeOnly?>("EndTime")
-                        .HasColumnType("time without time zone")
-                        .HasColumnName("end_time");
-
-                    b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_default");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("name");
-
-                    b.Property<TimeOnly?>("QuietHoursEnd")
-                        .HasColumnType("time without time zone")
-                        .HasColumnName("quiet_hours_end");
-
-                    b.Property<bool>("QuietHoursOverrideCritical")
-                        .HasColumnType("boolean")
-                        .HasColumnName("quiet_hours_override_critical");
-
-                    b.Property<TimeOnly?>("QuietHoursStart")
-                        .HasColumnType("time without time zone")
-                        .HasColumnName("quiet_hours_start");
-
-                    b.Property<TimeOnly?>("StartTime")
-                        .HasColumnType("time without time zone")
-                        .HasColumnName("start_time");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<string>("Timezone")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("timezone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AlertRuleId");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("alert_schedules", (string)null);
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertStepChannelEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ChannelType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("channel_type");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<string>("Destination")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("destination");
-
-                    b.Property<string>("DestinationLabel")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("destination_label");
-
-                    b.Property<Guid>("EscalationStepId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("escalation_step_id");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EscalationStepId");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("alert_step_channels", (string)null);
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertTrackerStateEntity", b =>
@@ -3708,6 +3598,68 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("system_events");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantAlertSettingsEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("DndManualActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("dnd_manual_active");
+
+                    b.Property<DateTime?>("DndManualStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dnd_manual_started_at");
+
+                    b.Property<DateTime?>("DndManualUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dnd_manual_until");
+
+                    b.Property<bool>("DndScheduleEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("dnd_schedule_enabled");
+
+                    b.Property<TimeOnly?>("DndScheduleEnd")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("dnd_schedule_end");
+
+                    b.Property<TimeOnly?>("DndScheduleStart")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("dnd_schedule_start");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Timezone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("timezone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_tenant_alert_settings_tenant_id_unique");
+
+                    b.ToTable("tenant_alert_settings", (string)null);
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantAuditConfigEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6741,11 +6693,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertEscalationStepEntity", "EscalationStep")
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertRuleChannelEntity", "AlertRuleChannel")
                         .WithMany()
-                        .HasForeignKey("EscalationStepId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .HasForeignKey("AlertRuleChannelId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
@@ -6755,24 +6706,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.Navigation("AlertInstance");
 
-                    b.Navigation("EscalationStep");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertEscalationStepEntity", b =>
-                {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertScheduleEntity", "AlertSchedule")
-                        .WithMany("EscalationSteps")
-                        .HasForeignKey("AlertScheduleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AlertSchedule");
+                    b.Navigation("AlertRuleChannel");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertExcursionEntity", b =>
@@ -6800,12 +6734,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertScheduleEntity", "AlertSchedule")
-                        .WithMany()
-                        .HasForeignKey("AlertScheduleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -6813,15 +6741,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("AlertExcursion");
-
-                    b.Navigation("AlertSchedule");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertInviteEntity", b =>
                 {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertEscalationStepEntity", "EscalationStep")
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertRuleChannelEntity", "AlertRuleChannel")
                         .WithMany()
-                        .HasForeignKey("EscalationStepId")
+                        .HasForeignKey("AlertRuleChannelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -6831,22 +6757,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("EscalationStep");
+                    b.Navigation("AlertRuleChannel");
                 });
 
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", b =>
-                {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertScheduleEntity", b =>
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleChannelEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", "AlertRule")
-                        .WithMany("Schedules")
+                        .WithMany("Channels")
                         .HasForeignKey("AlertRuleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -6860,21 +6777,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("AlertRule");
                 });
 
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertStepChannelEntity", b =>
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", b =>
                 {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.AlertEscalationStepEntity", "EscalationStep")
-                        .WithMany("Channels")
-                        .HasForeignKey("EscalationStepId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("EscalationStep");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertTrackerStateEntity", b =>
@@ -7319,6 +7228,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SystemEventEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantAlertSettingsEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
@@ -7842,11 +7760,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertEscalationStepEntity", b =>
-                {
-                    b.Navigation("Channels");
-                });
-
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertExcursionEntity", b =>
                 {
                     b.Navigation("Instances");
@@ -7854,14 +7767,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertRuleEntity", b =>
                 {
-                    b.Navigation("Schedules");
+                    b.Navigation("Channels");
 
                     b.Navigation("TrackerState");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AlertScheduleEntity", b =>
-                {
-                    b.Navigation("EscalationSteps");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DiscrepancyAnalysisEntity", b =>

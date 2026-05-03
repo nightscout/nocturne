@@ -31,6 +31,11 @@ public sealed record DataNeedsSet(
     bool NeedsUploaderStatus,
     bool NeedsOverride,
     bool NeedsSensitivityRatio)
+// Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
+// every evaluation pass because engine-level suppression applies to every rule regardless of
+// whether the rule's condition tree references the `do_not_disturb` fact. Gating fetch on a
+// per-rule walker flag would silently exempt typical glucose/threshold rules from suppression.
+// The unconditional fetch in `SensorContextEnricher` is by design.
 {
     /// <summary>An empty needs set with all flags false.</summary>
     public static DataNeedsSet None { get; } =
@@ -143,6 +148,7 @@ public static class RuleDataNeeds
             case AlertConditionType.UploaderBattery: b.UploaderStatus = true; break;
             case AlertConditionType.OverrideActive: b.Override = true; break;
             case AlertConditionType.SensitivityRatio: b.SensitivityRatio = true; break;
+            // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
             // Threshold, RateOfChange, SignalLoss, Staleness, TimeOfDay, Composite, Not, Sustained
             // require no extra context — handled by base SensorContext or recursed by VisitNode.
         }

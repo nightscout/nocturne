@@ -8,6 +8,7 @@
   import SidebarGlucoseWidget from "./SidebarGlucoseWidget.svelte";
   import SidebarNotifications from "./SidebarNotifications.svelte";
   import UserMenu from "./UserMenu.svelte";
+  import DndQuickToggle from "$lib/components/alerts/DndQuickToggle.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
@@ -490,6 +491,11 @@
                   updateLanguagePreference({ preferredLanguage: locale })
               : undefined}
           />
+        </Sidebar.MenuItem>
+      {/if}
+      {#if user && !isGuestSession}
+        <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
+          <DndQuickToggle />
         </Sidebar.MenuItem>
       {/if}
       <Sidebar.MenuItem

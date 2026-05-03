@@ -106,4 +106,8 @@ public enum AlertConditionType
     /// <summary>OpenAPS sensitivity ratio (autosens) comparison.</summary>
     [EnumMember(Value = "sensitivity_ratio"), JsonStringEnumMemberName("sensitivity_ratio")]
     SensitivityRatio,
+
+    /// <summary>Tenant Do Not Disturb state, optionally for a sustained duration.</summary>
+    [EnumMember(Value = "do_not_disturb"), JsonStringEnumMemberName("do_not_disturb")]
+    DoNotDisturb,
 }

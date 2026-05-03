@@ -4173,6 +4173,7 @@ msgstr ""
 msgid "UAM"
 msgstr ""
 
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 msgid "Off"
@@ -4452,6 +4453,7 @@ msgstr ""
 msgid "Basal"
 msgstr ""
 
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -6329,6 +6331,7 @@ msgstr ""
 msgid "StaleData"
 msgstr ""
 
+#: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Normal"
@@ -10988,6 +10991,7 @@ msgstr ""
 #~ msgid "No access token available for this subject."
 #~ msgstr ""
 
+#: src/lib/components/alerts/FiringToast.svelte
 #: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
@@ -15681,6 +15685,7 @@ msgstr ""
 #~ msgid "Positive = ate after bolusing, Negative = ate before bolusing"
 #~ msgstr ""
 
+#: src/lib/components/alerts/FiringToast.svelte
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/dashboard/SetupCard.svelte
@@ -21155,8 +21160,9 @@ msgstr ""
 msgid "From {0}"
 msgstr ""
 
-#. placeholder {0}: formatDate(device.endDate)
+#. placeholder {0}: new Date(settings.dndManualUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 #. placeholder {0}: formatDate(insulin.endDate)
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 msgid "Until {0}"
@@ -21641,6 +21647,7 @@ msgstr ""
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AudioSection.svelte
+#: src/lib/components/alerts/FiringToast.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Alert"
@@ -28635,6 +28642,7 @@ msgstr ""
 msgid "Classic Blue"
 msgstr ""
 
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 msgid "On"
 msgstr ""
@@ -30015,4 +30023,65 @@ msgstr ""
 
 #: src/lib/components/alerts/ChannelPicker.svelte
 msgid "Routed to your account automatically."
+msgstr ""
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Do Not Disturb"
+msgstr ""
+
+#. placeholder {0}: loading ? "…" : label
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "DND · {0}"
+msgstr ""
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Loading…"
+msgstr ""
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "<0/> Turn off"
+msgstr ""
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Mute alerts for"
+msgstr ""
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Until I turn it off"
+msgstr ""
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "<0/> Configure…"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "Fresh alerts"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "just now"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "5m"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "15m"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "30m"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "1h"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "Acknowledge"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "Mute the rule"
 msgstr ""

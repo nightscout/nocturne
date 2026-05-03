@@ -81,11 +81,9 @@ public class AlertsController : ControllerBase
                 .Select(i => new ActiveInstanceResponse
                 {
                     Id = i.Id,
-                    ScheduleId = i.AlertScheduleId,
                     Status = i.Status,
-                    CurrentStepOrder = i.CurrentStepOrder,
                     TriggeredAt = i.TriggeredAt,
-                    NextEscalationAt = i.NextEscalationAt,
+                    SuppressionReason = i.SuppressionReason,
                 })
                 .ToList(),
         }).ToList();
@@ -283,11 +281,10 @@ public class ActiveExcursionResponse
 public class ActiveInstanceResponse
 {
     public Guid Id { get; set; }
-    public Guid ScheduleId { get; set; }
     public string Status { get; set; } = string.Empty;
-    public int CurrentStepOrder { get; set; }
     public DateTime TriggeredAt { get; set; }
-    public DateTime? NextEscalationAt { get; set; }
+    /// <summary>One of <c>"dnd"</c> when delivery was suppressed at fire time, otherwise null.</summary>
+    public string? SuppressionReason { get; set; }
 }
 
 public class AlertHistoryResponse

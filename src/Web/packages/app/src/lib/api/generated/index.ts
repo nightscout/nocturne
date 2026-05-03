@@ -33,6 +33,7 @@ export * from './alertReplays.generated.remote';
 export * from './alertRules.generated.remote';
 export * from './alerts.generated.remote';
 export * from './notifications.generated.remote';
+export { get } from './tenantAlertSettings.generated.remote';
 export * from './trackers.generated.remote';
 export * from './chatIdentities.generated.remote';
 // './connectedApps.generated.remote' - all exports collide, import directly

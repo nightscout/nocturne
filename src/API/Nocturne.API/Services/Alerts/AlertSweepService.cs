@@ -13,17 +13,18 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// <list type="number">
-///   <item>Advance escalations whose configured delay has elapsed.</item>
 ///   <item>Close excursions whose hysteresis window has expired.</item>
 ///   <item>Evaluate signal-loss rules for tenants with stale CGM readings.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
+///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
 /// Each sweep creates a child DI scope so that scoped services (DbContext, tenant repositories)
 /// are properly isolated and disposed. Individual tenant failures are caught and logged without
-/// aborting the rest of the sweep.
+/// aborting the rest of the sweep. The escalation-advancement step that previously lived here
+/// went away with the schedule/escalation-step rip-out — express delayed escalation as a
+/// separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="AlertOrchestrator"/>
-/// <seealso cref="IEscalationAdvancer"/>
 /// <seealso cref="ExcursionTracker"/>
 public class AlertSweepService : BackgroundService
 {
@@ -50,15 +51,6 @@ public class AlertSweepService : BackgroundService
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         while (await timer.WaitForNextTickAsync(ct))
         {
-            try
-            {
-                await AdvanceEscalationsAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error advancing escalations");
-            }
-
             try
             {
                 await CloseHysteresisWindowsAsync(ct);
@@ -97,37 +89,6 @@ public class AlertSweepService : BackgroundService
         }
 
         _logger.LogInformation("Alert Sweep Service stopped");
-    }
-
-    /// <summary>
-    /// Query instances with status "escalating" whose NextEscalationAt has passed.
-    /// Advance each to the next step.
-    /// </summary>
-    private async Task AdvanceEscalationsAsync(CancellationToken ct)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
-        var advancer = scope.ServiceProvider.GetRequiredService<IEscalationAdvancer>();
-
-        var now = DateTime.UtcNow;
-
-        var instances = await repository.GetEscalatingInstancesDueAsync(now, ct);
-
-        if (instances.Count == 0) return;
-
-        _logger.LogDebug("Advancing {Count} escalations", instances.Count);
-
-        foreach (var instance in instances)
-        {
-            try
-            {
-                await advancer.AdvanceAsync(instance, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error advancing escalation for instance {InstanceId}", instance.Id);
-            }
-        }
     }
 
     /// <summary>

@@ -168,7 +168,6 @@ internal sealed class AlertAcknowledgementService(
         foreach (var instance in instances)
         {
             instance.Status = "acknowledged";
-            instance.NextEscalationAt = null;
         }
     }
 }

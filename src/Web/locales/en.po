@@ -1319,6 +1319,7 @@ msgstr "Composite Alert"
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AudioSection.svelte
+#: src/lib/components/alerts/FiringToast.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Alert"
 msgstr "Alert"
@@ -1747,6 +1748,7 @@ msgstr ""
 "Account not linked. Use /connect in {0} to\n"
 "enable delivery."
 
+#: src/lib/components/entries/BolusSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Normal"
@@ -2915,10 +2917,12 @@ msgstr "Custom CSS"
 msgid "Add custom CSS properties (e.g., text-shadow, letter-spacing)"
 msgstr "Add custom CSS properties (e.g., text-shadow, letter-spacing)"
 
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 msgid "On"
 msgstr "On"
 
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 msgid "Off"
@@ -3363,6 +3367,7 @@ msgstr "<0/> Downloading..."
 msgid "<0/> Download Food Definitions"
 msgstr "<0/> Download Food Definitions"
 
+#: src/lib/components/alerts/FiringToast.svelte
 #: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
@@ -4313,6 +4318,7 @@ msgstr "Imported from your data source"
 msgid "You're all set"
 msgstr "You're all set"
 
+#: src/lib/components/alerts/FiringToast.svelte
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -6102,8 +6108,9 @@ msgstr "AID: {0}"
 msgid "From {0}"
 msgstr "From {0}"
 
-#. placeholder {0}: formatDate(device.endDate)
+#. placeholder {0}: new Date(settings.dndManualUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 #. placeholder {0}: formatDate(insulin.endDate)
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 msgid "Until {0}"
@@ -7361,6 +7368,7 @@ msgstr "Carbs on Board"
 msgid "Temp"
 msgstr "Temp"
 
+#: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
@@ -18677,3 +18685,64 @@ msgstr "Routed to your account automatically."
 #: src/lib/components/alerts/ChannelPicker.svelte
 msgid "Webhook URL"
 msgstr "Webhook URL"
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Do Not Disturb"
+msgstr "Do Not Disturb"
+
+#. placeholder {0}: loading ? "…" : label
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "DND · {0}"
+msgstr "DND · {0}"
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Loading…"
+msgstr "Loading…"
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "<0/> Turn off"
+msgstr "<0/> Turn off"
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Mute alerts for"
+msgstr "Mute alerts for"
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "Until I turn it off"
+msgstr "Until I turn it off"
+
+#: src/lib/components/alerts/DndQuickToggle.svelte
+msgid "<0/> Configure…"
+msgstr "<0/> Configure…"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "Fresh alerts"
+msgstr "Fresh alerts"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "just now"
+msgstr "just now"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "5m"
+msgstr "5m"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "15m"
+msgstr "15m"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "30m"
+msgstr "30m"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "1h"
+msgstr "1h"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "Acknowledge"
+msgstr "Acknowledge"
+
+#: src/lib/components/alerts/FiringToast.svelte
+msgid "Mute the rule"
+msgstr "Mute the rule"

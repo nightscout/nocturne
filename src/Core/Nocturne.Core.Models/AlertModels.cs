@@ -111,6 +111,14 @@ public record SensorContext
     /// <summary>Latest non-null APS sensitivity ratio (autosens), when available.</summary>
     public decimal? SensitivityRatio { get; init; }
 
+    /// <summary>
+    /// Currently active Do Not Disturb projection, or null when DND is off. Populated from
+    /// <c>tenant_alert_settings</c> by the context enricher; collapses both manual and
+    /// scheduled DND activation paths into one snapshot, so condition evaluators don't have
+    /// to know which path is active.
+    /// </summary>
+    public DoNotDisturbSnapshot? ActiveDoNotDisturb { get; init; }
+
     // ----- Cold-start null-suppression flags -----
     // These exist for facts where "no data yet" must be distinguished from "data is just
     // very old" — i.e. where a missing/old timestamp would otherwise satisfy a `>=`
@@ -186,7 +194,7 @@ public record RateOfChangeCondition(string Direction, decimal Rate);
 /// Signal loss alert condition. Triggers when no CGM reading is received for <paramref name="TimeoutMinutes"/>.
 /// </summary>
 /// <param name="TimeoutMinutes">Minutes without a reading before triggering.</param>
-public record SignalLossCondition(int TimeoutMinutes);
+public record SignalLossCondition([property: JsonPropertyName("timeout_minutes")] int TimeoutMinutes);
 
 /// <summary>
 /// Composite alert condition combining multiple child conditions with a logical operator.
@@ -221,7 +229,7 @@ public record StalenessCondition(string Operator, int Value);
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">Glucose value in mg/dL to compare against.</param>
 /// <param name="WithinMinutes">Forecast horizon in minutes.</param>
-public record PredictedCondition(string Operator, decimal Value, int WithinMinutes);
+public record PredictedCondition(string Operator, decimal Value, [property: JsonPropertyName("within_minutes")] int WithinMinutes);
 
 /// <summary>
 /// Trend condition matching a coarse direction bucket.
@@ -278,7 +286,10 @@ public record SensorAgeCondition(string Operator, decimal Value);
 /// <param name="AlertId">The alert (rule) id to inspect.</param>
 /// <param name="State">One of "firing", "unacknowledged", "acknowledged".</param>
 /// <param name="ForMinutes">When non-null, the condition is true only if the referenced alert has been in the matching state for at least this many minutes — i.e. now - TriggeredAt &gt;= ForMinutes for "firing"/"unacknowledged", or now - AcknowledgedAt &gt;= ForMinutes for "acknowledged".</param>
-public record AlertStateCondition(Guid AlertId, string State, int? ForMinutes);
+public record AlertStateCondition(
+    [property: JsonPropertyName("alert_id")] Guid AlertId,
+    string State,
+    [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>Loop liveness — minutes since the latest APS cycle (suggested or enacted).</summary>
 public record LoopStaleCondition(string Operator, int Minutes);
@@ -288,7 +299,9 @@ public record LoopStaleCondition(string Operator, int Minutes);
 public record LoopEnactionStaleCondition(string Operator, int Minutes);
 
 /// <summary>Pump suspension state. Optional ForMinutes measures from the StateSpan start.</summary>
-public record PumpSuspendedCondition(bool IsActive, int? ForMinutes);
+public record PumpSuspendedCondition(
+    [property: JsonPropertyName("is_active")] bool IsActive,
+    [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>Pump battery comparison (percent).</summary>
 public record PumpBatteryCondition(string Operator, decimal Value);
@@ -301,11 +314,20 @@ public record TempBasalCondition(TempBasalMetric Metric, string Operator, decima
 public record UploaderBatteryCondition(string Operator, decimal Value);
 
 /// <summary>Active override state. Optional ForMinutes measures from the StateSpan start.</summary>
-public record OverrideActiveCondition(bool IsActive, int? ForMinutes);
+public record OverrideActiveCondition(
+    [property: JsonPropertyName("is_active")] bool IsActive,
+    [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>OpenAPS sensitivity ratio (autosens) comparison. AAPS/Trio only;
 /// silently false on Loop iOS via null-suppression.</summary>
 public record SensitivityRatioCondition(string Operator, decimal Value);
+
+/// <summary>Tenant Do Not Disturb state. Active when DND is on by manual toggle
+/// (with optional auto-expire) or by scheduled window. Optional ForMinutes
+/// measures from <see cref="DoNotDisturbSnapshot.StartedAt"/>.</summary>
+public record DoNotDisturbCondition(
+    [property: JsonPropertyName("is_active")] bool IsActive,
+    [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
 /// <summary>Selects which TempBasal field a TempBasalCondition compares.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TempBasalMetric>))]
@@ -320,35 +342,36 @@ public enum TempBasalMetric
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
     string Type,
     ThresholdCondition? Threshold = null,
-    RateOfChangeCondition? RateOfChange = null,
-    SignalLossCondition? SignalLoss = null,
+    [property: JsonPropertyName("rate_of_change")] RateOfChangeCondition? RateOfChange = null,
+    [property: JsonPropertyName("signal_loss")] SignalLossCondition? SignalLoss = null,
     CompositeCondition? Composite = null,
     NotCondition? Not = null,
     SustainedCondition? Sustained = null,
     StalenessCondition? Staleness = null,
     PredictedCondition? Predicted = null,
     TrendCondition? Trend = null,
-    TimeOfDayCondition? TimeOfDay = null,
+    [property: JsonPropertyName("time_of_day")] TimeOfDayCondition? TimeOfDay = null,
     IobCondition? Iob = null,
     CobCondition? Cob = null,
     ReservoirCondition? Reservoir = null,
-    SiteAgeCondition? SiteAge = null,
-    SensorAgeCondition? SensorAge = null,
-    AlertStateCondition? AlertState = null,
-    LoopStaleCondition? LoopStale = null,
-    LoopEnactionStaleCondition? LoopEnactionStale = null,
-    PumpSuspendedCondition? PumpSuspended = null,
-    PumpBatteryCondition? PumpBattery = null,
-    TempBasalCondition? TempBasal = null,
-    UploaderBatteryCondition? UploaderBattery = null,
-    OverrideActiveCondition? OverrideActive = null,
-    SensitivityRatioCondition? SensitivityRatio = null
+    [property: JsonPropertyName("site_age")] SiteAgeCondition? SiteAge = null,
+    [property: JsonPropertyName("sensor_age")] SensorAgeCondition? SensorAge = null,
+    [property: JsonPropertyName("alert_state")] AlertStateCondition? AlertState = null,
+    [property: JsonPropertyName("loop_stale")] LoopStaleCondition? LoopStale = null,
+    [property: JsonPropertyName("loop_enaction_stale")] LoopEnactionStaleCondition? LoopEnactionStale = null,
+    [property: JsonPropertyName("pump_suspended")] PumpSuspendedCondition? PumpSuspended = null,
+    [property: JsonPropertyName("pump_battery")] PumpBatteryCondition? PumpBattery = null,
+    [property: JsonPropertyName("temp_basal")] TempBasalCondition? TempBasal = null,
+    [property: JsonPropertyName("uploader_battery")] UploaderBatteryCondition? UploaderBattery = null,
+    [property: JsonPropertyName("override_active")] OverrideActiveCondition? OverrideActive = null,
+    [property: JsonPropertyName("sensitivity_ratio")] SensitivityRatioCondition? SensitivityRatio = null,
+    [property: JsonPropertyName("do_not_disturb")] DoNotDisturbCondition? DoNotDisturb = null
 );
 
 /// <summary>

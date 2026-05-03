@@ -13,7 +13,6 @@ namespace Nocturne.API.Validators.Alerts;
 /// <item><description>ConditionType must be a valid enum value.</description></item>
 /// <item><description>Severity, when provided, must be a valid enum value.</description></item>
 /// <item><description>AutoResolveParams is required when AutoResolveEnabled is true.</description></item>
-/// <item><description>At least one schedule must be marked as default if schedules are provided.</description></item>
 /// </list>
 /// </remarks>
 /// <seealso cref="UpdateAlertRuleRequest"/>
@@ -29,7 +28,5 @@ public class UpdateAlertRuleRequestValidator : AbstractValidator<UpdateAlertRule
         RuleFor(x => x.AutoResolveParams).NotNull()
             .When(x => x.AutoResolveEnabled)
             .WithMessage("AutoResolveParams is required when AutoResolveEnabled is true");
-        RuleFor(x => x.Schedules).Must(s => s == null || s.Any(sch => sch.IsDefault))
-            .WithMessage("At least one schedule must be marked as default");
     }
 }

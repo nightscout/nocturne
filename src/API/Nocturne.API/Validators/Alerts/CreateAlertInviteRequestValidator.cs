@@ -8,7 +8,7 @@ namespace Nocturne.API.Validators.Alerts;
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item><description>EscalationStepId must be a non-empty GUID.</description></item>
+/// <item><description>AlertRuleChannelId must be a non-empty GUID.</description></item>
 /// <item><description>PermissionScope, when provided, is capped at 100 characters.</description></item>
 /// </list>
 /// </remarks>
@@ -22,7 +22,7 @@ public class CreateAlertInviteRequestValidator : AbstractValidator<CreateAlertIn
     /// </summary>
     public CreateAlertInviteRequestValidator()
     {
-        RuleFor(x => x.EscalationStepId).NotEmpty();
+        RuleFor(x => x.AlertRuleChannelId).NotEmpty();
         RuleFor(x => x.PermissionScope).MaximumLength(100).When(x => x.PermissionScope is not null);
     }
 }

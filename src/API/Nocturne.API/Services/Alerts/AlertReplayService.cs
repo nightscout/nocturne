@@ -42,8 +42,28 @@ internal sealed class AlertReplayService(
         "service is forward-from-now only). Auto-resolve, escalation, quiet hours, and " +
         "smart-snooze are not modelled.";
 
-    public async Task<AlertReplayResult> ReplayAsync(
+    public Task<AlertReplayResult> ReplayAsync(
         DateOnly? localDate, string? timezone, CancellationToken ct)
+        => ReplayInternalAsync(localDate, timezone, ruleOverride: null, ct);
+
+    public Task<AlertReplayResult> ReplayDryRunAsync(
+        DateOnly? localDate, string? timezone, ReplayRuleOverride ruleOverride, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ruleOverride);
+        return ReplayInternalAsync(localDate, timezone, ruleOverride, ct);
+    }
+
+    /// <summary>
+    /// Shared replay body. The optional <paramref name="ruleOverride"/> is applied to the
+    /// rule list before evaluation: when its <c>Id</c> matches an existing rule, the override
+    /// replaces it; otherwise the override is appended to the list (with a server-assigned
+    /// id so any <c>alert_state</c> references the editor seeded resolve correctly).
+    /// </summary>
+    private async Task<AlertReplayResult> ReplayInternalAsync(
+        DateOnly? localDate,
+        string? timezone,
+        ReplayRuleOverride? ruleOverride,
+        CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty)
@@ -53,7 +73,8 @@ internal sealed class AlertReplayService(
 
         var (windowStart, windowEnd) = ResolveWindow(localDate, timezone);
 
-        var rules = await alertRepository.GetEnabledRulesAsync(tenantId, ct);
+        var stored = await alertRepository.GetEnabledRulesAsync(tenantId, ct);
+        var rules = ApplyOverride(stored, ruleOverride, tenantId);
         if (rules.Count == 0)
         {
             return new AlertReplayResult(windowStart, windowEnd, [], LimitationsBanner);
@@ -312,7 +333,52 @@ internal sealed class AlertReplayService(
     /// <summary>
     /// Topologically sort rules so each rule appears after every rule it depends on via
     /// <c>alert_state</c>. Falls back to insertion order on cycle (cycles are blocked at
-    /// write time, but defence-in-depth keeps replay alive on stale data).
+    /// Layers <paramref name="ruleOverride"/> onto <paramref name="stored"/>: when its Id
+    /// matches an existing rule the override replaces it; otherwise the override is appended
+    /// (with a synthesised id so any <c>alert_state</c> references the editor seeded resolve
+    /// against the override rather than against a non-existent rule). The original list is
+    /// returned unchanged when <paramref name="ruleOverride"/> is null.
+    /// </summary>
+    private static IReadOnlyList<AlertRuleSnapshot> ApplyOverride(
+        IReadOnlyList<AlertRuleSnapshot> stored,
+        ReplayRuleOverride? ruleOverride,
+        Guid tenantId)
+    {
+        if (ruleOverride is null) return stored;
+
+        var overrideId = ruleOverride.Id ?? Guid.CreateVersion7();
+        var overrideSnapshot = new AlertRuleSnapshot(
+            Id: overrideId,
+            TenantId: tenantId,
+            Name: ruleOverride.Name,
+            ConditionType: ruleOverride.ConditionType,
+            ConditionParams: ruleOverride.ConditionParams,
+            Severity: ruleOverride.Severity,
+            ClientConfiguration: "{}",
+            SortOrder: 0,
+            AutoResolveEnabled: ruleOverride.AutoResolveEnabled,
+            AutoResolveParams: ruleOverride.AutoResolveParams,
+            AllowThroughDnd: ruleOverride.AllowThroughDnd);
+
+        var matchedExisting = ruleOverride.Id.HasValue
+            && stored.Any(r => r.Id == ruleOverride.Id.Value);
+        if (matchedExisting)
+        {
+            return stored
+                .Select(r => r.Id == overrideId ? overrideSnapshot : r)
+                .ToList();
+        }
+
+        var combined = new List<AlertRuleSnapshot>(stored.Count + 1);
+        combined.AddRange(stored);
+        combined.Add(overrideSnapshot);
+        return combined;
+    }
+
+    /// <summary>
+    /// Topo-sort by alert_state edges so a rule's parents have been evaluated for the same
+    /// tick before the rule itself runs. Cycles short-circuit to insertion order (cycles are
+    /// already prevented at write time, but defence-in-depth keeps replay alive on stale data).
     /// </summary>
     private IReadOnlyList<AlertRuleSnapshot> TopologicallySort(IReadOnlyList<AlertRuleSnapshot> rules)
     {

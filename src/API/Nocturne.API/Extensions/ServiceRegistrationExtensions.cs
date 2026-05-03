@@ -668,7 +668,6 @@ public static class ServiceRegistrationExtensions
 
         // Alert engine core
         services.AddScoped<IAlertRepository, AlertRepository>();
-        services.AddScoped<IEscalationAdvancer, EscalationAdvancer>();
         services.Configure<AlertEvaluationOptions>(
             configuration.GetSection(AlertEvaluationOptions.SectionName));
         // Bundles the enricher's data-source dependencies; resolved positionally from DI.
@@ -768,6 +767,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, UploaderBatteryEvaluator>();
         services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
         services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
+        services.AddScoped<IConditionEvaluator, DoNotDisturbEvaluator>();
         return services;
     }
 

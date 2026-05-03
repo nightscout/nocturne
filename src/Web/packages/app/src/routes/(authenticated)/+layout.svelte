@@ -14,6 +14,7 @@
   import { browser } from "$app/environment";
   import * as Card from "$lib/components/ui/card";
   import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
+  import FiringToast from "$lib/components/alerts/FiringToast.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider } from "@nocturne/coach";
@@ -203,6 +204,7 @@
         <GuestBanner expiresAt={data.guestExpiresAt} />
       {/if}
       <AlertBanner />
+      <FiringToast />
       <main class="flex-1 overflow-auto">
         <svelte:boundary>
           {@render children()}

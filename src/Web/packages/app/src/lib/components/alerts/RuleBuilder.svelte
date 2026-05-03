@@ -1,20 +1,51 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Plus, X } from "lucide-svelte";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import {
+    Plus,
+    X,
+    Ban,
+    Brackets,
+    Timer,
+    MoreHorizontal,
+    Droplet,
+    TrendingUp,
+    Syringe,
+    Apple,
+    Clock,
+    AlertTriangle,
+    Battery,
+    BatteryLow,
+    Smartphone,
+    Fuel,
+    RotateCcw,
+    WifiOff,
+    PauseCircle,
+    Wand2,
+    ChartLine,
+    Activity,
+    Bell,
+    BellOff,
+    CalendarClock,
+  } from "lucide-svelte";
   import Self from "./RuleBuilder.svelte";
-  import OperatorValueEditor from "./OperatorValueEditor.svelte";
+  import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
   import {
     defaultPayload,
     type ConditionKind,
     type ConditionNode,
-    type ComparisonOperator,
-    type TrendBucket,
-    type TempBasalMetric,
   } from "./types";
+  import {
+    LEAF_FACTS,
+    FACT_GROUP_ORDER,
+    FACT_GROUP_LABELS,
+    FACT_GROUP_COLOURS,
+    getFact,
+    type LeafKind,
+    type LucideIconName,
+  } from "./factCatalog";
 
   interface AvailableRule {
     id: string;
@@ -22,616 +53,439 @@
   }
 
   interface Props {
+    /** Composite-rooted condition tree. The root MUST be a composite — call
+     *  `ensureCompositeRoot` from types.ts before mounting if unsure. */
     node: ConditionNode;
     availableRules?: AvailableRule[];
-    onRemove?: () => void;
+    /** When true, suppress the "Notify when …" preamble (used by recursive
+     *  nested groups so only the outermost shows the lead-in). */
+    nested?: boolean;
   }
 
-  let {
-    node = $bindable(),
-    availableRules = [],
-    onRemove,
-  }: Props = $props();
+  let { node = $bindable(), availableRules = [], nested = false }: Props = $props();
 
-  const kindLabels: Record<ConditionKind, string> = {
-    composite: "Group (and/or)",
-    not: "Not",
-    sustained: "Sustained for...",
-    threshold: "Threshold (mg/dL)",
-    rate_of_change: "Rate of change",
-    staleness: "Data staleness",
-    predicted: "Predicted glucose",
-    trend: "Trend bucket",
-    time_of_day: "Time of day",
-    iob: "Insulin on board",
-    cob: "Carbs on board",
-    reservoir: "Reservoir level",
-    site_age: "Site age",
-    sensor_age: "Sensor age",
-    alert_state: "Other rule state",
-    loop_stale: "Loop has stopped",
-    loop_enaction_stale: "Loop not enacting",
-    pump_suspended: "Pump suspended",
-    pump_battery: "Pump battery",
-    temp_basal: "Temp basal",
-    uploader_battery: "Phone battery",
-    override_active: "Override active",
-    sensitivity_ratio: "Insulin sensitivity",
+  // The rule builder always edits at the group level; if a caller hands us a
+  // non-composite node, render an empty stub so the runtime doesn't crash —
+  // surfacing the bug to the developer console rather than rendering garbage.
+  if (node.type !== "composite" || !node.composite) {
+    // eslint-disable-next-line no-console
+    console.error("[RuleBuilder] expected a composite root, got:", node.type);
+  }
+
+  // ---- Lookup table for the icon glyph per fact -------------------------
+  const ICONS: Record<LucideIconName, typeof Droplet> = {
+    droplet: Droplet,
+    "trending-up": TrendingUp,
+    syringe: Syringe,
+    apple: Apple,
+    clock: Clock,
+    "alert-triangle": AlertTriangle,
+    battery: Battery,
+    "battery-low": BatteryLow,
+    smartphone: Smartphone,
+    fuel: Fuel,
+    "rotate-ccw": RotateCcw,
+    "wifi-off": WifiOff,
+    "pause-circle": PauseCircle,
+    "wand-2": Wand2,
+    "chart-line": ChartLine,
+    activity: Activity,
+    bell: Bell,
+    "bell-off": BellOff,
+    "calendar-clock": CalendarClock,
   };
 
-  const kinds: ConditionKind[] = [
-    "composite",
-    "not",
-    "sustained",
-    "threshold",
-    "rate_of_change",
-    "staleness",
-    "predicted",
-    "trend",
-    "time_of_day",
-    "iob",
-    "cob",
-    "reservoir",
-    "site_age",
-    "sensor_age",
-    "alert_state",
-    "loop_stale",
-    "loop_enaction_stale",
-    "pump_suspended",
-    "pump_battery",
-    "temp_basal",
-    "uploader_battery",
-    "override_active",
-    "sensitivity_ratio",
-  ];
+  // ---- Mutations -------------------------------------------------------
+  // Mutating the existing array/object via Svelte 5's deep-proxy state
+  // propagates back through the parent's bind:node — no reassignment needed
+  // for child-level edits. For child *replacement* we splice in place.
 
-  const tempBasalMetricLabels: Record<TempBasalMetric, string> = {
-    rate: "Rate (U/hr)",
-    percent_of_scheduled: "Percent of scheduled",
-  };
-
-  const operatorLabels: Record<ComparisonOperator, string> = {
-    ">=": "≥",
-    ">": ">",
-    "<=": "≤",
-    "<": "<",
-  };
-
-  const trendLabels: Record<TrendBucket, string> = {
-    falling_fast: "Falling fast",
-    falling: "Falling",
-    flat: "Flat",
-    rising: "Rising",
-    rising_fast: "Rising fast",
-  };
-
-  function changeKind(next: ConditionKind) {
-    if (next === node.type) return;
-    node = defaultPayload(next);
+  function addLeaf(kind: LeafKind): void {
+    if (!node.composite) return;
+    node.composite.conditions.push(defaultPayload(kind));
   }
 
-  function ensurePayload<K extends ConditionKind>(kind: K): NonNullable<ConditionNode[K]> {
-    const existing = node[kind];
-    if (existing) return existing as NonNullable<ConditionNode[K]>;
-    const fresh = defaultPayload(kind)[kind];
-    node[kind] = fresh as ConditionNode[K];
-    return fresh as NonNullable<ConditionNode[K]>;
+  function addGroup(operator: "and" | "or"): void {
+    if (!node.composite) return;
+    const seed = defaultPayload("composite");
+    if (seed.composite) seed.composite.operator = operator;
+    node.composite.conditions.push(seed);
   }
 
-  function addCompositeChild() {
-    const payload = ensurePayload("composite");
-    payload.conditions = [...payload.conditions, defaultPayload("threshold")];
+  function removeChild(index: number): void {
+    if (!node.composite) return;
+    node.composite.conditions.splice(index, 1);
   }
 
-  function removeCompositeChild(index: number) {
-    const payload = ensurePayload("composite");
-    payload.conditions = payload.conditions.filter((_, i) => i !== index);
+  /**
+   * Wrap the child at <paramref name="index"/> in <paramref name="wrapper"/>
+   * (and/or → composite, not, sustained), preserving the original node as the
+   * wrapper's first/only child. The original `_uid` stays on the inner node so
+   * the keyed each block doesn't collapse.
+   */
+  function wrapChild(index: number, wrapper: "and" | "or" | "not" | "sustained"): void {
+    if (!node.composite) return;
+    const inner = node.composite.conditions[index];
+    let next: ConditionNode;
+    if (wrapper === "not") {
+      next = { ...defaultPayload("not"), not: { child: inner } };
+    } else if (wrapper === "sustained") {
+      next = {
+        ...defaultPayload("sustained"),
+        sustained: { minutes: 15, child: inner },
+      };
+    } else {
+      next = {
+        ...defaultPayload("composite"),
+        composite: { operator: wrapper, conditions: [inner] },
+      };
+    }
+    node.composite.conditions[index] = next;
   }
 
-  function parseNumber(value: string, fallback: number): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
+  /**
+   * Inverse of {@link wrapChild}. If the child at <paramref name="index"/> is
+   * a NOT or single-child composite or a sustained, replace it with its inner
+   * node. Multi-child composites stay put — flattening them would lose the
+   * group's siblings.
+   */
+  function unwrapChild(index: number): void {
+    if (!node.composite) return;
+    const c = node.composite.conditions[index];
+    if (c.type === "not" && c.not?.child) {
+      node.composite.conditions[index] = c.not.child;
+    } else if (c.type === "sustained" && c.sustained?.child) {
+      node.composite.conditions[index] = c.sustained.child;
+    } else if (
+      c.type === "composite" &&
+      c.composite &&
+      c.composite.conditions.length === 1
+    ) {
+      node.composite.conditions[index] = c.composite.conditions[0];
+    }
+  }
+
+  function eyebrow(index: number, op: "and" | "or"): string {
+    if (index === 0) return "IF";
+    return op === "and" ? "AND" : "OR";
+  }
+
+  /**
+   * Pull the leaf descriptor for a node — for `not(leaf)` and
+   * `sustained(leaf)` we display the *inner* leaf's icon and label, so the row
+   * still reads like "(NOT) BG &lt; 70 mg/dL (for 15m)" rather than something
+   * generic for the wrapper.
+   */
+  function rowLeafKind(c: ConditionNode): LeafKind | null {
+    let cur: ConditionNode = c;
+    while (cur.type === "not" && cur.not) cur = cur.not.child;
+    while (cur.type === "sustained" && cur.sustained) cur = cur.sustained.child;
+    if (cur.type === "composite") return null;
+    return cur.type as LeafKind;
+  }
+
+  /** Walk past NOT/SUSTAINED wrappers to reach the underlying leaf node. */
+  function rowLeafNode(c: ConditionNode): ConditionNode {
+    let cur: ConditionNode = c;
+    while (cur.type === "not" && cur.not) cur = cur.not.child;
+    while (cur.type === "sustained" && cur.sustained) cur = cur.sustained.child;
+    return cur;
   }
 </script>
 
-<div class="rounded-md border bg-background p-3 space-y-3">
-  <div class="flex items-center gap-2">
-    <div class="flex-1">
-      <Select.Root
-        type="single"
-        value={node.type}
-        onValueChange={(v) => changeKind(v as ConditionKind)}
-      >
-        <Select.Trigger>{kindLabels[node.type]}</Select.Trigger>
-        <Select.Content>
-          {#each kinds as kind (kind)}
-            <Select.Item value={kind} label={kindLabels[kind]} />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    </div>
-    {#if onRemove}
-      <Button
-        variant="ghost"
-        size="icon"
-        onclick={onRemove}
-        aria-label="Remove condition"
-      >
-        <X class="h-4 w-4" />
-      </Button>
-    {/if}
-  </div>
-
-  {#if node.type === "composite"}
-    {@const payload = ensurePayload("composite")}
-    <div class="space-y-3">
-      <div class="space-y-2">
-        <Label>Match</Label>
-        <Select.Root
-          type="single"
-          value={payload.operator}
-          onValueChange={(v) => {
-            payload.operator = v as "and" | "or";
+<div class="space-y-2">
+  {#if !nested && node.composite}
+    <div class="flex items-center gap-2 text-sm text-muted-foreground">
+      <span>Notify when</span>
+      <div class="inline-flex rounded-md border bg-background p-0.5 text-xs font-medium">
+        <button
+          type="button"
+          class="px-2 py-1 rounded {node.composite.operator === 'and'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:text-foreground'}"
+          onclick={() => {
+            if (node.composite) node.composite.operator = 'and';
           }}
         >
-          <Select.Trigger>
-            {payload.operator === "and" ? "All conditions (AND)" : "Any condition (OR)"}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="and" label="All conditions (AND)" />
-            <Select.Item value="or" label="Any condition (OR)" />
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="space-y-2 pl-3 border-l">
-        {#each payload.conditions as child, i (child._uid)}
-          <Self
-            bind:node={payload.conditions[i]}
-            {availableRules}
-            onRemove={() => removeCompositeChild(i)}
-          />
-        {/each}
-        <Button variant="outline" size="sm" onclick={addCompositeChild}>
-          <Plus class="h-4 w-4 mr-2" />
-          Add condition
-        </Button>
-      </div>
-    </div>
-  {:else if node.type === "not"}
-    {@const payload = ensurePayload("not")}
-    <div class="pl-3 border-l">
-      <Self bind:node={payload.child} {availableRules} />
-    </div>
-  {:else if node.type === "sustained"}
-    {@const payload = ensurePayload("sustained")}
-    <div class="space-y-2">
-      <Label for="sustained-minutes">Minutes</Label>
-      <Input
-        id="sustained-minutes"
-        type="number"
-        min="1"
-        value={payload.minutes}
-        oninput={(e) => {
-          payload.minutes = parseNumber(e.currentTarget.value, payload.minutes);
-        }}
-      />
-    </div>
-    <div class="pl-3 border-l">
-      <Self bind:node={payload.child} {availableRules} />
-    </div>
-  {:else if node.type === "threshold"}
-    {@const payload = ensurePayload("threshold")}
-    <div class="grid grid-cols-2 gap-2">
-      <div class="space-y-2">
-        <Label>Direction</Label>
-        <Select.Root
-          type="single"
-          value={payload.direction}
-          onValueChange={(v) => {
-            payload.direction = v as "above" | "below";
+          all of
+        </button>
+        <button
+          type="button"
+          class="px-2 py-1 rounded {node.composite.operator === 'or'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:text-foreground'}"
+          onclick={() => {
+            if (node.composite) node.composite.operator = 'or';
           }}
         >
-          <Select.Trigger>{payload.direction === "above" ? "Above" : "Below"}</Select.Trigger>
-          <Select.Content>
-            <Select.Item value="below" label="Below" />
-            <Select.Item value="above" label="Above" />
-          </Select.Content>
-        </Select.Root>
+          any of
+        </button>
       </div>
-      <div class="space-y-2">
-        <Label for="threshold-value">Value (mg/dL)</Label>
-        <Input
-          id="threshold-value"
-          type="number"
-          value={payload.value}
-          oninput={(e) => {
-            payload.value = parseNumber(e.currentTarget.value, payload.value);
-          }}
-        />
-      </div>
+      <span>these are true:</span>
     </div>
-  {:else if node.type === "rate_of_change"}
-    {@const payload = ensurePayload("rate_of_change")}
-    <div class="grid grid-cols-2 gap-2">
-      <div class="space-y-2">
-        <Label>Direction</Label>
-        <Select.Root
-          type="single"
-          value={payload.direction}
-          onValueChange={(v) => {
-            payload.direction = v as "rising" | "falling";
+  {:else if nested && node.composite}
+    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+      <Brackets class="h-3.5 w-3.5" />
+      <span>Group — match</span>
+      <div class="inline-flex rounded-md border bg-background p-0.5 font-medium">
+        <button
+          type="button"
+          class="px-1.5 py-0.5 rounded {node.composite.operator === 'and'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:text-foreground'}"
+          onclick={() => {
+            if (node.composite) node.composite.operator = 'and';
           }}
         >
-          <Select.Trigger>{payload.direction === "rising" ? "Rising" : "Falling"}</Select.Trigger>
-          <Select.Content>
-            <Select.Item value="falling" label="Falling" />
-            <Select.Item value="rising" label="Rising" />
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="space-y-2">
-        <Label for="roc-rate">Rate (mg/dL per min)</Label>
-        <Input
-          id="roc-rate"
-          type="number"
-          step="0.1"
-          value={payload.rate}
-          oninput={(e) => {
-            payload.rate = parseNumber(e.currentTarget.value, payload.rate);
-          }}
-        />
-      </div>
-    </div>
-  {:else if node.type === "staleness"}
-    {@const payload = ensurePayload("staleness")}
-    <OperatorValueEditor
-      {payload}
-      field="value"
-      valueLabel="Minutes"
-      idPrefix="staleness"
-    />
-  {:else if node.type === "predicted"}
-    {@const payload = ensurePayload("predicted")}
-    <div class="grid grid-cols-3 gap-2">
-      <div class="space-y-2">
-        <Label>Operator</Label>
-        <Select.Root
-          type="single"
-          value={payload.operator}
-          onValueChange={(v) => {
-            payload.operator = v as ComparisonOperator;
+          all
+        </button>
+        <button
+          type="button"
+          class="px-1.5 py-0.5 rounded {node.composite.operator === 'or'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:text-foreground'}"
+          onclick={() => {
+            if (node.composite) node.composite.operator = 'or';
           }}
         >
-          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
-          <Select.Content>
-            {#each Object.entries(operatorLabels) as [op, label] (op)}
-              <Select.Item value={op} {label} />
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="space-y-2">
-        <Label for="predicted-value">Value (mg/dL)</Label>
-        <Input
-          id="predicted-value"
-          type="number"
-          value={payload.value}
-          oninput={(e) => {
-            payload.value = parseNumber(e.currentTarget.value, payload.value);
-          }}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="predicted-within">Within (min)</Label>
-        <Input
-          id="predicted-within"
-          type="number"
-          value={payload.within_minutes}
-          oninput={(e) => {
-            payload.within_minutes = parseNumber(
-              e.currentTarget.value,
-              payload.within_minutes,
-            );
-          }}
-        />
+          any
+        </button>
       </div>
     </div>
-  {:else if node.type === "trend"}
-    {@const payload = ensurePayload("trend")}
-    <div class="space-y-2">
-      <Label>Bucket</Label>
-      <Select.Root
-        type="single"
-        value={payload.bucket}
-        onValueChange={(v) => {
-          payload.bucket = v as TrendBucket;
-        }}
-      >
-        <Select.Trigger>{trendLabels[payload.bucket]}</Select.Trigger>
-        <Select.Content>
-          {#each Object.entries(trendLabels) as [bucket, label] (bucket)}
-            <Select.Item value={bucket} {label} />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    </div>
-  {:else if node.type === "time_of_day"}
-    {@const payload = ensurePayload("time_of_day")}
-    <div class="grid grid-cols-3 gap-2">
-      <div class="space-y-2">
-        <Label for="tod-from">From</Label>
-        <Input
-          id="tod-from"
-          type="time"
-          value={payload.from}
-          oninput={(e) => {
-            payload.from = e.currentTarget.value;
-          }}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="tod-to">To</Label>
-        <Input
-          id="tod-to"
-          type="time"
-          value={payload.to}
-          oninput={(e) => {
-            payload.to = e.currentTarget.value;
-          }}
-        />
-      </div>
-      <div class="space-y-2">
-        <Label for="tod-tz">Timezone (optional)</Label>
-        <Input
-          id="tod-tz"
-          type="text"
-          placeholder="UTC"
-          value={payload.timezone ?? ""}
-          oninput={(e) => {
-            const v = e.currentTarget.value;
-            payload.timezone = v.length > 0 ? v : undefined;
-          }}
-        />
-      </div>
-    </div>
-  {:else if node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age"}
-    {@const payload = node[node.type]!}
-    {@const valueLabel =
-      node.type === "iob"
-        ? "Units"
-        : node.type === "cob"
-          ? "Grams"
-          : node.type === "reservoir"
-            ? "Units"
-            : node.type === "site_age"
-              ? "Hours"
-              : "Days"}
-    <OperatorValueEditor
-      {payload}
-      field="value"
-      {valueLabel}
-      step="0.1"
-      idPrefix={node.type}
-    />
-  {:else if node.type === "alert_state"}
-    {@const payload = ensurePayload("alert_state")}
-    {@const selectedRule = availableRules.find((r) => r.id === payload.alert_id)}
-    <div class="space-y-2">
-      <Label>Other rule</Label>
-      <Select.Root
-        type="single"
-        value={payload.alert_id}
-        onValueChange={(v) => {
-          payload.alert_id = v;
-        }}
-      >
-        <Select.Trigger>
-          {selectedRule?.name ?? "Select a rule"}
-        </Select.Trigger>
-        <Select.Content>
-          {#each availableRules as rule (rule.id)}
-            <Select.Item value={rule.id} label={rule.name} />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    </div>
-    <div class="grid grid-cols-2 gap-2">
-      <div class="space-y-2">
-        <Label>State</Label>
-        <Select.Root
-          type="single"
-          value={payload.state}
-          onValueChange={(v) => {
-            payload.state = v as "firing" | "acknowledged";
-          }}
-        >
-          <Select.Trigger>
-            {payload.state === "firing" ? "Firing" : "Acknowledged"}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="firing" label="Firing" />
-            <Select.Item value="acknowledged" label="Acknowledged" />
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="space-y-2">
-        <Label for="alert-state-for">For at least (min, optional)</Label>
-        <Input
-          id="alert-state-for"
-          type="number"
-          value={payload.for_minutes ?? ""}
-          oninput={(e) => {
-            const v = e.currentTarget.value;
-            payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
-          }}
-        />
-      </div>
-    </div>
-  {:else if node.type === "loop_stale"}
-    {@const payload = ensurePayload("loop_stale")}
-    <OperatorValueEditor
-      {payload}
-      field="minutes"
-      valueLabel="Minutes"
-      min={1}
-      operators={[">", ">="]}
-      idPrefix="loop-stale"
-    />
-  {:else if node.type === "loop_enaction_stale"}
-    {@const payload = ensurePayload("loop_enaction_stale")}
-    <OperatorValueEditor
-      {payload}
-      field="minutes"
-      valueLabel="Minutes"
-      min={1}
-      operators={[">", ">="]}
-      idPrefix="loop-enaction-stale"
-    />
-    <p class="text-xs text-muted-foreground">
-      For closed-loop users only. Open-loop users should use "Loop has stopped" instead.
-    </p>
-  {:else if node.type === "pump_suspended"}
-    {@const payload = ensurePayload("pump_suspended")}
-    <div class="space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <Label for="pump-suspended-active">Pump is currently suspended</Label>
-        <Switch
-          id="pump-suspended-active"
-          checked={payload.is_active}
-          onCheckedChange={(checked) => {
-            payload.is_active = checked;
-            if (!checked) payload.for_minutes = null;
-          }}
-        />
-      </div>
-      {#if payload.is_active}
-        <div class="space-y-2">
-          <Label for="pump-suspended-for">For at least (min, optional)</Label>
-          <Input
-            id="pump-suspended-for"
-            type="number"
-            min="1"
-            value={payload.for_minutes ?? ""}
-            oninput={(e) => {
-              const v = e.currentTarget.value;
-              payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : null;
-            }}
-          />
-        </div>
-      {/if}
-    </div>
-  {:else if node.type === "pump_battery"}
-    {@const payload = ensurePayload("pump_battery")}
-    <OperatorValueEditor
-      {payload}
-      field="value"
-      valueLabel="Percent"
-      min={0}
-      max={100}
-      idPrefix="pump-battery"
-    />
-  {:else if node.type === "temp_basal"}
-    {@const payload = ensurePayload("temp_basal")}
-    {@const valueLabel = payload.metric === "rate" ? "U/hr" : "%"}
-    <div class="space-y-2">
-      <Label>Metric</Label>
-      <Select.Root
-        type="single"
-        value={payload.metric}
-        onValueChange={(v) => {
-          payload.metric = v as TempBasalMetric;
-        }}
-      >
-        <Select.Trigger>{tempBasalMetricLabels[payload.metric]}</Select.Trigger>
-        <Select.Content>
-          {#each Object.entries(tempBasalMetricLabels) as [m, label] (m)}
-            <Select.Item value={m} {label} />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    </div>
-    <div class="grid grid-cols-2 gap-2">
-      <div class="space-y-2">
-        <Label>Operator</Label>
-        <Select.Root
-          type="single"
-          value={payload.operator}
-          onValueChange={(v) => {
-            payload.operator = v as ComparisonOperator;
-          }}
-        >
-          <Select.Trigger>{operatorLabels[payload.operator]}</Select.Trigger>
-          <Select.Content>
-            {#each Object.entries(operatorLabels) as [op, label] (op)}
-              <Select.Item value={op} {label} />
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="space-y-2">
-        <Label for="temp-basal-value">{valueLabel}</Label>
-        <Input
-          id="temp-basal-value"
-          type="number"
-          step="0.1"
-          value={payload.value}
-          oninput={(e) => {
-            payload.value = parseNumber(e.currentTarget.value, payload.value);
-          }}
-        />
-      </div>
-    </div>
-  {:else if node.type === "uploader_battery"}
-    {@const payload = ensurePayload("uploader_battery")}
-    <OperatorValueEditor
-      {payload}
-      field="value"
-      valueLabel="Percent"
-      min={0}
-      max={100}
-      idPrefix="uploader-battery"
-    />
-  {:else if node.type === "override_active"}
-    {@const payload = ensurePayload("override_active")}
-    <div class="space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <Label for="override-active-active">Override is currently active</Label>
-        <Switch
-          id="override-active-active"
-          checked={payload.is_active}
-          onCheckedChange={(checked) => {
-            payload.is_active = checked;
-            if (!checked) payload.for_minutes = null;
-          }}
-        />
-      </div>
-      {#if payload.is_active}
-        <div class="space-y-2">
-          <Label for="override-active-for">For at least (min, optional)</Label>
-          <Input
-            id="override-active-for"
-            type="number"
-            min="1"
-            value={payload.for_minutes ?? ""}
-            oninput={(e) => {
-              const v = e.currentTarget.value;
-              payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : null;
-            }}
-          />
-        </div>
-      {/if}
-    </div>
-  {:else if node.type === "sensitivity_ratio"}
-    {@const payload = ensurePayload("sensitivity_ratio")}
-    <OperatorValueEditor
-      {payload}
-      field="value"
-      valueLabel="Ratio"
-      step="0.01"
-      idPrefix="sensitivity-ratio"
-    />
-    <p class="text-xs text-muted-foreground">
-      Available for AAPS and Trio. Loop iOS does not report this value.
-    </p>
   {/if}
+
+  <div class="space-y-1.5 {nested ? 'pl-3 border-l border-border/60' : ''}">
+    {#if node.composite}
+      {#each node.composite.conditions as child, i (child._uid)}
+        {@const leafKind = rowLeafKind(child)}
+        {@const fact = leafKind ? getFact(leafKind) : undefined}
+        {@const colours = fact ? FACT_GROUP_COLOURS[fact.group] : null}
+        {@const Icon = fact ? ICONS[fact.icon] : null}
+
+        {#if child.type === "composite"}
+          <!-- Nested group: indented IFTTT block with eyebrow + actions row above -->
+          <div class="rounded-md border bg-background p-2 space-y-2">
+            <div class="flex items-center gap-2">
+              <span
+                class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                {eyebrow(i, node.composite.operator as "and" | "or")}
+              </span>
+              <div class="flex-1">
+                <Self bind:node={node.composite.conditions[i]} {availableRules} nested />
+              </div>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      variant="ghost"
+                      size="icon"
+                      class="h-7 w-7 shrink-0"
+                      aria-label="Group actions"
+                    >
+                      <MoreHorizontal class="h-4 w-4" />
+                    </Button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item onclick={() => wrapChild(i, "not")}>
+                    <Ban class="h-4 w-4 mr-2" /> Wrap in NOT
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onclick={() => unwrapChild(i)}>
+                    Unwrap (when single child)
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item onclick={() => removeChild(i)}>
+                    <X class="h-4 w-4 mr-2" /> Remove group
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </div>
+          </div>
+        {:else}
+          <!-- Leaf row (possibly wrapped in NOT/SUSTAINED) -->
+          {@const leafTarget = rowLeafNode(child)}
+          {@const isNot = child.type === "not"}
+          {@const isSustained = child.type === "sustained" || (isNot && child.not?.child.type === "sustained")}
+          {@const sustainedNode = child.type === "sustained" ? child : (isNot && child.not?.child.type === "sustained" ? child.not.child : null)}
+
+          <div class="flex items-center gap-2 rounded-md border bg-background px-2 py-1.5">
+            <span
+              class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              {eyebrow(i, node.composite.operator as "and" | "or")}
+            </span>
+            {#if Icon && colours}
+              <span
+                class="grid h-6 w-6 shrink-0 place-items-center rounded {colours.bg} {colours.fg}"
+                aria-hidden="true"
+              >
+                <Icon class="h-3.5 w-3.5" />
+              </span>
+            {/if}
+            {#if isNot}
+              <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                NOT
+              </span>
+            {/if}
+            <span class="text-sm font-medium shrink-0">{fact?.label ?? child.type}</span>
+            <RuleBuilderLeafEditor bind:node={leafTarget} {availableRules} />
+            {#if isSustained && sustainedNode?.sustained}
+              <span class="text-xs text-muted-foreground shrink-0">for at least</span>
+              <Input
+                type="number"
+                min="1"
+                class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+                value={sustainedNode.sustained.minutes ?? 15}
+                oninput={(e) => {
+                  if (sustainedNode?.sustained) {
+                    const n = Number(e.currentTarget.value);
+                    sustainedNode.sustained.minutes = Number.isFinite(n) ? n : sustainedNode.sustained.minutes;
+                  }
+                }}
+              />
+              <span class="text-xs text-muted-foreground shrink-0">min</span>
+            {/if}
+            <span class="flex-1"></span>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="icon"
+                    class="h-7 w-7 shrink-0"
+                    aria-label="Row actions"
+                  >
+                    <MoreHorizontal class="h-4 w-4" />
+                  </Button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end">
+                <DropdownMenu.Item onclick={() => wrapChild(i, "and")}>
+                  <Brackets class="h-4 w-4 mr-2" /> Wrap in AND group
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onclick={() => wrapChild(i, "or")}>
+                  <Brackets class="h-4 w-4 mr-2" /> Wrap in OR group
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onclick={() => wrapChild(i, "not")}>
+                  <Ban class="h-4 w-4 mr-2" /> Wrap in NOT
+                </DropdownMenu.Item>
+                {#if !isSustained}
+                  <DropdownMenu.Item onclick={() => wrapChild(i, "sustained")}>
+                    <Timer class="h-4 w-4 mr-2" /> Make sustained
+                  </DropdownMenu.Item>
+                {/if}
+                {#if isNot || isSustained}
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item onclick={() => unwrapChild(i)}>
+                    Remove wrapper
+                  </DropdownMenu.Item>
+                {/if}
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item onclick={() => removeChild(i)}>
+                  <X class="h-4 w-4 mr-2" /> Remove
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          </div>
+        {/if}
+      {/each}
+    {/if}
+
+    <!-- "Add condition" picker -->
+    <Popover.Root>
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="outline"
+            size="sm"
+            class="border-dashed text-muted-foreground"
+          >
+            <Plus class="h-4 w-4 mr-2" /> Add condition
+          </Button>
+        {/snippet}
+      </Popover.Trigger>
+      <Popover.Content class="w-80 p-1" align="start">
+        <div class="max-h-96 overflow-y-auto">
+          {#each FACT_GROUP_ORDER as group (group)}
+            {@const facts = LEAF_FACTS.filter((f) => f.group === group)}
+            {#if facts.length > 0}
+              <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {FACT_GROUP_LABELS[group]}
+              </div>
+              {#each facts as f (f.kind)}
+                {@const c = FACT_GROUP_COLOURS[f.group]}
+                {@const Glyph = ICONS[f.icon]}
+                <Popover.Close>
+                  {#snippet child({ props })}
+                    <button
+                      {...props}
+                      type="button"
+                      class="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                      onclick={() => addLeaf(f.kind)}
+                    >
+                      <span
+                        class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded {c.bg} {c.fg}"
+                        aria-hidden="true"
+                      >
+                        <Glyph class="h-3.5 w-3.5" />
+                      </span>
+                      <span class="flex flex-col">
+                        <span class="text-sm font-medium">{f.label}</span>
+                        <span class="text-xs text-muted-foreground leading-tight">{f.description}</span>
+                      </span>
+                    </button>
+                  {/snippet}
+                </Popover.Close>
+              {/each}
+            {/if}
+          {/each}
+
+          <div class="my-1 border-t"></div>
+          <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Group
+          </div>
+          <Popover.Close>
+            {#snippet child({ props })}
+              <button
+                {...props}
+                type="button"
+                class="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                onclick={() => addGroup("and")}
+              >
+                <span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+                  <Brackets class="h-3.5 w-3.5" />
+                </span>
+                <span class="flex flex-col">
+                  <span class="text-sm font-medium">+ Group (AND)</span>
+                  <span class="text-xs text-muted-foreground leading-tight">All sub-conditions must hold</span>
+                </span>
+              </button>
+            {/snippet}
+          </Popover.Close>
+          <Popover.Close>
+            {#snippet child({ props })}
+              <button
+                {...props}
+                type="button"
+                class="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                onclick={() => addGroup("or")}
+              >
+                <span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+                  <Brackets class="h-3.5 w-3.5" />
+                </span>
+                <span class="flex flex-col">
+                  <span class="text-sm font-medium">+ Group (OR)</span>
+                  <span class="text-xs text-muted-foreground leading-tight">Any sub-condition is enough</span>
+                </span>
+              </button>
+            {/snippet}
+          </Popover.Close>
+        </div>
+      </Popover.Content>
+    </Popover.Root>
+  </div>
 </div>

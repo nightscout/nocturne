@@ -6,6 +6,28 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/Metadata/alert-condition-types": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Get the alert condition tree shape. Exists solely so NSwag generates TypeScript\ninterfaces for ConditionNode and every condition payload record\n— they're stored as opaque JSON on the rule entity and not otherwise reachable\nthrough a controller signature.",
+        "operationId": "Metadata_GetAlertConditionTypes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertConditionTypesMetadata"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/Metadata/auth-error-codes": {
       "get": {
         "tags": [
@@ -9458,7 +9480,7 @@
         "tags": [
           "Alert Invites"
         ],
-        "summary": "Generate an invite link for a follower to join an escalation step.",
+        "summary": "Generate an invite link for a follower to attach to a rule channel.",
         "operationId": "AlertInvites_CreateInvite",
         "requestBody": {
           "x-name": "request",
@@ -9677,12 +9699,46 @@
         "x-remote-type": "command"
       }
     },
+    "/api/v4/alerts/replay/dry-run": {
+      "post": {
+        "tags": [
+          "Alert Replay"
+        ],
+        "summary": "Dry-run replay variant for the rule editor. Layers a user-provided rule definition\nonto the saved rule set for one call (never persisted), so authors can answer\n\"would my new/edited rule have woken me last night?\" before saving.",
+        "operationId": "AlertReplay_ReplayDryRun",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertReplayDryRunRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertReplayResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/alert-rules": {
       "get": {
         "tags": [
           "Alert Rules"
         ],
-        "summary": "List all alert rules for the current tenant with schedules and escalation steps.",
+        "summary": "List all alert rules for the current tenant with their flat channel list.",
         "operationId": "AlertRules_GetRules",
         "responses": {
           "200": {
@@ -9705,7 +9761,7 @@
         "tags": [
           "Alert Rules"
         ],
-        "summary": "Create an alert rule with nested schedules, escalation steps, and channels.",
+        "summary": "Create an alert rule with a flat channel list.",
         "operationId": "AlertRules_CreateRule",
         "requestBody": {
           "x-name": "request",
@@ -9752,7 +9808,7 @@
         "tags": [
           "Alert Rules"
         ],
-        "summary": "Get a single alert rule with full schedule/escalation tree.",
+        "summary": "Get a single alert rule with its flat channel list.",
         "operationId": "AlertRules_GetRule",
         "parameters": [
           {
@@ -9862,7 +9918,7 @@
         "tags": [
           "Alert Rules"
         ],
-        "summary": "Delete an alert rule (cascades to schedules, steps, channels).",
+        "summary": "Delete an alert rule (cascades to its channels).",
         "operationId": "AlertRules_DeleteRule",
         "parameters": [
           {
@@ -9953,6 +10009,70 @@
           "GetRules",
           "GetRule"
         ]
+      }
+    },
+    "/api/v4/alert-rules/{id}/test-fire": {
+      "post": {
+        "tags": [
+          "Alert Rules"
+        ],
+        "summary": "Fire a saved rule through its real channel list as a test. Writes a\nis_test=true instance + delivery rows so the user can verify their channels\nwithout polluting the active-alerts surface.",
+        "operationId": "AlertRules_TestFire",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/alert-rules/test-fire-dry-run": {
+      "post": {
+        "tags": [
+          "Alert Rules"
+        ],
+        "summary": "Test-fire variant for the editor on an unsaved rule. Same provider chain, no\nrule lookup — channels and metadata come straight from the request body.",
+        "operationId": "AlertRules_TestFireDryRun",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestFireDryRunRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "command"
       }
     },
     "/api/v4/alerts/active": {
@@ -10438,6 +10558,73 @@
         "x-remote-type": "command",
         "x-remote-invalidates": [
           "GetNotifications"
+        ]
+      }
+    },
+    "/api/v4/tenant-alert-settings": {
+      "get": {
+        "tags": [
+          "Tenant Alert Settings"
+        ],
+        "summary": "Get the current tenant's alert settings, creating a default row if one does not exist.",
+        "operationId": "TenantAlertSettings_Get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAlertSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Tenant Alert Settings"
+        ],
+        "summary": "Replace the current tenant's alert settings. Upserts on first call.",
+        "operationId": "TenantAlertSettings_Update",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantAlertSettingsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAlertSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "Get"
         ]
       }
     },
@@ -22555,6 +22742,587 @@
   },
   "components": {
     "schemas": {
+      "AlertConditionTypesMetadata": {
+        "type": "object",
+        "description": "Forces NSwag to emit TypeScript interfaces for ConditionNode and\nevery condition payload record — they're stored as opaque JSON on the rule entity\nand otherwise never appear in a controller signature.",
+        "additionalProperties": false,
+        "properties": {
+          "sample": {
+            "description": "A sample ConditionNode; pulls every sub-record into the OpenAPI schema.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConditionNode"
+              }
+            ]
+          },
+          "tempBasalMetrics": {
+            "type": "array",
+            "description": "All TempBasalMetric values.",
+            "items": {
+              "$ref": "#/components/schemas/TempBasalMetric"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "ConditionNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "threshold": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThresholdCondition"
+              }
+            ]
+          },
+          "rate_of_change": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RateOfChangeCondition"
+              }
+            ]
+          },
+          "signal_loss": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SignalLossCondition"
+              }
+            ]
+          },
+          "composite": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompositeCondition"
+              }
+            ]
+          },
+          "not": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotCondition"
+              }
+            ]
+          },
+          "sustained": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SustainedCondition"
+              }
+            ]
+          },
+          "staleness": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StalenessCondition"
+              }
+            ]
+          },
+          "predicted": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PredictedCondition"
+              }
+            ]
+          },
+          "trend": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrendCondition"
+              }
+            ]
+          },
+          "time_of_day": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeOfDayCondition"
+              }
+            ]
+          },
+          "iob": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IobCondition"
+              }
+            ]
+          },
+          "cob": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CobCondition"
+              }
+            ]
+          },
+          "reservoir": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReservoirCondition"
+              }
+            ]
+          },
+          "site_age": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SiteAgeCondition"
+              }
+            ]
+          },
+          "sensor_age": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SensorAgeCondition"
+              }
+            ]
+          },
+          "alert_state": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AlertStateCondition"
+              }
+            ]
+          },
+          "loop_stale": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoopStaleCondition"
+              }
+            ]
+          },
+          "loop_enaction_stale": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoopEnactionStaleCondition"
+              }
+            ]
+          },
+          "pump_suspended": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpSuspendedCondition"
+              }
+            ]
+          },
+          "pump_battery": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpBatteryCondition"
+              }
+            ]
+          },
+          "temp_basal": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TempBasalCondition"
+              }
+            ]
+          },
+          "uploader_battery": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UploaderBatteryCondition"
+              }
+            ]
+          },
+          "override_active": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OverrideActiveCondition"
+              }
+            ]
+          },
+          "sensitivity_ratio": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SensitivityRatioCondition"
+              }
+            ]
+          },
+          "do_not_disturb": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DoNotDisturbCondition"
+              }
+            ]
+          }
+        }
+      },
+      "ThresholdCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "RateOfChangeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "rate": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "SignalLossCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeout_minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CompositeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConditionNode"
+            }
+          }
+        }
+      },
+      "NotCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "child": {
+            "$ref": "#/components/schemas/ConditionNode"
+          }
+        }
+      },
+      "SustainedCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "child": {
+            "$ref": "#/components/schemas/ConditionNode"
+          }
+        }
+      },
+      "StalenessCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PredictedCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "within_minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TrendCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bucket": {
+            "type": "string"
+          }
+        }
+      },
+      "TimeOfDayCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "IobCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "CobCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "ReservoirCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "SiteAgeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "SensorAgeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "AlertStateCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "alert_id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "LoopStaleCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "LoopEnactionStaleCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PumpSuspendedCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "PumpBatteryCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "TempBasalCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "metric": {
+            "$ref": "#/components/schemas/TempBasalMetric"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "TempBasalMetric": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Rate",
+          "PercentOfScheduled"
+        ],
+        "enum": [
+          "rate",
+          "percent_of_scheduled"
+        ]
+      },
+      "UploaderBatteryCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "OverrideActiveCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "SensitivityRatioCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "DoNotDisturbCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
       "AuthErrorCodesMetadata": {
         "type": "object",
         "description": "Metadata about authentication error codes for NSwag generation",
@@ -31407,7 +32175,7 @@
           "token": {
             "type": "string"
           },
-          "escalationStepId": {
+          "alertRuleChannelId": {
             "type": "string",
             "format": "guid"
           },
@@ -31431,7 +32199,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "escalationStepId": {
+          "alertRuleChannelId": {
             "type": "string",
             "format": "guid"
           },
@@ -31514,47 +32282,56 @@
           }
         }
       },
-      "AlertRuleResponse": {
+      "AlertReplayDryRunRequest": {
         "type": "object",
+        "description": "Request body for the dry-run replay endpoint. Id is\noptional: when present and matching an existing rule it replaces it for the simulation;\notherwise the rule is appended for the call.",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "nullable": true
+          },
+          "rule": {
+            "$ref": "#/components/schemas/ReplayRuleDefinition"
+          }
+        }
+      },
+      "ReplayRuleDefinition": {
+        "type": "object",
+        "description": "In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save\nshape — the controller doesn't deserialise the condition tree itself, just the\nConditionParams JSON blob the rule body would have stored.",
         "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
-            "format": "guid"
+            "format": "guid",
+            "nullable": true
           },
           "name": {
             "type": "string"
           },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
           "conditionType": {
             "$ref": "#/components/schemas/AlertConditionType"
           },
-          "conditionParams": {},
-          "isEnabled": {
-            "type": "boolean"
-          },
-          "sortOrder": {
-            "type": "integer",
-            "format": "int32"
+          "conditionParams": {
+            "type": "string"
           },
           "severity": {
             "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "allowThroughDnd": {
+            "type": "boolean"
           },
           "autoResolveEnabled": {
             "type": "boolean"
           },
           "autoResolveParams": {
+            "type": "string",
             "nullable": true
-          },
-          "clientConfiguration": {},
-          "schedules": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlertScheduleResponse"
-            }
           }
         }
       },
@@ -31585,7 +32362,8 @@
           "TempBasal",
           "UploaderBattery",
           "OverrideActive",
-          "SensitivityRatio"
+          "SensitivityRatio",
+          "DoNotDisturb"
         ],
         "enum": [
           "threshold",
@@ -31611,10 +32389,11 @@
           "temp_basal",
           "uploader_battery",
           "override_active",
-          "sensitivity_ratio"
+          "sensitivity_ratio",
+          "do_not_disturb"
         ]
       },
-      "AlertScheduleResponse": {
+      "AlertRuleResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -31625,72 +32404,45 @@
           "name": {
             "type": "string"
           },
-          "isDefault": {
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "conditionType": {
+            "$ref": "#/components/schemas/AlertConditionType"
+          },
+          "conditionParams": {},
+          "isEnabled": {
             "type": "boolean"
           },
-          "daysOfWeek": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "startTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "endTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "timezone": {
-            "type": "string"
-          },
-          "quietHoursStart": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursEnd": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursOverrideCritical": {
-            "type": "boolean"
-          },
-          "escalationSteps": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlertEscalationStepResponse"
-            }
-          }
-        }
-      },
-      "AlertEscalationStepResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "stepOrder": {
+          "sortOrder": {
             "type": "integer",
             "format": "int32"
           },
-          "delaySeconds": {
-            "type": "integer",
-            "format": "int32"
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
           },
+          "allowThroughDnd": {
+            "type": "boolean",
+            "description": "When true, this rule still fires while the tenant is in Do Not Disturb mode.\n            Critical rules implicitly bypass DND regardless of this flag."
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
+          },
+          "clientConfiguration": {},
           "channels": {
             "type": "array",
+            "description": "Flat list of delivery channels. Dispatched in parallel when the rule fires.",
             "items": {
-              "$ref": "#/components/schemas/AlertStepChannelResponse"
+              "$ref": "#/components/schemas/AlertRuleChannelResponse"
             }
           }
         }
       },
-      "AlertStepChannelResponse": {
+      "AlertRuleChannelResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -31707,6 +32459,10 @@
           "destinationLabel": {
             "type": "string",
             "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -31742,6 +32498,9 @@
               }
             ]
           },
+          "allowThroughDnd": {
+            "type": "boolean"
+          },
           "autoResolveEnabled": {
             "type": "boolean"
           },
@@ -31751,91 +32510,16 @@
           "clientConfiguration": {
             "nullable": true
           },
-          "schedules": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/CreateAlertScheduleRequest"
-            }
-          }
-        }
-      },
-      "CreateAlertScheduleRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string",
-            "nullable": true
-          },
-          "isDefault": {
-            "type": "boolean"
-          },
-          "daysOfWeek": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "startTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "endTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "timezone": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursEnabled": {
-            "type": "boolean"
-          },
-          "quietHoursStart": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursEnd": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursOverrideCritical": {
-            "type": "boolean"
-          },
-          "escalationSteps": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/CreateAlertEscalationStepRequest"
-            }
-          }
-        }
-      },
-      "CreateAlertEscalationStepRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "stepOrder": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "delaySeconds": {
-            "type": "integer",
-            "format": "int32"
-          },
           "channels": {
             "type": "array",
             "nullable": true,
             "items": {
-              "$ref": "#/components/schemas/CreateAlertStepChannelRequest"
+              "$ref": "#/components/schemas/CreateAlertRuleChannelRequest"
             }
           }
         }
       },
-      "CreateAlertStepChannelRequest": {
+      "CreateAlertRuleChannelRequest": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -31843,7 +32527,9 @@
             "$ref": "#/components/schemas/ChannelType"
           },
           "destination": {
-            "type": "string"
+            "type": "string",
+            "description": "Channel-specific address: webhook URL, chat handle, etc. Empty for in-app/web-push.",
+            "nullable": true
           },
           "destinationLabel": {
             "type": "string",
@@ -31883,6 +32569,9 @@
               }
             ]
           },
+          "allowThroughDnd": {
+            "type": "boolean"
+          },
           "autoResolveEnabled": {
             "type": "boolean"
           },
@@ -31892,11 +32581,11 @@
           "clientConfiguration": {
             "nullable": true
           },
-          "schedules": {
+          "channels": {
             "type": "array",
             "nullable": true,
             "items": {
-              "$ref": "#/components/schemas/CreateAlertScheduleRequest"
+              "$ref": "#/components/schemas/CreateAlertRuleChannelRequest"
             }
           }
         }
@@ -31911,6 +32600,25 @@
             "items": {
               "type": "string",
               "format": "guid"
+            }
+          }
+        }
+      },
+      "TestFireDryRunRequest": {
+        "type": "object",
+        "description": "Request body for the dry-run test fire endpoint. Mirrors the editor's in-memory rule\nshape — only the fields needed to render a notification.",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateAlertRuleChannelRequest"
             }
           }
         }
@@ -31967,24 +32675,16 @@
             "type": "string",
             "format": "guid"
           },
-          "scheduleId": {
-            "type": "string",
-            "format": "guid"
-          },
           "status": {
             "type": "string"
-          },
-          "currentStepOrder": {
-            "type": "integer",
-            "format": "int32"
           },
           "triggeredAt": {
             "type": "string",
             "format": "date-time"
           },
-          "nextEscalationAt": {
+          "suppressionReason": {
             "type": "string",
-            "format": "date-time",
+            "description": "One of \"dnd\" when delivery was suppressed at fire time, otherwise null.",
             "nullable": true
           }
         }
@@ -32344,6 +33044,78 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          }
+        }
+      },
+      "TenantAlertSettingsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dndManualActive": {
+            "type": "boolean",
+            "description": "True when the user has manually toggled DND on."
+          },
+          "dndManualUntil": {
+            "type": "string",
+            "description": "UTC instant at which a manually-activated DND auto-expires. Null = indefinite.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dndManualStartedAt": {
+            "type": "string",
+            "description": "UTC instant at which DND was most recently activated. Anchors sustained\n            do_not_disturb conditions.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dndScheduleEnabled": {
+            "type": "boolean",
+            "description": "True when a recurring scheduled DND window is configured."
+          },
+          "dndScheduleStart": {
+            "type": "string",
+            "description": "Local-time start of the scheduled DND window (in Timezone).",
+            "format": "time",
+            "nullable": true
+          },
+          "dndScheduleEnd": {
+            "type": "string",
+            "description": "Local-time end of the scheduled DND window. Cross-midnight windows allowed.",
+            "format": "time",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone (e.g. Europe/London) for the scheduled window."
+          }
+        }
+      },
+      "UpdateTenantAlertSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dndManualActive": {
+            "type": "boolean"
+          },
+          "dndManualUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dndScheduleEnabled": {
+            "type": "boolean"
+          },
+          "dndScheduleStart": {
+            "type": "string",
+            "format": "time",
+            "nullable": true
+          },
+          "dndScheduleEnd": {
+            "type": "string",
+            "format": "time",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string"
           }
         }
       },

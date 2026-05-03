@@ -167,6 +167,24 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             }
         }
 
+        // DND state is fetched unconditionally — engine-level suppression in the orchestrator
+        // applies to every rule regardless of whether its tree references the do_not_disturb
+        // condition fact. Gating on a NeedsDoNotDisturb walker flag would silently exempt
+        // every typical glucose/threshold rule from suppression, which is the opposite of
+        // what users expect. The lookup is one indexed row from `tenant_alert_settings` per
+        // evaluation pass — cheap enough to make unconditional.
+        if (!isReplay)
+        {
+            var settings = await _deps.Alerts.GetTenantAlertSettingsAsync(tenantId, ct);
+            var projection = settings.Resolve(now);
+            enriched = enriched with
+            {
+                ActiveDoNotDisturb = projection is null
+                    ? null
+                    : new DoNotDisturbSnapshot(projection.StartedAt, projection.Source),
+            };
+        }
+
         enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, ct);
 
         return enriched;

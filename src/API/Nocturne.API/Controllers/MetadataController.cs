@@ -225,6 +225,26 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// Get the alert condition tree shape. Exists solely so NSwag generates TypeScript
+    /// interfaces for <see cref="ConditionNode"/> and every condition payload record
+    /// — they're stored as opaque JSON on the rule entity and not otherwise reachable
+    /// through a controller signature.
+    /// </summary>
+    [HttpGet("alert-condition-types")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(AlertConditionTypesMetadata), 200)]
+    public ActionResult<AlertConditionTypesMetadata> GetAlertConditionTypes()
+    {
+        return Ok(new AlertConditionTypesMetadata
+        {
+            Sample = new ConditionNode("threshold"),
+            TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
+            Description = "Polymorphic ConditionNode shape used by alert rules.",
+        });
+    }
+
+    /// <summary>
     /// Get authentication error codes metadata
     /// This endpoint ensures NSwag generates TypeScript types for AuthErrorCode
     /// </summary>
@@ -611,6 +631,22 @@ public class DataSourceCategoriesMetadata
     /// <summary>
     /// Description of the data source categories
     /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Forces NSwag to emit TypeScript interfaces for <see cref="ConditionNode"/> and
+/// every condition payload record — they're stored as opaque JSON on the rule entity
+/// and otherwise never appear in a controller signature.
+/// </summary>
+public class AlertConditionTypesMetadata
+{
+    /// <summary>A sample <see cref="ConditionNode"/>; pulls every sub-record into the OpenAPI schema.</summary>
+    public ConditionNode? Sample { get; set; }
+
+    /// <summary>All <see cref="TempBasalMetric"/> values.</summary>
+    public TempBasalMetric[] TempBasalMetrics { get; set; } = [];
+
     public string Description { get; set; } = string.Empty;
 }
 

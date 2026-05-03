@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { CreateAlertInviteRequestSchema } from '$lib/api/generated/schemas';
 import { type CreateAlertInviteRequest } from '$api';
 
-/** Generate an invite link for a follower to join an escalation step. */
+/** Generate an invite link for a follower to attach to a rule channel. */
 export const createInvite = command(CreateAlertInviteRequestSchema, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {

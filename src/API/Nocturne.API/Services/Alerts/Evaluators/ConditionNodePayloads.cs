@@ -51,6 +51,7 @@ internal static class ConditionNodePayloads
             "uploader_battery" => node.UploaderBattery,
             "override_active" => node.OverrideActive,
             "sensitivity_ratio" => node.SensitivityRatio,
+            "do_not_disturb" => node.DoNotDisturb,
             _ => null,
         };
 
