@@ -96,6 +96,18 @@
     /** External prediction data (e.g. historical predictions from APS snapshots).
      *  When provided, bypasses the internal live prediction fetch. */
     externalPredictionData?: PredictionData | null;
+    /**
+     * Optional overlay rendered inside the chart's Svg layer with access to the
+     * chart's scales. Lets callers (e.g. the alert replay simulator) draw event
+     * markers, playheads, etc. without forking the chart.
+     */
+    annotations?: import("svelte").Snippet<[{
+      xScale: import("d3-scale").ScaleTime<number, number>;
+      yScale: import("d3-scale").ScaleLinear<number, number>;
+      width: number;
+      height: number;
+      padding: { top: number; right: number; bottom: number; left: number };
+    }]>;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -124,6 +136,7 @@
     initialChartData,
     streamedHistoricalData,
     externalPredictionData,
+    annotations,
   }: ComponentProps = $props();
 
   // Selection mode is enabled when onSelectionChange callback is provided
@@ -1233,6 +1246,14 @@
               />
             {/each}
           {/if}
+
+          {@render annotations?.({
+            xScale: context.xScale,
+            yScale: context.yScale,
+            width: context.width,
+            height: context.height,
+            padding: { left: 48, bottom: 30, top: 8, right: 48 },
+          })}
 
           <!-- Basal highlight -->
           {#if showBasal}
