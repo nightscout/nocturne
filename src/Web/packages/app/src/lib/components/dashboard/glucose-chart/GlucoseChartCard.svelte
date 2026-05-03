@@ -139,6 +139,10 @@
     annotations,
   }: ComponentProps = $props();
 
+  // Shared so the annotations snippet payload reports the same padding the
+  // Layerchart `<Chart>` uses internally — preventing the two from drifting.
+  const CHART_PADDING = { left: 48, bottom: 30, top: 8, right: 48 } as const;
+
   // Selection mode is enabled when onSelectionChange callback is provided
   const isSelectionMode = $derived(!!onSelectionChange);
 
@@ -1049,7 +1053,7 @@
     xScale={scaleTime()}
     xDomain={[chartXDomain.from, chartXDomain.to]}
     yDomain={[0, glucoseYMax]}
-    padding={{ left: 48, bottom: 30, top: 8, right: 48 }}
+    padding={CHART_PADDING}
     tooltip={{ mode: "quadtree-x" }}
   >
     {#snippet children({ context })}
@@ -1252,7 +1256,7 @@
             yScale: context.yScale,
             width: context.width,
             height: context.height,
-            padding: { left: 48, bottom: 30, top: 8, right: 48 },
+            padding: CHART_PADDING,
           })}
 
           <!-- Basal highlight -->
