@@ -1,7 +1,6 @@
 using Moq;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -10,9 +9,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Treatments;
 
 /// <summary>
-/// Complete IOB calculation tests with 1:1 legacy JavaScript compatibility
-/// Tests exact algorithms from ClientApp/mocha-tests/iob.test.js
-/// NO SIMPLIFICATIONS - Must match legacy behavior exactly
+/// Complete IOB calculation tests with 1:1 legacy JavaScript compatibility.
+/// Tests exact algorithms from <c>ClientApp/mocha-tests/iob.test.js</c> against the
+/// snapshot-based <see cref="IobService"/> overloads.
 /// </summary>
 [Parity("iob.test.js")]
 public class IobServiceTests
@@ -20,33 +19,19 @@ public class IobServiceTests
     private readonly IobService _iobService;
     private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepo;
     private readonly Mock<IPumpSnapshotRepository> _pumpSnapshotRepo;
+    private readonly TherapySnapshot _defaultSnapshot;
 
-    // Default test profile values matching the old TestProfile
     private const double DefaultDIA = 3.0;
     private const double DefaultSensitivity = 95.0;
     private const double DefaultBasalRate = 1.0;
 
     public IobServiceTests()
     {
-        var therapySettings = new Mock<ITherapySettingsResolver>();
-        therapySettings
-            .Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultDIA);
-
-        var sensitivityResolver = new Mock<ISensitivityResolver>();
-        sensitivityResolver
-            .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultSensitivity);
-
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
+        _defaultSnapshot = BuildSnapshot(DefaultDIA, DefaultSensitivity, DefaultBasalRate);
 
         _apsSnapshotRepo = new Mock<IApsSnapshotRepository>();
         _pumpSnapshotRepo = new Mock<IPumpSnapshotRepository>();
 
-        // Default: repos return empty results
         _apsSnapshotRepo
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
@@ -55,60 +40,43 @@ public class IobServiceTests
             .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
 
         _iobService = new IobService(
-            therapySettings.Object,
-            sensitivityResolver.Object,
-            basalRateResolver.Object,
             _apsSnapshotRepo.Object,
-            _pumpSnapshotRepo.Object
+            _pumpSnapshotRepo.Object,
+            BuildTimelineResolver(_defaultSnapshot).Object
         );
     }
 
-    private static IobService CreateServiceWithDIA(double dia)
+    private static TherapySnapshot BuildSnapshot(double dia, double sens, double basal)
     {
-        var therapySettings = new Mock<ITherapySettingsResolver>();
-        therapySettings
-            .Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(dia);
-
-        var sensitivityResolver = new Mock<ISensitivityResolver>();
-        sensitivityResolver
-            .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultSensitivity);
-
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
-
-        var apsRepo = new Mock<IApsSnapshotRepository>();
-        apsRepo
-            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
-        var pumpRepo = new Mock<IPumpSnapshotRepository>();
-        pumpRepo
-            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
-
-        return new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object, apsRepo.Object, pumpRepo.Object);
+        return new TherapySnapshot(
+            dia: dia,
+            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+            carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
+            timezone: null,
+            ccpPercentage: null,
+            ccpTimeshiftMs: 0,
+            sensitivityEntries: new[] { new ScheduleEntry { Value = sens, TimeAsSeconds = 0 } },
+            carbRatioEntries: null,
+            basalEntries: new[] { new ScheduleEntry { Value = basal, TimeAsSeconds = 0 } }
+        );
     }
 
-    private static IobService CreateServiceWithSensitivity(double sens)
+    private static Mock<ITherapyTimelineResolver> BuildTimelineResolver(TherapySnapshot snapshot)
     {
-        var therapySettings = new Mock<ITherapySettingsResolver>();
-        therapySettings
-            .Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultDIA);
+        var resolver = new Mock<ITherapyTimelineResolver>();
+        resolver
+            .Setup(r => r.GetSnapshotAtAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot);
+        resolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline(new[] { new TherapySegment(from, to, snapshot) })
+            );
+        return resolver;
+    }
 
-        var sensitivityResolver = new Mock<ISensitivityResolver>();
-        sensitivityResolver
-            .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sens);
-
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
-            .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DefaultBasalRate);
-
+    private static IobService BuildService(TherapySnapshot snapshot)
+    {
         var apsRepo = new Mock<IApsSnapshotRepository>();
         apsRepo
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
@@ -118,7 +86,7 @@ public class IobServiceTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
 
-        return new IobService(therapySettings.Object, sensitivityResolver.Object, basalRateResolver.Object, apsRepo.Object, pumpRepo.Object);
+        return new IobService(apsRepo.Object, pumpRepo.Object, BuildTimelineResolver(snapshot).Object);
     }
 
     [Fact]
@@ -127,7 +95,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time - 1, Insulin = 1.0 };
 
-        var result = _iobService.CalcTreatment(treatment, time);
+        var result = _iobService.CalcTreatment(treatment, time, _defaultSnapshot);
 
         Assert.Equal(1.0, result.IobContrib, 2);
     }
@@ -138,7 +106,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time - 1, Insulin = 1.0 };
 
-        var result = _iobService.CalcTreatment(treatment, time + 60 * 60 * 1000);
+        var result = _iobService.CalcTreatment(treatment, time + 60 * 60 * 1000, _defaultSnapshot);
 
         Assert.True(result.IobContrib < 1.0);
         Assert.True(result.IobContrib > 0.0);
@@ -150,7 +118,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time - 1, Insulin = 1.0 };
 
-        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000);
+        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000, _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib, 3);
     }
@@ -161,7 +129,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time, Insulin = 5.0 };
 
-        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000 - 90 * 1000);
+        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000 - 90 * 1000, _defaultSnapshot);
 
         Assert.True(result.IobContrib >= 0.0);
     }
@@ -170,11 +138,12 @@ public class IobServiceTests
     public void CalcTreatment_4HourDIA_ShouldUseCorrectDuration()
     {
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var service = CreateServiceWithDIA(4.0);
+        var snapshot = BuildSnapshot(dia: 4.0, sens: DefaultSensitivity, basal: DefaultBasalRate);
+        var service = BuildService(snapshot);
         var treatment = new Treatment { Mills = time - 1, Insulin = 1.0 };
 
-        var rightAfter = service.CalcTreatment(treatment, time);
-        var afterHour = service.CalcTreatment(treatment, time + 60 * 60 * 1000);
+        var rightAfter = service.CalcTreatment(treatment, time, snapshot);
+        var afterHour = service.CalcTreatment(treatment, time + 60 * 60 * 1000, snapshot);
 
         Assert.Equal(1.0, rightAfter.IobContrib, 2);
         Assert.True(afterHour.IobContrib > 0.5);
@@ -191,7 +160,7 @@ public class IobServiceTests
             new() { Mills = time - 10 * 60 * 1000, Insulin = 1.0 },
         };
 
-        var result = _iobService.FromTreatments(treatments, time);
+        var result = _iobService.FromTreatments(treatments, time, _defaultSnapshot);
 
         Assert.True(result.Iob > 0);
         Assert.True(result.Iob < 4.5);
@@ -213,7 +182,7 @@ public class IobServiceTests
             },
         };
 
-        var result = _iobService.FromTreatments(treatments, time);
+        var result = _iobService.FromTreatments(treatments, time, _defaultSnapshot);
 
         Assert.True(result.BasalIob.HasValue);
         Assert.True(result.BasalIob.Value > 0);
@@ -315,8 +284,6 @@ public class IobServiceTests
             new() { Mills = time - 30 * 60 * 1000, Insulin = 2.0 },
         };
 
-        // ApsSnapshot older than 30 minutes - should be filtered out by the time range query
-        // (the repo query uses recentTime..futureTime, so stale data won't be returned)
         _apsSnapshotRepo
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
@@ -489,7 +456,7 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.True(result.IobContrib > 0);
     }
@@ -507,7 +474,7 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib);
     }
@@ -525,7 +492,7 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib);
     }
@@ -543,7 +510,7 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Suspended,
         };
 
-        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib);
     }
@@ -561,7 +528,7 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib);
     }
@@ -579,7 +546,7 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib);
     }
@@ -597,8 +564,8 @@ public class IobServiceTests
             Origin = TempBasalOrigin.Algorithm,
         };
 
-        var earlier = _iobService.CalcTempBasalIob(tempBasal, now.AddMinutes(-30).ToUnixTimeMilliseconds());
-        var later = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds());
+        var earlier = _iobService.CalcTempBasalIob(tempBasal, now.AddMinutes(-30).ToUnixTimeMilliseconds(), _defaultSnapshot);
+        var later = _iobService.CalcTempBasalIob(tempBasal, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.True(earlier.IobContrib > later.IobContrib);
         Assert.True(later.IobContrib > 0);
@@ -630,7 +597,7 @@ public class IobServiceTests
             },
         };
 
-        var result = _iobService.FromTempBasals(tempBasals, now.ToUnixTimeMilliseconds());
+        var result = _iobService.FromTempBasals(tempBasals, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.True(result.BasalIob.HasValue);
         Assert.True(result.BasalIob!.Value > 0);
@@ -639,7 +606,7 @@ public class IobServiceTests
     [Fact]
     public void FromTempBasals_EmptyList_ShouldReturnZero()
     {
-        var result = _iobService.FromTempBasals(new List<TempBasal>(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = _iobService.FromTempBasals(new List<TempBasal>(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.Iob);
         Assert.Null(result.BasalIob);
@@ -660,7 +627,7 @@ public class IobServiceTests
             },
         };
 
-        var result = _iobService.FromTempBasals(tempBasals, now.ToUnixTimeMilliseconds());
+        var result = _iobService.FromTempBasals(tempBasals, now.ToUnixTimeMilliseconds(), _defaultSnapshot);
 
         Assert.Equal(0.0, result.Iob);
         Assert.True(result.BasalIob.HasValue);
@@ -685,7 +652,7 @@ public class IobServiceTests
             },
         };
 
-        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000);
+        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000, _defaultSnapshot);
 
         Assert.True(result.IobContrib > 0, "IOB should still be active at 3hrs with 5hr DIA");
     }
@@ -696,7 +663,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time - 1, Insulin = 1.0, InsulinContext = null };
 
-        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000);
+        var result = _iobService.CalcTreatment(treatment, time + 3 * 60 * 60 * 1000, _defaultSnapshot);
 
         Assert.Equal(0.0, result.IobContrib, 3);
     }
@@ -717,8 +684,8 @@ public class IobServiceTests
         var treatmentWithoutContext = new Treatment { Mills = time - 1, Insulin = 1.0, InsulinContext = null };
 
         var atTime = time + 80 * 60 * 1000;
-        var resultWithContext = _iobService.CalcTreatment(treatmentWithContext, atTime);
-        var resultWithoutContext = _iobService.CalcTreatment(treatmentWithoutContext, atTime);
+        var resultWithContext = _iobService.CalcTreatment(treatmentWithContext, atTime, _defaultSnapshot);
+        var resultWithoutContext = _iobService.CalcTreatment(treatmentWithoutContext, atTime, _defaultSnapshot);
 
         Assert.NotEqual(Math.Round(resultWithContext.IobContrib, 5), Math.Round(resultWithoutContext.IobContrib, 5));
     }
@@ -741,7 +708,7 @@ public class IobServiceTests
             new() { Mills = time - 1, Insulin = 1.0, InsulinContext = null },
         };
 
-        var result = _iobService.FromTreatments(treatments, time + 3 * 60 * 60 * 1000);
+        var result = _iobService.FromTreatments(treatments, time + 3 * 60 * 60 * 1000, _defaultSnapshot);
 
         Assert.True(result.Iob > 0, "Should have IOB from the 5hr DIA treatment");
         Assert.True(result.Iob < 1.0, "Should be less than full dose since one treatment is fully decayed");
@@ -756,9 +723,10 @@ public class IobServiceTests
     {
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatments = new List<Treatment> { new() { Mills = time, Insulin = 1.0 } };
-        var service = CreateServiceWithSensitivity(50);
+        var snapshot = BuildSnapshot(DefaultDIA, sens: 50, DefaultBasalRate);
+        var service = BuildService(snapshot);
 
-        var result = service.FromTreatments(treatments, time);
+        var result = service.FromTreatments(treatments, time, snapshot);
 
         Assert.Equal(1.0, result.Iob, 2);
         Assert.Equal(0.0, result.Activity ?? 0.0, 3);
@@ -770,7 +738,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time - 30 * 60 * 1000, Insulin = 1.0 };
 
-        var result = _iobService.CalcTreatment(treatment, time);
+        var result = _iobService.CalcTreatment(treatment, time, _defaultSnapshot);
 
         var expectedIob = 1.0 * (1.0 - 0.001852 * 49.0 + 0.001852 * 7.0);
         Assert.Equal(expectedIob, result.IobContrib, 5);
@@ -782,7 +750,7 @@ public class IobServiceTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var treatment = new Treatment { Mills = time - 120 * 60 * 1000, Insulin = 1.0 };
 
-        var result = _iobService.CalcTreatment(treatment, time);
+        var result = _iobService.CalcTreatment(treatment, time, _defaultSnapshot);
 
         var expectedIob = 1.0 * (0.001323 * 81.0 - 0.054233 * 9.0 + 0.55556);
         Assert.Equal(expectedIob, result.IobContrib, 5);

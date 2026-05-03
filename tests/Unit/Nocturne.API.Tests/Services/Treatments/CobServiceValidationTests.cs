@@ -22,6 +22,9 @@ public class CobServiceValidationTests
     {
         var logger = new Mock<ILogger<Nocturne.API.Services.Treatments.CobService>>();
         var iobService = new Mock<IIobService>();
+        iobService
+            .Setup(s => s.FromTreatments(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<long>(), It.IsAny<TherapySnapshot>()))
+            .Returns(new IobResult { Activity = 0.0 });
 
         var sensitivity = new Mock<ISensitivityResolver>();
         sensitivity.Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(50.0);
@@ -36,8 +39,24 @@ public class CobServiceValidationTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
+        var timelineResolver = new Mock<ITherapyTimelineResolver>();
+        var snapshot = new TherapySnapshot(
+            dia: 3.0,
+            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+            carbsPerHour: 30.0,
+            timezone: null,
+            ccpPercentage: null,
+            ccpTimeshiftMs: 0,
+            sensitivityEntries: new[] { new ScheduleEntry { Value = 50.0, TimeAsSeconds = 0 } },
+            carbRatioEntries: new[] { new ScheduleEntry { Value = 15.0, TimeAsSeconds = 0 } },
+            basalEntries: null
+        );
+        timelineResolver
+            .Setup(r => r.GetSnapshotAtAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot);
+
         _cobService = new Nocturne.API.Services.Treatments.CobService(
-            logger.Object, iobService.Object, sensitivity.Object, carbRatio.Object, therapySettings.Object, _apsSnapshotRepo.Object);
+            logger.Object, iobService.Object, _apsSnapshotRepo.Object, timelineResolver.Object);
     }
 
     [Fact]

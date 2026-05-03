@@ -47,18 +47,6 @@ public class CobCalcResult
 }
 
 /// <summary>
-/// COB contribution calculated for a single <see cref="Treatment"/>.
-/// </summary>
-/// <seealso cref="CobService.CalcTreatment"/>
-public class TreatmentCobResult
-{
-    public double CobContrib { get; set; }
-    public double ActivityContrib { get; set; }
-    public long? DecayedBy { get; set; }
-    public bool IsDecaying { get; set; }
-}
-
-/// <summary>
 /// Service for calculating Carbs on Board (COB) with exact 1:1 legacy JavaScript compatibility.
 /// Implements exact algorithms from <c>ClientApp/lib/plugins/cob.js</c> with no simplifications.
 /// </summary>
@@ -89,13 +77,28 @@ public interface ICobService
     );
 
     /// <summary>
-    /// Calculates the COB contribution from a single <see cref="Treatment"/>.
+    /// Sync <c>CobTotal</c> driven by a request-scoped <see cref="TherapySnapshot"/> and a
+    /// pre-fetched <see cref="DeviceCobSnapshot"/>. Eliminates the per-tick async chain
+    /// (APS lookup, resolver awaits) that the legacy <see cref="CobTotalAsync"/> incurs.
     /// </summary>
-    TreatmentCobResult CalcTreatment(
-        Treatment treatment,
-        long time,
-        string? specProfile = null
+    /// <param name="treatments">Carb-bearing <see cref="Treatment"/> records contributing to COB.</param>
+    /// <param name="currentTime">Calculation time in Unix milliseconds.</param>
+    /// <param name="snapshot">Frozen therapy state covering <paramref name="currentTime"/>.</param>
+    /// <param name="deviceCob">Most recent device-reported COB observation, or <c>null</c> when none was found.</param>
+    /// <param name="nowMills">Wall-clock time used for the device-COB freshness check (kept as a parameter for testability).</param>
+    CobResult CobTotal(
+        IReadOnlyList<Treatment> treatments,
+        long currentTime,
+        TherapySnapshot snapshot,
+        DeviceCobSnapshot? deviceCob,
+        long nowMills
     );
+
+    /// <summary>
+    /// Returns the most recent APS-reported COB observation in <c>[queryAtMills - 30min, queryAtMills + 5min]</c>,
+    /// mapped to a <see cref="DeviceCobSnapshot"/>. Returns <c>null</c> when no fresh snapshot has Cob &gt; 0.
+    /// </summary>
+    Task<DeviceCobSnapshot?> GetDeviceCobAsync(long queryAtMills, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -117,10 +120,8 @@ public interface ICobService
 public class CobService(
     ILogger<CobService> logger,
     IIobService iobService,
-    ISensitivityResolver sensitivityResolver,
-    ICarbRatioResolver carbRatioResolver,
-    ITherapySettingsResolver therapySettingsResolver,
-    IApsSnapshotRepository apsSnapshotRepo
+    IApsSnapshotRepository apsSnapshotRepo,
+    ITherapyTimelineResolver therapyTimelineResolver
 ) : ICobService
 {
     // Constants from legacy implementation - exact values required
@@ -134,9 +135,9 @@ public class CobService(
     private const double DEFAULT_CARB_RATIO = 18.0;
 
     /// <summary>
-    /// Main COB calculation function - exact implementation of legacy cobTotal.
-    /// Queries <see cref="IApsSnapshotRepository"/> for device-reported COB,
-    /// falling back to treatment-based calculation when no recent data exists.
+    /// One-shot COB orchestrator: resolves a request-scoped <see cref="TherapySnapshot"/>,
+    /// pre-fetches the latest <see cref="DeviceCobSnapshot"/>, and delegates to the
+    /// sync <see cref="CobTotal"/> overload.
     /// </summary>
     public async Task<CobResult> CobTotalAsync(
         List<Treatment> treatments,
@@ -146,76 +147,17 @@ public class CobService(
     )
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        var hasData = await therapySettingsResolver.HasDataAsync(ct);
-
-        if (hasData)
-        {
-            // Profile validation - exact legacy behavior
-            try
-            {
-                var sens = GetSensitivityOrDefault(currentTime, specProfile);
-                var carbRatio = GetCarbRatioOrDefault(currentTime, specProfile);
-                if (sens <= 0 || carbRatio <= 0)
-                {
-                    logger.LogWarning(
-                        "For the COB plugin to function your treatment profile must have both sens and carbratio fields. Using defaults."
-                    );
-                }
-            }
-            catch
-            {
-                logger.LogWarning(
-                    "For the COB plugin to function your treatment profile must have both sens and carbratio fields. Using defaults."
-                );
-            }
-        }
-
-        // Get COB from APS snapshot (prioritized source)
-        var deviceCob = await GetLatestDeviceCobAsync(currentTime, ct);
-
-        // Legacy logic: if device COB exists and is recent (within 10 minutes), use it
-        if (deviceCob != null && deviceCob.Cob > 0 && deviceCob.Mills.HasValue)
-        {
-            var deviceAge =
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - deviceCob.Mills.Value;
-            if (deviceAge <= 10 * 60 * 1000)
-            {
-                return AddDisplay(deviceCob);
-            }
-        }
-
-        // Fall back to treatment-based COB calculation
-        var treatmentCOB =
-            treatments?.Any() == true
-                ? await FromTreatmentsAsync(treatments, currentTime, specProfile, ct)
-                : new CobResult();
-
-        var result = new CobResult
-        {
-            Cob = treatmentCOB.Cob,
-            Activity = treatmentCOB.Activity,
-            DecayedBy = treatmentCOB.DecayedBy,
-            IsDecaying = treatmentCOB.IsDecaying,
-            CarbsHr = treatmentCOB.CarbsHr,
-            RawCarbImpact = treatmentCOB.RawCarbImpact,
-            LastCarbs = treatmentCOB.LastCarbs,
-            Source = "Care Portal",
-            TreatmentCOB = treatmentCOB,
-        };
-
-        return AddDisplay(result);
+        var snapshot = await therapyTimelineResolver.GetSnapshotAtAsync(currentTime, specProfile, ct);
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var deviceCob = await GetDeviceCobAsync(currentTime, ct);
+        return CobTotal(treatments ?? new List<Treatment>(), currentTime, snapshot, deviceCob, nowMills);
     }
 
-    /// <summary>
-    /// Query <see cref="IApsSnapshotRepository"/> for the most recent device-reported COB
-    /// within the staleness window.
-    /// </summary>
-    internal async Task<CobResult?> GetLatestDeviceCobAsync(long time, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<DeviceCobSnapshot?> GetDeviceCobAsync(long queryAtMills, CancellationToken ct = default)
     {
-        var futureMills = time + 5 * 60 * 1000; // Allow for clocks to be a little off
-        var recentMills = time - RECENCY_THRESHOLD;
-
+        var futureMills = queryAtMills + 5 * 60 * 1000;
+        var recentMills = queryAtMills - RECENCY_THRESHOLD;
         var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
         var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
 
@@ -238,21 +180,20 @@ public class CobService(
                 AidAlgorithm.Loop => "Loop",
                 _ => "OpenAPS",
             };
-
-            return new CobResult
-            {
-                Cob = apsSnapshot.Cob.Value,
-                Source = source,
-                Device = apsSnapshot.Device,
-                Mills = new DateTimeOffset(apsSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            };
+            return new DeviceCobSnapshot(
+                Cob: apsSnapshot.Cob.Value,
+                Mills: new DateTimeOffset(apsSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Source: source,
+                Device: apsSnapshot.Device
+            );
         }
 
         return null;
     }
 
     /// <summary>
-    /// Calculate COB from treatments - exact implementation of legacy fromTreatments
+    /// Treatment-based COB calculation orchestrator. Resolves the request-scoped therapy
+    /// snapshot once and delegates to the sync <c>FromTreatments</c> path.
     /// </summary>
     public async Task<CobResult> FromTreatmentsAsync(
         List<Treatment> treatments,
@@ -262,102 +203,150 @@ public class CobService(
     )
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var snapshot = await therapyTimelineResolver.GetSnapshotAtAsync(currentTime, specProfile, ct);
+        return FromTreatments(treatments ?? new List<Treatment>(), currentTime, snapshot);
+    }
 
+    /// <inheritdoc />
+    public CobResult CobTotal(
+        IReadOnlyList<Treatment> treatments,
+        long currentTime,
+        TherapySnapshot snapshot,
+        DeviceCobSnapshot? deviceCob,
+        long nowMills
+    )
+    {
+        var sens = snapshot.SensitivityAt(currentTime);
+        var carbRatio = snapshot.CarbRatioAt(currentTime);
+        if (sens <= 0 || carbRatio <= 0)
+        {
+            logger.LogWarning(
+                "For the COB plugin to function your treatment profile must have both sens and carbratio fields. Using defaults."
+            );
+        }
+
+        if (deviceCob is { Cob: > 0 } d && nowMills - d.Mills <= 10 * 60 * 1000)
+        {
+            return AddDisplay(new CobResult
+            {
+                Cob = d.Cob,
+                Source = d.Source,
+                Device = d.Device,
+                Mills = d.Mills,
+            });
+        }
+
+        var treatmentCob = treatments.Count > 0
+            ? FromTreatments(treatments, currentTime, snapshot)
+            : new CobResult();
+
+        var result = new CobResult
+        {
+            Cob = treatmentCob.Cob,
+            Activity = treatmentCob.Activity,
+            DecayedBy = treatmentCob.DecayedBy,
+            IsDecaying = treatmentCob.IsDecaying,
+            CarbsHr = treatmentCob.CarbsHr,
+            RawCarbImpact = treatmentCob.RawCarbImpact,
+            LastCarbs = treatmentCob.LastCarbs,
+            Source = "Care Portal",
+            TreatmentCOB = treatmentCob,
+        };
+
+        return AddDisplay(result);
+    }
+
+    private CobResult FromTreatments(
+        IReadOnlyList<Treatment> treatments,
+        long currentTime,
+        TherapySnapshot snapshot
+    )
+    {
         var totalCOB = 0.0;
         Treatment? lastCarbs = null;
         var isDecaying = 0.0;
         var lastDecayedBy = 0L;
 
-        var sortedTreatments = (treatments ?? new List<Treatment>()).OrderBy(t => t.Mills).ToList();
+        var sortedTreatments = treatments.OrderBy(t => t.Mills).ToList();
+        var carbsPerHour = snapshot.CarbsPerHour > 0 ? snapshot.CarbsPerHour : DEFAULT_CARB_ABSORPTION_RATE;
 
         foreach (var treatment in sortedTreatments)
         {
-            var carbAbsorptionRateFromProfile = GetCarbAbsorptionRateOrDefault(treatment.Mills, specProfile);
-
             if (
-                treatment.Carbs.HasValue
-                && treatment.Carbs.Value > 0
-                && treatment.Mills < currentTime
+                !treatment.Carbs.HasValue
+                || treatment.Carbs.Value <= 0
+                || treatment.Mills >= currentTime
             )
             {
-                lastCarbs = treatment;
-                var cCalc = CobCalc(treatment, lastDecayedBy, currentTime, specProfile);
-                if (cCalc == null)
-                    continue;
+                continue;
+            }
 
-                var decaysinHr =
-                    (cCalc.DecayedBy.ToUnixTimeMilliseconds() - currentTime) / 1000.0 / 60.0 / 60.0;
+            lastCarbs = treatment;
+            var cCalc = CobCalc(treatment, lastDecayedBy, currentTime, snapshot);
+            if (cCalc == null)
+                continue;
 
-                if (decaysinHr > -10)
+            var decaysinHr =
+                (cCalc.DecayedBy.ToUnixTimeMilliseconds() - currentTime) / 1000.0 / 60.0 / 60.0;
+
+            if (decaysinHr > -10)
+            {
+                var actStart = iobService.FromTreatments(sortedTreatments, lastDecayedBy, snapshot).Activity ?? double.NaN;
+                var actEnd = iobService.FromTreatments(sortedTreatments, cCalc.DecayedBy.ToUnixTimeMilliseconds(), snapshot).Activity ?? double.NaN;
+
+                var avgActivity = (actStart + actEnd) / 2.0;
+
+                var sensFromSnapshot = snapshot.SensitivityAt(treatment.Mills);
+                if (sensFromSnapshot <= 0)
+                    sensFromSnapshot = DEFAULT_SENSITIVITY;
+                var carbRatioFromSnapshot = snapshot.CarbRatioAt(treatment.Mills);
+                if (carbRatioFromSnapshot <= 0)
+                    carbRatioFromSnapshot = DEFAULT_CARB_RATIO;
+
+                var delayedCarbs = carbRatioFromSnapshot * ((avgActivity * LIVER_SENS_RATIO) / sensFromSnapshot);
+                var delayMinutes = Math.Round((delayedCarbs / carbsPerHour) * 60);
+
+                if (delayMinutes > 0)
                 {
-                    var actStartResult = await iobService
-                        .CalculateTotalAsync(
-                            treatments ?? new List<Treatment>(),
-                            lastDecayedBy,
-                            specProfile,
-                            ct: ct
-                        );
-                    var actStart = actStartResult?.Activity ?? double.NaN;
-
-                    var actEndResult = await iobService
-                        .CalculateTotalAsync(
-                            treatments ?? new List<Treatment>(),
-                            cCalc.DecayedBy.ToUnixTimeMilliseconds(),
-                            specProfile,
-                            ct: ct
-                        );
-                    var actEnd = actEndResult?.Activity ?? double.NaN;
-
-                    var avgActivity = (actStart + actEnd) / 2.0;
-
-                    var sensFromProfile = GetSensitivityOrDefault(treatment.Mills, specProfile);
-                    var carbRatioFromProfile = GetCarbRatioOrDefault(treatment.Mills, specProfile);
-
-                    var delayedCarbs =
-                        carbRatioFromProfile * ((avgActivity * LIVER_SENS_RATIO) / sensFromProfile);
-                    var delayMinutes = Math.Round(
-                        (delayedCarbs / carbAbsorptionRateFromProfile) * 60
-                    );
-
-                    if (delayMinutes > 0)
-                    {
-                        cCalc.DecayedBy = cCalc.DecayedBy.AddMinutes(delayMinutes);
-                        decaysinHr =
-                            (cCalc.DecayedBy.ToUnixTimeMilliseconds() - currentTime)
-                            / 1000.0
-                            / 60.0
-                            / 60.0;
-                    }
+                    cCalc.DecayedBy = cCalc.DecayedBy.AddMinutes(delayMinutes);
+                    decaysinHr =
+                        (cCalc.DecayedBy.ToUnixTimeMilliseconds() - currentTime)
+                        / 1000.0
+                        / 60.0
+                        / 60.0;
                 }
+            }
 
-                lastDecayedBy = cCalc.DecayedBy.ToUnixTimeMilliseconds();
+            lastDecayedBy = cCalc.DecayedBy.ToUnixTimeMilliseconds();
 
-                if (decaysinHr > 0)
-                {
-                    totalCOB += Math.Min(
-                        Convert.ToDouble(treatment.Carbs.Value),
-                        decaysinHr * carbAbsorptionRateFromProfile
-                    );
-                    isDecaying = cCalc.IsDecaying;
-                }
-                else
-                {
-                    totalCOB = 0;
-                }
+            if (decaysinHr > 0)
+            {
+                totalCOB += Math.Min(
+                    Convert.ToDouble(treatment.Carbs.Value),
+                    decaysinHr * carbsPerHour
+                );
+                isDecaying = cCalc.IsDecaying;
+            }
+            else
+            {
+                totalCOB = 0;
             }
         }
 
-        var sens = GetSensitivityOrDefault(currentTime, specProfile);
-        var carbRatio = GetCarbRatioOrDefault(currentTime, specProfile);
-        var carbAbsorptionRate = GetCarbAbsorptionRateOrDefault(currentTime, specProfile);
+        var sensNow = snapshot.SensitivityAt(currentTime);
+        if (sensNow <= 0)
+            sensNow = DEFAULT_SENSITIVITY;
+        var carbRatioNow = snapshot.CarbRatioAt(currentTime);
+        if (carbRatioNow <= 0)
+            carbRatioNow = DEFAULT_CARB_RATIO;
 
-        var rawCarbImpact = (((isDecaying * sens) / carbRatio) * carbAbsorptionRate) / 60.0;
+        var rawCarbImpact = (((isDecaying * sensNow) / carbRatioNow) * carbsPerHour) / 60.0;
 
         return new CobResult
         {
             DecayedBy = lastDecayedBy,
             IsDecaying = isDecaying,
-            CarbsHr = carbAbsorptionRate,
+            CarbsHr = carbsPerHour,
             RawCarbImpact = rawCarbImpact,
             Cob = totalCOB,
             LastCarbs = lastCarbs,
@@ -368,7 +357,7 @@ public class CobService(
         Treatment treatment,
         long lastDecayedBy,
         long time,
-        string? specProfile
+        TherapySnapshot snapshot
     )
     {
         if (!treatment.Carbs.HasValue || treatment.Carbs.Value <= 0)
@@ -381,7 +370,7 @@ public class CobService(
 
         var carbsHr = treatment.AbsorptionTime.HasValue
             ? (treatment.Carbs.Value / (treatment.AbsorptionTime.Value / 60.0))
-            : GetCarbAbsorptionRateOrDefault(treatment.Mills, specProfile);
+            : (snapshot.CarbsPerHour > 0 ? snapshot.CarbsPerHour : DEFAULT_CARB_ABSORPTION_RATE);
 
         carbsHr = ApplyAdvancedAbsorptionAdjustments(carbsHr, treatment);
 
@@ -408,91 +397,6 @@ public class CobService(
             DecayedBy = decayedBy,
             IsDecaying = isDecaying,
             CarbTime = carbTime,
-        };
-    }
-
-    public TreatmentCobResult CalcTreatment(
-        Treatment treatment,
-        long time,
-        string? specProfile = null
-    )
-    {
-        var currentTime = time;
-
-        var hasData = therapySettingsResolver.HasDataAsync().GetAwaiter().GetResult();
-        if (!hasData)
-        {
-            logger.LogWarning("For the COB plugin to function you need a treatment profile");
-            return new TreatmentCobResult();
-        }
-
-        try
-        {
-            var sens = GetSensitivityOrDefault(currentTime, specProfile);
-            var carbRatio = GetCarbRatioOrDefault(currentTime, specProfile);
-            if (sens <= 0 || carbRatio <= 0)
-            {
-                logger.LogWarning(
-                    "For the COB plugin to function your treatment profile must have both sens and carbratio fields"
-                );
-                return new TreatmentCobResult();
-            }
-        }
-        catch
-        {
-            logger.LogWarning(
-                "For the COB plugin to function your treatment profile must have both sens and carbratio fields"
-            );
-            return new TreatmentCobResult();
-        }
-
-        var cobContrib = 0.0;
-        var activityContrib = 0.0;
-        long? decayedBy = null;
-        var isDecaying = false;
-        if (treatment.Carbs.HasValue && treatment.Carbs.Value > 0 && treatment.Mills < currentTime)
-        {
-            var cCalc = CobCalc(treatment, 0, currentTime, specProfile);
-            if (cCalc != null)
-            {
-                var decayedByTime = cCalc.DecayedBy.ToUnixTimeMilliseconds();
-                var decaysinHr = (decayedByTime - currentTime) / 1000.0 / 60.0 / 60.0;
-                if (decaysinHr > 0)
-                {
-                    var carbAbsorptionRate = treatment.AbsorptionTime.HasValue
-                        ? (treatment.Carbs.Value / (treatment.AbsorptionTime.Value / 60.0))
-                        : GetCarbAbsorptionRateOrDefault(treatment.Mills, specProfile);
-
-                    cobContrib = Math.Min(
-                        Convert.ToDouble(treatment.Carbs.Value),
-                        decaysinHr * carbAbsorptionRate
-                    );
-                }
-                else
-                {
-                    cobContrib = 0;
-                }
-
-                decayedBy = decayedByTime;
-                isDecaying = cCalc.IsDecaying > 0;
-            }
-        }
-
-        if (cobContrib > 0)
-        {
-            var carbRatio = GetCarbRatioOrDefault(currentTime, specProfile);
-            if (carbRatio > 0)
-            {
-                activityContrib = cobContrib / carbRatio;
-            }
-        }
-
-        return new TreatmentCobResult
-        {
-            CobContrib = cobContrib,
-            ActivityContrib = activityContrib,
-            DecayedBy = decayedBy,
-            IsDecaying = isDecaying,
         };
     }
 
@@ -537,45 +441,6 @@ public class CobService(
         cob.DisplayLine = $"COB: {display}g";
 
         return cob;
-    }
-
-    private double GetCarbAbsorptionRateOrDefault(long time, string? specProfile)
-    {
-        try
-        {
-            var value = therapySettingsResolver.GetCarbAbsorptionRateAsync(time, specProfile).GetAwaiter().GetResult();
-            return value > 0 ? value : DEFAULT_CARB_ABSORPTION_RATE;
-        }
-        catch
-        {
-            return DEFAULT_CARB_ABSORPTION_RATE;
-        }
-    }
-
-    private double GetSensitivityOrDefault(long time, string? specProfile)
-    {
-        try
-        {
-            var value = sensitivityResolver.GetSensitivityAsync(time, specProfile).GetAwaiter().GetResult();
-            return value > 0 ? value : DEFAULT_SENSITIVITY;
-        }
-        catch
-        {
-            return DEFAULT_SENSITIVITY;
-        }
-    }
-
-    private double GetCarbRatioOrDefault(long time, string? specProfile)
-    {
-        try
-        {
-            var value = carbRatioResolver.GetCarbRatioAsync(time, specProfile).GetAwaiter().GetResult();
-            return value > 0 ? value : DEFAULT_CARB_RATIO;
-        }
-        catch
-        {
-            return DEFAULT_CARB_RATIO;
-        }
     }
 
     #endregion

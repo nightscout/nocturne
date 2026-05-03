@@ -50,8 +50,24 @@ public class CobServiceTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
+        var timelineResolver = new Mock<ITherapyTimelineResolver>();
+        var snapshot = new TherapySnapshot(
+            dia: DefaultDIA,
+            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+            carbsPerHour: DefaultCarbAbsorptionRate,
+            timezone: null,
+            ccpPercentage: null,
+            ccpTimeshiftMs: 0,
+            sensitivityEntries: new[] { new ScheduleEntry { Value = DefaultSensitivity, TimeAsSeconds = 0 } },
+            carbRatioEntries: new[] { new ScheduleEntry { Value = DefaultCarbRatio, TimeAsSeconds = 0 } },
+            basalEntries: new[] { new ScheduleEntry { Value = DefaultBasalRate, TimeAsSeconds = 0 } }
+        );
+        timelineResolver
+            .Setup(r => r.GetSnapshotAtAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot);
+
         _cobService = new Nocturne.API.Services.Treatments.CobService(
-            logger.Object, iobService, sensitivity.Object, carbRatio.Object, therapySettings.Object, _apsSnapshotRepo.Object);
+            logger.Object, iobService, _apsSnapshotRepo.Object, timelineResolver.Object);
     }
 
     [Fact]
@@ -111,54 +127,6 @@ public class CobServiceTests
         Assert.Equal(0.0, result3.Cob, 1);
         Assert.Equal(0.0, result4.Cob, 1);
         Assert.Equal(0.0, result5.Cob, 1);
-    }
-
-    [Fact]
-    public void CalcTreatment_NoCarbs_ShouldReturnZero()
-    {
-        var treatment = new Treatment
-        {
-            Insulin = 1.0,
-            Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        };
-
-        var result = _cobService.CalcTreatment(treatment, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-
-        Assert.Equal(0.0, result.CobContrib);
-        Assert.Equal(0.0, result.ActivityContrib);
-    }
-
-    [Fact]
-    public void CalcTreatment_LinearAbsorption_ShouldDecreaseOverTime()
-    {
-        var startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var treatment = new Treatment { Carbs = 60, Mills = startTime };
-
-        var rightAfter = _cobService.CalcTreatment(treatment, startTime + 1000);
-        var after30Min = _cobService.CalcTreatment(treatment, startTime + 30 * 60 * 1000);
-        var after60Min = _cobService.CalcTreatment(treatment, startTime + 60 * 60 * 1000);
-        var after120Min = _cobService.CalcTreatment(treatment, startTime + 120 * 60 * 1000);
-
-        Assert.True(rightAfter.CobContrib > after30Min.CobContrib);
-        Assert.True(after30Min.CobContrib > after60Min.CobContrib);
-        Assert.True(after60Min.CobContrib > after120Min.CobContrib);
-        Assert.True(after120Min.CobContrib >= 0);
-    }
-
-    [Fact]
-    public void CalcTreatment_WithCustomAbsorptionTime_ShouldUseCustomTime()
-    {
-        var startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var fastTreatment = new Treatment { Carbs = 30, Mills = startTime, AbsorptionTime = 60 };
-        var slowTreatment = new Treatment { Carbs = 30, Mills = startTime, AbsorptionTime = 240 };
-
-        var testTime = startTime + 90 * 60 * 1000;
-
-        var fastResult = _cobService.CalcTreatment(fastTreatment, testTime);
-        var slowResult = _cobService.CalcTreatment(slowTreatment, testTime);
-
-        Assert.True(slowResult.CobContrib > fastResult.CobContrib);
-        Assert.Equal(0.0, fastResult.CobContrib, 1);
     }
 
     #region ApsSnapshot COB Priority Tests
@@ -277,57 +245,33 @@ public class CobServiceTests
 
     #endregion
 
-    #region Advanced COB Tests
-
-    [Fact]
-    public void CalcTreatmentAdvanced_HighFatMeal_ShouldUseSlowAbsorption()
-    {
-        var startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var highFatTreatment = new Treatment { Carbs = 40, Fat = 25, Mills = startTime, Notes = "Pizza with extra cheese" };
-        var normalTreatment = new Treatment { Carbs = 40, Mills = startTime };
-
-        var testTime = startTime + 120 * 60 * 1000;
-
-        var highFatResult = _cobService.CalcTreatment(highFatTreatment, testTime);
-        var normalResult = _cobService.CalcTreatment(normalTreatment, testTime);
-
-        Assert.True(highFatResult.CobContrib > normalResult.CobContrib);
-    }
-
-    [Fact]
-    public void CalcTreatmentAdvanced_FastCarbMeal_ShouldUseFastAbsorption()
-    {
-        var startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var fastTreatment = new Treatment { Carbs = 30, Mills = startTime, Notes = "Glucose tablets for low" };
-        var normalTreatment = new Treatment { Carbs = 30, Mills = startTime };
-
-        var testTime = startTime + 30 * 60 * 1000;
-
-        var fastResult = _cobService.CalcTreatment(fastTreatment, testTime);
-        var normalResult = _cobService.CalcTreatment(normalTreatment, testTime);
-
-        Assert.True(fastResult.CobContrib < normalResult.CobContrib);
-    }
-
-    #endregion
-
     #region Helper Methods and Test Profile
 
     private static IobService CreateDefaultIobService()
     {
-        var therapySettings = new Mock<ITherapySettingsResolver>();
-        therapySettings.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(DefaultDIA);
-        var sensitivity = new Mock<ISensitivityResolver>();
-        sensitivity.Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(DefaultSensitivity);
-        var basalRate = new Mock<IBasalRateResolver>();
-        basalRate.Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(DefaultBasalRate);
         var apsRepo = new Mock<IApsSnapshotRepository>();
         apsRepo.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
         var pumpRepo = new Mock<IPumpSnapshotRepository>();
         pumpRepo.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<PumpSnapshot>());
-        return new IobService(therapySettings.Object, sensitivity.Object, basalRate.Object, apsRepo.Object, pumpRepo.Object);
+        var timelineResolver = new Mock<ITherapyTimelineResolver>();
+        var snapshot = new TherapySnapshot(
+            dia: DefaultDIA,
+            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+            carbsPerHour: DefaultCarbAbsorptionRate,
+            timezone: null,
+            ccpPercentage: null,
+            ccpTimeshiftMs: 0,
+            sensitivityEntries: new[] { new ScheduleEntry { Value = DefaultSensitivity, TimeAsSeconds = 0 } },
+            carbRatioEntries: new[] { new ScheduleEntry { Value = DefaultCarbRatio, TimeAsSeconds = 0 } },
+            basalEntries: new[] { new ScheduleEntry { Value = DefaultBasalRate, TimeAsSeconds = 0 } }
+        );
+        timelineResolver
+            .Setup(r => r.GetSnapshotAtAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot);
+
+        return new IobService(apsRepo.Object, pumpRepo.Object, timelineResolver.Object);
     }
 
     private sealed class OrefIobAdapter : IIobService
@@ -351,12 +295,12 @@ public class CobServiceTests
             return Task.FromResult(new IobResult { Iob = iobData.Iob, Activity = iobData.Activity * DefaultSensitivity, Source = "Care Portal" });
         }
 
-        public IobResult FromTreatments(List<Treatment> treatments, long? time = null, string? specProfile = null)
-            => CalculateTotalAsync(treatments, time, specProfile).GetAwaiter().GetResult();
-        public IobContribution CalcTreatment(Treatment treatment, long? time = null, string? specProfile = null) => new();
-        public IobContribution CalcBasalTreatment(Treatment treatment, long? time = null, string? specProfile = null) => new();
-        public IobContribution CalcTempBasalIob(Nocturne.Core.Models.V4.TempBasal tempBasal, long? time = null, string? specProfile = null) => new();
-        public IobResult FromTempBasals(List<Nocturne.Core.Models.V4.TempBasal> tempBasals, long? time = null, string? specProfile = null) => new();
+        public IobResult FromTreatments(IReadOnlyList<Treatment> treatments, long currentTime, TherapySnapshot snapshot)
+            => CalculateTotalAsync(treatments.ToList(), currentTime).GetAwaiter().GetResult();
+        public IobResult FromTempBasals(IReadOnlyList<Nocturne.Core.Models.V4.TempBasal> tempBasals, long currentTime, TherapySnapshot snapshot) => new();
+        public IobContribution CalcTreatment(Treatment treatment, long currentTime, TherapySnapshot snapshot) => new();
+        public IobContribution CalcBasalTreatment(Treatment treatment, long currentTime, TherapySnapshot snapshot) => new();
+        public IobContribution CalcTempBasalIob(Nocturne.Core.Models.V4.TempBasal tempBasal, long currentTime, TherapySnapshot snapshot) => new();
 
         private static List<OrefModels.OrefTreatment> BuildTreatments(IEnumerable<Treatment> treatments)
         {

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -22,6 +23,7 @@ public class PropertiesService : IPropertiesService
     private readonly IIobService _iobService;
     private readonly ICobService _cobService;
     private readonly IAr2Service _ar2Service;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
 
     // Properties that should be filtered out for security
     private static readonly string[] SecureProperties =
@@ -40,7 +42,8 @@ public class PropertiesService : IPropertiesService
         ILogger<PropertiesService> logger,
         IIobService iobService,
         ICobService cobService,
-        IAr2Service ar2Service
+        IAr2Service ar2Service,
+        ITherapyTimelineResolver therapyTimelineResolver
     )
     {
         _ddataService = ddataService;
@@ -48,6 +51,7 @@ public class PropertiesService : IPropertiesService
         _iobService = iobService;
         _cobService = cobService;
         _ar2Service = ar2Service;
+        _therapyTimelineResolver = therapyTimelineResolver;
     }
 
     /// <inheritdoc />
@@ -330,7 +334,9 @@ public class PropertiesService : IPropertiesService
 
             // Use full COB calculation service - NO SIMPLIFICATIONS
             _logger.LogDebug("SetCobProperties: Calling COB service");
-            var cobResult = await _cobService.CobTotalAsync(treatments, now);
+            var snapshot = await _therapyTimelineResolver.GetSnapshotAtAsync(now);
+            var deviceCob = await _cobService.GetDeviceCobAsync(now);
+            var cobResult = _cobService.CobTotal(treatments, now, snapshot, deviceCob, now);
             _logger.LogDebug("SetCobProperties: COB service returned result, is null: {IsNull}", cobResult == null);
 
             if (cobResult == null)

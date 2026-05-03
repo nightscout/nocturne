@@ -83,18 +83,6 @@
     <!-- Skip NSwag generation during publish to avoid issues with runtime dependencies -->
     <GenerateNSwagClient Condition="'$(PublishDir)' != ''">false</GenerateNSwagClient>
   </PropertyGroup>
-  <!-- Mermaid Diagram SVG Generation — renders .mmd files to SVGs for Scalar docs -->
-  <Target Name="GenerateDiagramSvgs" BeforeTargets="Build">
-    <PropertyGroup>
-      <DiagramsSourceDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../../docs/diagrams'))</DiagramsSourceDir>
-      <DiagramsOutputDir>$(MSBuildProjectDirectory)/wwwroot/diagrams</DiagramsOutputDir>
-    </PropertyGroup>
-    <ItemGroup>
-      <MermaidFiles Include="$(DiagramsSourceDir)/*.mmd" />
-    </ItemGroup>
-    <MakeDir Directories="$(DiagramsOutputDir)" />
-    <Exec Command="npx @mermaid-js/mermaid-cli -i &quot;%(MermaidFiles.Identity)&quot; -o &quot;$(DiagramsOutputDir)/%(MermaidFiles.Filename).svg&quot; -b transparent -c &quot;$(DiagramsSourceDir)/mermaid-config.json&quot;" Condition="'@(MermaidFiles)' != ''" ContinueOnError="true" />
-  </Target>
   <Target Name="GenerateClient" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true'">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
     <Exec Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="false" />

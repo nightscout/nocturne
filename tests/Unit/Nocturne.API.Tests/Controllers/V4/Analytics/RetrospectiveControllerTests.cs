@@ -25,6 +25,7 @@ public class RetrospectiveControllerTests
     private readonly Mock<IEntryService> _entryServiceMock = new();
     private readonly Mock<ITreatmentService> _treatmentServiceMock = new();
     private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
+    private readonly Mock<ITherapyTimelineResolver> _therapyTimelineResolverMock = new();
     private readonly Mock<ILogger<RetrospectiveController>> _loggerMock = new();
 
     private static DeviceStatusProjectionService CreateProjectionService()
@@ -47,6 +48,7 @@ public class RetrospectiveControllerTests
             _treatmentServiceMock.Object,
             CreateProjectionService(),
             _basalRateResolverMock.Object,
+            _therapyTimelineResolverMock.Object,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -91,12 +93,27 @@ public class RetrospectiveControllerTests
             .ReturnsAsync(new IobResult());
 
         _cobServiceMock
-            .Setup(s => s.CobTotalAsync(
-                It.IsAny<List<Treatment>>(),
-                It.IsAny<long?>(),
-                It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CobResult());
+            .Setup(s => s.CobTotal(
+                It.IsAny<IReadOnlyList<Treatment>>(),
+                It.IsAny<long>(),
+                It.IsAny<TherapySnapshot>(),
+                It.IsAny<DeviceCobSnapshot?>(),
+                It.IsAny<long>()))
+            .Returns(new CobResult());
+
+        _therapyTimelineResolverMock
+            .Setup(s => s.GetSnapshotAtAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TherapySnapshot(
+                dia: 3.0,
+                peakMinutes: 75,
+                carbsPerHour: 30.0,
+                timezone: null,
+                ccpPercentage: null,
+                ccpTimeshiftMs: 0,
+                sensitivityEntries: null,
+                carbRatioEntries: null,
+                basalEntries: null
+            ));
 
         _basalRateResolverMock
             .Setup(s => s.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))

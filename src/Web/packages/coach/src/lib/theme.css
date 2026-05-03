@@ -6,6 +6,7 @@
   --coach-text-muted: hsl(0 0% 65%);
   --coach-primary: hsl(210 100% 60%);
   --coach-primary-hover: hsl(210 100% 50%);
+  --coach-primary-text: white;
   --coach-radius: 10px;
   --coach-shadow: 0 8px 32px hsl(0 0% 0% / 0.4);
   --coach-hotspot-size: 12px;
@@ -126,7 +127,7 @@
 
 .coach-btn--primary {
   background: var(--coach-primary);
-  color: white;
+  color: var(--coach-primary-text);
 }
 
 .coach-btn--primary:hover {

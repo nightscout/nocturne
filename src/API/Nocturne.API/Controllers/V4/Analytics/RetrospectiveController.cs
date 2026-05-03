@@ -39,6 +39,7 @@ public class RetrospectiveController : ControllerBase
     private readonly ITreatmentService _treatmentService;
     private readonly DeviceStatusProjectionService _projectionService;
     private readonly IBasalRateResolver _basalRateResolver;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly ILogger<RetrospectiveController> _logger;
     public RetrospectiveController(
         IIobService iobService,
@@ -47,6 +48,7 @@ public class RetrospectiveController : ControllerBase
         ITreatmentService treatmentService,
         DeviceStatusProjectionService projectionService,
         IBasalRateResolver basalRateResolver,
+        ITherapyTimelineResolver therapyTimelineResolver,
         ILogger<RetrospectiveController> logger
     )
     {
@@ -56,6 +58,7 @@ public class RetrospectiveController : ControllerBase
         _treatmentService = treatmentService;
         _projectionService = projectionService;
         _basalRateResolver = basalRateResolver;
+        _therapyTimelineResolver = therapyTimelineResolver;
         _logger = logger;
     }
     /// <summary>
@@ -117,12 +120,11 @@ public class RetrospectiveController : ControllerBase
                 time,
                 ct: cancellationToken
             );
-            // Calculate COB at the specified time
-            var cobResult = await _cobService.CobTotalAsync(
-                treatmentList,
-                time,
-                ct: cancellationToken
-            );
+            // Calculate COB at the specified time via the snapshot path.
+            var snapshot = await _therapyTimelineResolver.GetSnapshotAtAsync(time, ct: cancellationToken);
+            var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var deviceCob = await _cobService.GetDeviceCobAsync(time, cancellationToken);
+            var cobResult = _cobService.CobTotal(treatmentList, time, snapshot, deviceCob, nowMills);
             // Get glucose at the specified time (interpolated)
             var glucoseData = GetGlucoseAtTime(entryList, time);
             // Get basal rate at the specified time
@@ -241,26 +243,38 @@ public class RetrospectiveController : ControllerBase
             var deviceStatusList = deviceStatus?
                 .Where(d => d.Mills >= startMills && d.Mills <= endMills)
                 .ToList() ?? new List<DeviceStatus>();
+            // Resolve once for the day window; segment lookup is in-memory per tick.
+            var timeline = await _therapyTimelineResolver.BuildAsync(startMills, endMills + 1, ct: cancellationToken);
+            var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
             // Calculate data points at each interval
             var dataPoints = new List<RetrospectiveDataPoint>();
             var totalIntervals = (24 * 60) / intervalMinutes;
             for (int i = 0; i < totalIntervals; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
                 var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
                 // Filter treatments relevant to this time point (for IOB calculation)
                 var relevantTreatments = treatmentList
                     .Where(t => t.Mills <= pointTime)
                     .ToList();
+                var snapshot = timeline.SnapshotAt(pointTime);
                 // Calculate IOB
                 var iobResult = _iobService.FromTreatments(
                     relevantTreatments,
-                    pointTime
+                    pointTime,
+                    snapshot
                 );
-                // Calculate COB
-                var cobResult = await _cobService.FromTreatmentsAsync(
+                // Calculate COB — pass deviceCob:null so historical ticks use treatment-only COB
+                // (the legacy FromTreatmentsAsync path skipped device priority for the same reason).
+                var cobResult = _cobService.CobTotal(
                     relevantTreatments,
-                    pointTime
+                    pointTime,
+                    snapshot,
+                    deviceCob: null,
+                    nowMills
                 );
                 // Get glucose at this time
                 var glucose = GetGlucoseAtTime(entryList, pointTime);

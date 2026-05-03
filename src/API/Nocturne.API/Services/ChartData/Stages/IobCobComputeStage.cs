@@ -7,6 +7,7 @@ using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -49,6 +50,8 @@ internal sealed class IobCobComputeStage(
     ICobService cobService,
     ITherapySettingsResolver therapySettingsResolver,
     IBasalRateResolver basalRateResolver,
+    ITherapyTimelineResolver therapyTimelineResolver,
+    IApsSnapshotRepository apsSnapshotRepo,
     IMemoryCache cache,
     ITenantAccessor tenantAccessor,
     ILogger<IobCobComputeStage> logger
@@ -141,11 +144,20 @@ internal sealed class IobCobComputeStage(
         double maxIob = 0,
             maxCob = 0;
 
-        // Pre-compute DIA and COB absorption window for filtering
-        var hasData = await therapySettingsResolver.HasDataAsync(ct);
-        var dia = hasData ? await therapySettingsResolver.GetDIAAsync(endTime, ct: ct) : 3.0;
-        var diaMs = (long)(dia * 60 * 60 * 1000); // DIA in milliseconds
-        var cobAbsorptionMs = 6L * 60 * 60 * 1000; // 6 hours for COB absorption
+        // Build the request-scoped therapy timeline once. SnapshotAt(t) inside the loop
+        // resolves DIA / sensitivity / carb ratio / basal rate / carbsPerHour via in-memory
+        // schedule lookup with a sticky cursor — replacing four nested async resolver awaits per tick.
+        // The window extends one millisecond past endTime so SnapshotAt(endTime) lands inside a segment.
+        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: ct);
+
+        // Pre-fetch the latest device COB once. The freshness check is against wall-clock now,
+        // so the answer is constant across all ticks in this request.
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var deviceCob = await PrefetchDeviceCobAsync(nowMills, ct);
+
+        // DIA at endTime drives the IOB / temp-basal eviction window. Matches legacy behavior.
+        var diaMs = (long)(timeline.SnapshotAt(endTime).Dia * 60 * 60 * 1000);
+        var cobAbsorptionMs = 6L * 60 * 60 * 1000;
 
         // Sort once by Mills/StartMills so the active window can be tracked with two pointers
         // as t advances. The hi index admits entries whose source time is <= t; the lo index
@@ -171,6 +183,8 @@ internal sealed class IobCobComputeStage(
 
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
+            ct.ThrowIfCancellationRequested();
+
             // Admit newly-elapsed entries (Mills/StartMills <= t)
             while (insulinHi < sortedInsulin.Count && sortedInsulin[insulinHi].Mills <= t)
                 insulinHi++;
@@ -193,9 +207,11 @@ internal sealed class IobCobComputeStage(
                     basalLo++;
             }
 
+            var snapshot = timeline.SnapshotAt(t);
+
             var insulinCount = insulinHi - insulinLo;
             var iobResult = insulinCount > 0
-                ? iobService.FromTreatments(sortedInsulin.GetRange(insulinLo, insulinCount), t, null)
+                ? iobService.FromTreatments(sortedInsulin.GetRange(insulinLo, insulinCount), t, snapshot)
                 : new IobResult { Iob = 0 };
 
             var basalIob = 0.0;
@@ -205,7 +221,7 @@ internal sealed class IobCobComputeStage(
                 var basalResult = iobService.FromTempBasals(
                     sortedTempBasals.GetRange(basalLo, basalCount),
                     t,
-                    null
+                    snapshot
                 );
                 basalIob = basalResult.BasalIob ?? 0;
             }
@@ -217,7 +233,7 @@ internal sealed class IobCobComputeStage(
 
             var carbCount = carbHi - carbLo;
             var cobResult = carbCount > 0
-                ? await cobService.CobTotalAsync(sortedCarb.GetRange(carbLo, carbCount), t, null, ct)
+                ? cobService.CobTotal(sortedCarb.GetRange(carbLo, carbCount), t, snapshot, deviceCob, nowMills)
                 : new CobResult { Cob = 0 };
 
             var cob = cobResult.Cob;
@@ -231,6 +247,42 @@ internal sealed class IobCobComputeStage(
         cache.Set(cacheKey, result, IobCobCacheExpiration);
 
         return result;
+    }
+
+    private async Task<DeviceCobSnapshot?> PrefetchDeviceCobAsync(long nowMills, CancellationToken ct)
+    {
+        var futureMills = nowMills + 5 * 60 * 1000;
+        var recentMills = nowMills - 30 * 60 * 1000;
+        var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
+        var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
+
+        var snapshots = await apsSnapshotRepo.GetAsync(
+            from: recentTime,
+            to: futureTime,
+            device: null,
+            source: null,
+            limit: 1,
+            offset: 0,
+            descending: true,
+            ct: ct
+        );
+
+        var snapshot = snapshots.FirstOrDefault();
+        if (snapshot?.Cob is > 0)
+        {
+            var source = snapshot.AidAlgorithm switch
+            {
+                AidAlgorithm.Loop => "Loop",
+                _ => "OpenAPS",
+            };
+            return new DeviceCobSnapshot(
+                Cob: snapshot.Cob.Value,
+                Mills: new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Source: source,
+                Device: snapshot.Device
+            );
+        }
+        return null;
     }
 
     /// <summary>

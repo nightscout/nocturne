@@ -431,6 +431,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
         services.AddScoped<ITherapySettingsResolver, TherapySettingsResolver>();
+        services.AddScoped<ITherapyTimelineResolver, TherapyTimelineResolver>();
         services.AddScoped<ITempBasalResolver, TempBasalResolver>();
         services.AddScoped<IProfileProjectionService, ProfileProjectionService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>

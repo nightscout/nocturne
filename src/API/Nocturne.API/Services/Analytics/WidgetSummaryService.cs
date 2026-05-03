@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -29,6 +30,7 @@ public class WidgetSummaryService : IWidgetSummaryService
     private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly ILogger<WidgetSummaryService> _logger;
 
     /// <summary>
@@ -44,6 +46,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
+        ITherapyTimelineResolver therapyTimelineResolver,
         ILogger<WidgetSummaryService> logger
     )
     {
@@ -54,6 +57,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
+        _therapyTimelineResolver = therapyTimelineResolver;
         _logger = logger;
     }
 
@@ -162,8 +166,11 @@ public class WidgetSummaryService : IWidgetSummaryService
             var iobResult = await _iobService.CalculateTotalAsync(treatments);
             response.Iob = Math.Round(iobResult.Iob * 100) / 100; // Round to 2 decimal places
 
-            // Calculate COB
-            var cobResult = await _cobService.CobTotalAsync(treatments);
+            // Calculate COB via the snapshot path
+            var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var snapshot = await _therapyTimelineResolver.GetSnapshotAtAsync(nowMills);
+            var deviceCob = await _cobService.GetDeviceCobAsync(nowMills);
+            var cobResult = _cobService.CobTotal(treatments, nowMills, snapshot, deviceCob, nowMills);
             response.Cob = Math.Round(cobResult.Cob);
         }
         catch (Exception ex)

@@ -38,67 +38,52 @@ public interface IIobService
     );
 
     /// <summary>
-    /// Calculate IOB from bolus <see cref="Treatment"/> records only.
+    /// Calculate IOB from bolus <see cref="Treatment"/> records using a request-scoped <see cref="TherapySnapshot"/>.
     /// </summary>
-    /// <param name="treatments">Bolus <see cref="Treatment"/> records.</param>
-    /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns><see cref="IobResult"/> from treatments.</returns>
+    /// <remarks>
+    /// Sync alternative to the resolver-backed overload. All profile values (DIA, peak, sensitivity, basal rate)
+    /// come from <paramref name="snapshot"/>, eliminating per-call <c>GetAwaiter().GetResult()</c> in tick loops.
+    /// </remarks>
     IobResult FromTreatments(
-        List<Treatment> treatments,
-        long? time = null,
-        string? specProfile = null
+        IReadOnlyList<Treatment> treatments,
+        long currentTime,
+        TherapySnapshot snapshot
     );
 
     /// <summary>
-    /// Calculate IOB from V4 <see cref="TempBasal"/> records only.
+    /// Calculate IOB from V4 <see cref="TempBasal"/> records using a request-scoped <see cref="TherapySnapshot"/>.
     /// </summary>
-    /// <param name="tempBasals">V4 <see cref="TempBasal"/> records.</param>
-    /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns><see cref="IobResult"/> from temp basals.</returns>
     IobResult FromTempBasals(
-        List<TempBasal> tempBasals,
-        long? time = null,
-        string? specProfile = null
+        IReadOnlyList<TempBasal> tempBasals,
+        long currentTime,
+        TherapySnapshot snapshot
     );
 
     /// <summary>
-    /// Calculate IOB contribution from a single bolus <see cref="Treatment"/>.
+    /// Calculate IOB contribution from a single bolus <see cref="Treatment"/> using a request-scoped <see cref="TherapySnapshot"/>.
     /// </summary>
-    /// <param name="treatment">A bolus <see cref="Treatment"/>.</param>
-    /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns><see cref="IobContribution"/> from this treatment.</returns>
     IobContribution CalcTreatment(
         Treatment treatment,
-        long? time = null,
-        string? specProfile = null
+        long currentTime,
+        TherapySnapshot snapshot
     );
 
     /// <summary>
-    /// Calculate IOB contribution from a single basal <see cref="Treatment"/> (legacy format).
+    /// Calculate basal IOB contribution from a legacy "Temp Basal" <see cref="Treatment"/>
+    /// using a request-scoped <see cref="TherapySnapshot"/>.
     /// </summary>
-    /// <param name="treatment">A basal <see cref="Treatment"/>.</param>
-    /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns><see cref="IobContribution"/> from this basal treatment.</returns>
     IobContribution CalcBasalTreatment(
         Treatment treatment,
-        long? time = null,
-        string? specProfile = null
+        long currentTime,
+        TherapySnapshot snapshot
     );
 
     /// <summary>
-    /// Calculate IOB contribution from a single V4 <see cref="TempBasal"/>.
+    /// Calculate IOB contribution from a single V4 <see cref="TempBasal"/> using a request-scoped <see cref="TherapySnapshot"/>.
     /// </summary>
-    /// <param name="tempBasal">A V4 <see cref="TempBasal"/> record.</param>
-    /// <param name="time">Optional calculation time in Unix milliseconds. Defaults to now.</param>
-    /// <param name="specProfile">Optional specific profile name.</param>
-    /// <returns><see cref="IobContribution"/> from this temp basal.</returns>
     IobContribution CalcTempBasalIob(
         TempBasal tempBasal,
-        long? time = null,
-        string? specProfile = null
+        long currentTime,
+        TherapySnapshot snapshot
     );
 }

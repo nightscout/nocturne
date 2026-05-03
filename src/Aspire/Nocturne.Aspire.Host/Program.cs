@@ -542,10 +542,6 @@ class Program
                 yarp.AddRoute("/openapi/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
-                // Diagram SVGs (served from API static files)
-                yarp.AddRoute("/diagrams/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-
                 // OAuth/OIDC discovery endpoints → API
                 yarp.AddRoute("/.well-known/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);

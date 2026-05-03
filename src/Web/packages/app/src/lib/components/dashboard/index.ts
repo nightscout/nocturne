@@ -5,7 +5,6 @@ export { default as MiniOverviewChart } from './MiniOverviewChart.svelte';
 export { default as PredictionSettings } from './PredictionSettings.svelte';
 export { default as RecentEntriesCard } from './RecentEntriesCard.svelte';
 export { default as RecentTreatmentsCard } from './RecentTreatmentsCard.svelte';
-export { default as OnboardingProgress } from './OnboardingProgress.svelte';
 export { default as WidgetGrid } from './WidgetGrid.svelte';
 
 // Individual widgets

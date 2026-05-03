@@ -85,11 +85,15 @@ public class MetadataPublisherTests
     public async Task PublishConnectorFoodEntriesAsync_DelegatesToConnectorFoodEntryService()
     {
         var entries = new List<ConnectorFoodEntryImport> { new() };
+        _mockConnectorFoodEntryService
+            .Setup(s => s.ImportAsync("default", It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ConnectorFoodEntry> { new() });
 
         var publisher = CreatePublisher();
         var result = await publisher.PublishConnectorFoodEntriesAsync(entries, "test-source");
 
-        result.Should().BeTrue();
+        result.Should().NotBeNull();
+        result.Should().HaveCount(1);
         _mockConnectorFoodEntryService.Verify(
             s => s.ImportAsync("default", It.IsAny<IEnumerable<ConnectorFoodEntryImport>>(), It.IsAny<CancellationToken>()),
             Times.Once

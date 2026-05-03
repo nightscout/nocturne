@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using OpenApi.Remote.Attributes;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 
@@ -20,22 +21,22 @@ public class IobController : ControllerBase
 {
     private readonly IIobService _iobService;
     private readonly ITreatmentService _treatmentService;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly ILogger<IobController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="IobController"/>.
     /// </summary>
-    /// <param name="iobService">Service for insulin-on-board calculations.</param>
-    /// <param name="treatmentService">Service for treatment data retrieval.</param>
-    /// <param name="logger">Logger instance.</param>
     public IobController(
         IIobService iobService,
         ITreatmentService treatmentService,
+        ITherapyTimelineResolver therapyTimelineResolver,
         ILogger<IobController> logger
     )
     {
         _iobService = iobService;
         _treatmentService = treatmentService;
+        _therapyTimelineResolver = therapyTimelineResolver;
         _logger = logger;
     }
 
@@ -112,9 +113,11 @@ public class IobController : ControllerBase
             );
 
             // Calculate IOB from treatments only
+            var snapshot = await _therapyTimelineResolver.GetSnapshotAtAsync(calculationTime, ct: cancellationToken);
             var iobResult = _iobService.FromTreatments(
-                treatments?.ToList() ?? new List<Treatment>(),
-                calculationTime
+                (IReadOnlyList<Treatment>)(treatments?.ToList() ?? new List<Treatment>()),
+                calculationTime,
+                snapshot
             );
 
             return Ok(iobResult);
@@ -174,15 +177,26 @@ public class IobController : ControllerBase
             var hourlyData = new List<HourlyIobData>();
             var totalIntervals = (hours * 60) / intervalMinutes;
 
+            // Resolve once for the request window; segment lookup is in-memory per tick.
+            var timeline = await _therapyTimelineResolver.BuildAsync(
+                calculationStartTime,
+                endTime + 1,
+                ct: cancellationToken
+            );
+            var treatmentList = (IReadOnlyList<Treatment>)(treatments?.ToList() ?? new List<Treatment>());
+
             for (int i = 0; i < totalIntervals; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var timeSlot = calculationStartTime + (i * intervalMinutes * 60 * 1000);
                 var timeStamp = DateTimeOffset.FromUnixTimeMilliseconds(timeSlot);
 
                 // Calculate IOB at this time point
                 var iobResult = _iobService.FromTreatments(
-                    treatments?.ToList() ?? new List<Treatment>(),
-                    timeSlot
+                    treatmentList,
+                    timeSlot,
+                    timeline.SnapshotAt(timeSlot)
                 );
 
                 hourlyData.Add(
