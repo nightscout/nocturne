@@ -774,6 +774,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, TimeSinceLastBolusEvaluator>();
         services.AddScoped<IConditionEvaluator, DayOfWeekEvaluator>();
         services.AddScoped<IConditionEvaluator, PumpStateEvaluator>();
+        services.AddScoped<IConditionEvaluator, StateSpanActiveEvaluator>();
         return services;
     }
 

@@ -104,6 +104,9 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> CreateRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
+        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
+            return badRequest;
+
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
@@ -166,6 +169,9 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
+        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
+            return badRequest;
+
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
 
         var rule = await db.AlertRules
@@ -470,6 +476,36 @@ public class AlertRulesController : ControllerBase
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         PropertyNameCaseInsensitive = true,
     };
+
+    /// <summary>
+    /// Returns a <c>400 BadRequest</c> when the rule uses the generic
+    /// <see cref="AlertConditionType.StateSpanActive"/> leaf with
+    /// <see cref="StateSpanCategory.PumpMode"/>. Pump-mode rules must use the dedicated
+    /// <see cref="AlertConditionType.PumpState"/> type so the enricher loads the correct
+    /// snapshot and the legacy <c>pump_suspended</c> evaluator stays uncoupled from the
+    /// generic state-span dictionary. Returns null when the request is acceptable.
+    /// </summary>
+    private BadRequestObjectResult? RejectPumpModeOnGenericStateSpan(
+        AlertConditionType type, object? conditionParams)
+    {
+        if (type != AlertConditionType.StateSpanActive || conditionParams is null)
+            return null;
+
+        try
+        {
+            var json = JsonSerializer.Serialize(conditionParams);
+            var typed = JsonSerializer.Deserialize<StateSpanActiveCondition>(json, ReferenceJsonOptions);
+            if (typed is not null && typed.Category == StateSpanCategory.PumpMode)
+            {
+                return BadRequest("state_span_active does not accept the PumpMode category — use pump_state instead.");
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed JSON falls through to the existing rule-shape validation paths.
+        }
+        return null;
+    }
 
     #endregion
 }
