@@ -52,6 +52,12 @@ internal static class ConditionNodePayloads
             "override_active" => node.OverrideActive,
             "sensitivity_ratio" => node.SensitivityRatio,
             "do_not_disturb" => node.DoNotDisturb,
+            "glucose_bucket" => node.GlucoseBucket,
+            "time_since_last_carb" => node.TimeSinceLastCarb,
+            "time_since_last_bolus" => node.TimeSinceLastBolus,
+            "day_of_week" => node.DayOfWeek,
+            "pump_state" => node.PumpState,
+            "state_span_active" => node.StateSpanActive,
             _ => null,
         };
 

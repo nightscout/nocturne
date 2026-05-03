@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
@@ -186,8 +187,138 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
 
         enriched = await EnrichLoopingFactsAsync(enriched, needs, now, isReplay, ct);
+        enriched = await EnrichPhase2FactsAsync(enriched, needs, now, ct);
 
         return enriched;
+    }
+
+    /// <summary>
+    /// Populates the Phase-2 leaf inputs (glucose bucket, last-carb/bolus, tenant timezone,
+    /// pump-mode and generic state-span snapshots) when their corresponding needs flags are set.
+    /// </summary>
+    private async Task<SensorContext> EnrichPhase2FactsAsync(
+        SensorContext baseCtx, DataNeedsSet needs, DateTime now, CancellationToken ct)
+    {
+        var enriched = baseCtx;
+
+        // Glucose bucket — resolve target range schedule for the active profile and apply
+        // boundaries from the matching TargetRangeEntry. Falls back to clinical defaults
+        // (54/70/140/250) when the schedule has nulls or is missing entirely.
+        if (needs.NeedsGlucoseBucket && enriched.LatestValue is { } latestValue)
+        {
+            var bucket = await ResolveGlucoseBucketAsync(latestValue, now, ct);
+            enriched = enriched with { GlucoseBucket = bucket };
+        }
+
+        // Treatments — fetch once and project last-carb/last-bolus timestamps.
+        if (needs.NeedsTreatments)
+        {
+            var treatments = await FetchRecentTreatmentsAsync(now, ct);
+            DateTime? lastCarbAt = null;
+            DateTime? lastBolusAt = null;
+            foreach (var t in treatments)
+            {
+                if (t.Mills <= 0) continue;
+                var at = DateTimeOffset.FromUnixTimeMilliseconds(t.Mills).UtcDateTime;
+                if (t.Carbs is > 0 && (lastCarbAt is null || at > lastCarbAt))
+                    lastCarbAt = at;
+                if (t.Insulin is > 0 && (lastBolusAt is null || at > lastBolusAt))
+                    lastBolusAt = at;
+            }
+            enriched = enriched with { LastCarbAt = lastCarbAt, LastBolusAt = lastBolusAt };
+        }
+
+        if (needs.NeedsTenantTimeZone)
+        {
+            try
+            {
+                var tz = await _deps.TherapySettings.GetTimezoneAsync(ct: ct);
+                enriched = enriched with { TenantTimeZoneId = tz };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to resolve tenant timezone; day-of-week leaf will fall back to UTC");
+            }
+        }
+
+        if (needs.ReferencedPumpStates.Count > 0)
+        {
+            // Pump modes are mutually exclusive per StateSpan semantics — at most one mode-span
+            // is active at any instant. Walking the referenced set is still cheap enough to do
+            // sequentially: typical rules reference one or two modes.
+            foreach (var mode in needs.ReferencedPumpStates)
+            {
+                var span = await _deps.StateSpans.GetActiveAtAsync(
+                    StateSpanCategory.PumpMode, mode.ToString(), now, ct);
+                if (span is not null)
+                {
+                    enriched = enriched with
+                    {
+                        ActivePumpState = new PumpStateSnapshot(mode, span.StartTimestamp)
+                    };
+                    break; // exclusive — first match wins
+                }
+            }
+        }
+
+        if (needs.ReferencedStateSpans.Count > 0)
+        {
+            var dict = new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>(needs.ReferencedStateSpans.Count);
+            foreach (var key in needs.ReferencedStateSpans)
+            {
+                var span = await _deps.StateSpans.GetActiveAtAsync(key.Category, key.State, now, ct);
+                if (span is not null)
+                {
+                    dict[key] = new StateSpanSnapshot(key.Category, key.State, span.StartTimestamp);
+                }
+            }
+            enriched = enriched with { ActiveStateSpans = dict };
+        }
+
+        return enriched;
+    }
+
+    /// <summary>
+    /// Resolves the glucose bucket for <paramref name="glucoseMgdl"/> at <paramref name="at"/>
+    /// by loading the active <see cref="Nocturne.Core.Models.V4.TargetRangeSchedule"/>, finding
+    /// the time-of-day entry, and applying <see cref="GlucoseBucketResolver.Compute"/>.
+    /// Returns the InRange-default bucket assignment when no schedule exists.
+    /// </summary>
+    private async Task<GlucoseBucket?> ResolveGlucoseBucketAsync(
+        decimal glucoseMgdl, DateTime at, CancellationToken ct)
+    {
+        var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var profileName = await _deps.ActiveProfileResolver.GetActiveProfileNameAsync(atMills, ct) ?? "Default";
+        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
+
+        // No schedule at all — fall back to fully default (low=70, high=180) and clinical bucket defaults.
+        if (schedule is null || schedule.Entries.Count == 0)
+        {
+            return GlucoseBucketResolver.Compute(glucoseMgdl, 70m, 180m, null, null, null);
+        }
+
+        // Pick the entry active at the given local time-of-day. This duplicates a tiny slice of
+        // ScheduleResolution.FindRangeAtTime but returns the entry itself so we can read the
+        // VeryLow/TightHigh/VeryHigh fields that the (Low,High)-only helper drops on the floor.
+        var sortedEntries = schedule.Entries.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
+        var localTime = TimeOnly.FromDateTime(at);
+        var secondsFromMidnight = (localTime.Hour * 3600) + (localTime.Minute * 60) + localTime.Second;
+        var active = sortedEntries[0];
+        foreach (var entry in sortedEntries)
+        {
+            if (secondsFromMidnight >= (entry.TimeAsSeconds ?? 0))
+                active = entry;
+            else
+                break;
+        }
+
+        return GlucoseBucketResolver.Compute(
+            glucoseMgdl,
+            (decimal)active.Low,
+            (decimal)active.High,
+            active.VeryLow,
+            active.TightHigh,
+            active.VeryHigh);
     }
 
     /// <summary>

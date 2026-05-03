@@ -110,4 +110,28 @@ public enum AlertConditionType
     /// <summary>Tenant Do Not Disturb state, optionally for a sustained duration.</summary>
     [EnumMember(Value = "do_not_disturb"), JsonStringEnumMemberName("do_not_disturb")]
     DoNotDisturb,
+
+    /// <summary>Glucose falls into one of a configured set of buckets (very_low/low/tight_range/in_range/high/very_high).</summary>
+    [EnumMember(Value = "glucose_bucket"), JsonStringEnumMemberName("glucose_bucket")]
+    GlucoseBucket,
+
+    /// <summary>Minutes since the latest carb-bearing treatment compared against a threshold.</summary>
+    [EnumMember(Value = "time_since_last_carb"), JsonStringEnumMemberName("time_since_last_carb")]
+    TimeSinceLastCarb,
+
+    /// <summary>Minutes since the latest insulin-bearing treatment compared against a threshold.</summary>
+    [EnumMember(Value = "time_since_last_bolus"), JsonStringEnumMemberName("time_since_last_bolus")]
+    TimeSinceLastBolus,
+
+    /// <summary>Local day of week (in the tenant's timezone) matches one of a configured set.</summary>
+    [EnumMember(Value = "day_of_week"), JsonStringEnumMemberName("day_of_week")]
+    DayOfWeek,
+
+    /// <summary>Pump operational mode (Automatic/Manual/Boost/etc.) state, optionally for a sustained duration.</summary>
+    [EnumMember(Value = "pump_state"), JsonStringEnumMemberName("pump_state")]
+    PumpState,
+
+    /// <summary>Generic state-span-active leaf for non-pump-mode categories (Override, Sleep, Exercise, ...).</summary>
+    [EnumMember(Value = "state_span_active"), JsonStringEnumMemberName("state_span_active")]
+    StateSpanActive,
 }

@@ -769,6 +769,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
         services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
         services.AddScoped<IConditionEvaluator, DoNotDisturbEvaluator>();
+        services.AddScoped<IConditionEvaluator, GlucoseBucketEvaluator>();
         return services;
     }
 

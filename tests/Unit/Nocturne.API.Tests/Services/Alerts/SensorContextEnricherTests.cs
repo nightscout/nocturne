@@ -11,6 +11,7 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -33,6 +34,9 @@ public class SensorContextEnricherTests
     private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
     private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly Mock<IAlertRepository> _alertRepository = new();
+    private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepository = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
+    private readonly Mock<ITherapySettingsResolver> _therapySettingsResolver = new();
     private readonly Mock<IPredictionService> _predictionService = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -384,6 +388,9 @@ public class SensorContextEnricherTests
             _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
             apsRepo2.Object, _tempBasalRepository.Object, _uploaderSnapshotRepository.Object,
             _stateSpanService.Object, _alertRepository.Object,
+            _targetRangeScheduleRepository.Object,
+            _activeProfileResolver.Object,
+            _therapySettingsResolver.Object,
             Options.Create(new AlertEvaluationOptions()));
         var enricher2 = new SensorContextEnricher(
             deps2,
@@ -512,6 +519,9 @@ public class SensorContextEnricherTests
             _uploaderSnapshotRepository.Object,
             _stateSpanService.Object,
             _alertRepository.Object,
+            _targetRangeScheduleRepository.Object,
+            _activeProfileResolver.Object,
+            _therapySettingsResolver.Object,
             Options.Create(options ?? new AlertEvaluationOptions()));
 
         return new SensorContextEnricher(

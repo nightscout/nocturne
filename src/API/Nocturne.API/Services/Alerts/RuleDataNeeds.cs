@@ -30,7 +30,12 @@ public sealed record DataNeedsSet(
     bool NeedsTempBasal,
     bool NeedsUploaderStatus,
     bool NeedsOverride,
-    bool NeedsSensitivityRatio)
+    bool NeedsSensitivityRatio,
+    bool NeedsGlucoseBucket,
+    bool NeedsTreatments,
+    bool NeedsTenantTimeZone,
+    IReadOnlySet<PumpModeState> ReferencedPumpStates,
+    IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans)
 // Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
 // every evaluation pass because engine-level suppression applies to every rule regardless of
 // whether the rule's condition tree references the `do_not_disturb` fact. Gating fetch on a
@@ -40,7 +45,10 @@ public sealed record DataNeedsSet(
     /// <summary>An empty needs set with all flags false.</summary>
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false);
+            false, false, false, false, false, false, false,
+            false, false, false,
+            new HashSet<PumpModeState>(),
+            new HashSet<(StateSpanCategory, string?)>());
 }
 
 /// <summary>
@@ -99,6 +107,20 @@ public static class RuleDataNeeds
                     VisitNode(sustained.Child, b);
                     return;
                 }
+            case AlertConditionType.PumpState:
+                {
+                    ApplyLeaf(rule.ConditionType, b);
+                    var typed = TryDeserialize<PumpStateCondition>(rule.ConditionParams);
+                    if (typed is not null) b.PumpStates.Add(typed.Mode);
+                    return;
+                }
+            case AlertConditionType.StateSpanActive:
+                {
+                    ApplyLeaf(rule.ConditionType, b);
+                    var typed = TryDeserialize<StateSpanActiveCondition>(rule.ConditionParams);
+                    if (typed is not null) b.StateSpans.Add((typed.Category, typed.State));
+                    return;
+                }
             default:
                 ApplyLeaf(rule.ConditionType, b);
                 return;
@@ -116,6 +138,13 @@ public static class RuleDataNeeds
             if (kind is not null)
             {
                 ApplyLeaf(kind.Value, b);
+
+                // pump_state and state_span_active carry per-rule "which mode/category/state"
+                // selections that the enricher needs to know to fetch the right StateSpans.
+                if (kind == AlertConditionType.PumpState && visited.PumpState is not null)
+                    b.PumpStates.Add(visited.PumpState.Mode);
+                else if (kind == AlertConditionType.StateSpanActive && visited.StateSpanActive is not null)
+                    b.StateSpans.Add((visited.StateSpanActive.Category, visited.StateSpanActive.State));
             }
             return null;
         });
@@ -148,6 +177,12 @@ public static class RuleDataNeeds
             case AlertConditionType.UploaderBattery: b.UploaderStatus = true; break;
             case AlertConditionType.OverrideActive: b.Override = true; break;
             case AlertConditionType.SensitivityRatio: b.SensitivityRatio = true; break;
+            case AlertConditionType.GlucoseBucket: b.GlucoseBucket = true; break;
+            case AlertConditionType.TimeSinceLastCarb: b.Treatments = true; break;
+            case AlertConditionType.TimeSinceLastBolus: b.Treatments = true; break;
+            case AlertConditionType.DayOfWeek: b.TenantTimeZone = true; break;
+            case AlertConditionType.PumpState: /* handled in VisitTopLevel/VisitNode */ break;
+            case AlertConditionType.StateSpanActive: /* handled in VisitTopLevel/VisitNode */ break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
             // Threshold, RateOfChange, SignalLoss, Staleness, TimeOfDay, Composite, Not, Sustained
             // require no extra context — handled by base SensorContext or recursed by VisitNode.
@@ -187,9 +222,15 @@ public static class RuleDataNeeds
         public bool UploaderStatus;
         public bool Override;
         public bool SensitivityRatio;
+        public bool GlucoseBucket;
+        public bool Treatments;
+        public bool TenantTimeZone;
+        public readonly HashSet<PumpModeState> PumpStates = new();
+        public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
 
         public DataNeedsSet Build() =>
             new(Iob, Cob, Predicted, Reservoir, SiteAge, SensorAge, Trend, ActiveAlerts,
-                LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, Override, SensitivityRatio);
+                LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, Override, SensitivityRatio,
+                GlucoseBucket, Treatments, TenantTimeZone, PumpStates, StateSpans);
     }
 }

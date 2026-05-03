@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Alerts.Conditions;
 
 namespace Nocturne.Core.Models;
 
@@ -138,6 +139,42 @@ public record SensorContext
 
     /// <summary>True when the tenant has at least one ApsSnapshot with a non-null sensitivity ratio.</summary>
     public bool HasEverApsSensitivity { get; init; }
+
+    // ----- Phase 2 leaves -----
+
+    /// <summary>
+    /// Coarse glucose bucket derived from the active TargetRangeEntry boundaries and
+    /// <see cref="LatestValue"/>. Null when no glucose reading is available or no target
+    /// schedule could be resolved (the GlucoseBucket evaluator returns false in either case).
+    /// </summary>
+    public GlucoseBucket? GlucoseBucket { get; init; }
+
+    /// <summary>Timestamp of the latest carb-bearing treatment, or null when none observed.</summary>
+    public DateTime? LastCarbAt { get; init; }
+
+    /// <summary>Timestamp of the latest insulin-bearing treatment, or null when none observed.</summary>
+    public DateTime? LastBolusAt { get; init; }
+
+    /// <summary>
+    /// IANA timezone id for the tenant (e.g. <c>"Pacific/Auckland"</c>), resolved from the
+    /// active TherapySettings record. Null when the profile has no timezone configured —
+    /// the day-of-week evaluator falls back to UTC in that case.
+    /// </summary>
+    public string? TenantTimeZoneId { get; init; }
+
+    /// <summary>
+    /// Currently active pump-mode StateSpan, or null when no pump-mode span is active. Pump
+    /// modes are mutually exclusive per StateSpan semantics, so this is a single snapshot.
+    /// </summary>
+    public PumpStateSnapshot? ActivePumpState { get; init; }
+
+    /// <summary>
+    /// Active state-span snapshots keyed by <c>(Category, State)</c>. Populated by the
+    /// enricher for every <c>(category, state)</c> pair referenced by the rules being
+    /// evaluated. <c>State</c> may be null in the key meaning "any state of this category".
+    /// </summary>
+    public IReadOnlyDictionary<(StateSpanCategory Category, string? State), StateSpanSnapshot> ActiveStateSpans { get; init; }
+        = new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>();
 }
 
 /// <summary>
@@ -329,6 +366,52 @@ public record DoNotDisturbCondition(
     [property: JsonPropertyName("is_active")] bool IsActive,
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
+/// <summary>Comparison operator for time-since-last-event leaves. Single-character forms
+/// match the existing <see cref="ComparisonOps"/> wire format used by the JSON payload.</summary>
+public enum AlertComparisonOperator
+{
+    /// <summary>Strictly greater than.</summary>
+    [JsonStringEnumMemberName(">")] Gt,
+    /// <summary>Greater than or equal.</summary>
+    [JsonStringEnumMemberName(">=")] Gte,
+    /// <summary>Strictly less than.</summary>
+    [JsonStringEnumMemberName("<")] Lt,
+    /// <summary>Less than or equal.</summary>
+    [JsonStringEnumMemberName("<=")] Lte,
+    /// <summary>Equal.</summary>
+    [JsonStringEnumMemberName("==")] Eq,
+}
+
+/// <summary>Time-since-last-carb comparison, in minutes. A tenant with no carb record observed
+/// is treated as <c>+∞</c> minutes elapsed — predicates like "no carbs in 30 min" fire on cold
+/// start (matching the audit-trail expectation that absence of evidence is informative).</summary>
+public record TimeSinceLastCarbCondition(AlertComparisonOperator Operator, int Minutes);
+
+/// <summary>Time-since-last-bolus comparison, in minutes. Same cold-start semantics as
+/// <see cref="TimeSinceLastCarbCondition"/>.</summary>
+public record TimeSinceLastBolusCondition(AlertComparisonOperator Operator, int Minutes);
+
+/// <summary>Day-of-week condition. True when the current local day (in the tenant's timezone)
+/// falls into <see cref="Days"/>.</summary>
+public record DayOfWeekCondition(List<DayOfWeek> Days);
+
+/// <summary>Pump-mode state condition. <see cref="PumpStateCondition.IsActive"/> selects which
+/// side of the state is asserted; <see cref="PumpStateCondition.ForMinutes"/> only applies on
+/// the IsActive=true side (no anchor exists for "not in mode X for N minutes").</summary>
+public record PumpStateCondition(
+    PumpModeState Mode,
+    [property: JsonPropertyName("is_active")] bool IsActive,
+    [property: JsonPropertyName("for_minutes")] int? ForMinutes);
+
+/// <summary>Generic state-span-active condition. <see cref="State"/> may be null meaning
+/// "any state of this category". The <see cref="StateSpanCategory.PumpMode"/> category is
+/// rejected at validation time — use <see cref="PumpStateCondition"/> for pump-mode rules.</summary>
+public record StateSpanActiveCondition(
+    StateSpanCategory Category,
+    string? State,
+    [property: JsonPropertyName("is_active")] bool IsActive,
+    [property: JsonPropertyName("for_minutes")] int? ForMinutes);
+
 /// <summary>Selects which TempBasal field a TempBasalCondition compares.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TempBasalMetric>))]
 public enum TempBasalMetric
@@ -371,7 +454,13 @@ public record ConditionNode(
     [property: JsonPropertyName("uploader_battery")] UploaderBatteryCondition? UploaderBattery = null,
     [property: JsonPropertyName("override_active")] OverrideActiveCondition? OverrideActive = null,
     [property: JsonPropertyName("sensitivity_ratio")] SensitivityRatioCondition? SensitivityRatio = null,
-    [property: JsonPropertyName("do_not_disturb")] DoNotDisturbCondition? DoNotDisturb = null
+    [property: JsonPropertyName("do_not_disturb")] DoNotDisturbCondition? DoNotDisturb = null,
+    [property: JsonPropertyName("glucose_bucket")] GlucoseBucketCondition? GlucoseBucket = null,
+    [property: JsonPropertyName("time_since_last_carb")] TimeSinceLastCarbCondition? TimeSinceLastCarb = null,
+    [property: JsonPropertyName("time_since_last_bolus")] TimeSinceLastBolusCondition? TimeSinceLastBolus = null,
+    [property: JsonPropertyName("day_of_week")] DayOfWeekCondition? DayOfWeek = null,
+    [property: JsonPropertyName("pump_state")] PumpStateCondition? PumpState = null,
+    [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null
 );
 
 /// <summary>
