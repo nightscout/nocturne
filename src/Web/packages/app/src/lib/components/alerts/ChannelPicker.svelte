@@ -11,15 +11,8 @@
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
-  import {
-    Bell,
-    BellRing,
-    Webhook as WebhookIcon,
-    MessageSquare,
-    Send,
-    AlertTriangle,
-    Loader2,
-  } from "lucide-svelte";
+  import { AlertTriangle, Loader2 } from "lucide-svelte";
+  import { findChannelMeta } from "./channelMeta";
 
   type SelectedChannel = {
     channelType: ChannelType;
@@ -36,60 +29,6 @@
   // Pulled from layout-server data — used as the auto-populated destination
   // for the in-app channel for the current user.
   const currentSubjectId = $derived(page.data.user?.subjectId ?? "");
-
-  type ChannelMeta = {
-    icon: typeof Bell;
-    label: string;
-    description: string;
-    /** "url" renders an Input with type=url; "text" renders a plain text input. */
-    destinationInput?: "url" | "text";
-    destinationPlaceholder?: string;
-    destinationLabel?: string;
-    destinationHelper?: string;
-  };
-
-  const channelMeta: Record<string, ChannelMeta> = {
-    [ChannelType.WebPush]: {
-      icon: Bell,
-      label: "Browser Push",
-      description: "Receive alerts directly in your browser",
-    },
-    [ChannelType.InApp]: {
-      icon: BellRing,
-      label: "In-App",
-      description: "Show alerts in the Nocturne notification centre",
-      destinationHelper:
-        "Routed to your account automatically.",
-    },
-    [ChannelType.Webhook]: {
-      icon: WebhookIcon,
-      label: "Webhook",
-      description: "Send alert data to a custom URL",
-      destinationInput: "url",
-      destinationPlaceholder: "https://example.com/webhook",
-      destinationLabel: "Webhook URL",
-    },
-    [ChannelType.DiscordDm]: {
-      icon: MessageSquare,
-      label: "Discord DM",
-      description: "Send alerts as a Discord direct message",
-    },
-    [ChannelType.SlackDm]: {
-      icon: MessageSquare,
-      label: "Slack DM",
-      description: "Send alerts as a Slack direct message",
-    },
-    [ChannelType.Telegram]: {
-      icon: Send,
-      label: "Telegram",
-      description: "Send alerts to your Telegram chat",
-    },
-    [ChannelType.WhatsApp]: {
-      icon: MessageSquare,
-      label: "WhatsApp",
-      description: "Send alerts to your WhatsApp",
-    },
-  };
 
   const platformMap: Partial<Record<ChannelType, string>> = {
     [ChannelType.DiscordDm]: "discord",
@@ -117,7 +56,7 @@
 
   function toggleChannel(channelType: ChannelType, checked: boolean) {
     if (checked) {
-      const meta = channelMeta[channelType];
+      const meta = findChannelMeta(channelType);
       channels = [
         ...channels,
         {
@@ -133,7 +72,7 @@
 
   function updateDestination(channelType: ChannelType, value: string) {
     channels = channels.map((c) =>
-      c.channelType === channelType ? { ...c, destination: value } : c,
+      c.channelType === channelType ? { ...c, destination: value } : c
     );
   }
 
@@ -155,7 +94,7 @@
    * being healthy.
    */
   function ensureBuiltinChannels(
-    fromStatus: ChannelStatusEntry[],
+    fromStatus: ChannelStatusEntry[]
   ): ChannelStatusEntry[] {
     const result = [...fromStatus];
     const have = new Set(fromStatus.map((c) => c.channelType));
@@ -181,7 +120,7 @@
 
       linkedPlatforms = platformResult?.platforms ?? [];
       const filtered = (statusResult?.channels ?? []).filter(
-        (c) => c.status !== ChannelStatus.Unavailable,
+        (c) => c.status !== ChannelStatus.Unavailable
       );
       visibleChannels = ensureBuiltinChannels(filtered);
     } catch {
@@ -205,29 +144,50 @@
     {#each visibleChannels as channel (channel.channelType)}
       {@const ct = channel.channelType}
       {#if ct !== undefined}
-        {@const meta = channelMeta[ct]}
+        {@const meta = findChannelMeta(ct)}
         {@const enabled = isEnabled(ct)}
         {@const degraded = channel.status === ChannelStatus.Degraded}
         {@const needsLink = channel.requiresLink === true && !isLinked(ct)}
         {#if meta}
-          <div>
-            <div class="flex items-center justify-between p-3 rounded-lg border">
+          <div class:opacity-50={needsLink && !enabled}>
+            <div
+              class="flex items-center justify-between p-3 rounded-lg border"
+            >
               <div class="flex items-center gap-3">
                 <div
-                  class="flex items-center justify-center h-10 w-10 rounded-lg bg-primary/10"
+                  class="flex items-center justify-center h-10 w-10 rounded-lg bg-primary/10 overflow-hidden"
                 >
-                  <meta.icon class="h-5 w-5 text-primary" />
+                  {#if meta.logo}
+                    <img
+                      src={meta.logo}
+                      alt=""
+                      class="h-6 w-6 object-contain"
+                    />
+                  {:else if meta.icon}
+                    <meta.icon class="h-5 w-5 text-primary" />
+                  {/if}
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
                     <Label>{meta.label}</Label>
+                    {#if needsLink}
+                      <span
+                        class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+                      >
+                        Not linked
+                      </span>
+                    {/if}
                     {#if degraded}
-                      <span title="Service hasn't reported recently — alerts may be delayed">
-                        <AlertTriangle class="h-4 w-4 text-amber-500" />
+                      <span
+                        title="Service hasn't reported recently — alerts may be delayed"
+                      >
+                        <AlertTriangle class="h-4 w-4 text-status-warning" />
                       </span>
                     {/if}
                   </div>
-                  <p class="text-sm text-muted-foreground">{meta.description}</p>
+                  <p class="text-sm text-muted-foreground">
+                    {meta.description}
+                  </p>
                 </div>
               </div>
               <Switch
@@ -237,9 +197,9 @@
             </div>
 
             {#if enabled && needsLink}
-              <p class="text-sm text-amber-600 mt-1 pl-13">
-                Account not linked. Use /connect in {getPlatformName(ct)} to
-                enable delivery.
+              <p class="text-sm text-status-warning mt-1 pl-13">
+                Account not linked. Use /connect in {getPlatformName(ct)} to enable
+                delivery.
               </p>
             {/if}
 
@@ -252,7 +212,9 @@
             {#if enabled && meta.destinationInput}
               <div class="mt-2 pl-13 space-y-1">
                 {#if meta.destinationLabel}
-                  <Label for={`channel-dest-${ct}`}>{meta.destinationLabel}</Label>
+                  <Label for={`channel-dest-${ct}`}>
+                    {meta.destinationLabel}
+                  </Label>
                 {/if}
                 <Input
                   id={`channel-dest-${ct}`}

@@ -28,7 +28,7 @@
     availableRules?: AvailableRule[];
   }
 
-  let { node = $bindable(), availableRules = [] }: Props = $props();
+  let { node, availableRules = [] }: Props = $props();
 
   // Display strings for operators and trend buckets. Stored on the wire as the
   // literal symbol/key; formatted symbols (≥, ≤) are display-only.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AlertRuleResponse, AlertRuleSeverity } from "$api-clients";
+  import type { AlertRuleResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Switch } from "$lib/components/ui/switch";
@@ -11,15 +11,14 @@
     Trash2,
     Zap,
     MoreHorizontal,
-    Bell,
-    Webhook,
-    MessageSquare,
-    Send,
-    Smartphone,
   } from "lucide-svelte";
-  import { ChannelType } from "$api-clients";
-  import { summarizeCondition, type SummarizeContext } from "./summarizeCondition";
+  import {
+    summarizeCondition,
+    type SummarizeContext,
+  } from "./summarizeCondition";
+  import { severity } from "./severity";
   import { nodeFromApi } from "./types";
+  import { findChannelMeta } from "./channelMeta";
 
   interface Props {
     rule: AlertRuleResponse;
@@ -55,49 +54,10 @@
       const node = nodeFromApi(rule.conditionType, rule.conditionParams);
       const ctx: SummarizeContext = { resolveAlertName };
       return node ? summarizeCondition(node, ctx) : (rule.conditionType ?? "");
-    })(),
+    })()
   );
 
-  let severityClass = $derived(severityDotFor(rule.severity));
-
-  function severityDotFor(s: AlertRuleSeverity | undefined): string {
-    switch (s) {
-      case "critical":
-        return "bg-red-500";
-      case "warning":
-        return "bg-amber-500";
-      case "info":
-        return "bg-sky-500";
-      default:
-        return "bg-muted-foreground";
-    }
-  }
-
-  /**
-   * Pick a Lucide glyph for a channel type. The picker mirrors the icons
-   * used in <see cref="ChannelsSection"/> so the row's badges read like the
-   * picker entries below them.
-   */
-  function channelIcon(t: ChannelType | string | undefined) {
-    switch (t) {
-      case ChannelType.Webhook:
-        return Webhook;
-      case ChannelType.DiscordDm:
-      case ChannelType.DiscordChannel:
-      case ChannelType.SlackDm:
-      case ChannelType.SlackChannel:
-        return MessageSquare;
-      case ChannelType.Telegram:
-      case ChannelType.TelegramDm:
-      case ChannelType.TelegramGroup:
-        return Send;
-      case ChannelType.WhatsApp:
-      case ChannelType.WhatsAppDm:
-        return Smartphone;
-      default:
-        return Bell;
-    }
-  }
+  let severityClass = $derived(severity(rule.severity, "dot"));
 </script>
 
 <div
@@ -134,16 +94,23 @@
   {#if rule.channels && rule.channels.length > 0}
     <div class="hidden items-center gap-1 sm:flex" aria-label="Channels">
       {#each rule.channels.slice(0, 4) as ch (ch.id)}
-        {@const G = channelIcon(ch.channelType)}
+        {@const meta = findChannelMeta(ch.channelType)}
         <span
-          class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground"
+          class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
           title={ch.destinationLabel ?? ch.channelType ?? ""}
         >
-          <G class="h-3 w-3" />
+          {#if meta?.logo}
+            <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />
+          {:else if meta?.icon}
+            {@const G = meta.icon}
+            <G class="h-3 w-3" />
+          {/if}
         </span>
       {/each}
       {#if rule.channels.length > 4}
-        <span class="text-xs text-muted-foreground">+{rule.channels.length - 4}</span>
+        <span class="text-xs text-muted-foreground">
+          +{rule.channels.length - 4}
+        </span>
       {/if}
     </div>
   {/if}
@@ -207,8 +174,8 @@
             <AlertDialog.Header>
               <AlertDialog.Title>Delete "{rule.name}"?</AlertDialog.Title>
               <AlertDialog.Description>
-                This rule will stop firing immediately. Existing alert
-                history is preserved. This action cannot be undone.
+                This rule will stop firing immediately. Existing alert history
+                is preserved. This action cannot be undone.
               </AlertDialog.Description>
             </AlertDialog.Header>
             <AlertDialog.Footer>

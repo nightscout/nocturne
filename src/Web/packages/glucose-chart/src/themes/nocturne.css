@@ -33,6 +33,7 @@
   --status-warning: oklch(0.646 0.222 41.116);
   --status-critical: oklch(0.577 0.245 27.325);
   --status-normal: oklch(0.6 0.118 184.704);
+  --status-info: oklch(0.65 0.18 250);
 
   /* IOB (Insulin on Board) - for charts - should be more prominent than basal */
   --iob-basal: rgba(30, 150, 252, 0.7);
@@ -128,6 +129,7 @@
   --color-status-warning: var(--status-warning);
   --color-status-critical: var(--status-critical);
   --color-status-normal: var(--status-normal);
+  --color-status-info: var(--status-info);
 
   /* IOB */
   --color-iob-basal: var(--iob-basal);

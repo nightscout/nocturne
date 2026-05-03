@@ -5,6 +5,7 @@
     get as getDnd,
     update as updateDnd,
   } from "$api/generated/tenantAlertSettings.generated.remote";
+  import { getProfileSummary } from "$api/generated/profiles.generated.remote";
   import type { TenantAlertSettingsResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
@@ -66,21 +67,38 @@
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
   }
 
-  function applyResponse(r: TenantAlertSettingsResponse | null): void {
+  function browserTimezone(): string | null {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function applyResponse(
+    r: TenantAlertSettingsResponse | null,
+    fallbackTz: string | null,
+  ): void {
     dndManualActive = r?.dndManualActive ?? false;
     dndManualUntilLocal = isoToLocal(r?.dndManualUntil);
     dndScheduleEnabled = r?.dndScheduleEnabled ?? false;
     dndScheduleStart = r?.dndScheduleStart ?? "22:00";
     dndScheduleEnd = r?.dndScheduleEnd ?? "06:00";
-    timezone = r?.timezone ?? "UTC";
+    timezone = r?.timezone || fallbackTz || browserTimezone() || "UTC";
   }
 
   async function load(): Promise<void> {
     loading = true;
     error = null;
     try {
-      const r = await getDnd();
-      applyResponse(r);
+      const [r, summary] = await Promise.all([
+        getDnd(),
+        getProfileSummary(undefined).catch(() => null),
+      ]);
+      const profileTz =
+        (summary?.therapySettings?.find((ts) => ts.isDefault) ??
+          summary?.therapySettings?.[0])?.timezone ?? null;
+      applyResponse(r, profileTz);
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load DND settings";
     } finally {
@@ -100,7 +118,7 @@
         dndScheduleEnd: dndScheduleEnabled ? dndScheduleEnd : undefined,
         timezone,
       });
-      applyResponse(r);
+      applyResponse(r, timezone);
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to save DND settings";
     } finally {
@@ -122,7 +140,7 @@
         type="button"
         variant="ghost"
         size="icon"
-        onclick={() => goto("/settings/alerts")}
+        onclick={() => goto("/alerts")}
         aria-label="Back to alerts"
       >
         <ArrowLeft class="h-4 w-4" />
@@ -223,7 +241,7 @@
           >
             <Select.Trigger>{timezone}</Select.Trigger>
             <Select.Content>
-              {#each TIMEZONES as tz (tz)}
+              {#each Array.from(new Set([timezone, ...TIMEZONES])).filter(Boolean) as tz (tz)}
                 <Select.Item value={tz} label={tz} />
               {/each}
             </Select.Content>

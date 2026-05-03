@@ -72,6 +72,7 @@
   --status-warning: rgb(255, 193, 69);
   --status-critical: rgb(235, 87, 87);
   --status-normal: rgb(111, 207, 151);
+  --status-info: rgb(0, 122, 255);
   --status-aging: rgb(255, 193, 69);
   --status-stale: rgb(235, 87, 87);
 

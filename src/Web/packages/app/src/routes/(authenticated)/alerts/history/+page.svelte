@@ -12,6 +12,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
+  import { formatDuration, formatDateTime } from "$lib/components/alerts/alertTime";
 
   let history = $state<AlertHistoryResponse | null>(null);
   let page = $state(1);
@@ -32,29 +33,6 @@
     }
   }
 
-  function formatDuration(start: Date | undefined, end: Date | undefined): string {
-    if (!start) return "—";
-    const s = new Date(start).getTime();
-    const e = end ? new Date(end).getTime() : Date.now();
-    const ms = Math.max(0, e - s);
-    const min = Math.floor(ms / 60_000);
-    if (min < 1) return "< 1m";
-    if (min < 60) return `${min}m`;
-    const h = Math.floor(min / 60);
-    return `${h}h ${min % 60}m`;
-  }
-
-  function formatTime(date: Date | string | undefined): string {
-    if (!date) return "—";
-    const d = typeof date === "string" ? new Date(date) : date;
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
   onMount(() => load(1));
 </script>
 
@@ -66,7 +44,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto("/settings/alerts")}
+      onclick={() => goto("/alerts")}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />
@@ -75,7 +53,7 @@
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <HistoryIcon class="h-5 w-5" /> Alert history
       </h1>
-      <p class="text-sm text-muted-foreground">Every fire from this tenant — both real and test.</p>
+      <p class="text-sm text-muted-foreground">Every real fire from this tenant. Test fires aren't shown.</p>
     </div>
   </div>
 
@@ -151,7 +129,7 @@
         {/if}
       </div>
       <div class="text-xs text-muted-foreground">
-        {formatTime(h.startedAt)}{#if h.endedAt} → {formatTime(h.endedAt)}{/if} · {formatDuration(h.startedAt, h.endedAt)}
+        {formatDateTime(h.startedAt) || "—"}{#if h.endedAt} → {formatDateTime(h.endedAt) || "—"}{/if} · {formatDuration(h.startedAt, h.endedAt) || "—"}
       </div>
     </div>
   </div>

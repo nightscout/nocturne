@@ -9,6 +9,7 @@
   import type { ActiveExcursionResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { Bell, BellOff, X, Loader2 } from "lucide-svelte";
+  import { severity } from "./severity";
 
   /**
    * App-wide fresh-fire toast. Polls the active-alerts surface; whenever a new
@@ -114,7 +115,7 @@
       >
         <div class="flex items-start gap-2">
           <span
-            class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-red-500/15 text-red-600 dark:text-red-400"
+            class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full {severity('critical', 'chip')}"
           >
             <Bell class="h-4 w-4" />
           </span>

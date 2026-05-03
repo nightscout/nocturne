@@ -10105,7 +10105,7 @@
         "tags": [
           "Alerts"
         ],
-        "summary": "Get paginated history of resolved excursions.",
+        "summary": "Get paginated history of resolved excursions. Test fires are excluded\nby default; pass includeTest = true to include them.",
         "operationId": "Alerts_GetAlertHistory",
         "parameters": [
           {
@@ -10127,6 +10127,25 @@
               "default": 20
             },
             "x-position": 2
+          },
+          {
+            "name": "alertRuleId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "guid",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "includeTest",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 4
           }
         ],
         "responses": {
@@ -32751,6 +32770,10 @@
           "acknowledgedBy": {
             "type": "string",
             "nullable": true
+          },
+          "isTest": {
+            "type": "boolean",
+            "description": "True when every instance of this excursion was a test fire."
           }
         }
       },

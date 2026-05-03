@@ -7,8 +7,8 @@
   import * as Select from "$lib/components/ui/select";
   import SidebarGlucoseWidget from "./SidebarGlucoseWidget.svelte";
   import SidebarNotifications from "./SidebarNotifications.svelte";
+  import SidebarDndToggle from "$lib/components/alerts/SidebarDndToggle.svelte";
   import UserMenu from "./UserMenu.svelte";
-  import DndQuickToggle from "$lib/components/alerts/DndQuickToggle.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
@@ -26,6 +26,7 @@
     Apple,
     Utensils,
     Bell,
+    BellOff,
     HeartHandshake,
     Plug,
     Calendar,
@@ -44,6 +45,9 @@
     ScrollText,
     Eye,
     Users,
+    PlayCircle,
+    History as HistoryIcon,
+    SlidersHorizontal,
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
@@ -240,6 +244,16 @@
 
     items.push(
     {
+      title: "Alerts",
+      icon: Bell,
+      children: [
+        { title: "Rules", href: "/alerts", icon: Bell, strict: true },
+        { title: "Simulator", href: "/alerts/simulator", icon: PlayCircle },
+        { title: "Do Not Disturb", href: "/alerts/dnd", icon: BellOff },
+        { title: "History", href: "/alerts/history", icon: HistoryIcon },
+      ],
+    },
+    {
       title: "Dev Tools",
       icon: Terminal,
       children: [
@@ -274,7 +288,6 @@
           href: "/settings/data-quality",
           icon: ShieldCheck,
         },
-        { title: "Alerts", href: "/settings/alerts", icon: Bell },
         {
           title: "Notifications & Trackers",
           href: "/settings/trackers",
@@ -448,13 +461,17 @@
                   <Sidebar.MenuSub>
                     {#each item.children as child}
                       <Sidebar.MenuSubItem>
-                        <Sidebar.MenuSubButton
-                          href={child.href}
-                          isActive={isActive(child)}
-                        >
-                          <child.icon class="h-4 w-4" />
-                          <span>{child.title}</span>
-                        </Sidebar.MenuSubButton>
+                        {#if child.href === "/alerts/dnd"}
+                          <SidebarDndToggle />
+                        {:else}
+                          <Sidebar.MenuSubButton
+                            href={child.href}
+                            isActive={isActive(child)}
+                          >
+                            <child.icon class="h-4 w-4" />
+                            <span>{child.title}</span>
+                          </Sidebar.MenuSubButton>
+                        {/if}
                       </Sidebar.MenuSubItem>
                     {/each}
                   </Sidebar.MenuSub>
@@ -491,11 +508,6 @@
                   updateLanguagePreference({ preferredLanguage: locale })
               : undefined}
           />
-        </Sidebar.MenuItem>
-      {/if}
-      {#if user && !isGuestSession}
-        <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
-          <DndQuickToggle />
         </Sidebar.MenuItem>
       {/if}
       <Sidebar.MenuItem

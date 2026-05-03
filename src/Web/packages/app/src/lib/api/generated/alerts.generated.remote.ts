@@ -25,11 +25,12 @@ export const getActiveAlerts = query(async () => {
   }
 });
 
-/** Get paginated history of resolved excursions. */
-export const getAlertHistory = query(z.object({ page: z.number().optional(), pageSize: z.number().optional() }).optional(), async (params) => {
+/** Get paginated history of resolved excursions. Test fires are excluded
+by default; pass includeTest = true to include them. */
+export const getAlertHistory = query(z.object({ page: z.number().optional(), pageSize: z.number().optional(), alertRuleId: z.string().optional(), includeTest: z.boolean().optional() }).optional(), async (params) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
-    return await apiClient.alerts.getAlertHistory(params?.page, params?.pageSize);
+    return await apiClient.alerts.getAlertHistory(params?.page, params?.pageSize, params?.alertRuleId, params?.includeTest);
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }

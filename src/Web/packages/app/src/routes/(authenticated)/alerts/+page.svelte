@@ -12,7 +12,10 @@
     getAlertHistory,
     acknowledge,
   } from "$api/generated/alerts.generated.remote";
-  import { get as getTenantAlertSettings } from "$api/generated/tenantAlertSettings.generated.remote";
+  import {
+    get as getTenantAlertSettings,
+    update as updateTenantAlertSettings,
+  } from "$api/generated/tenantAlertSettings.generated.remote";
   import type {
     AlertRuleResponse,
     ActiveExcursionResponse,
@@ -28,12 +31,10 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import { Bell, Plus, AlertTriangle, Check, Loader2, History as HistoryIcon, BellOff, PlayCircle } from "lucide-svelte";
+  import { Bell, Plus, AlertTriangle, Check, Loader2 } from "lucide-svelte";
 
   import AlertRuleRow from "$lib/components/alerts/AlertRuleRow.svelte";
   import ArmedStatusStrip from "$lib/components/alerts/ArmedStatusStrip.svelte";
-  import ReplayDialog from "$lib/components/alerts/ReplayDialog.svelte";
-  import OnboardingCard from "$lib/components/alerts/OnboardingCard.svelte";
 
   // ---- State ----
   let rules = $state<AlertRuleResponse[]>([]);
@@ -47,7 +48,7 @@
   let deletingRuleId = $state<string | null>(null);
   let testingRuleId = $state<string | null>(null);
   let acknowledging = $state(false);
-  let replayOpen = $state(false);
+  let disablingDnd = $state(false);
 
   // ---- Derived ----
   let enabledCount = $derived(rules.filter((r) => r.isEnabled).length);
@@ -132,6 +133,24 @@
     }
   }
 
+  async function handleDisableDnd(): Promise<void> {
+    if (!dnd) return;
+    disablingDnd = true;
+    try {
+      const next = await updateTenantAlertSettings({
+        dndManualActive: false,
+        dndManualUntil: undefined,
+        dndScheduleEnabled: false,
+        dndScheduleStart: dnd.dndScheduleStart,
+        dndScheduleEnd: dnd.dndScheduleEnd,
+        timezone: dnd.timezone ?? "UTC",
+      });
+      dnd = next;
+    } finally {
+      disablingDnd = false;
+    }
+  }
+
   async function handleAcknowledge(): Promise<void> {
     acknowledging = true;
     try {
@@ -144,11 +163,11 @@
   }
 
   function newRule(): void {
-    goto("/settings/alerts/new");
+    goto("/alerts/new");
   }
 
   function editRule(rule: AlertRuleResponse): void {
-    goto(`/settings/alerts/${rule.id}`);
+    goto(`/alerts/${rule.id}`);
   }
 
   onMount(() => {
@@ -173,12 +192,6 @@
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <Button variant="outline" size="sm" onclick={() => goto("/settings/alerts/dnd")}>
-        <BellOff class="h-4 w-4 mr-2" /> Do Not Disturb
-      </Button>
-      <Button variant="outline" size="sm" onclick={() => goto("/settings/alerts/history")}>
-        <HistoryIcon class="h-4 w-4 mr-2" /> History
-      </Button>
       <Button onclick={newRule}>
         <Plus class="h-4 w-4 mr-2" /> New rule
       </Button>
@@ -189,7 +202,7 @@
     <SettingsPageSkeleton cardCount={3} />
   {:else if error}
     <Card class="border-destructive">
-      <CardContent class="flex items-center gap-3 pt-6">
+      <CardContent class="flex items-center gap-3">
         <AlertTriangle class="h-5 w-5 text-destructive" />
         <div>
           <p class="font-medium">Failed to load alerts</p>
@@ -199,15 +212,16 @@
     </Card>
   {:else}
     <!-- Armed status strip -->
-    <ArmedStatusStrip state={armedState} />
-
-    <!-- First-run trust ladder. Renders nothing once all four steps are done. -->
-    <OnboardingCard {rules} />
+    <ArmedStatusStrip
+      state={armedState}
+      onDisableDnd={armedState === "dnd" ? handleDisableDnd : undefined}
+      {disablingDnd}
+    />
 
     <!-- Stat row -->
     <div class="grid gap-3 sm:grid-cols-3">
       <Card>
-        <CardContent class="pt-6">
+        <CardContent>
           <p class="text-xs uppercase tracking-wider text-muted-foreground">Rules enabled</p>
           <p class="mt-1 text-2xl font-bold tabular-nums">
             {enabledCount}<span class="text-muted-foreground text-base font-normal"> / {totalCount}</span>
@@ -215,24 +229,29 @@
         </CardContent>
       </Card>
       <Card>
-        <CardContent class="pt-6">
+        <CardContent>
           <p class="text-xs uppercase tracking-wider text-muted-foreground">Active now</p>
           <p class="mt-1 text-2xl font-bold tabular-nums">{activeAlerts.length}</p>
         </CardContent>
       </Card>
-      <Card>
-        <CardContent class="pt-6">
-          <p class="text-xs uppercase tracking-wider text-muted-foreground">Fired this week</p>
-          <p class="mt-1 text-2xl font-bold tabular-nums">{firedThisWeek}</p>
-        </CardContent>
-      </Card>
+      <a
+        href="/alerts/history"
+        class="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Card class="transition-colors hover:bg-muted/40">
+          <CardContent>
+            <p class="text-xs uppercase tracking-wider text-muted-foreground">Fired this week</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums">{firedThisWeek}</p>
+          </CardContent>
+        </Card>
+      </a>
     </div>
 
     <!-- Active alerts banner (kept as a persistent surface separate from the
          FiringToast which handles fresh-fire moments). -->
     {#if activeAlerts.length > 0}
       <Card class="border-destructive/40 bg-destructive/5">
-        <CardHeader class="pb-3">
+        <CardHeader>
           <div class="flex items-center justify-between">
             <CardTitle class="flex items-center gap-2 text-destructive">
               <AlertTriangle class="h-5 w-5" />
@@ -251,7 +270,7 @@
         <CardContent class="space-y-2">
           {#each activeAlerts as a (a.id)}
             <div class="flex items-center gap-3 rounded-md border bg-background p-3">
-              <span class="h-2 w-2 rounded-full bg-red-500" aria-hidden="true"></span>
+              <span class="h-2 w-2 rounded-full bg-status-critical" aria-hidden="true"></span>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium truncate">{a.ruleName ?? "Alert"}</p>
                 <p class="text-xs text-muted-foreground">
@@ -270,12 +289,7 @@
     <!-- Rules table -->
     <Card>
       <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle>Alert rules</CardTitle>
-          <Button variant="outline" size="sm" onclick={() => (replayOpen = true)} disabled={rules.length === 0}>
-            <PlayCircle class="h-4 w-4 mr-2" /> Simulate last 24 h
-          </Button>
-        </div>
+        <CardTitle>Alert rules</CardTitle>
       </CardHeader>
       <CardContent>
         {#if rules.length === 0}
@@ -308,5 +322,3 @@
     </Card>
   {/if}
 </div>
-
-<ReplayDialog bind:open={replayOpen} availableRules={rules} />

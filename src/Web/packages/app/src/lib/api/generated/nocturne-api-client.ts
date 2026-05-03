@@ -11002,11 +11002,14 @@ export class AlertsClient {
     }
 
     /**
-     * Get paginated history of resolved excursions.
+     * Get paginated history of resolved excursions. Test fires are excluded
+    by default; pass includeTest = true to include them.
      * @param page (optional) 
      * @param pageSize (optional) 
+     * @param alertRuleId (optional) 
+     * @param includeTest (optional) 
      */
-    getAlertHistory(page?: number | undefined, pageSize?: number | undefined, signal?: AbortSignal): Promise<AlertHistoryResponse> {
+    getAlertHistory(page?: number | undefined, pageSize?: number | undefined, alertRuleId?: string | null | undefined, includeTest?: boolean | undefined, signal?: AbortSignal): Promise<AlertHistoryResponse> {
         let url_ = this.baseUrl + "/api/v4/alerts/history?";
         if (page === null)
             throw new globalThis.Error("The parameter 'page' cannot be null.");
@@ -11016,6 +11019,12 @@ export class AlertsClient {
             throw new globalThis.Error("The parameter 'pageSize' cannot be null.");
         else if (pageSize !== undefined)
             url_ += "pageSize=" + encodeURIComponent("" + pageSize) + "&";
+        if (alertRuleId !== undefined && alertRuleId !== null)
+            url_ += "alertRuleId=" + encodeURIComponent("" + alertRuleId) + "&";
+        if (includeTest === null)
+            throw new globalThis.Error("The parameter 'includeTest' cannot be null.");
+        else if (includeTest !== undefined)
+            url_ += "includeTest=" + encodeURIComponent("" + includeTest) + "&";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -27780,6 +27789,8 @@ export interface HistoryExcursionResponse {
     endedAt?: Date;
     acknowledgedAt?: Date | undefined;
     acknowledgedBy?: string | undefined;
+    /** True when every instance of this excursion was a test fire. */
+    isTest?: boolean;
 }
 
 export interface AcknowledgeRequest {

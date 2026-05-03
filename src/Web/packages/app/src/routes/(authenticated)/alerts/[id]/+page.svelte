@@ -9,10 +9,10 @@
     updateRule,
     deleteRule,
     testFire,
-    testFireDryRun,
   } from "$api/generated/alertRules.generated.remote";
-  import { AlertRuleSeverity, AlertConditionType, ChannelType } from "$api-clients";
-  import type { AlertRuleResponse } from "$api-clients";
+  import { getAlertHistory } from "$api/generated/alerts.generated.remote";
+  import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
+  import type { AlertRuleResponse, HistoryExcursionResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -28,13 +28,15 @@
     CardDescription,
   } from "$lib/components/ui/card";
   import * as Select from "$lib/components/ui/select";
+  import * as Dialog from "$lib/components/ui/dialog";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { ArrowLeft, Save, Trash2, Zap, Loader2 } from "lucide-svelte";
+  import { ArrowLeft, Save, Trash2, Zap, Loader2, History as HistoryIcon, PlayCircle } from "lucide-svelte";
 
   import RuleBuilder from "$lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
-  import RulePreviewRail from "$lib/components/alerts/RulePreviewRail.svelte";
+  import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
+  import { severityLabel } from "$lib/components/alerts/severity";
   import {
     parseRule,
     flattenSingleChildRoot,
@@ -43,7 +45,6 @@
     ensureCompositeRoot,
     defaultPayload,
     type RuleEditorState,
-    type ChannelDef,
   } from "$lib/components/alerts/types";
 
   // ---- Page state ------------------------------------------------------
@@ -55,11 +56,20 @@
   let saving = $state(false);
   let deleting = $state(false);
   let testingSaved = $state(false);
-  let testingDryRun = $state(false);
   let error = $state<string | null>(null);
 
   let state = $state<RuleEditorState>(parseRule(null));
   let availableRules = $state<{ id: string; name: string }[]>([]);
+
+  // Per-rule excursion history surfaced in the right rail. Loaded after the
+  // rule itself so the rail doesn't block the editor render.
+  let history = $state<HistoryExcursionResponse[]>([]);
+  let historyLoading = $state(false);
+
+  // Replay dialog state — opened either by the "Test alert" button (no preset)
+  // or by clicking a historic firing (preset to that day).
+  let replayOpen = $state(false);
+  let replayInitialDate = $state<string | undefined>(undefined);
 
   // Smart-snooze controls — driven by the snooze sub-tree on clientConfig.
   let smartSnoozeOn = $derived(state.clientConfig.snooze.smartSnooze);
@@ -81,6 +91,22 @@
       error = e instanceof Error ? e.message : String(e);
     } finally {
       loading = false;
+    }
+
+    if (!isNew) {
+      historyLoading = true;
+      try {
+        const r = await getAlertHistory({
+          page: 1,
+          pageSize: 25,
+          alertRuleId: ruleId,
+        });
+        history = r?.items ?? [];
+      } catch {
+        history = [];
+      } finally {
+        historyLoading = false;
+      }
     }
   });
 
@@ -133,7 +159,7 @@
       };
       if (isNew) {
         const created = await createRule(body);
-        await goto(`/settings/alerts/${created?.id ?? ""}`);
+        await goto(`/alerts/${created?.id ?? ""}`);
       } else {
         await updateRule({ id: ruleId, request: body });
       }
@@ -151,7 +177,7 @@
     error = null;
     try {
       await deleteRule(ruleId);
-      await goto("/settings/alerts");
+      await goto("/alerts");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -160,9 +186,6 @@
   }
 
   // ---- Test fire -------------------------------------------------------
-  // Saved rules use the real testFire endpoint (writes a is_test=true row);
-  // unsaved/dirty rules use testFireDryRun which fires through the live
-  // channel chain without persisting.
 
   async function fireSaved(): Promise<void> {
     testingSaved = true;
@@ -176,24 +199,32 @@
     }
   }
 
-  async function fireDryRun(): Promise<void> {
-    testingDryRun = true;
-    error = null;
-    try {
-      await testFireDryRun({
-        name: state.name || "(Untitled rule)",
-        severity: state.severity,
-        channels: state.channels.map((c) => ({
-          channelType: c.channelType,
-          destination: c.destination || undefined,
-          destinationLabel: c.destinationLabel || undefined,
-        })),
-      });
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      testingDryRun = false;
+  function openReplay(initialDate?: string | Date | undefined): void {
+    if (initialDate instanceof Date) {
+      replayInitialDate = ymd(initialDate);
+    } else if (typeof initialDate === "string") {
+      replayInitialDate = initialDate.slice(0, 10);
+    } else {
+      replayInitialDate = undefined;
     }
+    replayOpen = true;
+  }
+
+  function ymd(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function formatHistoryRow(at: Date | string | undefined): string {
+    if (!at) return "—";
+    const d = at instanceof Date ? at : new Date(at);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   }
 
   // ---- Severity ---------------------------------------------------------
@@ -204,11 +235,31 @@
     { value: AlertRuleSeverity.Critical, label: "Critical" },
   ];
 
-  function severityLabel(s: AlertRuleSeverity): string {
-    return severityOptions.find((o) => o.value === s)?.label ?? "Warning";
-  }
-
   // ---- Smart snooze -----------------------------------------------------
+
+  /**
+   * Snapshot the editor state into the dry-run rule shape. Re-evaluated each
+   * time Run is pressed so unsaved edits between presses are picked up.
+   */
+  function buildReplayRule() {
+    const flat = flattenSingleChildRoot(state.condition!);
+    const api = nodeToApi(flat);
+    const params = api?.conditionParams;
+    const autoResolve = state.autoResolveCondition
+      ? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
+      : undefined;
+    return {
+      id: isNew ? undefined : ruleId,
+      name: state.name,
+      conditionType: api?.conditionType as AlertConditionType,
+      conditionParams:
+        params == null ? undefined : JSON.stringify(params),
+      severity: state.severity,
+      allowThroughDnd: state.allowThroughDnd,
+      autoResolveEnabled: state.autoResolveEnabled,
+      autoResolveParams: autoResolve ? JSON.stringify(autoResolve) : undefined,
+    };
+  }
 
   function toggleSmartSnooze(checked: boolean): void {
     state.clientConfig.snooze.smartSnooze = checked;
@@ -232,7 +283,7 @@
         type="button"
         variant="ghost"
         size="icon"
-        onclick={() => goto("/settings/alerts")}
+        onclick={() => goto("/alerts")}
         aria-label="Back to alerts"
       >
         <ArrowLeft class="h-4 w-4" />
@@ -280,7 +331,7 @@
     </div>
   {/if}
 
-  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
     <!-- Main editor column -->
     <div class="space-y-6">
       {#if loading}
@@ -296,9 +347,21 @@
       {:else}
         <!-- Identity -->
         <Card>
-          <CardHeader>
-            <CardTitle>Identity</CardTitle>
-            <CardDescription>What should this alert be called?</CardDescription>
+          <CardHeader class="flex flex-row items-start justify-between gap-4">
+            <div class="space-y-1.5">
+              <CardTitle>Identity</CardTitle>
+              <CardDescription>What should this alert be called?</CardDescription>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <Label class="cursor-pointer text-sm" for="rule-enabled">Enabled</Label>
+              <Switch
+                id="rule-enabled"
+                checked={state.isEnabled}
+                onCheckedChange={(c) => {
+                  state.isEnabled = c;
+                }}
+              />
+            </div>
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="space-y-2">
@@ -325,37 +388,22 @@
                 }}
               />
             </div>
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div class="space-y-2">
-                <Label>Severity</Label>
-                <Select.Root
-                  type="single"
-                  value={state.severity}
-                  onValueChange={(v) => {
-                    state.severity = v as AlertRuleSeverity;
-                  }}
-                >
-                  <Select.Trigger>{severityLabel(state.severity)}</Select.Trigger>
-                  <Select.Content>
-                    {#each severityOptions as o (o.value)}
-                      <Select.Item value={o.value} label={o.label} />
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
-              </div>
-              <div class="flex items-end justify-between gap-4">
-                <div class="space-y-0.5">
-                  <Label class="cursor-pointer" for="rule-enabled">Enabled</Label>
-                  <p class="text-xs text-muted-foreground">Disabled rules don't fire</p>
-                </div>
-                <Switch
-                  id="rule-enabled"
-                  checked={state.isEnabled}
-                  onCheckedChange={(c) => {
-                    state.isEnabled = c;
-                  }}
-                />
-              </div>
+            <div class="space-y-2">
+              <Label>Severity</Label>
+              <Select.Root
+                type="single"
+                value={state.severity}
+                onValueChange={(v) => {
+                  state.severity = v as AlertRuleSeverity;
+                }}
+              >
+                <Select.Trigger>{severityLabel(state.severity)}</Select.Trigger>
+                <Select.Content>
+                  {#each severityOptions as o (o.value)}
+                    <Select.Item value={o.value} label={o.label} />
+                  {/each}
+                </Select.Content>
+              </Select.Root>
             </div>
             <div class="flex items-start gap-2 rounded border bg-muted/30 p-3">
               <Checkbox
@@ -467,28 +515,13 @@
       {/if}
     </div>
 
-    <!-- Right rail: live preview + test fire -->
+    <!-- Right rail: test alert + historic firings -->
     <aside class="lg:sticky lg:top-6 self-start space-y-4">
       <Card>
-        <CardHeader class="pb-3">
-          <CardTitle class="text-base">Live preview</CardTitle>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          {#if !loading}
-            <RulePreviewRail
-              name={state.name}
-              severity={state.severity}
-              condition={state.condition}
-            />
-          {/if}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-3">
-          <CardTitle class="text-base">Test fire</CardTitle>
+        <CardHeader>
+          <CardTitle class="text-base">Test alert</CardTitle>
           <CardDescription class="text-xs">
-            Sends a real notification through the configured channels.
+            Fire a real notification, or replay the rule against historical glucose.
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-2">
@@ -512,19 +545,73 @@
             type="button"
             variant="outline"
             class="w-full justify-start"
-            onclick={fireDryRun}
-            disabled={testingDryRun || loading}
-            title="Fire through current channels without persisting"
+            onclick={() => openReplay()}
+            disabled={loading}
           >
-            {#if testingDryRun}
-              <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-            {:else}
-              <Zap class="h-4 w-4 mr-2" />
-            {/if}
-            Fire current draft
+            <PlayCircle class="h-4 w-4 mr-2" />
+            Replay against history
           </Button>
         </CardContent>
       </Card>
+
+      {#if !isNew}
+        <Card>
+          <CardHeader>
+            <CardTitle class="text-base flex items-center gap-2">
+              <HistoryIcon class="h-4 w-4" /> Historic firings
+            </CardTitle>
+            <CardDescription class="text-xs">
+              Real fires for this rule. Click any to replay the day in the simulator.
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-1.5">
+            {#if historyLoading}
+              <div class="flex items-center justify-center py-4 text-muted-foreground">
+                <Loader2 class="h-4 w-4 animate-spin" />
+              </div>
+            {:else if history.length === 0}
+              <div class="rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground">
+                No firings yet.
+              </div>
+            {:else}
+              <div class="max-h-72 overflow-y-auto space-y-1">
+                {#each history as h (h.id)}
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted"
+                    onclick={() => openReplay(h.startedAt)}
+                  >
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
+                    <span class="flex-1 min-w-0 truncate tabular-nums">
+                      {formatHistoryRow(h.startedAt)}
+                    </span>
+                    {#if h.acknowledgedAt}
+                      <span class="text-[10px] text-muted-foreground shrink-0">ack</span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </CardContent>
+        </Card>
+      {/if}
     </aside>
   </div>
 </div>
+
+<Dialog.Root bind:open={replayOpen}>
+  <Dialog.Content class="max-w-3xl">
+    <Dialog.Header>
+      <Dialog.Title class="flex items-center gap-2">
+        <PlayCircle class="h-4 w-4" /> Replay
+      </Dialog.Title>
+      <Dialog.Description>
+        Replay this alert (and any siblings) against historical glucose. Nothing is delivered.
+      </Dialog.Description>
+    </Dialog.Header>
+
+    <div class="py-2">
+      <ReplayPanel initialCustomDate={replayInitialDate} rule={buildReplayRule} />
+    </div>
+  </Dialog.Content>
+</Dialog.Root>

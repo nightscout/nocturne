@@ -546,8 +546,6 @@ msgid "Duration"
 msgstr ""
 
 #: src/lib/components/TreatmentsTable.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 msgid "Percent"
 msgstr ""
@@ -731,7 +729,6 @@ msgstr ""
 msgid "Failed to save alarm configuration"
 msgstr ""
 
-#: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
@@ -850,7 +847,6 @@ msgstr ""
 #~ msgid "<0/> Open Clock"
 #~ msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -861,7 +857,6 @@ msgstr ""
 msgid "Sun"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -872,7 +867,6 @@ msgstr ""
 msgid "Mon"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -883,7 +877,6 @@ msgstr ""
 msgid "Tue"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -894,7 +887,6 @@ msgstr ""
 msgid "Wed"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -905,7 +897,6 @@ msgstr ""
 msgid "Thu"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -916,7 +907,6 @@ msgstr ""
 msgid "Fri"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1474,9 +1464,7 @@ msgid "Comparison Error"
 msgstr ""
 
 #: src/lib/components/account/SecurityCredentialCard.svelte
-#: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
@@ -1501,7 +1489,6 @@ msgstr ""
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -1718,13 +1705,14 @@ msgstr ""
 
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/reports/GlucoseScoreCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1924,7 +1912,6 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/compatibility/+page.svelte
@@ -1995,6 +1982,7 @@ msgstr ""
 
 #: src/lib/components/SiteFooter.svelte
 #: src/lib/components/SiteHeader.svelte
+#: src/lib/components/alerts/RulePreviewRail.svelte
 #: src/lib/components/dashboard/CurrentBGDisplay.svelte
 #: src/lib/components/layout/AppSidebar.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
@@ -2104,9 +2092,11 @@ msgstr ""
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/food/FoodEditor.svelte
 #: src/routes/(authenticated)/food/FoodFilters.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/roles/+page.svelte
 #: src/routes/(authenticated)/settings/roles/+page.svelte
 #: src/routes/food/FoodEditor.svelte
@@ -2440,9 +2430,11 @@ msgstr ""
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/food/QuickPicksList.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/settings/account/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -3355,8 +3347,6 @@ msgstr ""
 msgid "<0/> Delete Profile"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
@@ -3370,10 +3360,10 @@ msgstr ""
 msgid "Units"
 msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
@@ -3443,7 +3433,6 @@ msgstr ""
 msgid "{0} g/hr"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -3466,6 +3455,8 @@ msgstr ""
 msgid "Default"
 msgstr ""
 
+#: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
@@ -3493,7 +3484,6 @@ msgstr ""
 msgid "Background insulin delivery rates"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/routes/(authenticated)/reports/basal-analysis/+page.svelte
@@ -3802,6 +3792,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 msgid "Manual"
 msgstr ""
 
@@ -3923,6 +3914,7 @@ msgstr ""
 msgid "UAM"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
@@ -4168,6 +4160,7 @@ msgid "IOB/COB"
 msgstr ""
 
 #: src/lib/components/actogram/ActogramRow.svelte
+#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
@@ -4203,6 +4196,7 @@ msgstr ""
 msgid "Basal"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/dashboard/GlucoseChartCard.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
@@ -4292,6 +4286,8 @@ msgstr ""
 #: src/lib/components/audit/AuditMutationsTable.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 #: src/routes/settings/admin/+page.svelte
@@ -4682,9 +4678,8 @@ msgstr ""
 msgid "Avg TDD"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Days"
-msgstr ""
+#~ msgid "Days"
+#~ msgstr ""
 
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Basal (U)"
@@ -4894,7 +4889,6 @@ msgstr ""
 msgid "Daily glucose statistics and time in range data."
 msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/reports/DailySummaryTable.svelte
 msgid "Date"
 msgstr ""
@@ -5352,6 +5346,7 @@ msgstr ""
 msgid "Avg Before"
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
@@ -5745,8 +5740,9 @@ msgstr ""
 
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Info"
 msgstr ""
@@ -5754,8 +5750,9 @@ msgstr ""
 #: src/lib/components/AlarmOverlay.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
-#: src/lib/components/alerts/ReplayDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Warning"
@@ -5792,6 +5789,8 @@ msgstr ""
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/roles/+page.svelte
 #: src/routes/(authenticated)/settings/roles/+page.svelte
 #: src/routes/settings/roles/+page.svelte
@@ -6157,8 +6156,6 @@ msgid "Minutes without data"
 msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/settings/alerts/setup/+page.svelte
 msgid "Threshold"
@@ -6444,6 +6441,13 @@ msgstr ""
 msgid "Extend by"
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderRow.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 #: src/lib/components/settings/alarm-profile/AlarmSnoozeTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmSnoozeTab.svelte
@@ -6764,7 +6768,10 @@ msgid "Failed to upload sound"
 msgstr ""
 
 #. placeholder {0}: sound.name
+#. placeholder {0}: state.name
 #: src/lib/components/settings/CustomSoundUpload.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Delete \"{0}\"? This cannot be undone."
 msgstr ""
 
@@ -7077,13 +7084,16 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/roles/+page.svelte
 #: src/routes/clock/+page.svelte
 #: src/routes/reports/data-quality/compression-lows/+page.svelte
@@ -7324,7 +7334,10 @@ msgstr ""
 
 #. placeholder {0}: table.getState().pagination.pageIndex + 1
 #. placeholder {1}: table.getPageCount()
+#. placeholder {0}: page
+#. placeholder {1}: history.totalPages
 #: src/lib/components/treatments/DataTablePagination.svelte
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Page {0} of {1}"
 msgstr ""
 
@@ -8122,6 +8135,7 @@ msgstr ""
 #: src/lib/components/alerts/QuietHoursCard.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 #: src/routes/(authenticated)/settings/roles/+page.svelte
 #: src/routes/settings/admin/tenants/+page.svelte
@@ -10923,6 +10937,8 @@ msgstr ""
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/lib/components/connectors/ConnectorSetup.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/settings/admin/+page.svelte
 msgid "Enabled"
 msgstr ""
@@ -12644,8 +12660,8 @@ msgstr ""
 msgid "Select a date range to re-sync specific data."
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -12653,8 +12669,8 @@ msgstr ""
 msgid "From"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/settings/connectors/+page.svelte
@@ -12875,6 +12891,7 @@ msgstr ""
 msgid "Start a tracker from your definitions"
 msgstr ""
 
+#: src/lib/components/layout/AppSidebar.svelte
 #: src/lib/components/trackers/TrackerHistoryTab.svelte
 #: src/routes/settings/trackers/+page.svelte
 msgid "History"
@@ -13168,6 +13185,7 @@ msgstr ""
 msgid "No recent meals"
 msgstr ""
 
+#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
 msgid "Last 24h"
 msgstr ""
@@ -13274,6 +13292,7 @@ msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/lib/components/ui/pagination/pagination-next-button.svelte
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Next"
 msgstr ""
@@ -13284,6 +13303,7 @@ msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/lib/components/ui/pagination/pagination-prev-button.svelte
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/setup/+page.svelte
@@ -13860,6 +13880,8 @@ msgstr ""
 msgid "Safe to run multiple times"
 msgstr ""
 
+#: src/lib/components/alerts/OnboardingCard.svelte
+#: src/lib/components/alerts/OnboardingCard.svelte
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/connectors/SyncResultCard.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
@@ -15666,6 +15688,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/FiringToast.svelte
+#: src/lib/components/alerts/RulePreviewRail.svelte
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/dashboard/SetupCard.svelte
@@ -15914,6 +15937,7 @@ msgstr ""
 #~ msgid "No Source <0/>"
 #~ msgstr ""
 
+#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/routes/(authenticated)/reports/week-to-week/+page.svelte
 #: src/routes/reports/week-to-week/+page.svelte
 msgid "Reset"
@@ -16332,7 +16356,6 @@ msgstr ""
 #~ msgid "Display mg/dL or mmol/L"
 #~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
@@ -16412,13 +16435,11 @@ msgstr ""
 #~ msgid "Predicted BG from loop"
 #~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Insulin on board"
-msgstr ""
+#~ msgid "Insulin on board"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Carbs on board"
-msgstr ""
+#~ msgid "Carbs on board"
+#~ msgstr ""
 
 #~ msgid "Current basal rate"
 #~ msgstr ""
@@ -16540,6 +16561,7 @@ msgstr ""
 msgid "{0}m"
 msgstr ""
 
+#: src/lib/components/alerts/RuleBuilderRow.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 msgid "<0/> Remove"
 msgstr ""
@@ -16809,8 +16831,10 @@ msgstr ""
 msgid "Failed to save clock face"
 msgstr ""
 
-#~ msgid "Delete \"{0}\"?"
-#~ msgstr ""
+#. placeholder {0}: rule.name
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Delete \"{0}\"?"
+msgstr ""
 
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/clock/+page.svelte
@@ -16915,6 +16939,7 @@ msgid "When is this event scheduled?"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerStartDialog.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 msgid "Schedule"
 msgstr ""
 
@@ -17703,7 +17728,6 @@ msgstr ""
 msgid "Bolus Type"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/lib/components/entries/BolusSection.svelte
 msgid "Rate (U/hr)"
 msgstr ""
@@ -21142,6 +21166,9 @@ msgstr ""
 
 #. placeholder {0}: new Date(settings.dndManualUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 #. placeholder {0}: formatDate(insulin.endDate)
+#. placeholder {0}: formatDate(device.endDate)
+#. placeholder {0}: formatDate(insulin.endDate)
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
@@ -21353,8 +21380,9 @@ msgstr ""
 msgid "Basics"
 msgstr ""
 
-#~ msgid "America/New_York"
-#~ msgstr ""
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "America/New_York"
+msgstr ""
 
 #: src/lib/components/patient/InsulinFormFields.svelte
 msgid "Duration of Insulin Action"
@@ -21641,7 +21669,12 @@ msgstr ""
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AudioSection.svelte
 #: src/lib/components/alerts/FiringToast.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Alert"
 msgstr ""
@@ -21879,22 +21912,17 @@ msgid "High Threshold"
 msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Rate of Change"
 msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Signal Loss"
 msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Composite"
 msgstr ""
@@ -21914,92 +21942,67 @@ msgstr ""
 msgid "Above {0} mg/dL"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Falling"
-msgstr ""
+#~ msgid "Falling"
+#~ msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Rising"
-msgstr ""
+#~ msgid "Rising"
+#~ msgstr ""
 
 #. placeholder {0}: (params as Record<string, unknown>)["minutes"] ?? "?"
 #: src/routes/settings/alerts/+page.svelte
 msgid "No data for {0} minutes"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Multiple conditions combined"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Custom condition"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
-#: src/routes/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Failed to load alert settings"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Alerts - Settings - Nocturne"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Configure alert rules, schedules, and escalation chains"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
-#: src/routes/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Setup Wizard"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Add Rule"
 msgstr ""
 
 #. placeholder {0}: activeAlerts.length
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Active Alerts ({0})"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Acknowledge All"
 msgstr ""
 
-#. placeholder {0}: getConditionLabel(alert.conditionType)
 #. placeholder {1}: formatDate( alert.startedAt )
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "{0} — Started {1}"
 msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Acknowledged"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Alert Rules"
 msgstr ""
@@ -22008,31 +22011,24 @@ msgstr ""
 msgid "Rules define when alerts trigger and how they escalate"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "No alert rules configured"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Use the setup wizard to create your first alert rules"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Unnamed Rule"
 msgstr ""
 
-#. placeholder {0}: rule.schedules.length
 #. placeholder {1}: rule.schedules.length !== 1 ? "s" : ""
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> {0} schedule{1}"
 msgstr ""
 
-#. placeholder {0}: stepCount
 #. placeholder {1}: stepCount !== 1 ? "s" : ""
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> {0} escalation step{1}"
 msgstr ""
@@ -22055,13 +22051,11 @@ msgstr ""
 msgid "{0} reading{1}"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Sort Order"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/RuleEditorSheet.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
 #: src/routes/settings/alerts/+page.svelte
@@ -22069,54 +22063,45 @@ msgstr ""
 msgid "Schedules"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Default Schedule"
 msgstr ""
 
 #. placeholder {0}: schedule.daysOfWeek.map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d] ?? d).join(", ")
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Days: {0}"
 msgstr ""
 
 #. placeholder {0}: idx + 1
 #. placeholder {0}: stepIdx + 1
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Step {0}"
 msgstr ""
 
 #. placeholder {0}: Math.round(step.delaySeconds / 60)
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "after {0}m"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "immediately"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "via"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Delete Rule"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "Delete Alert Rule"
 msgstr ""
 
 #. placeholder {0}: rule.name
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid ""
 "Are you sure you want to delete \"{0}\"? This\n"
@@ -22226,15 +22211,11 @@ msgstr ""
 msgid "Custom Sound"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Below"
-msgstr ""
+#~ msgid "Below"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Above"
-msgstr ""
+#~ msgid "Above"
+#~ msgstr ""
 
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
@@ -22254,6 +22235,7 @@ msgid "Presentation"
 msgstr ""
 
 #: src/lib/components/alerts/RuleEditorSheet.svelte
+#: src/lib/components/alerts/RulePreviewRail.svelte
 msgid "Snooze"
 msgstr ""
 
@@ -22265,8 +22247,9 @@ msgstr ""
 msgid "Brief description"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/lib/components/alerts/GeneralTab.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Severity"
 msgstr ""
 
@@ -22282,15 +22265,11 @@ msgstr ""
 #~ msgid "Composite -- editing not available"
 #~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Direction"
-msgstr ""
+#~ msgid "Direction"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Value (mg/dL)"
-msgstr ""
+#~ msgid "Value (mg/dL)"
+#~ msgstr ""
 
 #~ msgid "Rate (mg/dL/min)"
 #~ msgstr ""
@@ -22354,13 +22333,8 @@ msgstr ""
 msgid "Snooze Options"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/SnoozeTab.svelte
-msgid "Minutes"
-msgstr ""
+#~ msgid "Minutes"
+#~ msgstr ""
 
 #: src/lib/components/alerts/SnoozeTab.svelte
 msgid "Max Snooze Count"
@@ -22412,6 +22386,7 @@ msgid "Destination"
 msgstr ""
 
 #: src/lib/components/account/TotpSetupDialog.svelte
+#: src/lib/components/alerts/ChannelsSection.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -22443,7 +22418,6 @@ msgstr ""
 msgid "Update Rule"
 msgstr ""
 
-#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/settings/alerts/+page.svelte
 msgid "<0/> Edit Rule"
 msgstr ""
@@ -24204,6 +24178,7 @@ msgstr ""
 msgid "No timezone found."
 msgstr ""
 
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
 #: src/routes/settings/setup/profile/+page.svelte
 msgid "Europe/London"
@@ -24354,6 +24329,7 @@ msgstr ""
 msgid "America/Inuvik"
 msgstr ""
 
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
 #: src/routes/settings/setup/profile/+page.svelte
 msgid "Australia/Sydney"
@@ -24429,11 +24405,13 @@ msgstr ""
 msgid "Europe/Amsterdam"
 msgstr ""
 
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
 #: src/routes/settings/setup/profile/+page.svelte
 msgid "Europe/Berlin"
 msgstr ""
 
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(fullscreen)/setup/profile/+page.svelte
 #: src/routes/settings/setup/profile/+page.svelte
 msgid "Europe/Paris"
@@ -24981,6 +24959,8 @@ msgstr ""
 #: src/lib/components/rbac/PermissionPicker.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Identity"
 msgstr ""
 
@@ -28678,6 +28658,7 @@ msgstr ""
 msgid "<0/> Heart Rate Actogram"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 msgid "On"
@@ -29280,23 +29261,14 @@ msgstr ""
 #~ msgid "Rate ({0}/min)"
 #~ msgstr ""
 
-#. placeholder {0}: display
-#. placeholder {1}: label
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "Below {0} {1}"
-msgstr ""
+#~ msgid "Below {0} {1}"
+#~ msgstr ""
 
-#. placeholder {0}: display
-#. placeholder {1}: label
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "Above {0} {1}"
-msgstr ""
+#~ msgid "Above {0} {1}"
+#~ msgstr ""
 
-#. placeholder {0}: display
-#. placeholder {1}: label
-#: src/lib/components/alerts/AlertRuleRow.svelte
-msgid "Threshold: {0} {1}"
-msgstr ""
+#~ msgid "Threshold: {0} {1}"
+#~ msgstr ""
 
 #: src/lib/components/meals/MealBolusDialog.svelte
 msgid "Bolus deleted"
@@ -29643,6 +29615,8 @@ msgid "Failed to save rule. Please try again."
 msgstr ""
 
 #: src/lib/components/alerts/RuleEditorSheet.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Condition"
 msgstr ""
 
@@ -29675,6 +29649,8 @@ msgstr ""
 
 #: src/lib/components/alerts/AutoResolveSection.svelte
 #: src/lib/components/alerts/RuleEditorSheet.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Auto-resolve"
 msgstr ""
 
@@ -29694,6 +29670,8 @@ msgid "Replay enabled rules over a window"
 msgstr ""
 
 #: src/lib/components/alerts/RuleEditorSheet.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "<0/> Replay"
 msgstr ""
 
@@ -29713,7 +29691,7 @@ msgstr ""
 msgid "Conditions to extend snooze"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilderAddPicker.svelte
 #: src/lib/components/alerts/SnoozeTab.svelte
 msgid "<0/> Add condition"
 msgstr ""
@@ -29728,194 +29706,144 @@ msgstr ""
 msgid "No conditions configured."
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Group (and/or)"
-msgstr ""
+#~ msgid "Group (and/or)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Not"
-msgstr ""
+#~ msgid "Not"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Sustained for..."
-msgstr ""
+#~ msgid "Sustained for..."
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Threshold (mg/dL)"
-msgstr ""
+#~ msgid "Threshold (mg/dL)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Rate of change"
-msgstr ""
+#~ msgid "Rate of change"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Data staleness"
-msgstr ""
+#~ msgid "Data staleness"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Predicted glucose"
-msgstr ""
+#~ msgid "Predicted glucose"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Trend bucket"
-msgstr ""
+#~ msgid "Trend bucket"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Time of day"
-msgstr ""
+#~ msgid "Time of day"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Reservoir level"
-msgstr ""
+#~ msgid "Reservoir level"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Site age"
-msgstr ""
+#~ msgid "Site age"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Sensor age"
-msgstr ""
+#~ msgid "Sensor age"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Other rule state"
-msgstr ""
+#~ msgid "Other rule state"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Loop has stopped"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Loop not enacting"
-msgstr ""
+#~ msgid "Loop not enacting"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Pump suspended"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Pump battery"
-msgstr ""
+#~ msgid "Pump battery"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Temp basal"
-msgstr ""
+#~ msgid "Temp basal"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Phone battery"
-msgstr ""
+#~ msgid "Phone battery"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Override active"
-msgstr ""
+#~ msgid "Override active"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Insulin sensitivity"
-msgstr ""
+#~ msgid "Insulin sensitivity"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Percent of scheduled"
-msgstr ""
+#~ msgid "Percent of scheduled"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Falling fast"
-msgstr ""
+#~ msgid "Falling fast"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Flat"
-msgstr ""
+#~ msgid "Flat"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Rising fast"
-msgstr ""
+#~ msgid "Rising fast"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Remove condition"
-msgstr ""
+#~ msgid "Remove condition"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "All conditions (AND)"
-msgstr ""
+#~ msgid "All conditions (AND)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Any condition (OR)"
-msgstr ""
+#~ msgid "Any condition (OR)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Rate (mg/dL per min)"
-msgstr ""
+#~ msgid "Rate (mg/dL per min)"
+#~ msgstr ""
 
 #: src/lib/components/alerts/OperatorValueEditor.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Operator"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Within (min)"
-msgstr ""
+#~ msgid "Within (min)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Bucket"
-msgstr ""
+#~ msgid "Bucket"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Timezone (optional)"
-msgstr ""
+#~ msgid "Timezone (optional)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Grams"
-msgstr ""
+#~ msgid "Grams"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Other rule"
-msgstr ""
+#~ msgid "Other rule"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 msgid "Select a rule"
 msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "State"
-msgstr ""
+#~ msgid "State"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Firing"
-msgstr ""
+#~ msgid "Firing"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "For at least (min, optional)"
-msgstr ""
+#~ msgid "For at least (min, optional)"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "For closed-loop users only. Open-loop users should use \"Loop has stopped\" instead."
-msgstr ""
+#~ msgid "For closed-loop users only. Open-loop users should use \"Loop has stopped\" instead."
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Pump is currently suspended"
-msgstr ""
+#~ msgid "Pump is currently suspended"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Metric"
-msgstr ""
+#~ msgid "Metric"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Override is currently active"
-msgstr ""
+#~ msgid "Override is currently active"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Ratio"
-msgstr ""
+#~ msgid "Ratio"
+#~ msgstr ""
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Available for AAPS and Trio. Loop iOS does not report this value."
-msgstr ""
+#~ msgid "Available for AAPS and Trio. Loop iOS does not report this value."
+#~ msgstr ""
 
 #: src/lib/components/alerts/AutoResolveSection.svelte
 msgid "Close the alert automatically when this condition is true."
@@ -29925,42 +29853,37 @@ msgstr ""
 msgid "Add a condition that signals the alert should resolve."
 msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
+#: src/lib/components/alerts/ReplayPanel.svelte
 msgid "Failed to run replay. Please try again."
 msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
-msgid "<0/> Replay alert rules"
-msgstr ""
+#~ msgid "<0/> Replay alert rules"
+#~ msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
-msgid ""
-"See which events the currently enabled rules would have produced over\n"
-"a window. Replay does not deliver any notifications."
-msgstr ""
+#~ msgid ""
+#~ "See which events the currently enabled rules would have produced over\n"
+#~ "a window. Replay does not deliver any notifications."
+#~ msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
-msgid "Leave blank to replay the last 24 hours."
-msgstr ""
+#~ msgid "Leave blank to replay the last 24 hours."
+#~ msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
-msgid "Defaults to your browser timezone."
-msgstr ""
+#~ msgid "Defaults to your browser timezone."
+#~ msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
+#: src/lib/components/alerts/ReplayPanel.svelte
 msgid "<0/> Running…"
 msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
-msgid "Run replay"
-msgstr ""
+#~ msgid "Run replay"
+#~ msgstr ""
 
-#. placeholder {0}: formatRange( result.windowStart, result.windowEnd, timezone || browserTimezone, )
-#: src/lib/components/alerts/ReplayDialog.svelte
+#. placeholder {0}: formatRange(result.windowStart, result.windowEnd)
+#: src/lib/components/alerts/ReplayPanel.svelte
 msgid "Window: {0}"
 msgstr ""
 
-#: src/lib/components/alerts/ReplayDialog.svelte
+#: src/lib/components/alerts/ReplayPanel.svelte
 msgid "No events would have fired in this window."
 msgstr ""
 
@@ -29988,7 +29911,8 @@ msgstr ""
 msgid "Me"
 msgstr ""
 
-#. placeholder {0}: severityLabel(preset.severity)
+#. placeholder {0}: rule.severity ?? 'warning'
+#: src/lib/components/alerts/AlertRuleRow.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Severity: {0}"
 msgstr ""
@@ -30005,7 +29929,10 @@ msgstr ""
 msgid "Routed to your account automatically."
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+#: src/lib/components/layout/AppSidebar.svelte
 msgid "Do Not Disturb"
 msgstr ""
 
@@ -30014,22 +29941,27 @@ msgstr ""
 msgid "DND · {0}"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 msgid "Loading…"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 msgid "<0/> Turn off"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 msgid "Mute alerts for"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 msgid "Until I turn it off"
 msgstr ""
 
+#: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
 msgid "<0/> Configure…"
 msgstr ""
@@ -30064,4 +29996,701 @@ msgstr ""
 
 #: src/lib/components/alerts/FiringToast.svelte
 msgid "Mute the rule"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Failed to load alerts"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Alerts · Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Rules that decide when, how, and where you're notified."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "<0/> Do Not Disturb"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "<0/> New rule"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Rules enabled"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Active now"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Fired this week"
+msgstr ""
+
+#. placeholder {0}: activeAlerts.length
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "<0/> Active alerts ({0})"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "<0/> Acknowledge all"
+msgstr ""
+
+#. placeholder {0}: a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : "—"
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Since {0}"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Alert rules"
+msgstr ""
+
+#~ msgid "<0/> Simulate last 24 h"
+#~ msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "No alert rules yet"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/+page.svelte
+msgid "Add a rule so Nocturne can notify you when glucose goes out of range."
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Channels"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Test fire — sends a real notification"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Enable rule"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Row actions"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid ""
+"This rule will stop firing immediately. Existing alert history\n"
+"is preserved. This action cannot be undone."
+msgstr ""
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "<0/> Simulate alert rules"
+msgstr ""
+
+#: src/lib/components/alerts/ReplayDialog.svelte
+msgid "Replay your enabled rules against historical glucose. Nothing is delivered."
+msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "Pick a date…"
+msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "Custom date"
+msgstr ""
+
+#~ msgid "TZ"
+#~ msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "<0/> Run"
+msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "No glucose data in this window."
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "<0/> Get alerts working"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid ""
+"Four short steps. The point isn't the checklist — it's the moment your phone buzzes\n"
+"and you trust it."
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Grant browser notification permission"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Granted"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Denied — reset in browser"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Grant permission"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Add a critical rule (e.g. BG below 55)"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Add rule"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Test fire — feel it"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Fired"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Firing…"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Fire test"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Add a backup channel on at least one rule"
+msgstr ""
+
+#: src/lib/components/alerts/OnboardingCard.svelte
+msgid "Pick a rule"
+msgstr ""
+
+#: src/lib/components/alerts/ArmedStatusStrip.svelte
+msgid "All channels healthy. Alerts are armed."
+msgstr ""
+
+#: src/lib/components/alerts/ArmedStatusStrip.svelte
+msgid "One or more channels degraded. Alerts will fall back to backup channels."
+msgstr ""
+
+#: src/lib/components/alerts/ArmedStatusStrip.svelte
+msgid "Critical channels unreachable. Alerts may not deliver."
+msgstr ""
+
+#: src/lib/components/alerts/ArmedStatusStrip.svelte
+msgid "Do Not Disturb is on. Only critical rules will fire."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "America/Chicago"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "America/Denver"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "America/Los_Angeles"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Asia/Tokyo"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Failed to load DND settings"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Failed to save DND settings"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Do Not Disturb · Alerts · Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "Back to alerts"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Suppress non-critical alerts. Critical-severity rules and rules opted in via \"Allow through DND\" still fire."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Toggle DND on right now, optionally with an automatic expiry."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Do Not Disturb is currently"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Auto-expire (optional)"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Leave blank to keep DND on indefinitely."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Recurring quiet hours. Cross-midnight windows are allowed."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Use a recurring quiet-hours window"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
+msgid "Falls back to UTC if the value can't be resolved at evaluation time."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "Failed to load history"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "Alert history · Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "<0/> Alert history"
+msgstr ""
+
+#~ msgid "Every fire from this tenant — both real and test."
+#~ msgstr ""
+
+#. placeholder {0}: history.totalCount
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "({0} total)"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "Recent fires <0/>"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "No alert history yet."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "New alert"
+msgstr ""
+
+#. placeholder {0}: isNew ? "New alert" : state.name || "Alert"
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "{0} · Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Define a new alert rule"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Edit alert rule"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "What should this alert be called?"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Approaching low"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Why this alert exists, what it should trigger"
+msgstr ""
+
+#~ msgid "Disabled rules don't fire"
+#~ msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Allow through Do Not Disturb"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Critical-severity rules implicitly bypass DND regardless of this flag."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Define when this alert fires. Mix facts with AND/OR; nest with brackets."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Where to deliver the alert. All channels fire in parallel."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Smart snooze"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "When the user snoozes, extend the snooze automatically while these conditions hold."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Enable smart snooze"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Extend by (minutes)"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Extend while"
+msgstr ""
+
+#~ msgid "Live preview"
+#~ msgstr ""
+
+#~ msgid "Test fire"
+#~ msgstr ""
+
+#~ msgid "Sends a real notification through the configured channels."
+#~ msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "<0/> Fire saved rule"
+msgstr ""
+
+#~ msgid "Fire through current channels without persisting"
+#~ msgstr ""
+
+#~ msgid "<0/> Fire current draft"
+#~ msgstr ""
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+msgid "Derive a starting auto-resolve from the firing tree"
+msgstr ""
+
+#: src/lib/components/alerts/AutoResolveSection.svelte
+msgid "<0/> Suggest"
+msgstr ""
+
+#: src/lib/components/alerts/RulePreviewRail.svelte
+#: src/lib/components/alerts/RulePreviewRail.svelte
+msgid "Always fire"
+msgstr ""
+
+#: src/lib/components/alerts/RulePreviewRail.svelte
+msgid "<0/> Browser push"
+msgstr ""
+
+#: src/lib/components/alerts/RulePreviewRail.svelte
+msgid "Nocturne · just now"
+msgstr ""
+
+#: src/lib/components/alerts/RulePreviewRail.svelte
+msgid "<0/> Mobile lock screen"
+msgstr ""
+
+#: src/lib/components/alerts/RulePreviewRail.svelte
+msgid "now"
+msgstr ""
+
+#: src/lib/components/alerts/RulePreviewRail.svelte
+msgid "<0/> In-app toast"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Notify when"
+msgstr ""
+
+#~ msgid "all of"
+#~ msgstr ""
+
+#~ msgid "any of"
+#~ msgstr ""
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "these are true:"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Group — match"
+msgstr ""
+
+#~ msgid "all"
+#~ msgstr ""
+
+#~ msgid "any"
+#~ msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Group actions"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Wrap in NOT"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Unwrap (when single child)"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Remove group"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "NOT"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "for at least"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Wrap in AND group"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Wrap in OR group"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "<0/> Make sustained"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Remove wrapper"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderAddPicker.svelte
+msgid "Group"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderAddPicker.svelte
+msgid "+ Group (AND)"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderAddPicker.svelte
+msgid "All sub-conditions must hold"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderAddPicker.svelte
+msgid "+ Group (OR)"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderAddPicker.svelte
+msgid "Any sub-condition is enough"
+msgstr ""
+
+#~ msgid "Browser push"
+#~ msgstr ""
+
+#~ msgid "Web push notification on this device"
+#~ msgstr ""
+
+#~ msgid "In-app"
+#~ msgstr ""
+
+#~ msgid "Surfaces in the in-app notification tray"
+#~ msgstr ""
+
+#~ msgid "POST to a custom URL"
+#~ msgstr ""
+
+#~ msgid "Direct message via the linked Discord identity"
+#~ msgstr ""
+
+#~ msgid "Discord channel"
+#~ msgstr ""
+
+#~ msgid "Post to a Discord channel via webhook"
+#~ msgstr ""
+
+#~ msgid "Telegram DM"
+#~ msgstr ""
+
+#~ msgid "Direct message via the linked Telegram identity"
+#~ msgstr ""
+
+#~ msgid "Direct message in a Slack workspace"
+#~ msgstr ""
+
+#~ msgid "WhatsApp DM"
+#~ msgstr ""
+
+#~ msgid "Direct message via WhatsApp Business"
+#~ msgstr ""
+
+#~ msgid "Phone (E.164)"
+#~ msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "No channels configured. Add at least one to receive this alert."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Remove channel"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Family channel, work phone…"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "<0/> Add channel"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "mg/dL within"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "mg/dL/min"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "no data for ≥"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "is"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "for ≥"
+msgstr ""
+
+#. placeholder {0}: platformLabel(opt.platform)
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "{0} not linked — won't deliver until connected."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Not linked"
+msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "Pause"
+msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "Play"
+msgstr ""
+
+#~ msgid "Replay scrubber"
+#~ msgstr ""
+
+#~ msgid "{0} of {1} alerts fired"
+#~ msgstr ""
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "Edit rule"
+msgstr ""
+
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+msgid "Scheduled DND active"
+msgstr ""
+
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+msgid "Toggle Do Not Disturb"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Rules"
+msgstr ""
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Simulator"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/alerts/history/+page.svelte
+msgid "Every real fire from this tenant. Test fires aren't shown."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Test alert"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Fire a real notification, or replay the rule against historical glucose."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "<0/> Replay against history"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "<0/> Historic firings"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Real fires for this rule. Click any to replay the day in the simulator."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "No firings yet."
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "ack"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
+msgid "Replay this alert (and any siblings) against historical glucose. Nothing is delivered."
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilder.svelte
+#: src/lib/components/alerts/RuleBuilder.svelte
+msgid "Shift"
+msgstr ""
+
+#: src/lib/components/alerts/OperatorToggle.svelte
+msgid "All conditions must hold"
+msgstr ""
+
+#: src/lib/components/alerts/OperatorToggle.svelte
+msgid "Any condition is enough"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Remove condition (shift+click shortcut)"
+msgstr ""
+
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+#: src/lib/components/alerts/RuleBuilderRow.svelte
+msgid "Drag to reorder"
 msgstr ""
