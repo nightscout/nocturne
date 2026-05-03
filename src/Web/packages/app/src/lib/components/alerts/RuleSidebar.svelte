@@ -23,6 +23,8 @@
     Bell,
     BellOff,
     CalendarClock,
+    CalendarDays,
+    Moon,
     Ban,
     Timer,
   } from "lucide-svelte";
@@ -112,6 +114,8 @@
     bell: Bell,
     "bell-off": BellOff,
     "calendar-clock": CalendarClock,
+    "calendar-days": CalendarDays,
+    moon: Moon,
   };
 
   // Pin the rule under edit to the top so it's always visible. Other rules
@@ -243,47 +247,42 @@
     {@const isEditing = editingRuleId === id}
 
     <Collapsible.Root open={isEditing} class="rounded-md border bg-background">
-      <Collapsible.Trigger
-        class="group flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm"
-      >
-        <ChevronRight
-          class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
-        />
-        <span
-          data-testid="rule-status-pip"
-          data-truth={truth ? "true" : "false"}
-          class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-          class:opacity-50={disabled}
-          style:background-color={truth ? severityVar(rule.severity) : "transparent"}
-          style:border={`1.5px solid ${severityVar(rule.severity)}`}
-          aria-hidden="true"
-        ></span>
-        <span class="flex-1 min-w-0 truncate">
-          {rule.name ?? "(unnamed)"}
-          {#if isEditing}
-            <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-              (editing)
-            </span>
-          {/if}
-        </span>
-        <span
-          class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
+      <div class="flex items-center gap-2 px-2 py-1.5">
+        <Collapsible.Trigger
+          class="group flex flex-1 min-w-0 items-center gap-2 text-left text-sm"
         >
-          {disabled ? "Off" : "On"}
-        </span>
-        <span
-          role="presentation"
-          class="shrink-0"
-          onclick={(e) => e.stopPropagation()}
-          onkeydown={(e) => e.stopPropagation()}
-        >
-          <Switch
-            checked={!disabled}
-            onCheckedChange={(c) => id && toggleDisabled(id, c)}
-            aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
+          <ChevronRight
+            class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
           />
-        </span>
-      </Collapsible.Trigger>
+          <span
+            data-testid="rule-status-pip"
+            data-truth={truth ? "true" : "false"}
+            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+            class:opacity-50={disabled}
+            style:background-color={truth ? severityVar(rule.severity) : "transparent"}
+            style:border={`1.5px solid ${severityVar(rule.severity)}`}
+            aria-hidden="true"
+          ></span>
+          <span class="flex-1 min-w-0 truncate">
+            {rule.name ?? "(unnamed)"}
+            {#if isEditing}
+              <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                (editing)
+              </span>
+            {/if}
+          </span>
+          <span
+            class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
+          >
+            {disabled ? "Off" : "On"}
+          </span>
+        </Collapsible.Trigger>
+        <Switch
+          checked={!disabled}
+          onCheckedChange={(c) => id && toggleDisabled(id, c)}
+          aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
+        />
+      </div>
       <Collapsible.Content class="border-t px-2 py-1.5">
         {#if leaves.length === 0}
           <p class="text-xs text-muted-foreground">No leaves to evaluate.</p>
