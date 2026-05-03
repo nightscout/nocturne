@@ -27608,6 +27608,7 @@ export interface AlertReplayResult {
     windowEnd?: Date;
     events?: AlertReplayEvent[];
     limitations?: string;
+    leafTransitionsByRule?: { [key: string]: LeafTransitionLog[]; };
 }
 
 export interface AlertReplayEvent {
@@ -27621,6 +27622,16 @@ export enum AlertRuleSeverity {
     Critical = "critical",
     Warning = "warning",
     Info = "info",
+}
+
+export interface LeafTransitionLog {
+    leafId?: number;
+    points?: LeafTransitionPoint[];
+}
+
+export interface LeafTransitionPoint {
+    atMs?: number;
+    value?: boolean;
 }
 
 /** Request body for the alerts replay endpoint. */

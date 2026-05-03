@@ -32248,6 +32248,15 @@
           },
           "limitations": {
             "type": "string"
+          },
+          "leafTransitionsByRule": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/LeafTransitionLog"
+              }
+            }
           }
         }
       },
@@ -32284,6 +32293,35 @@
           "warning",
           "info"
         ]
+      },
+      "LeafTransitionLog": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "leafId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeafTransitionPoint"
+            }
+          }
+        }
+      },
+      "LeafTransitionPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "atMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "value": {
+            "type": "boolean"
+          }
+        }
       },
       "AlertReplayRequest": {
         "type": "object",
