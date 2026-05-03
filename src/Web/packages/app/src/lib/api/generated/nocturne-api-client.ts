@@ -24805,11 +24805,11 @@ export interface TimeSinceLastCarbCondition {
 }
 
 export enum AlertComparisonOperator {
-    Gt = 0,
-    Gte = 1,
-    Lt = 2,
-    Lte = 3,
-    Eq = 4,
+    Gt = ">",
+    Gte = ">=",
+    Lt = "<",
+    Lte = "<=",
+    Eq = "==",
 }
 
 export interface TimeSinceLastBolusCondition {

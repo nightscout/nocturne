@@ -23436,7 +23436,7 @@
         }
       },
       "AlertComparisonOperator": {
-        "type": "integer",
+        "type": "string",
         "description": "",
         "x-enumNames": [
           "Gt",
@@ -23446,11 +23446,11 @@
           "Eq"
         ],
         "enum": [
-          0,
-          1,
-          2,
-          3,
-          4
+          ">",
+          ">=",
+          "<",
+          "<=",
+          "=="
         ]
       },
       "TimeSinceLastBolusCondition": {

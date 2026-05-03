@@ -368,6 +368,7 @@ public record DoNotDisturbCondition(
 
 /// <summary>Comparison operator for time-since-last-event leaves. Single-character forms
 /// match the existing <see cref="ComparisonOps"/> wire format used by the JSON payload.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AlertComparisonOperator>))]
 public enum AlertComparisonOperator
 {
     /// <summary>Strictly greater than.</summary>
