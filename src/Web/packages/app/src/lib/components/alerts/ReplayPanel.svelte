@@ -21,7 +21,7 @@
     ReplayRuleDefinition,
   } from "$api-clients";
   import { severityLabel, severityVar } from "./severity";
-  import { formatTime, formatDateTime, formatRange } from "./alertTime";
+  import { formatTime, formatRange } from "./alertTime";
   import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import PlaybackStrip from "./PlaybackStrip.svelte";
   import RuleSidebar from "./RuleSidebar.svelte";

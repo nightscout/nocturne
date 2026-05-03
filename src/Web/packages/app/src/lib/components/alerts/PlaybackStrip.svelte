@@ -69,7 +69,7 @@
 
   function handleSpeedChange(value: string): void {
     const next = Number(value);
-    if (Number.isFinite(next)) speed = next as 0.25 | 0.5 | 1 | 2;
+    if (Number.isFinite(next)) speed = next;
   }
 </script>
 
