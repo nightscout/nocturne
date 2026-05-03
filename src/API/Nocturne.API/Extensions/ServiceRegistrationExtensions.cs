@@ -770,6 +770,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
         services.AddScoped<IConditionEvaluator, DoNotDisturbEvaluator>();
         services.AddScoped<IConditionEvaluator, GlucoseBucketEvaluator>();
+        services.AddScoped<IConditionEvaluator, TimeSinceLastCarbEvaluator>();
+        services.AddScoped<IConditionEvaluator, TimeSinceLastBolusEvaluator>();
         return services;
     }
 
