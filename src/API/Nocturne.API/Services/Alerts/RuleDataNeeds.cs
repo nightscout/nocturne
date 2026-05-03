@@ -178,6 +178,7 @@ public static class RuleDataNeeds
             case AlertConditionType.OverrideActive: b.Override = true; break;
             case AlertConditionType.SensitivityRatio: b.SensitivityRatio = true; break;
             case AlertConditionType.GlucoseBucket: b.GlucoseBucket = true; break;
+            // Carb/bolus times are derived from the same treatment fetch; one flag covers both.
             case AlertConditionType.TimeSinceLastCarb: b.Treatments = true; break;
             case AlertConditionType.TimeSinceLastBolus: b.Treatments = true; break;
             case AlertConditionType.DayOfWeek: b.TenantTimeZone = true; break;

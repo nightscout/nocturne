@@ -78,6 +78,22 @@ public class LeafIdentityTests
     }
 
     [Fact]
+    public void Phase2LeafType_TreatedAsLeafByDefault()
+    {
+        // Locks in the "default = leaf" guarantee: any non-container condition
+        // type (including the Phase 2 additions like pump_state, glucose_bucket,
+        // time_since_last_carb, etc.) gets a leaf id without per-type plumbing.
+        var pumpState = new ConditionNode("pump_state",
+            PumpState: new PumpStateCondition(PumpModeState.Manual, IsActive: true, ForMinutes: null));
+
+        var ids = LeafIdentity.AssignLeafIds(pumpState);
+
+        ids.Should().HaveCount(1);
+        ids[0].LeafId.Should().Be(0);
+        ids[0].Node.Should().BeSameAs(pumpState);
+    }
+
+    [Fact]
     public void NestedComposite_PreOrderAcrossNesting()
     {
         // AND(a, OR(b, c)) → [a:0, b:1, c:2]

@@ -185,7 +185,7 @@ internal sealed class AlertReplayService(
                 {
                     leafValues = await forceRunner.EvaluateAllLeavesAsync(node, ruleContext, registry, ct);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogWarning(ex,
                         "Replay force-eval failed for rule {RuleId} at {Tick}; skipping leaf log for this tick",
