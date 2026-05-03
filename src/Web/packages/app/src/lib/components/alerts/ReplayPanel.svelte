@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
-  import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
@@ -9,43 +8,35 @@
     Info,
     AlertCircle,
     PlayCircle,
-    Play,
-    Pause,
-    RotateCcw,
-    Pencil,
   } from "lucide-svelte";
-  import {
-    Chart,
-    Svg,
-    Spline,
-    Area,
-    Threshold,
-    AnnotationRange,
-    AnnotationPoint,
-    Tooltip,
-  } from "layerchart";
-  import { curveMonotoneX } from "d3-shape";
-  import type { ScaleTime } from "d3-scale";
   import {
     replay,
     replayDryRun,
   } from "$api/generated/alertReplays.generated.remote";
-  import { getDashboardChartData } from "$api/generated/chartDatas.generated.remote";
+  import { getRules } from "$api/generated/alertRules.generated.remote";
   import type {
     AlertReplayResult,
     AlertReplayEvent,
     AlertRuleResponse,
-    GlucosePointDto,
     ReplayRuleDefinition,
   } from "$api-clients";
   import { severityLabel, severityVar } from "./severity";
   import { formatTime, formatDateTime, formatRange } from "./alertTime";
+  import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
+  import PlaybackStrip from "./PlaybackStrip.svelte";
+  import RuleSidebar from "./RuleSidebar.svelte";
+  import { LeafTransitionLog, assignLeafIds } from "./leafEval";
+  import {
+    nodeFromApi,
+    ensureCompositeRoot,
+    type ConditionNode,
+  } from "./types";
 
   interface Props {
     /**
-     * Sibling rules — currently unused by the panel but kept on the prop shape
-     * so the overview can pass the same list it shows in the table (future:
-     * per-rule overlay toggle).
+     * Sibling rules used to seed the rule sidebar before the panel runs its
+     * own fresh fetch in {@link handleRun}. The fresh fetch picks up rules
+     * created since the parent loaded.
      */
     availableRules?: AlertRuleResponse[];
     /**
@@ -61,13 +52,28 @@
      * each Run so edits made between presses are picked up.
      */
     rule?: ReplayRuleDefinition | (() => ReplayRuleDefinition);
+    /** Pinned to the top of the sidebar with an "(editing)" marker. */
+    editingRuleId?: string;
+    /**
+     * Live tree of the rule under edit. Used when building the per-rule tree
+     * map so leaves the user is currently typing reflect back into the
+     * sidebar's truth pips at the next replay tick.
+     */
+    editingTree?: ConditionNode;
   }
 
-  let { availableRules = [], initialCustomDate, rule }: Props = $props();
-  void availableRules;
+  let {
+    availableRules = [],
+    initialCustomDate,
+    rule,
+    editingRuleId,
+    editingTree,
+  }: Props = $props();
 
   type Preset = "last24h" | "7daysAgo" | "custom";
+  // svelte-ignore state_referenced_locally
   let preset = $state<Preset>(initialCustomDate ? "custom" : "last24h");
+  // svelte-ignore state_referenced_locally
   let customDate = $state<string>(initialCustomDate ?? "");
 
   const browserTimezone =
@@ -78,7 +84,14 @@
   let running = $state(false);
   let runError = $state<string | null>(null);
   let result = $state<AlertReplayResult | null>(null);
-  let glucose = $state<GlucosePointDto[]>([]);
+
+  // Per-run derived state populated by handleRun. Kept as plain $state (not
+  // $derived) because they're built imperatively from a one-shot fetch.
+  let allRules = $state<AlertRuleResponse[]>([]);
+  let treeByRule = $state<Map<string, ConditionNode>>(new Map());
+  let leafIdsByRule = $state<Map<string, Map<string, number>>>(new Map());
+  let leafLog = $state<LeafTransitionLog>(new LeafTransitionLog({}));
+  let disabledRuleIds = $state<Set<string>>(new Set());
 
   function resolvePreset(): { date: string | null } {
     switch (preset) {
@@ -107,7 +120,6 @@
     running = true;
     runError = null;
     result = null;
-    glucose = [];
     pause();
     playPct = 0;
     maxPct = 0;
@@ -125,23 +137,38 @@
           });
       result = replayResult ?? null;
 
-      const start = result?.windowStart
-        ? new Date(result.windowStart).getTime()
-        : null;
-      const end = result?.windowEnd
-        ? new Date(result.windowEnd).getTime()
-        : null;
-      if (start && end) {
-        try {
-          const chart = await getDashboardChartData({
-            startTime: start,
-            endTime: end,
-          });
-          glucose = chart?.glucoseData ?? [];
-        } catch {
-          glucose = [];
-        }
+      // Pull a fresh rule list so the sidebar sees rules created since the
+      // parent loaded. Falls back to the seeded availableRules prop on error.
+      let rulesList: AlertRuleResponse[] = availableRules;
+      try {
+        const fresh = await getRules();
+        if (fresh && fresh.length > 0) rulesList = fresh;
+      } catch {
+        // Fall through to the seed list.
       }
+      allRules = rulesList;
+
+      // Build per-rule tree + leaf-id maps. The rule under edit substitutes
+      // its in-memory tree so the sidebar reflects the editor's current
+      // typing rather than the saved version.
+      const trees = new Map<string, ConditionNode>();
+      const ids = new Map<string, Map<string, number>>();
+      for (const r of rulesList) {
+        if (!r.id) continue;
+        let parsed: ConditionNode | null;
+        if (editingRuleId && r.id === editingRuleId && editingTree) {
+          parsed = editingTree;
+        } else {
+          parsed = nodeFromApi(r.conditionType, r.conditionParams);
+        }
+        if (!parsed) continue;
+        const tree = ensureCompositeRoot(parsed);
+        trees.set(r.id, tree);
+        ids.set(r.id, assignLeafIds(tree));
+      }
+      treeByRule = trees;
+      leafIdsByRule = ids;
+      leafLog = new LeafTransitionLog(result?.leafTransitionsByRule ?? {});
     } catch (err) {
       runError =
         err instanceof Error
@@ -152,54 +179,33 @@
     }
   }
 
-  let chartData = $derived(
-    glucose
-      .filter((g) => g.time != null && g.sgv != null)
-      .map((g) => ({
-        date: new Date(g.time as number),
-        value: g.sgv as number,
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-  );
-
   let xDomain = $derived.by<[Date, Date] | undefined>(() => {
     if (!result?.windowStart || !result?.windowEnd) return undefined;
     return [new Date(result.windowStart), new Date(result.windowEnd)];
   });
 
-  const Y_FLOOR = 40;
-  const Y_CEIL = 350;
-  const LOW = 70;
-  const HIGH = 180;
-  let yDomain = $derived.by<[number, number]>(() => {
-    if (chartData.length === 0) return [Y_FLOOR, Y_CEIL];
-    const max = Math.max(Y_CEIL - 50, ...chartData.map((p) => p.value));
-    const min = Math.min(Y_FLOOR + 10, ...chartData.map((p) => p.value));
-    return [Math.max(Y_FLOOR, min - 10), Math.min(Y_CEIL, max + 10)];
-  });
-
-  type Marker = { ev: AlertReplayEvent; tMs: number; xPct: number };
+  type Marker = { ev: AlertReplayEvent; tMs: number };
   let markers = $derived.by<Marker[]>(() => {
     if (!xDomain) return [];
-    const [start, end] = xDomain;
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-    const span = endMs - startMs || 1;
+    const startMs = xDomain[0].getTime();
+    const endMs = xDomain[1].getTime();
     return (result?.events ?? [])
       .map((ev) => {
         const t = ev.at ? new Date(ev.at).getTime() : NaN;
         if (!Number.isFinite(t) || t < startMs || t > endMs) return null;
-        return { ev, tMs: t, xPct: ((t - startMs) / span) * 100 };
+        return { ev, tMs: t };
       })
       .filter((m): m is Marker => m !== null);
   });
 
   // ---- Manual playback (rAF) ----
-  // We drive the playhead with requestAnimationFrame instead of svelte's
-  // Tween so we can reason about state precisely. The previous Tween-based
-  // implementation was being interrupted by reactive churn in the
-  // AnnotationRange mask, leaving each "play" press only advancing a tick.
-  const ANIMATION_MS = 12000;
+  // rAF instead of Tween so we can reason about pause/scrub deterministically.
+  // BASE_ANIMATION_MS is the wall-clock time for a 1x sweep across the window;
+  // the active duration is BASE / speed.
+  const BASE_ANIMATION_MS = 12_000;
+  let speed = $state<number>(1);
+  let animationMs = $derived(BASE_ANIMATION_MS / speed);
+
   let playPct = $state(0);
   let maxPct = $state(0);
   let playing = $state(false);
@@ -214,7 +220,7 @@
     if (lastTs == null) lastTs = ts;
     const dt = ts - lastTs;
     lastTs = ts;
-    const next = Math.min(100, playPct + (dt / ANIMATION_MS) * 100);
+    const next = Math.min(100, playPct + (dt / animationMs) * 100);
     playPct = next;
     if (next > maxPct) maxPct = next;
     if (next >= 100) {
@@ -255,10 +261,14 @@
     maxPct = 0;
   }
 
-  // Auto-start the sweep each time a new result arrives. `play()` reads
-  // `playing` and `playPct` reactively, so without `untrack` this effect
-  // would re-fire on every animation tick and on every pause — silently
-  // restarting playback and making the pause button look broken.
+  function seek(pct: number): void {
+    pause();
+    playPct = Math.max(0, Math.min(100, pct));
+    if (playPct > maxPct) maxPct = playPct;
+  }
+
+  // Auto-start playback on each new result. untrack so the effect doesn't
+  // re-fire on every animation frame (which would silently restart pausing).
   $effect(() => {
     if (result && xDomain) untrack(() => play());
   });
@@ -275,122 +285,60 @@
   });
 
   let currentDate = $derived(
-    currentTimeMs != null ? new Date(currentTimeMs) : null
+    currentTimeMs != null ? new Date(currentTimeMs) : null,
   );
 
-  // High-water mark in absolute time. Used to decide how much of the
-  // chart to reveal — the mask shrinks from the right toward this point
-  // and never grows back, so the line stays visible if the user scrubs.
-  let maxSeenDate = $derived.by<Date | null>(() => {
-    if (!xDomain) return null;
-    const [s, e] = xDomain;
-    return new Date(s.getTime() + ((e.getTime() - s.getTime()) * maxPct) / 100);
-  });
-
-  // Linear interpolation along chartData so the playhead crosshair sits on
-  // the line at the current time.
-  function valueAt(ms: number): number | null {
-    if (chartData.length === 0) return null;
-    if (ms <= chartData[0].date.getTime()) return chartData[0].value;
-    const last = chartData[chartData.length - 1];
-    if (ms >= last.date.getTime()) return last.value;
-    for (let i = 1; i < chartData.length; i++) {
-      const a = chartData[i - 1];
-      const b = chartData[i];
-      const bMs = b.date.getTime();
-      if (ms <= bMs) {
-        const aMs = a.date.getTime();
-        const t = (ms - aMs) / (bMs - aMs);
-        return a.value + t * (b.value - a.value);
-      }
-    }
-    return null;
-  }
-
-  let firedMarkers = $derived(markers.filter((m) => m.xPct <= maxPct));
+  let firedMarkers = $derived(
+    currentTimeMs != null
+       ? markers.filter((m) => m.tMs <= currentTimeMs)
+      : [],
+  );
 
   // Auto-Run on mount so the panel demonstrates immediately.
   $effect(() => {
     if (!hasRun && !running) handleRun();
   });
 
-  function editRule(ruleId: string | undefined): void {
-    if (!ruleId) return;
-    goto(`/alerts/${ruleId}`);
-  }
-
-  // ---- Pointer scrubbing on the chart ----
-
-  type TimeScale = ScaleTime<number, number>;
-  type ChartContext = {
+  // Type alias mirrors the GlucoseChartCard `annotations` snippet payload.
+  type AnnotationProps = {
+    xScale: import("d3-scale").ScaleTime<number, number>;
+    yScale: import("d3-scale").ScaleLinear<number, number>;
     width: number;
     height: number;
-    xScale: TimeScale;
-    tooltip?: {
-      show: (e: PointerEvent | MouseEvent, data: unknown) => void;
-      hide: () => void;
-    };
+    padding: { top: number; right: number; bottom: number; left: number };
   };
-
-  type ReplayTooltip = {
-    time: Date;
-    value: number | null;
-  };
-
-  let scrubbing = $state(false);
-
-  function pointerToPct(
-    e: PointerEvent,
-    xScale: TimeScale,
-    width: number
-  ): number | null {
-    const svg = (e.currentTarget as SVGElement).closest("svg");
-    if (!svg || !xDomain) return null;
-    const r = svg.getBoundingClientRect();
-    // The chart has padding on left/right; xScale.invert handles that since
-    // it's keyed off the rendered range, not the SVG width. We clamp on the
-    // domain after inverting.
-    const localX = Math.max(0, Math.min(width, e.clientX - r.left));
-    const t = xScale.invert(localX).getTime();
-    const startMs = xDomain[0].getTime();
-    const endMs = xDomain[1].getTime();
-    const span = endMs - startMs || 1;
-    const pct = ((t - startMs) / span) * 100;
-    return Math.max(0, Math.min(100, pct));
-  }
-
-  function setPlayheadFromPointer(
-    e: PointerEvent,
-    xScale: TimeScale,
-    width: number
-  ): void {
-    const pct = pointerToPct(e, xScale, width);
-    if (pct == null) return;
-    playPct = pct;
-    if (pct > maxPct) maxPct = pct;
-  }
-
-  function showTooltipAt(e: PointerEvent, context: ChartContext): void {
-    if (!xDomain) return;
-    const localTime = context.xScale.invert(
-      Math.max(
-        0,
-        Math.min(
-          context.width,
-          e.clientX -
-            ((e.currentTarget as SVGElement)
-              .closest("svg")
-              ?.getBoundingClientRect().left ?? 0)
-        )
-      )
-    );
-    const v = valueAt(localTime.getTime());
-    context.tooltip?.show(e, {
-      time: localTime,
-      value: v,
-    } satisfies ReplayTooltip);
-  }
 </script>
+
+{#snippet replayAnnotations({ xScale, height }: AnnotationProps)}
+  {#each firedMarkers as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
+    {@const px = xScale(new Date(m.tMs))}
+    <line
+      x1={px}
+      x2={px}
+      y1={height - 20}
+      y2={height - 8}
+      stroke={severityVar(m.ev.severity)}
+      stroke-width="1.5"
+    />
+    <circle
+      cx={px}
+      cy={height - 8}
+      r="4"
+      fill={severityVar(m.ev.severity)}
+    />
+  {/each}
+  {#if currentDate}
+    {@const px = xScale(currentDate)}
+    <line
+      x1={px}
+      x2={px}
+      y1="0"
+      y2={height}
+      class="stroke-foreground/80"
+      stroke-width="1.5"
+    />
+  {/if}
+{/snippet}
 
 <div class="space-y-4">
   <div class="flex flex-wrap items-center gap-2">
@@ -437,269 +385,95 @@
       </p>
     {/if}
 
-    {#if xDomain && chartData.length > 0}
-      <div
-        class="h-48 w-full rounded-md border bg-background touch-none"
-        class:cursor-grabbing={scrubbing}
-        class:cursor-crosshair={!scrubbing}
-      >
-        <Chart
-          data={chartData}
-          x="date"
-          y="value"
-          {xDomain}
-          {yDomain}
-          padding={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          tooltip={{ mode: "manual" }}
-        >
-          {#snippet children({ context })}
-            {@const ctx = {
-              width: context.width,
-              height: context.height,
-              xScale: context.xScale as unknown as TimeScale,
-              tooltip: context.tooltip,
-            } satisfies ChartContext}
-            <Svg>
-              <AnnotationRange
-                y={[LOW, HIGH]}
-                class="opacity-15 fill-[var(--glucose-in-range)]"
-              />
-              <Threshold curve={curveMonotoneX}>
-                {#snippet above()}
-                  <Area
-                    y0={HIGH}
-                    curve={curveMonotoneX}
-                    class="fill-[var(--glucose-high)]/30"
-                    line={{ class: "stroke-none" }}
-                  />
-                {/snippet}
-                {#snippet below()}
-                  <Area
-                    y0={LOW}
-                    curve={curveMonotoneX}
-                    class="fill-[var(--glucose-low)]/30"
-                    line={{ class: "stroke-none" }}
-                  />
-                {/snippet}
-                <Spline
-                  curve={curveMonotoneX}
-                  class="stroke-foreground/70 stroke-[1.5] fill-none"
-                />
-              </Threshold>
-
-              <!-- Reveal mask: covers the still-undiscovered portion of the
-                   window. Keyed off the high-water mark, not the playhead,
-                   so scrubbing back never re-hides the line. -->
-              {#if maxSeenDate && xDomain[1].getTime() > maxSeenDate.getTime()}
-                {@const maskX = ctx.xScale(maxSeenDate)}
-                {@const maskRight = ctx.xScale(xDomain[1])}
-                <rect
-                  x={maskX}
-                  y={0}
-                  width={Math.max(0, maskRight - maskX)}
-                  height={ctx.height}
-                  fill="var(--background)"
-                />
-              {/if}
-
-              <!-- Discovered alerts. AnnotationPoint colored by severity;
-                   dims when the playhead is scrubbed back behind them. -->
-              {#each firedMarkers as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
-                {@const v = valueAt(m.tMs)}
-                {#if v != null}
-                  {@const dimmed =
-                    currentTimeMs != null && m.tMs > currentTimeMs}
-                  {@const c = severityVar(m.ev.severity)}
-                  <!-- AnnotationPoint only forwards styling via props.circle;
-                       fill/stroke at the top level are dropped on the floor. -->
-                  <AnnotationPoint
-                    x={new Date(m.tMs)}
-                    y={v}
-                    r={5}
-                    props={{
-                      circle: {
-                        fill: c,
-                        stroke: c,
-                        strokeWidth: 1.5,
-                        fillOpacity: dimmed ? 0.4 : 1,
-                        strokeOpacity: dimmed ? 0.6 : 1,
-                      },
-                    }}
-                  />
-                {/if}
-              {/each}
-
-              <!-- Playhead vertical rule -->
-              {#if currentDate}
-                {@const px = ctx.xScale(currentDate)}
-                <line
-                  x1={px}
-                  x2={px}
-                  y1={0}
-                  y2={ctx.height}
-                  class="stroke-foreground/80"
-                  stroke-width="1.5"
-                />
-                {@const pv =
-                  currentTimeMs != null ? valueAt(currentTimeMs) : null}
-                {#if pv != null && context.yScale}
-                  <circle
-                    cx={px}
-                    cy={(context.yScale as (v: number) => number)(pv)}
-                    r={4}
-                    class="fill-foreground stroke-background"
-                    stroke-width="1.5"
-                  />
-                {/if}
-              {/if}
-
-              <!-- Pointer surface. Click + drag to scrub; hover for tooltip. -->
-              <rect
-                role="presentation"
-                x={0}
-                y={0}
-                width={ctx.width}
-                height={ctx.height}
-                fill="transparent"
-                onpointerdown={(e) => {
-                  pause();
-                  scrubbing = true;
-                  (e.currentTarget as SVGRectElement).setPointerCapture(
-                    e.pointerId
-                  );
-                  setPlayheadFromPointer(e, ctx.xScale, ctx.width);
-                  showTooltipAt(e, ctx);
-                }}
-                onpointermove={(e) => {
-                  if (scrubbing) {
-                    setPlayheadFromPointer(e, ctx.xScale, ctx.width);
-                  }
-                  showTooltipAt(e, ctx);
-                }}
-                onpointerup={(e) => {
-                  scrubbing = false;
-                  (e.currentTarget as SVGRectElement).releasePointerCapture(
-                    e.pointerId
-                  );
-                }}
-                onpointercancel={() => {
-                  scrubbing = false;
-                }}
-                onpointerleave={() => {
-                  ctx.tooltip?.hide();
-                }}
-              />
-            </Svg>
-
-            <Tooltip.Root
-              class="bg-popover/95 text-popover-foreground rounded-md border border-border px-2 py-1 shadow-md text-xs"
-            >
-              {#snippet children({ data })}
-                {@const d = data as ReplayTooltip | undefined}
-                {#if d}
-                  <div class="space-y-0.5">
-                    <div class="font-medium tabular-nums">
-                      {formatDateTime(d.time)}
-                    </div>
-                    {#if d.value != null}
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-muted-foreground">Glucose</span>
-                        <span class="font-mono font-medium tabular-nums">
-                          {Math.round(d.value)}
-                        </span>
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
-              {/snippet}
-            </Tooltip.Root>
-          {/snippet}
-        </Chart>
-      </div>
-    {:else if isEmpty && xDomain}
-      <div
-        class="flex h-32 w-full items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground"
-      >
-        No glucose data in this window.
-      </div>
-    {/if}
-
     {#if xDomain}
-      <div class="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          class="h-8 w-8"
-          onclick={togglePlayback}
-          aria-label={playing ? "Pause" : "Play"}
-        >
-          {#if playing}
-            <Pause class="h-4 w-4" />
-          {:else}
-            <Play class="h-4 w-4" />
-          {/if}
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          class="h-8 w-8"
-          onclick={resetPlayback}
-          aria-label="Reset"
-        >
-          <RotateCcw class="h-4 w-4" />
-        </Button>
-        <span
-          class="font-mono text-xs text-muted-foreground tabular-nums ml-auto shrink-0"
-        >
-          {currentDate ? formatDateTime(currentDate) : ""}
-        </span>
+      <div class="rounded-md border bg-background p-1">
+        <GlucoseChartCard
+          compact
+          dateRange={{ from: xDomain[0], to: xDomain[1] }}
+          annotations={replayAnnotations}
+          heightClass="h-[280px]"
+        />
       </div>
-    {/if}
 
-    {#if isEmpty}
-      <div
-        class="rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground"
-      >
-        No events would have fired in this window.
-      </div>
-    {:else if firedMarkers.length > 0}
-      <div class="max-h-72 overflow-y-auto rounded-md border divide-y">
-        {#each firedMarkers as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
-          {@const dimmed = currentTimeMs != null && m.tMs > currentTimeMs}
-          <div
-            class="group flex items-center gap-3 px-3 py-2 text-sm transition-opacity duration-150"
-            class:opacity-40={dimmed}
-          >
-            <span
-              class="h-2 w-2 shrink-0 rounded-full"
-              style:background-color={severityVar(m.ev.severity)}
-              aria-hidden="true"
-            ></span>
-            <span
-              class="font-mono text-xs text-muted-foreground tabular-nums w-16 shrink-0"
+      <PlaybackStrip
+        {playing}
+        {playPct}
+        {maxPct}
+        {currentDate}
+        bind:speed
+        events={markers.map((m) => ({
+          tMs: m.tMs,
+          severity: m.ev.severity,
+          ruleId: m.ev.ruleId ?? undefined,
+        }))}
+        windowStartMs={xDomain[0].getTime()}
+        windowEndMs={xDomain[1].getTime()}
+        onPlayPause={togglePlayback}
+        onReset={resetPlayback}
+        onSeek={seek}
+      />
+
+      <div class="grid gap-4 md:grid-cols-[1fr_320px]">
+        <!-- Events list (left) -->
+        <div class="min-w-0">
+          {#if isEmpty}
+            <div
+              class="rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground"
             >
-              {formatTime(m.ev.at)}
-            </span>
-            <Badge variant="outline" class="shrink-0">
-              {severityLabel(m.ev.severity)}
-            </Badge>
-            <span class="flex-1 min-w-0 truncate">
-              {m.ev.ruleName ?? "(unnamed rule)"}
-            </span>
-            {#if m.ev.ruleId}
-              <Button
-                variant="ghost"
-                size="sm"
-                class="h-7 px-2 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                onclick={() => editRule(m.ev.ruleId)}
-                aria-label="Edit rule"
-              >
-                <Pencil class="h-3.5 w-3.5 mr-1" />
-                Edit
-              </Button>
-            {/if}
-          </div>
-        {/each}
+              No events would have fired in this window.
+            </div>
+          {:else if firedMarkers.length === 0}
+            <div
+              class="rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground"
+            >
+              No events yet — playhead at start of window.
+            </div>
+          {:else}
+            <div class="max-h-72 overflow-y-auto rounded-md border divide-y">
+              {#each firedMarkers as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
+                {@const dimmed =
+                  currentTimeMs != null && m.tMs > currentTimeMs}
+                <div
+                  class="flex items-center gap-3 px-3 py-2 text-sm transition-opacity duration-150"
+                  class:opacity-40={dimmed}
+                >
+                  <span
+                    class="h-2 w-2 shrink-0 rounded-full"
+                    style:background-color={severityVar(m.ev.severity)}
+                    aria-hidden="true"
+                  ></span>
+                  <span
+                    class="font-mono text-xs text-muted-foreground tabular-nums w-16 shrink-0"
+                  >
+                    {formatTime(m.ev.at)}
+                  </span>
+                  <Badge variant="outline" class="shrink-0">
+                    {severityLabel(m.ev.severity)}
+                  </Badge>
+                  <span class="flex-1 min-w-0 truncate">
+                    {m.ev.ruleName ?? "(unnamed rule)"}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Rule sidebar (right) -->
+        {#if currentTimeMs != null}
+          <RuleSidebar
+            rules={allRules}
+            {editingRuleId}
+            {treeByRule}
+            {leafIdsByRule}
+            {leafLog}
+            currentTimeMs={currentTimeMs}
+            bind:disabledRuleIds
+            availableRules={allRules
+              .filter((r) => r.id)
+              .map((r) => ({ id: r.id as string, name: r.name ?? "" }))}
+          />
+        {/if}
       </div>
     {/if}
 

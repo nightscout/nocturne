@@ -611,7 +611,12 @@
     </Dialog.Header>
 
     <div class="py-2">
-      <ReplayPanel initialCustomDate={replayInitialDate} rule={buildReplayRule} />
+      <ReplayPanel
+        initialCustomDate={replayInitialDate}
+        rule={buildReplayRule}
+        editingRuleId={isNew ? undefined : ruleId}
+        editingTree={state.condition ?? undefined}
+      />
     </div>
   </Dialog.Content>
 </Dialog.Root>
