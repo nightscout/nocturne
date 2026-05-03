@@ -58,6 +58,7 @@
   import TrackerExpirationMarker from "./markers/TrackerExpirationMarker.svelte";
   import { mergeChartData } from "$lib/utils/chart-data-merge";
   import type { TransformedChartData } from "$lib/utils/chart-data-transform";
+  import { getGlucoseColor } from "$lib/utils/chart-colors";
   import { SWIM_LANE_HEIGHT, getSwimLanePositions } from "./chart-layout";
 
   interface ComponentProps {
@@ -455,7 +456,42 @@
   });
 
   // ===== DATA FROM SERVER =====
-  const glucoseData = $derived(serverChartData?.glucoseData ?? []);
+  // Merge realtime entries arriving via SignalR into the server-fetched chart
+  // data. Without this, the chart line freezes at whatever was loaded on mount
+  // even though the BG card and Recent Entries update live.
+  const glucoseData = $derived.by(() => {
+    const base = serverChartData?.glucoseData ?? [];
+    if (!serverChartData) return base;
+
+    const thresholds = serverChartData.thresholds;
+    const fromMs = fullDataRange.from.getTime();
+    const toMs = fullDataRange.to.getTime();
+    const existingTimes = new Set(base.map((p) => p.time.getTime()));
+
+    const realtimePoints = realtimeStore.entries
+      .filter(
+        (e) =>
+          e.type === "sgv" &&
+          e.mills != null &&
+          e.sgv != null &&
+          e.mills >= fromMs &&
+          e.mills <= toMs &&
+          !existingTimes.has(e.mills)
+      )
+      .map((e) => ({
+        time: new Date(e.mills!),
+        sgv: e.sgv!,
+        direction: e.direction,
+        dataSource: e.data_source,
+        color: getGlucoseColor(e.sgv!, thresholds),
+      }));
+
+    if (realtimePoints.length === 0) return base;
+
+    return [...base, ...realtimePoints].sort(
+      (a, b) => a.time.getTime() - b.time.getTime()
+    );
+  });
   const bolusMarkers = $derived(serverChartData?.bolusMarkers ?? []);
   const carbMarkers = $derived(serverChartData?.carbMarkers ?? []);
   const deviceEventMarkers = $derived(
