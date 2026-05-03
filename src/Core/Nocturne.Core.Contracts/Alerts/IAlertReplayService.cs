@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Contracts.Alerts;
@@ -77,4 +78,15 @@ public record AlertReplayResult(
     DateTime WindowStart,
     DateTime WindowEnd,
     IReadOnlyList<AlertReplayEvent> Events,
-    string Limitations);
+    string Limitations)
+{
+    /// <summary>
+    /// Per-rule, per-leaf truth transition log captured during replay. Keyed by rule id;
+    /// each <see cref="LeafTransitionLog"/> covers one leaf identified by the sequential
+    /// id assigned via <see cref="LeafIdentity.AssignLeafIds"/>. Only transitions are
+    /// stored — the first tick emits a baseline point so the FE can render the starting
+    /// state without scanning. Empty by default for backward compatibility.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, IReadOnlyList<LeafTransitionLog>> LeafTransitionsByRule { get; init; }
+        = ImmutableDictionary<Guid, IReadOnlyList<LeafTransitionLog>>.Empty;
+}

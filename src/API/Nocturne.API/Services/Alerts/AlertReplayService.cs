@@ -98,6 +98,13 @@ internal sealed class AlertReplayService(
         // Per-rule firing state across the replay so a continuously-true condition produces
         // one event at its leading edge rather than one per tick.
         var firing = new Dictionary<Guid, bool>(rules.Count);
+        // Replay-only per-leaf transition log. Keyed first by rule id, then by leaf id
+        // (assigned via LeafIdentity.AssignLeafIds on each tick for the rule's tree).
+        // We track the previous boolean per leaf so we only push a point when truth flips,
+        // and we always seed the first observed tick so callers can render the baseline.
+        var forceRunner = new ForceEvalRunner();
+        var leafPrev = new Dictionary<Guid, Dictionary<int, bool>>(rules.Count);
+        var leafPoints = new Dictionary<Guid, Dictionary<int, List<LeafTransitionPoint>>>(rules.Count);
         // ActiveAlerts snapshot threaded into the SensorContext so alert_state references
         // resolve against rules that already fired earlier in the replay's timeline. The
         // enricher's EnrichAsOfAsync skips its own active-alerts repo fetch and reads this
@@ -169,6 +176,59 @@ internal sealed class AlertReplayService(
                     met = false;
                 }
 
+                // Force-evaluate every leaf in the rule's tree so the per-leaf transition
+                // log captures truth even when the live composite evaluator would have
+                // short-circuited. Failures inside individual leaves are swallowed by the
+                // runner (mirrors the registry's silent-fail mode).
+                IReadOnlyDictionary<int, bool> leafValues;
+                try
+                {
+                    leafValues = await forceRunner.EvaluateAllLeavesAsync(node, ruleContext, registry, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex,
+                        "Replay force-eval failed for rule {RuleId} at {Tick}; skipping leaf log for this tick",
+                        rule.Id, tick);
+                    leafValues = new Dictionary<int, bool>();
+                }
+
+                if (leafValues.Count > 0)
+                {
+                    if (!leafPrev.TryGetValue(rule.Id, out var prevForRule))
+                    {
+                        prevForRule = new Dictionary<int, bool>(leafValues.Count);
+                        leafPrev[rule.Id] = prevForRule;
+                    }
+                    if (!leafPoints.TryGetValue(rule.Id, out var pointsForRule))
+                    {
+                        pointsForRule = new Dictionary<int, List<LeafTransitionPoint>>(leafValues.Count);
+                        leafPoints[rule.Id] = pointsForRule;
+                    }
+                    var tickMs = new DateTimeOffset(DateTime.SpecifyKind(tick, DateTimeKind.Utc))
+                        .ToUnixTimeMilliseconds();
+                    foreach (var (leafId, value) in leafValues)
+                    {
+                        if (!prevForRule.TryGetValue(leafId, out var prev))
+                        {
+                            // First observation — seed a baseline point so callers can render
+                            // the leaf's starting state without scanning later transitions.
+                            if (!pointsForRule.TryGetValue(leafId, out var list))
+                            {
+                                list = new List<LeafTransitionPoint>();
+                                pointsForRule[leafId] = list;
+                            }
+                            list.Add(new LeafTransitionPoint(tickMs, value));
+                            prevForRule[leafId] = value;
+                        }
+                        else if (prev != value)
+                        {
+                            pointsForRule[leafId].Add(new LeafTransitionPoint(tickMs, value));
+                            prevForRule[leafId] = value;
+                        }
+                    }
+                }
+
                 var wasFiring = firing.GetValueOrDefault(rule.Id);
                 if (met && !wasFiring)
                 {
@@ -184,7 +244,17 @@ internal sealed class AlertReplayService(
             }
         }
 
-        return new AlertReplayResult(windowStart, windowEnd, events, LimitationsBanner);
+        var leafTransitionsByRule = leafPoints.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (IReadOnlyList<LeafTransitionLog>)kvp.Value
+                .Select(inner => new LeafTransitionLog(inner.Key, inner.Value))
+                .OrderBy(l => l.LeafId)
+                .ToList());
+
+        return new AlertReplayResult(windowStart, windowEnd, events, LimitationsBanner)
+        {
+            LeafTransitionsByRule = leafTransitionsByRule,
+        };
     }
 
     /// <summary>
