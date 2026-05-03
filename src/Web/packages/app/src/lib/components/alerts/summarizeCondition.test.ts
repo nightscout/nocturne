@@ -1,8 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { defaultPayload, type ConditionNode } from "./types";
 import { summarizeCondition } from "./summarizeCondition";
+import { LEAF_FACTS } from "./factCatalog";
 
 describe("summarizeCondition", () => {
+	it("returns a non-empty string for every fact-catalog leaf kind", () => {
+		// Regression guard: every leaf the editor can create must render something
+		// in the rule sidebar. Returning undefined would render as the literal
+		// string "undefined" in the sidebar disclosure body.
+		for (const fact of LEAF_FACTS) {
+			const node = defaultPayload(fact.kind);
+			const summary = summarizeCondition(node);
+			expect(summary, `summarizeCondition for kind=${fact.kind}`).toBeTruthy();
+		}
+	});
+
+
 	it("returns empty string for null/undefined input", () => {
 		expect(summarizeCondition(null)).toBe("");
 		expect(summarizeCondition(undefined)).toBe("");

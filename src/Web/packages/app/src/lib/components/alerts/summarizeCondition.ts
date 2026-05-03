@@ -155,7 +155,85 @@ export function summarizeCondition(
 			const verb = p.is_active ? "Do Not Disturb on" : "Do Not Disturb off";
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}
+		case "signal_loss": {
+			const p = node.signal_loss;
+			if (!p) return "";
+			return `No data for ≥ ${formatMinutes(p.timeout_minutes)}`;
+		}
+		case "glucose_bucket": {
+			const p = node.glucose_bucket;
+			if (!p || !p.buckets || p.buckets.length === 0) return "";
+			return `BG in ${p.buckets.map(bucketLabel).join(" / ")}`;
+		}
+		case "time_since_last_carb": {
+			const p = node.time_since_last_carb;
+			if (!p) return "";
+			return `Time since last carb ${opSymbol(p.operator)} ${formatMinutes(p.minutes)}`;
+		}
+		case "time_since_last_bolus": {
+			const p = node.time_since_last_bolus;
+			if (!p) return "";
+			return `Time since last bolus ${opSymbol(p.operator)} ${formatMinutes(p.minutes)}`;
+		}
+		case "day_of_week": {
+			const p = node.day_of_week;
+			if (!p || !p.days || p.days.length === 0) return "";
+			return `Day in ${p.days.map(dayLabel).join(", ")}`;
+		}
+		case "pump_state": {
+			const p = node.pump_state;
+			if (!p) return "";
+			const verb = p.is_active ? `Pump ${pumpModeLabel(p.mode)}` : `Pump not ${pumpModeLabel(p.mode)}`;
+			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
+		}
+		case "state_span_active": {
+			const p = node.state_span_active;
+			if (!p) return "";
+			const subject = stateSpanLabel(p.category, p.state);
+			const verb = p.is_active ? `${subject} active` : `${subject} not active`;
+			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
+		}
 	}
+}
+
+function bucketLabel(bucket: string): string {
+	switch (bucket) {
+		case "very_low": return "Very Low";
+		case "low": return "Low";
+		case "tight_range": return "Tight Range";
+		case "in_range": return "In Range";
+		case "high": return "High";
+		case "very_high": return "Very High";
+		default: return bucket;
+	}
+}
+
+function dayLabel(day: number | string): string {
+	// `DayOfWeek` is wired as a numeric system enum on the wire (no string converter); the
+	// editor stores numbers but the loader may surface either form, so handle both.
+	const idx = typeof day === "number" ? day : Number(day);
+	const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+	return names[idx] ?? String(day);
+}
+
+function pumpModeLabel(mode: string): string {
+	switch (mode) {
+		case "automatic": return "in Automatic";
+		case "limited": return "Limited";
+		case "manual": return "in Manual";
+		case "boost": return "Boosting";
+		case "ease_off": return "Easing Off";
+		case "sleep": return "in Sleep mode";
+		case "exercise": return "in Exercise mode";
+		case "suspended": return "Suspended";
+		case "off": return "Off";
+		default: return mode;
+	}
+}
+
+function stateSpanLabel(category: string, state: string | null | undefined): string {
+	const cat = category.replace(/_/g, " ");
+	return state ? `${cat} (${state})` : cat;
 }
 
 /**

@@ -47,7 +47,7 @@ internal sealed class ForceEvalRunner
             {
                 value = await registry.EvaluateNodeAsync(node, context, ct);
             }
-            catch
+            catch (Exception) when (!ct.IsCancellationRequested)
             {
                 value = false;
             }
