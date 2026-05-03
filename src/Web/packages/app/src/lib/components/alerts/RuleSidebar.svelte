@@ -304,7 +304,6 @@
                 <span
                   class="inline-block h-2 w-2 shrink-0 rounded-full"
                   class:bg-status-normal={lt}
-                  class:bg-emerald-500={lt}
                   class:bg-muted-foreground={!lt}
                   class:opacity-30={!lt}
                   aria-hidden="true"
