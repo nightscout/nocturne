@@ -54,6 +54,7 @@ public static class GlookoConstants
     public const string ScheduledBasalsPath = "/api/v2/pumps/scheduled_basals";
     public const string NormalBolusesPath = "/api/v2/pumps/normal_boluses";
     public const string CgmReadingsPath = "/api/v2/cgm/readings";
+    public const string MeterReadingsPath = "/api/v2/readings";
     public const string SuspendBasalsPath = "/api/v2/pumps/suspend_basals";
     public const string TemporaryBasalsPath = "/api/v2/pumps/temporary_basals";
     public const string V3UsersPath = "/api/v3/session/users";

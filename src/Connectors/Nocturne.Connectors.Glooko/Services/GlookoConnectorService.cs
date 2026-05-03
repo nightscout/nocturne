@@ -338,6 +338,17 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                             ConnectorSource, v3Glucose.Count);
                     }
                 }
+
+                // V2 meter readings → BGCheck records
+                var bgChecks = _sensorGlucoseMapper.TransformBatchDataToBGChecks(batchData).ToList();
+                if (bgChecks.Count > 0)
+                {
+                    if (await PublishBGCheckDataAsync(bgChecks, config, cancellationToken))
+                    {
+                        _logger.LogInformation("[{ConnectorSource}] Published {Count} BG checks from meter readings",
+                            ConnectorSource, bgChecks.Count);
+                    }
+                }
             }
 
             // 2. Process Treatments (boluses, carb intake)
@@ -611,6 +622,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     if (json.TryGetProperty("readings", out var el))
                         batchData.Readings = JsonSerializer.Deserialize<GlookoCgmReading[]>(el.GetRawText()) ?? [];
                 }),
+                (GlookoConstants.MeterReadingsPath, json =>
+                {
+                    if (json.TryGetProperty("readings", out var el))
+                        batchData.MeterReadings = JsonSerializer.Deserialize<GlookoMeterReading[]>(el.GetRawText()) ?? [];
+                }),
                 (GlookoConstants.SuspendBasalsPath, json =>
                 {
                     if (json.TryGetProperty("suspendBasals", out var el))
@@ -647,11 +663,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             _logger.LogInformation(
                 "[{ConnectorSource}] Fetched Glooko batch data summary: "
-                + "Readings={ReadingsCount}, Foods={FoodsCount}, "
+                + "Readings={ReadingsCount}, MeterReadings={MeterReadingsCount}, Foods={FoodsCount}, "
                 + "NormalBoluses={BolusCount}, TempBasals={TempBasalCount}, "
                 + "ScheduledBasals={ScheduledBasalCount}, Suspends={SuspendCount}",
                 ConnectorSource,
                 batchData.Readings?.Length ?? 0,
+                batchData.MeterReadings?.Length ?? 0,
                 batchData.Foods?.Length ?? 0,
                 batchData.NormalBoluses?.Length ?? 0,
                 batchData.TempBasals?.Length ?? 0,

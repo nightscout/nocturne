@@ -13,6 +13,8 @@ public class GlookoBatchData
 
     [JsonPropertyName("readings")] public GlookoCgmReading[]? Readings { get; set; }
 
+    [JsonPropertyName("meterReadings")] public GlookoMeterReading[]? MeterReadings { get; set; }
+
     [JsonPropertyName("suspendBasals")] public GlookoSuspendBasal[]? SuspendBasals { get; set; }
 
     [JsonPropertyName("temporaryBasals")] public GlookoTempBasal[]? TempBasals { get; set; }
@@ -131,4 +133,25 @@ public class GlookoTempBasal
     [JsonPropertyName("percent")] public int? Percent { get; set; }
 
     [JsonPropertyName("tempBasalType")] public string? TempBasalType { get; set; }
+}
+
+public class GlookoMeterReading
+{
+    [JsonPropertyName("timestamp")] public string Timestamp { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Glucose value in mg/dL × 100 (integer encoding for 2-decimal precision).
+    /// Must be divided by 100 to get actual mg/dL.
+    /// </summary>
+    [JsonPropertyName("value")] public double Value { get; set; }
+
+    [JsonPropertyName("meterUnits")] public string? MeterUnits { get; set; }
+
+    [JsonPropertyName("meterMealTag")] public int? MeterMealTag { get; set; }
+
+    [JsonPropertyName("guid")] public string? Guid { get; set; }
+
+    [JsonPropertyName("softDeleted")] public bool? SoftDeleted { get; set; }
+
+    [JsonPropertyName("meterGuid")] public string? MeterGuid { get; set; }
 }
