@@ -17,6 +17,7 @@ export type FactGroup =
 	| "carbs"
 	| "device"
 	| "behaviour"
+	| "state"
 	| "time"
 	| "alert";
 
@@ -53,7 +54,9 @@ export type LucideIconName =
 	| "activity"
 	| "bell"
 	| "bell-off"
-	| "calendar-clock";
+	| "calendar-clock"
+	| "calendar-days"
+	| "moon";
 
 /**
  * Authoritative leaf-fact catalogue. Order within each group is the order
@@ -62,6 +65,7 @@ export type LucideIconName =
 export const LEAF_FACTS: readonly FactDef[] = [
 	// Glucose
 	{ kind: "threshold", label: "Glucose", description: "Current CGM reading vs. a threshold", group: "glucose", icon: "droplet" },
+	{ kind: "glucose_bucket", label: "Glucose bucket", description: "Current reading falls in selected buckets (very-low … very-high)", group: "glucose", icon: "chart-line" },
 	{ kind: "predicted", label: "Predicted glucose", description: "oref/AAPS forecast crossing a threshold", group: "glucose", icon: "trending-up" },
 	{ kind: "rate_of_change", label: "Rate of change", description: "Glucose rising or falling faster than a rate", group: "glucose", icon: "trending-up" },
 	{ kind: "trend", label: "Trend", description: "Coarse direction bucket (rising fast, falling, …)", group: "glucose", icon: "trending-up" },
@@ -74,6 +78,8 @@ export const LEAF_FACTS: readonly FactDef[] = [
 
 	// Carbs
 	{ kind: "cob", label: "COB", description: "Carbs on board", group: "carbs", icon: "apple" },
+	{ kind: "time_since_last_carb", label: "Time since last carb", description: "Minutes elapsed since the last recorded carb entry", group: "carbs", icon: "clock" },
+	{ kind: "time_since_last_bolus", label: "Time since last bolus", description: "Minutes elapsed since the last recorded bolus", group: "insulin", icon: "clock" },
 
 	// Device
 	{ kind: "reservoir", label: "Reservoir", description: "Pump reservoir level (units)", group: "device", icon: "fuel" },
@@ -89,9 +95,14 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "pump_suspended", label: "Pump suspended", description: "Pump suspension state", group: "behaviour", icon: "pause-circle" },
 	{ kind: "override_active", label: "Override active", description: "An override profile is active", group: "behaviour", icon: "wand-2" },
 	{ kind: "do_not_disturb", label: "Do Not Disturb", description: "Tenant DND state (manual or scheduled)", group: "behaviour", icon: "bell-off" },
+	{ kind: "pump_state", label: "Pump mode", description: "Pump operational mode (Automatic, Manual, Boost, …)", group: "behaviour", icon: "activity" },
+
+	// State spans
+	{ kind: "state_span_active", label: "State active", description: "Generic state span (override, sleep, exercise, …)", group: "state", icon: "activity" },
 
 	// Time
 	{ kind: "time_of_day", label: "Time of day", description: "Current local time falls in a window", group: "time", icon: "clock" },
+	{ kind: "day_of_week", label: "Day of week", description: "Current local day matches selected weekdays", group: "time", icon: "calendar-days" },
 
 	// Alert
 	{ kind: "alert_state", label: "Other rule state", description: "Reference another alert rule's state", group: "alert", icon: "bell" },
@@ -119,6 +130,7 @@ export const FACT_GROUP_LABELS: Record<FactGroup, string> = {
 	carbs: "Carbs",
 	device: "Device",
 	behaviour: "Behaviour",
+	state: "State spans",
 	time: "Time",
 	alert: "Alerts",
 };
@@ -130,6 +142,7 @@ export const FACT_GROUP_ORDER: readonly FactGroup[] = [
 	"carbs",
 	"device",
 	"behaviour",
+	"state",
 	"time",
 	"alert",
 ];
@@ -147,6 +160,7 @@ export const FACT_GROUP_COLOURS: Record<FactGroup, { fg: string; bg: string }> =
 	carbs: { fg: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/15" },
 	device: { fg: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/15" },
 	behaviour: { fg: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/15" },
+	state: { fg: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-500/15" },
 	time: { fg: "text-muted-foreground", bg: "bg-muted" },
 	alert: { fg: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/15" },
 };

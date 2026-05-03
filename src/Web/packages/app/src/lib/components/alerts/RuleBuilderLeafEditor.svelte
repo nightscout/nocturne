@@ -1,13 +1,20 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input";
   import * as Select from "$lib/components/ui/select";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Switch } from "$lib/components/ui/switch";
   import {
     type ConditionNode,
     type ComparisonOperator,
     type StalenessOperator,
     type TrendBucket,
+    type TimeSinceLastCarbCondition,
+    type TimeSinceLastBolusCondition,
     TempBasalMetric,
+    GlucoseBucket,
+    PumpModeState,
+    StateSpanCategory,
+    DayOfWeek,
   } from "./types";
 
   interface AvailableRule {
@@ -52,6 +59,59 @@
   const tempBasalMetricLabels: Record<TempBasalMetric, string> = {
     [TempBasalMetric.Rate]: "rate (U/h)",
     [TempBasalMetric.PercentOfScheduled]: "% of scheduled",
+  };
+  const glucoseBucketLabels: Record<GlucoseBucket, string> = {
+    [GlucoseBucket.VeryLow]: "very low",
+    [GlucoseBucket.Low]: "low",
+    [GlucoseBucket.TightRange]: "tight range",
+    [GlucoseBucket.InRange]: "in range",
+    [GlucoseBucket.High]: "high",
+    [GlucoseBucket.VeryHigh]: "very high",
+  };
+  const pumpModeLabels: Record<PumpModeState, string> = {
+    [PumpModeState.Automatic]: "Automatic",
+    [PumpModeState.Limited]: "Limited",
+    [PumpModeState.Manual]: "Manual",
+    [PumpModeState.Boost]: "Boost",
+    [PumpModeState.EaseOff]: "Ease off",
+    [PumpModeState.Sleep]: "Sleep",
+    [PumpModeState.Exercise]: "Exercise",
+    [PumpModeState.Suspended]: "Suspended",
+    [PumpModeState.Off]: "Off",
+  };
+  // PumpMode is intentionally excluded — pump mode rules use the dedicated
+  // pump_state condition (the backend rejects PumpMode on the generic state-span
+  // condition at validation time).
+  const stateCategoryLabels: Partial<Record<StateSpanCategory, string>> = {
+    [StateSpanCategory.PumpConnectivity]: "Pump connectivity",
+    [StateSpanCategory.Override]: "Override",
+    [StateSpanCategory.Profile]: "Profile",
+    [StateSpanCategory.Sleep]: "Sleep",
+    [StateSpanCategory.Exercise]: "Exercise",
+    [StateSpanCategory.Illness]: "Illness",
+    [StateSpanCategory.Travel]: "Travel",
+    [StateSpanCategory.DataExclusion]: "Data exclusion",
+    [StateSpanCategory.TemporaryTarget]: "Temporary target",
+  };
+  // Mon → Sun. Order is fixed to a Monday-start week for the toggle pills; the
+  // wire stores System.DayOfWeek values regardless of display order.
+  const weekdayOrder: DayOfWeek[] = [
+    DayOfWeek.Monday,
+    DayOfWeek.Tuesday,
+    DayOfWeek.Wednesday,
+    DayOfWeek.Thursday,
+    DayOfWeek.Friday,
+    DayOfWeek.Saturday,
+    DayOfWeek.Sunday,
+  ];
+  const weekdayLabels: Record<DayOfWeek, string> = {
+    [DayOfWeek.Sunday]: "Sun",
+    [DayOfWeek.Monday]: "Mon",
+    [DayOfWeek.Tuesday]: "Tue",
+    [DayOfWeek.Wednesday]: "Wed",
+    [DayOfWeek.Thursday]: "Thu",
+    [DayOfWeek.Friday]: "Fri",
+    [DayOfWeek.Saturday]: "Sat",
   };
 
   function parseNumber(value: string, fallback: number): number {
@@ -453,6 +513,172 @@
       }}
     />
     <span class="text-xs text-muted-foreground">min</span>
+  {:else if node.type === "glucose_bucket" && node.glucose_bucket}
+    {@const selected = new Set(node.glucose_bucket.buckets ?? [])}
+    <ToggleGroup.Root
+      type="multiple"
+      size="sm"
+      value={[...selected] as string[]}
+      onValueChange={(v) => {
+        if (node.glucose_bucket)
+          node.glucose_bucket.buckets = v as GlucoseBucket[];
+      }}
+      class="flex flex-wrap gap-1"
+    >
+      {#each Object.entries(glucoseBucketLabels) as [bucket, label] (bucket)}
+        <ToggleGroup.Item value={bucket} aria-label={label} class="h-7 px-2 text-xs">
+          {label}
+        </ToggleGroup.Item>
+      {/each}
+    </ToggleGroup.Root>
+  {:else if (node.type === "time_since_last_carb" || node.type === "time_since_last_bolus") && node[node.type]}
+    {@const payload = node[node.type]! as TimeSinceLastCarbCondition | TimeSinceLastBolusCondition}
+    <Select.Root
+      type="single"
+      value={(payload.operator as unknown as ComparisonOperator) ?? ">="}
+      onValueChange={(v) => {
+        // AlertComparisonOperator is generated as a numeric enum but the wire
+        // shape carries the symbol literal — cast at the boundary.
+        payload.operator = v as unknown as typeof payload.operator;
+      }}
+    >
+      <Select.Trigger class="h-7 w-14 px-2 text-xs">
+        {opLabels[(payload.operator as unknown as ComparisonOperator) ?? ">="]}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.entries(opLabels) as [op, label] (op)}
+          <Select.Item value={op} {label} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Input
+      type="number"
+      min="1"
+      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      value={payload.minutes ?? 0}
+      oninput={(e) => {
+        payload.minutes = parseNumber(e.currentTarget.value, payload.minutes ?? 0);
+      }}
+    />
+    <span class="text-xs text-muted-foreground">min</span>
+  {:else if node.type === "day_of_week" && node.day_of_week}
+    {@const selectedDays = new Set(node.day_of_week.days ?? [])}
+    <ToggleGroup.Root
+      type="multiple"
+      size="sm"
+      value={[...selectedDays].map(String)}
+      onValueChange={(v) => {
+        if (node.day_of_week)
+          node.day_of_week.days = v.map((s) => Number(s) as DayOfWeek);
+      }}
+      class="flex flex-wrap gap-1"
+    >
+      {#each weekdayOrder as day (day)}
+        <ToggleGroup.Item value={String(day)} aria-label={weekdayLabels[day]} class="h-7 w-9 px-1 text-xs">
+          {weekdayLabels[day]}
+        </ToggleGroup.Item>
+      {/each}
+    </ToggleGroup.Root>
+  {:else if node.type === "pump_state" && node.pump_state}
+    <Select.Root
+      type="single"
+      value={(node.pump_state.mode ?? PumpModeState.Suspended) as string}
+      onValueChange={(v) => {
+        if (node.pump_state) node.pump_state.mode = v as PumpModeState;
+      }}
+    >
+      <Select.Trigger class="h-7 w-32 px-2 text-xs">
+        {pumpModeLabels[(node.pump_state.mode as PumpModeState) ?? PumpModeState.Suspended]}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.entries(pumpModeLabels) as [mode, label] (mode)}
+          <Select.Item value={mode} {label} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <span class="text-xs text-muted-foreground">is</span>
+    <Switch
+      checked={node.pump_state.is_active ?? true}
+      onCheckedChange={(checked) => {
+        if (!node.pump_state) return;
+        node.pump_state.is_active = checked;
+        if (!checked) node.pump_state.for_minutes = undefined;
+      }}
+    />
+    <span class="text-xs text-muted-foreground">{node.pump_state.is_active ? "active" : "inactive"}</span>
+    {#if node.pump_state.is_active}
+      <span class="text-xs text-muted-foreground">for ≥</span>
+      <Input
+        type="number"
+        min="1"
+        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        placeholder="any"
+        value={node.pump_state.for_minutes ?? ""}
+        oninput={(e) => {
+          if (!node.pump_state) return;
+          const v = e.currentTarget.value;
+          node.pump_state.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
+        }}
+      />
+      <span class="text-xs text-muted-foreground">min</span>
+    {/if}
+  {:else if node.type === "state_span_active" && node.state_span_active}
+    <Select.Root
+      type="single"
+      value={(node.state_span_active.category ?? StateSpanCategory.Override) as string}
+      onValueChange={(v) => {
+        if (node.state_span_active)
+          node.state_span_active.category = v as StateSpanCategory;
+      }}
+    >
+      <Select.Trigger class="h-7 w-40 px-2 text-xs">
+        {stateCategoryLabels[
+          (node.state_span_active.category as StateSpanCategory) ?? StateSpanCategory.Override
+        ] ?? "category"}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.entries(stateCategoryLabels) as [cat, label] (cat)}
+          <Select.Item value={cat} label={label ?? cat} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Input
+      type="text"
+      class="h-7 w-28 px-2 text-xs"
+      placeholder="any state"
+      value={node.state_span_active.state ?? ""}
+      oninput={(e) => {
+        if (!node.state_span_active) return;
+        const v = e.currentTarget.value;
+        node.state_span_active.state = v.length > 0 ? v : undefined;
+      }}
+    />
+    <span class="text-xs text-muted-foreground">is</span>
+    <Switch
+      checked={node.state_span_active.is_active ?? true}
+      onCheckedChange={(checked) => {
+        if (!node.state_span_active) return;
+        node.state_span_active.is_active = checked;
+        if (!checked) node.state_span_active.for_minutes = undefined;
+      }}
+    />
+    <span class="text-xs text-muted-foreground">{node.state_span_active.is_active ? "active" : "inactive"}</span>
+    {#if node.state_span_active.is_active}
+      <span class="text-xs text-muted-foreground">for ≥</span>
+      <Input
+        type="number"
+        min="1"
+        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        placeholder="any"
+        value={node.state_span_active.for_minutes ?? ""}
+        oninput={(e) => {
+          if (!node.state_span_active) return;
+          const v = e.currentTarget.value;
+          node.state_span_active.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
+        }}
+      />
+      <span class="text-xs text-muted-foreground">min</span>
+    {/if}
   {/if}
 </div>
 
