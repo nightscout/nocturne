@@ -2,7 +2,7 @@ import type {
 	AlertRuleResponse,
 	LeafTransitionLog as ApiLeafTransitionLog,
 } from "$api-clients";
-import { nodeFromApi, type ConditionNode } from "./types";
+import type { ConditionNode } from "./types";
 
 // ---------------------------------------------------------------------------
 // Leaf identity
@@ -55,7 +55,7 @@ function walk(
 // Transition log lookup
 // ---------------------------------------------------------------------------
 
-interface PreparedPoint {
+export interface PreparedTransitionPoint {
 	atMs: number;
 	value: boolean;
 }
@@ -66,16 +66,19 @@ interface PreparedPoint {
  * encoded, matching the backend emission contract.
  */
 export class LeafTransitionLog {
-	private readonly byRuleLeaf = new Map<string, Map<number, PreparedPoint[]>>();
+	private readonly byRuleLeaf = new Map<
+		string,
+		Map<number, PreparedTransitionPoint[]>
+	>();
 
 	constructor(byRule: Record<string, ApiLeafTransitionLog[] | undefined>) {
 		for (const ruleId of Object.keys(byRule)) {
 			const logs = byRule[ruleId];
 			if (!logs) continue;
-			const perLeaf = new Map<number, PreparedPoint[]>();
+			const perLeaf = new Map<number, PreparedTransitionPoint[]>();
 			for (const log of logs) {
 				if (log.leafId === undefined) continue;
-				const points: PreparedPoint[] = [];
+				const points: PreparedTransitionPoint[] = [];
 				for (const p of log.points ?? []) {
 					if (p.atMs === undefined || p.value === undefined) continue;
 					points.push({ atMs: p.atMs, value: p.value });
@@ -112,6 +115,14 @@ export class LeafTransitionLog {
 		}
 		return points[lo].value;
 	}
+
+	/** Read-only view of all transition points for (ruleId, leafId), or empty if none. */
+	pointsFor(
+		ruleId: string,
+		leafId: number,
+	): readonly PreparedTransitionPoint[] {
+		return this.byRuleLeaf.get(ruleId)?.get(leafId) ?? [];
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -123,8 +134,20 @@ type MemoEntry = boolean | typeof IN_PROGRESS;
 
 export interface ComposeOpts {
 	ruleById: Map<string, AlertRuleResponse>;
-	disabledRuleIds: ReadonlySet<string>;
+	/**
+	 * Caller-owned parsed condition trees keyed by rule id. The composer walks
+	 * these references directly; it does NOT reparse `rule.conditionParams`.
+	 * Every rule reachable from the entry rule via `alert_state` references
+	 * MUST have an entry here, or the recursion will throw.
+	 */
+	treeByRule: Map<string, ConditionNode>;
+	/**
+	 * Per-rule map from a leaf node's editor `_uid` to its sequential leaf id
+	 * (as produced by <c>assignLeafIds</c> on the same tree from
+	 * <c>treeByRule</c>). Same coverage requirement as <c>treeByRule</c>.
+	 */
 	leafIdsByRule: Map<string, Map<string, number>>;
+	disabledRuleIds: ReadonlySet<string>;
 	/**
 	 * Per-`atMs` cache of rule-level results. Caller MUST instantiate a fresh
 	 * Map (or omit) per timestamp — sharing across times would return stale
@@ -136,8 +159,15 @@ export interface ComposeOpts {
 
 /**
  * Returns the composite truth of <paramref name="rule"/> at
- * <paramref name="atMs"/> by walking its condition tree and looking up each
- * leaf in <paramref name="log"/>.
+ * <paramref name="atMs"/> by walking <paramref name="tree"/> and looking up
+ * each leaf in <paramref name="log"/>.
+ *
+ * The caller owns parsing: pass the same parsed tree reference (and the same
+ * `leafIdsByRule[rule.id]` map derived from it via <c>assignLeafIds</c>) for
+ * as long as you want stable IDs. For rules referenced via `alert_state`,
+ * the caller must also pre-populate <c>opts.treeByRule</c> and
+ * <c>opts.leafIdsByRule</c> entries for the referenced rule id, otherwise
+ * the composer throws.
  *
  * Memoisation is per-timestamp; if the same rule is re-encountered while its
  * own composition is in flight (an `alert_state` cycle) the in-progress
@@ -145,16 +175,18 @@ export interface ComposeOpts {
  */
 export function composeRuleTruth(
 	rule: AlertRuleResponse,
+	tree: ConditionNode,
 	log: LeafTransitionLog,
 	atMs: number,
 	opts: ComposeOpts,
 ): boolean {
 	const memo = opts.memo ?? new Map<string, MemoEntry>();
-	return composeRuleInternal(rule, log, atMs, opts, memo);
+	return composeRuleInternal(rule, tree, log, atMs, opts, memo);
 }
 
 function composeRuleInternal(
 	rule: AlertRuleResponse,
+	tree: ConditionNode,
 	log: LeafTransitionLog,
 	atMs: number,
 	opts: ComposeOpts,
@@ -167,27 +199,28 @@ function composeRuleInternal(
 	if (cached !== undefined) return cached;
 	memo.set(ruleId, IN_PROGRESS);
 
-	const tree = getCachedTree(rule);
-	const result = tree
-		? evalNode(tree, rule, log, atMs, opts, memo)
-		: false;
+	const result = evalNode(tree, rule, log, atMs, opts, memo);
 	memo.set(ruleId, result);
 	return result;
 }
 
-// Cache the parsed tree per AlertRuleResponse so its uids stay stable across
-// the multiple internal walks (composition + leaf-id sequence lookup).
-// nodeFromApi assigns fresh uids on every call, so without this cache the
-// leaf node walked by composition wouldn't match the leaf-id sequence.
-const PARSED_TREE = new WeakMap<AlertRuleResponse, ConditionNode | null>();
-
-function getCachedTree(rule: AlertRuleResponse): ConditionNode | null {
-	let cached = PARSED_TREE.get(rule);
-	if (cached === undefined) {
-		cached = nodeFromApi(rule.conditionType, rule.conditionParams);
-		PARSED_TREE.set(rule, cached);
+function leafIdsFor(
+	rule: AlertRuleResponse,
+	opts: ComposeOpts,
+): Map<string, number> {
+	const ruleId = rule.id;
+	if (!ruleId) {
+		throw new Error(
+			"composeRuleTruth: rule has no id — cannot resolve leaf ids",
+		);
 	}
-	return cached;
+	const idMap = opts.leafIdsByRule.get(ruleId);
+	if (!idMap) {
+		throw new Error(
+			`composeRuleTruth: leafIdsByRule missing entry for rule ${ruleId} — caller must call assignLeafIds first`,
+		);
+	}
+	return idMap;
 }
 
 function evalNode(
@@ -233,65 +266,11 @@ function evalLeaf(
 	opts: ComposeOpts,
 ): boolean {
 	if (!rule.id || !node._uid) return false;
-	// The original `rule.conditionType`/`conditionParams` was re-parsed via
-	// nodeFromApi, which assigns brand-new uids — so we can't look up by the
-	// node's own _uid here. Instead, rebuild leafIds from the parsed tree by
-	// matching DFS order against the cached map. To keep this O(1) per leaf, we
-	// memoise the parsed-tree leaf id sequence on first use.
-	const ids = getLeafIdSequenceForRule(rule, opts);
-	const idx = ids.indexOf(node._uid);
-	if (idx < 0) return false;
-	const leafId = idx;
+	const idMap = leafIdsFor(rule, opts);
+	const leafId = idMap.get(node._uid);
+	if (leafId === undefined) return false;
 	const v = log.valueAt(rule.id, leafId, atMs);
 	return v ?? false;
-}
-
-// Sequence of leaf _uids in DFS pre-order for a rule's parsed tree, cached on
-// the opts.leafIdsByRule map so callers can pre-populate it but lazy parsing
-// also works.
-const PARSED_SEQ = new WeakMap<AlertRuleResponse, string[]>();
-
-function getLeafIdSequenceForRule(
-	rule: AlertRuleResponse,
-	opts: ComposeOpts,
-): string[] {
-	const cached = PARSED_SEQ.get(rule);
-	if (cached) return cached;
-	const tree = getCachedTree(rule);
-	const ids = tree ? collectLeafUids(tree) : [];
-	PARSED_SEQ.set(rule, ids);
-	// Also populate opts so call-sites that introspect leafIdsByRule see it.
-	if (rule.id && !opts.leafIdsByRule.has(rule.id)) {
-		const m = new Map<string, number>();
-		ids.forEach((u, i) => m.set(u, i));
-		opts.leafIdsByRule.set(rule.id, m);
-	}
-	return ids;
-}
-
-function collectLeafUids(node: ConditionNode): string[] {
-	const out: string[] = [];
-	collectLeafUidsInto(node, out);
-	return out;
-}
-
-function collectLeafUidsInto(node: ConditionNode, out: string[]): void {
-	switch (node.type) {
-		case "composite":
-			if (node.composite?.conditions) {
-				for (const c of node.composite.conditions) collectLeafUidsInto(c, out);
-			}
-			return;
-		case "not":
-			if (node.not?.child) collectLeafUidsInto(node.not.child, out);
-			return;
-		case "sustained":
-			if (node.sustained?.child) collectLeafUidsInto(node.sustained.child, out);
-			return;
-		default:
-			if (node._uid) out.push(node._uid);
-			return;
-	}
 }
 
 function evalSustained(
@@ -310,15 +289,15 @@ function evalSustained(
 	// Sustained-of-leaf (the common case): inspect the leaf's transition list
 	// directly so we know exactly when it last became true.
 	if (isLeaf(p.child)) {
-		if (!rule.id) return false;
-		const ids = getLeafIdSequenceForRule(rule, opts);
-		const idx = p.child._uid ? ids.indexOf(p.child._uid) : -1;
-		if (idx < 0) return false;
+		if (!rule.id || !p.child._uid) return false;
+		const idMap = leafIdsFor(rule, opts);
+		const leafId = idMap.get(p.child._uid);
+		if (leafId === undefined) return false;
 		// Current value must be true; previous transition (if any) defines when
 		// it became true.
-		const nowVal = log.valueAt(rule.id, idx, atMs);
+		const nowVal = log.valueAt(rule.id, leafId, atMs);
 		if (nowVal !== true) return false;
-		const since = mostRecentTrueSince(log, rule.id, idx, atMs);
+		const since = mostRecentTrueSince(log, rule.id, leafId, atMs);
 		// since === null means the leaf has been true for the entire history we
 		// have; treat the window-start sample as the anchor and accept.
 		if (since === null) return true;
@@ -344,14 +323,9 @@ function mostRecentTrueSince(
 	leafId: number,
 	atMs: number,
 ): number | null {
-	// Reach into the prepared point list. The class encapsulates points but for
-	// sustained evaluation we need the transition timestamp of the most recent
-	// flip-to-true. valueAt only exposes the current value, so re-walk via a
-	// linear scan back from the query point — there are typically <10 transitions
-	// per leaf in a replay window.
-	const points = (log as unknown as { byRuleLeaf: Map<string, Map<number, PreparedPoint[]>> })
-		.byRuleLeaf.get(ruleId)?.get(leafId);
-	if (!points || points.length === 0) return null;
+	const points = log.pointsFor(ruleId, leafId);
+	if (points.length === 0) return null;
+	if (atMs < points[0].atMs) return null;
 	// Find the index whose atMs <= atMs.
 	let lo = 0;
 	let hi = points.length - 1;
@@ -360,7 +334,6 @@ function mostRecentTrueSince(
 		if (points[mid].atMs <= atMs) lo = mid;
 		else hi = mid - 1;
 	}
-	if (atMs < points[0].atMs) return null;
 	// Walk backwards to find the most recent true-anchor.
 	for (let i = lo; i >= 0; i--) {
 		if (points[i].value) {
@@ -385,11 +358,17 @@ function evalAlertState(
 	if (opts.disabledRuleIds.has(p.alert_id)) return false;
 	const target = opts.ruleById.get(p.alert_id);
 	if (!target) return false;
+	const targetTree = opts.treeByRule.get(p.alert_id);
+	if (!targetTree) {
+		throw new Error(
+			`composeRuleTruth: treeByRule missing entry for referenced rule ${p.alert_id} — caller must pre-parse all reachable rules`,
+		);
+	}
 
 	// `acknowledged` / `unacknowledged` are runtime concerns the replay log
 	// can't reconstruct — collapse both to the same firing-truth as the live
 	// `firing` state for now. Documented limitation.
-	const nowTrue = composeRuleInternal(target, log, atMs, opts, memo);
+	const nowTrue = composeRuleInternal(target, targetTree, log, atMs, opts, memo);
 	if (!nowTrue) return false;
 
 	if (p.for_minutes && p.for_minutes > 0) {
@@ -398,6 +377,7 @@ function evalAlertState(
 		const boundaryMemo = new Map<string, MemoEntry>();
 		const boundaryTrue = composeRuleInternal(
 			target,
+			targetTree,
 			log,
 			boundary,
 			{ ...opts, memo: boundaryMemo },

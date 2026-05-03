@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { AlertRuleResponse, LeafTransitionLog as ApiLeafTransitionLog } from "$api-clients";
 import { assignLeafIds, LeafTransitionLog, composeRuleTruth } from "./leafEval";
-import type { ConditionNode } from "./types";
+import { nodeFromApi, type ConditionNode } from "./types";
 
 // Lightweight builders. We bypass the editor's defaultPayload helpers so each
 // test owns the exact tree shape; uids are stable strings to make ID lookups
@@ -211,43 +211,40 @@ describe("LeafTransitionLog.valueAt", () => {
 });
 
 describe("composeRuleTruth", () => {
+	// Tests construct rules from a single ConditionNode they already have, so we
+	// stash the source tree on the rule itself for reconstruction. Production
+	// callers pass the already-parsed editor tree directly to composeRuleTruth.
+	const sourceTrees = new Map<string, ConditionNode>();
+
+	function rule(id: string, condition: ConditionNode): AlertRuleResponse {
+		sourceTrees.set(id, condition);
+		return makeRule(id, condition);
+	}
+
 	function compose(
-		rule: AlertRuleResponse,
+		r: AlertRuleResponse,
 		log: LeafTransitionLog,
 		atMs: number,
 		extra?: { rules?: AlertRuleResponse[]; disabled?: ReadonlySet<string> },
 	): boolean {
-		const rules = [rule, ...(extra?.rules ?? [])];
-		const ruleById = new Map(rules.map((r) => [r.id!, r]));
+		const rules = [r, ...(extra?.rules ?? [])];
+		const ruleById = new Map(rules.map((x) => [x.id!, x]));
+		const treeByRule = new Map<string, ConditionNode>();
 		const leafIdsByRule = new Map<string, Map<string, number>>();
-		for (const r of rules) {
-			// Re-derive the editor tree from conditionType/conditionParams. The
-			// makeRule builder stores the original ConditionNode parts, so we wrap
-			// the raw params back into a node-style envelope by hand.
-			const node = rebuildNode(r);
-			if (node) leafIdsByRule.set(r.id!, assignLeafIds(node));
+		for (const x of rules) {
+			const tree = sourceTrees.get(x.id!);
+			if (!tree) continue;
+			treeByRule.set(x.id!, tree);
+			leafIdsByRule.set(x.id!, assignLeafIds(tree));
 		}
-		return composeRuleTruth(rule, log, atMs, {
+		const tree = treeByRule.get(r.id!)!;
+		return composeRuleTruth(r, tree, log, atMs, {
 			ruleById,
+			treeByRule,
 			disabledRuleIds: extra?.disabled ?? new Set(),
 			leafIdsByRule,
 			memo: new Map(),
 		});
-	}
-
-	// Tests construct rules from a single ConditionNode they already have, so we
-	// stash the source tree on the rule itself for reconstruction. Production
-	// callers pass the already-parsed editor tree via composeRuleTruth's own
-	// parser path; here we keep the test plumbing minimal.
-	const treeByRule = new Map<string, ConditionNode>();
-
-	function rule(id: string, condition: ConditionNode): AlertRuleResponse {
-		treeByRule.set(id, condition);
-		return makeRule(id, condition);
-	}
-
-	function rebuildNode(r: AlertRuleResponse): ConditionNode | null {
-		return r.id ? (treeByRule.get(r.id) ?? null) : null;
 	}
 
 	it("AND: both true → true, one false → false", () => {
@@ -421,13 +418,30 @@ describe("composeRuleTruth", () => {
 			{ ruleId: "rJson", leafId: 0, points: [[0, true]] },
 			{ ruleId: "rJson", leafId: 1, points: [[0, true]] },
 		]);
-		const result = composeRuleTruth(r, log, 100, {
+		const tree = nodeFromApi(r.conditionType, r.conditionParams)!;
+		const leafIdsByRule = new Map([[r.id!, assignLeafIds(tree)]]);
+		const treeByRule = new Map([[r.id!, tree]]);
+		const result = composeRuleTruth(r, tree, log, 100, {
 			ruleById: new Map([[r.id!, r]]),
+			treeByRule,
 			disabledRuleIds: new Set(),
-			leafIdsByRule: new Map(),
+			leafIdsByRule,
 			memo: new Map(),
 		});
 		expect(result).toBe(true);
+	});
+
+	it("sustained-of-composite: AND of two leaves true at boundary and at atMs", () => {
+		const a = leaf("threshold");
+		const b = leaf("trend");
+		const r = rule("rsoc", and(sustained(5, and(a, b))));
+		const queryAt = 30 * 60_000;
+		// Both leaves are true from t=0 onwards — true at boundary (queryAt - 5min) and at queryAt.
+		const log = logFrom([
+			{ ruleId: "rsoc", leafId: 0, points: [[0, true]] },
+			{ ruleId: "rsoc", leafId: 1, points: [[0, true]] },
+		]);
+		expect(compose(r, log, queryAt)).toBe(true);
 	});
 
 	it("alert_state acknowledged/unacknowledged falls back to firing semantics", () => {
