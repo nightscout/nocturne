@@ -5,8 +5,7 @@
 
   /**
    * Coarse health summary surfaced at the top of the alerts surface. Four
-   * states:<ul>
-   *   <li><c>ok</c> — every channel is healthy and the tenant is reachable.</li>
+   * states:<ul>  <li><c>ok</c> — every channel is healthy and the tenant is reachable.</li>
    *   <li><c>warn</c> — at least one channel is degraded but a fallback exists.</li>
    *   <li><c>bad</c> — at least one channel is unreachable with no working backup.</li>
    *   <li><c>dnd</c> — Do Not Disturb is on; non-critical rules are suppressed.</li>
@@ -37,7 +36,7 @@
         ? severity("warning", "strip")
         : state === "bad"
           ? severity("critical", "strip")
-          : severity("info", "strip"),
+          : severity("info", "strip")
   );
 
   function messageFor(s: ArmedState, d: string | undefined): string {

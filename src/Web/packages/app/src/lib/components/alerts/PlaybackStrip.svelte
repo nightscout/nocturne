@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
   import { Play, Pause, RotateCcw } from "lucide-svelte";
-  import type { AlertRuleSeverity } from "$api-clients";
+  import { AlertReplayEventKind, type AlertRuleSeverity } from "$api-clients";
   import { severityVar } from "./severity";
   import { formatDateTime } from "./alertTime";
 
@@ -10,6 +10,7 @@
     tMs: number;
     severity: AlertRuleSeverity | string | undefined;
     ruleId?: string;
+    kind?: AlertReplayEventKind;
   }
 
   interface Props {
@@ -142,17 +143,21 @@
     />
     {#each tickList as tick, i (`${tick.ruleId ?? "x"}:${tick.tMs}:${i}`)}
       {@const dimmed = tick.xPct > playPct}
+      {@const isResolved = tick.kind === AlertReplayEventKind.AutoResolved}
+      {@const isSuppressed = tick.kind === AlertReplayEventKind.SuppressedByDnd}
       <line
         data-testid="event-tick"
         data-rule-id={tick.ruleId ?? ""}
+        data-kind={tick.kind ?? "fired"}
         x1={tick.xPct}
         x2={tick.xPct}
-        y1="20"
+        y1={isResolved ? "8" : "20"}
         y2="32"
         vector-effect="non-scaling-stroke"
         stroke={severityVar(tick.severity)}
-        stroke-width="2"
-        opacity={dimmed ? 0.35 : 1}
+        stroke-width={isSuppressed ? "1.5" : "2"}
+        stroke-dasharray={isSuppressed ? "2 2" : null}
+        opacity={dimmed ? 0.35 : isSuppressed ? 0.6 : 1}
       />
     {/each}
   </svg>

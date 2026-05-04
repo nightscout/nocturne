@@ -1,10 +1,13 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Alerts.Conditions;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Alerts;
@@ -12,13 +15,14 @@ namespace Nocturne.API.Services.Alerts;
 /// <summary>
 /// Replays the tenant's enabled rule set over a historical glucose window using a
 /// self-contained <see cref="ConditionEvaluatorRegistry"/> so the live tenant timer table
-/// is never touched. Sustained timers, time-of-day, staleness, alert_state, and the
+/// is never touched. Sustained timers, time-of-day, staleness, alert_state, the
 /// looping conditions (loop staleness/enaction, pump suspended/battery, temp basal,
-/// uploader battery, override active, sensitivity ratio) are reconstructed via the same
-/// <see cref="ISensorContextEnricher"/> the live engine uses, pinned per tick to the
-/// replay timestamp via <see cref="ISensorContextEnricher.EnrichAsOfAsync"/>. Predictions
-/// remain unmodelled (the prediction service is forward-from-now only) and surface as
-/// <see cref="AlertReplayResult.Limitations"/>.
+/// uploader battery, override active, sensitivity ratio), and predictions are reconstructed
+/// via the same <see cref="ISensorContextEnricher"/> the live engine uses, pinned per tick
+/// to the replay timestamp via <see cref="ISensorContextEnricher.EnrichAsOfAsync"/>.
+/// Auto-resolve (mirroring <c>AlertOrchestrator.TryAutoResolveAsync</c>) and DND suppression
+/// (mirroring <c>HandleExcursionOpened</c>'s suppressed-by-DND gate) surface as dedicated
+/// <see cref="AlertReplayEventKind"/> values.
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
@@ -34,23 +38,16 @@ internal sealed class AlertReplayService(
     /// </summary>
     private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(5);
 
-    private const string LimitationsBanner =
-        "Replay simulates threshold, rate-of-change, trend, time-of-day, staleness, sustained, " +
-        "alert_state references, and looping conditions (loop staleness, pump suspended/battery, " +
-        "temp basal, uploader battery, override active, sensitivity ratio) by reconstructing " +
-        "tenant state at each replay tick. Predictions are not reconstructed (the prediction " +
-        "service is forward-from-now only). Auto-resolve, escalation, quiet hours, and " +
-        "smart-snooze are not modelled.";
-
     public Task<AlertReplayResult> ReplayAsync(
-        DateOnly? localDate, string? timezone, CancellationToken ct)
-        => ReplayInternalAsync(localDate, timezone, ruleOverride: null, ct);
+        DateOnly? localDate, string? timezone, DateTime? fromUtc, DateTime? toUtc, CancellationToken ct)
+        => ReplayInternalAsync(localDate, timezone, fromUtc, toUtc, ruleOverride: null, ct);
 
     public Task<AlertReplayResult> ReplayDryRunAsync(
-        DateOnly? localDate, string? timezone, ReplayRuleOverride ruleOverride, CancellationToken ct)
+        DateOnly? localDate, string? timezone, DateTime? fromUtc, DateTime? toUtc,
+        ReplayRuleOverride ruleOverride, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ruleOverride);
-        return ReplayInternalAsync(localDate, timezone, ruleOverride, ct);
+        return ReplayInternalAsync(localDate, timezone, fromUtc, toUtc, ruleOverride, ct);
     }
 
     /// <summary>
@@ -62,22 +59,24 @@ internal sealed class AlertReplayService(
     private async Task<AlertReplayResult> ReplayInternalAsync(
         DateOnly? localDate,
         string? timezone,
+        DateTime? fromUtc,
+        DateTime? toUtc,
         ReplayRuleOverride? ruleOverride,
         CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty)
         {
-            return new AlertReplayResult(DateTime.UtcNow, DateTime.UtcNow, [], LimitationsBanner);
+            return new AlertReplayResult(DateTime.UtcNow, DateTime.UtcNow, []);
         }
 
-        var (windowStart, windowEnd) = ResolveWindow(localDate, timezone);
+        var (windowStart, windowEnd) = ResolveWindow(localDate, timezone, fromUtc, toUtc);
 
         var stored = await alertRepository.GetEnabledRulesAsync(tenantId, ct);
         var rules = ApplyOverride(stored, ruleOverride, tenantId);
         if (rules.Count == 0)
         {
-            return new AlertReplayResult(windowStart, windowEnd, [], LimitationsBanner);
+            return new AlertReplayResult(windowStart, windowEnd, []);
         }
 
         // Topo-sort by alert_state edges so a rule's parents have always been evaluated for
@@ -93,7 +92,8 @@ internal sealed class AlertReplayService(
 
         var fakeTime = new ReplayTimeProvider();
         var timerStore = new InMemoryConditionTimerStore();
-        var registry = BuildReplayRegistry(timerStore, fakeTime);
+        await using var replayServices = BuildReplayServices(timerStore, fakeTime);
+        var registry = replayServices.GetRequiredService<ConditionEvaluatorRegistry>();
 
         // Per-rule firing state across the replay so a continuously-true condition produces
         // one event at its leading edge rather than one per tick.
@@ -105,6 +105,12 @@ internal sealed class AlertReplayService(
         var forceRunner = new ForceEvalRunner();
         var leafPrev = new Dictionary<Guid, Dictionary<int, bool>>(rules.Count);
         var leafPoints = new Dictionary<Guid, Dictionary<int, List<LeafTransitionPoint>>>(rules.Count);
+        // Per-tick fact snapshots (site age, IOB, temp basal rate, etc.). Keyed by snake_case
+        // fact name; same compression as the leaf log — emit baseline + on rounded-value flip.
+        // The previous-value map stores the rounded value to keep the change-detection cheap
+        // and stable against floating-point jitter.
+        var factPrev = new Dictionary<string, decimal>();
+        var factPoints = new Dictionary<string, List<FactSnapshotPoint>>();
         // ActiveAlerts snapshot threaded into the SensorContext so alert_state references
         // resolve against rules that already fired earlier in the replay's timeline. The
         // enricher's EnrichAsOfAsync skips its own active-alerts repo fetch and reads this
@@ -151,6 +157,8 @@ internal sealed class AlertReplayService(
             // state-span / temp-basal / device-event repos all support an as-of cutoff.
             var enrichedBase = await enricher.EnrichAsOfAsync(
                 baseContext, ordered, tenantId, DateTime.SpecifyKind(tick, DateTimeKind.Utc), ct);
+
+            CaptureFactSnapshots(enrichedBase, DateTime.SpecifyKind(tick, DateTimeKind.Utc), factPrev, factPoints);
 
             foreach (var rule in ordered)
             {
@@ -230,17 +238,102 @@ internal sealed class AlertReplayService(
                 }
 
                 var wasFiring = firing.GetValueOrDefault(rule.Id);
+
+                // Step 1: open / continue / close — mirrors AlertOrchestrator.EvaluateRuleAsync's
+                // ExcursionTransition switch. `currentlyFiring` tracks whether the rule has an
+                // open excursion after this step, fed to the auto-resolve gate below.
+                bool currentlyFiring;
                 if (met && !wasFiring)
                 {
-                    events.Add(new AlertReplayEvent(tick, rule.Id, rule.Name, rule.Severity));
+                    // Fresh open. DND suppression mirror of HandleExcursionOpened: a non-Critical
+                    // rule without AllowThroughDnd that fires while the tenant is in DND would
+                    // have been recorded as suppressed in the live engine. We still seed
+                    // activeAlerts so downstream alert_state references see the excursion as
+                    // open — only the surfaced event kind differs (matches live, where the
+                    // instance row is created and then marked suppressed).
+                    var suppressedByDnd =
+                        ruleContext.ActiveDoNotDisturb is not null
+                        && rule.Severity != AlertRuleSeverity.Critical
+                        && !rule.AllowThroughDnd;
+
+                    var kind = suppressedByDnd
+                        ? AlertReplayEventKind.SuppressedByDnd
+                        : AlertReplayEventKind.Fired;
+                    events.Add(new AlertReplayEvent(tick, rule.Id, rule.Name, rule.Severity, kind));
                     activeAlerts[rule.Id] = new ActiveAlertSnapshot("firing", tick, null);
+                    currentlyFiring = true;
                 }
                 else if (!met && wasFiring)
                 {
+                    // Natural clear. Live doesn't have this transition (excursions only close
+                    // via auto-resolve or manual close); replay relaxes it so a rule whose body
+                    // bounces met true→false→true produces a useful re-fire marker on the
+                    // second open rather than staying silent. Manual closes are out of scope.
                     activeAlerts.Remove(rule.Id);
-                    timerStore.ClearAllForRuleAsync(rule.Id, ct).GetAwaiter().GetResult();
+                    await timerStore.ClearAllForRuleAsync(rule.Id, ct);
+                    currentlyFiring = false;
                 }
-                firing[rule.Id] = met;
+                else
+                {
+                    // Continues firing (met && wasFiring) or continues not firing.
+                    currentlyFiring = met;
+                }
+
+                // Step 2: auto-resolve. Mirrors AlertOrchestrator.EvaluateRuleAsync's
+                // unconditional fall-through to TryAutoResolveAsync after the open/continue
+                // path — runs against the same ruleContext under the AutoResolvePathRoot prefix
+                // so nested sustained timers don't collide with timers owned by the main rule
+                // body. The unconditional gate (live runs this even on a same-tick open) is the
+                // important bit: a rule whose body opens at tick T and whose resolve predicate
+                // is already true at T produces a fired+auto_resolved pair, matching live.
+                if (currentlyFiring
+                    && rule.AutoResolveEnabled
+                    && !string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+                {
+                    ConditionNode? resolveNode = null;
+                    try
+                    {
+                        resolveNode = JsonSerializer.Deserialize<ConditionNode>(
+                            rule.AutoResolveParams, EvaluatorJson.Options);
+                    }
+                    catch (JsonException ex)
+                    {
+                        logger.LogWarning(ex,
+                            "Replay: malformed AutoResolveParams for rule {RuleId}; skipping auto-resolve",
+                            rule.Id);
+                    }
+
+                    if (resolveNode is not null)
+                    {
+                        var resolveContext = ruleContext with
+                        {
+                            CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
+                        };
+                        bool shouldResolve;
+                        try
+                        {
+                            shouldResolve = await registry.EvaluateNodeAsync(resolveNode, resolveContext, ct);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            logger.LogWarning(ex,
+                                "Replay auto-resolve evaluation failed for rule {RuleId} at {Tick}; treating as not-resolved",
+                                rule.Id, tick);
+                            shouldResolve = false;
+                        }
+
+                        if (shouldResolve)
+                        {
+                            events.Add(new AlertReplayEvent(
+                                tick, rule.Id, rule.Name, rule.Severity, AlertReplayEventKind.AutoResolved));
+                            activeAlerts.Remove(rule.Id);
+                            await timerStore.ClearAllForRuleAsync(rule.Id, ct);
+                            currentlyFiring = false;
+                        }
+                    }
+                }
+
+                firing[rule.Id] = currentlyFiring;
             }
         }
 
@@ -251,10 +344,96 @@ internal sealed class AlertReplayService(
                 .OrderBy(l => l.LeafId)
                 .ToList());
 
-        return new AlertReplayResult(windowStart, windowEnd, events, LimitationsBanner)
+        var factTimelines = factPoints.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (IReadOnlyList<FactSnapshotPoint>)kvp.Value);
+
+        return new AlertReplayResult(windowStart, windowEnd, events)
         {
             LeafTransitionsByRule = leafTransitionsByRule,
+            FactTimelines = factTimelines,
         };
+    }
+
+    /// <summary>
+    /// Compiled binding for one <see cref="ReplayFactAttribute"/>-tagged property: a
+    /// pre-resolved getter plus the projection rule that turns the raw property value into
+    /// the decimal wire value. Built once via reflection and reused across every replay tick.
+    /// </summary>
+    private sealed record FactBinding(
+        string Key,
+        int Decimals,
+        ReplayFactConversion Conversion,
+        Func<SensorContext, object?> Getter);
+
+    private static readonly IReadOnlyList<FactBinding> FactBindings = DiscoverFactBindings();
+
+    /// <summary>
+    /// Scans <see cref="SensorContext"/> for <see cref="ReplayFactAttribute"/>-tagged
+    /// properties at type-load time so adding a new fact is a one-line change on the model
+    /// (drop the attribute) — replay surfaces it automatically with no parallel registry.
+    /// </summary>
+    private static IReadOnlyList<FactBinding> DiscoverFactBindings()
+    {
+        var ctxParam = System.Linq.Expressions.Expression.Parameter(typeof(SensorContext), "ctx");
+        var bindings = new List<FactBinding>();
+        foreach (var prop in typeof(SensorContext).GetProperties())
+        {
+            var attr = prop.GetCustomAttributes(typeof(ReplayFactAttribute), inherit: false)
+                .OfType<ReplayFactAttribute>()
+                .FirstOrDefault();
+            if (attr is null) continue;
+
+            var access = System.Linq.Expressions.Expression.Property(ctxParam, prop);
+            var boxed = System.Linq.Expressions.Expression.Convert(access, typeof(object));
+            var getter = System.Linq.Expressions.Expression
+                .Lambda<Func<SensorContext, object?>>(boxed, ctxParam)
+                .Compile();
+            bindings.Add(new FactBinding(attr.Key, attr.Decimals, attr.Conversion, getter));
+        }
+        return bindings;
+    }
+
+    /// <summary>
+    /// Reads the attribute-declared facts off <paramref name="ctx"/> and pushes a point onto
+    /// the matching timeline whenever the rounded display value differs from the previous emit
+    /// (or when this is the first observation of the fact). Rounding precision per fact comes
+    /// from <see cref="ReplayFactAttribute.Decimals"/> on the source property, so the FE never
+    /// sees jitter the user can't perceive.
+    /// </summary>
+    private static void CaptureFactSnapshots(
+        SensorContext ctx,
+        DateTime tickUtc,
+        Dictionary<string, decimal> prev,
+        Dictionary<string, List<FactSnapshotPoint>> points)
+    {
+        var tickMs = new DateTimeOffset(tickUtc).ToUnixTimeMilliseconds();
+
+        foreach (var binding in FactBindings)
+        {
+            var raw = binding.Getter(ctx);
+            if (raw is null) continue;
+
+            var projected = binding.Conversion switch
+            {
+                ReplayFactConversion.Direct => (decimal?)(decimal)raw,
+                ReplayFactConversion.MinutesSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalMinutes,
+                ReplayFactConversion.HoursSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalHours,
+                ReplayFactConversion.DaysSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalDays,
+                _ => (decimal?)null,
+            };
+            if (projected is not { } value) continue;
+
+            var rounded = Math.Round(value, binding.Decimals, MidpointRounding.AwayFromZero);
+            if (prev.TryGetValue(binding.Key, out var previous) && previous == rounded) continue;
+            if (!points.TryGetValue(binding.Key, out var list))
+            {
+                list = new List<FactSnapshotPoint>();
+                points[binding.Key] = list;
+            }
+            list.Add(new FactSnapshotPoint(tickMs, rounded));
+            prev[binding.Key] = rounded;
+        }
     }
 
     /// <summary>
@@ -264,8 +443,20 @@ internal sealed class AlertReplayService(
     /// midnight-to-midnight, converted to UTC. On DST-transition days the resulting UTC
     /// window is 23 or 25 hours wide rather than exactly 24.
     /// </summary>
-    private static (DateTime Start, DateTime End) ResolveWindow(DateOnly? localDate, string? timezone)
+    private static (DateTime Start, DateTime End) ResolveWindow(
+        DateOnly? localDate, string? timezone, DateTime? fromUtc, DateTime? toUtc)
     {
+        // Absolute UTC range wins when both endpoints are provided. The caller is
+        // responsible for ordering — we swap rather than reject so a from > to range from
+        // a date-only client (where the calendar picker happened to pass the day boundary)
+        // still produces a usable window.
+        if (fromUtc is { } from && toUtc is { } to)
+        {
+            var start = DateTime.SpecifyKind(from, DateTimeKind.Utc);
+            var end = DateTime.SpecifyKind(to, DateTimeKind.Utc);
+            return start <= end ? (start, end) : (end, start);
+        }
+
         if (localDate is null)
         {
             var now = DateTime.UtcNow;
@@ -348,6 +539,20 @@ internal sealed class AlertReplayService(
                     OverrideActive: JsonSerializer.Deserialize<OverrideActiveCondition>(rule.ConditionParams, EvaluatorJson.Options)),
                 AlertConditionType.SensitivityRatio => new ConditionNode("sensitivity_ratio",
                     SensitivityRatio: JsonSerializer.Deserialize<SensitivityRatioCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.DoNotDisturb => new ConditionNode("do_not_disturb",
+                    DoNotDisturb: JsonSerializer.Deserialize<DoNotDisturbCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.GlucoseBucket => new ConditionNode("glucose_bucket",
+                    GlucoseBucket: JsonSerializer.Deserialize<GlucoseBucketCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.TimeSinceLastCarb => new ConditionNode("time_since_last_carb",
+                    TimeSinceLastCarb: JsonSerializer.Deserialize<TimeSinceLastCarbCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.TimeSinceLastBolus => new ConditionNode("time_since_last_bolus",
+                    TimeSinceLastBolus: JsonSerializer.Deserialize<TimeSinceLastBolusCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.DayOfWeek => new ConditionNode("day_of_week",
+                    DayOfWeek: JsonSerializer.Deserialize<DayOfWeekCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.PumpState => new ConditionNode("pump_state",
+                    PumpState: JsonSerializer.Deserialize<PumpStateCondition>(rule.ConditionParams, EvaluatorJson.Options)),
+                AlertConditionType.StateSpanActive => new ConditionNode("state_span_active",
+                    StateSpanActive: JsonSerializer.Deserialize<StateSpanActiveCondition>(rule.ConditionParams, EvaluatorJson.Options)),
                 _ => null,
             };
         }
@@ -359,45 +564,28 @@ internal sealed class AlertReplayService(
     }
 
     /// <summary>
-    /// Builds a self-contained registry whose evaluators share the supplied in-memory timer
-    /// store and replay clock. The <see cref="ReplayServiceProvider"/> only resolves the
-    /// registry itself — recursive evaluators (Composite/Not/Sustained) ask for it
-    /// lazily, and the registry exposes <see cref="ConditionEvaluatorRegistry.EvaluateNodeAsync"/>
-    /// as the single dispatch entrypoint.
+    /// Builds a self-contained <see cref="ServiceProvider"/> for the replay run by reusing the
+    /// live <see cref="ServiceRegistrationExtensions.AddAlertEvaluators"/> registration with
+    /// only the <see cref="TimeProvider"/> and <see cref="IConditionTimerStore"/> swapped for
+    /// replay-local instances. Sourcing the evaluator list from DI ensures replay can never
+    /// drift behind the live engine when new condition evaluators are added.
     /// </summary>
-    private static ConditionEvaluatorRegistry BuildReplayRegistry(
+    /// <remarks>
+    /// The returned provider owns the lifetime of the registered evaluators and registry — the
+    /// caller must dispose it (replay uses <c>await using</c>). Recursive evaluators
+    /// (Composite/Not/Sustained) take <see cref="IServiceProvider"/> in their constructors and
+    /// resolve <see cref="ConditionEvaluatorRegistry"/> lazily, which is satisfied by the
+    /// container we build here.
+    /// </remarks>
+    internal static ServiceProvider BuildReplayServices(
         IConditionTimerStore timerStore, TimeProvider time)
     {
-        var sp = new ReplayServiceProvider();
-        var evaluators = new IConditionEvaluator[]
-        {
-            new ThresholdEvaluator(),
-            new RateOfChangeEvaluator(),
-            new StalenessEvaluator(time),
-            new PredictedEvaluator(),
-            new TrendEvaluator(),
-            new TimeOfDayEvaluator(time),
-            new IobEvaluator(),
-            new CobEvaluator(),
-            new ReservoirEvaluator(),
-            new SiteAgeEvaluator(time),
-            new SensorAgeEvaluator(time),
-            new AlertStateEvaluator(time),
-            new LoopStaleEvaluator(time),
-            new LoopEnactionStaleEvaluator(time),
-            new PumpSuspendedEvaluator(time),
-            new PumpBatteryEvaluator(),
-            new TempBasalEvaluator(),
-            new UploaderBatteryEvaluator(),
-            new OverrideActiveEvaluator(time),
-            new SensitivityRatioEvaluator(),
-            new CompositeEvaluator(sp),
-            new NotEvaluator(sp),
-            new SustainedEvaluator(sp, timerStore, time),
-        };
-        var registry = new ConditionEvaluatorRegistry(evaluators);
-        sp.Registry = registry;
-        return registry;
+        var services = new ServiceCollection();
+        services.AddSingleton(time);
+        services.AddSingleton(timerStore);
+        services.AddAlertEvaluators();
+        services.AddSingleton<ConditionEvaluatorRegistry>();
+        return services.BuildServiceProvider();
     }
 
     /// <summary>
@@ -513,14 +701,6 @@ internal sealed class AlertReplayService(
         {
             foreach (var id in ExtractAlertStateRefs(sustainedChild)) yield return id;
         }
-    }
-
-    private sealed class ReplayServiceProvider : IServiceProvider
-    {
-        public ConditionEvaluatorRegistry? Registry { get; set; }
-
-        public object? GetService(Type serviceType) =>
-            serviceType == typeof(ConditionEvaluatorRegistry) ? Registry : null;
     }
 
     /// <summary>

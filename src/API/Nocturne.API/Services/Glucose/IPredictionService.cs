@@ -16,10 +16,18 @@ namespace Nocturne.API.Services.Glucose;
 public interface IPredictionService
 {
     /// <summary>
-    /// Returns glucose predictions based on the configured prediction source.
+    /// Returns glucose predictions based on the configured prediction source. When
+    /// <paramref name="asOf"/> is set, every "now" reference inside the implementation —
+    /// the response timestamp, the upper bound on glucose / treatments / device-status
+    /// snapshots, the moment passed to the profile resolvers, and the time anchor handed
+    /// to oref — is pinned to that instant. Used by <c>AlertReplayService</c> so a
+    /// <c>predicted</c> rule can be evaluated at historical replay ticks against the
+    /// state the user actually had at that tick. <c>null</c> preserves the live behavior
+    /// (anchored at <see cref="DateTimeOffset.UtcNow"/>).
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when no glucose readings or device status data are available.</exception>
     Task<GlucosePredictionResponse> GetPredictionsAsync(
         string? profileId = null,
+        DateTimeOffset? asOf = null,
         CancellationToken cancellationToken = default);
 }

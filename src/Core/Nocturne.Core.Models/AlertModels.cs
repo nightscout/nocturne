@@ -13,6 +13,7 @@ public record SensorContext
     /// <summary>
     /// Most recent glucose value in mg/dL, or null if no reading is available.
     /// </summary>
+    [ReplayFact("latest_glucose", decimals: 0)]
     public required decimal? LatestValue { get; init; }
 
     /// <summary>
@@ -23,11 +24,13 @@ public record SensorContext
     /// <summary>
     /// Rate of glucose change in mg/dL per minute. Positive = rising, negative = falling.
     /// </summary>
+    [ReplayFact("trend_rate", decimals: 2)]
     public required decimal? TrendRate { get; init; }
 
     /// <summary>
     /// Timestamp of the last reading received from the CGM, used for signal loss detection.
     /// </summary>
+    [ReplayFact("staleness_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public required DateTime? LastReadingAt { get; init; }
 
     /// <summary>
@@ -38,26 +41,31 @@ public record SensorContext
     /// <summary>
     /// Insulin on board in units, when available from the loop/pump integration.
     /// </summary>
+    [ReplayFact("iob", decimals: 2)]
     public decimal? IobUnits { get; init; }
 
     /// <summary>
     /// Carbohydrates on board in grams, when available from the loop integration.
     /// </summary>
+    [ReplayFact("cob", decimals: 1)]
     public decimal? CobGrams { get; init; }
 
     /// <summary>
     /// Pump reservoir level in units, when available.
     /// </summary>
+    [ReplayFact("reservoir", decimals: 1)]
     public decimal? ReservoirUnits { get; init; }
 
     /// <summary>
     /// Timestamp of the most recent infusion site change. Used by the site-age condition.
     /// </summary>
+    [ReplayFact("site_age_hours", decimals: 1, conversion: ReplayFactConversion.HoursSinceNow)]
     public DateTime? LastSiteChangeAt { get; init; }
 
     /// <summary>
     /// Timestamp of the most recent CGM sensor start. Used by the sensor-age condition.
     /// </summary>
+    [ReplayFact("sensor_age_days", decimals: 2, conversion: ReplayFactConversion.DaysSinceNow)]
     public DateTime? LastSensorStartAt { get; init; }
 
     /// <summary>
@@ -86,18 +94,30 @@ public record SensorContext
     // ----- Looping facts -----
 
     /// <summary>Timestamp of the latest APS cycle (suggested or enacted), or null when none observed.</summary>
+    [ReplayFact("loop_stale_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastApsCycleAt { get; init; }
 
     /// <summary>Timestamp of the latest enacted APS cycle, or null when none observed.</summary>
+    [ReplayFact("loop_enaction_stale_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastApsEnactedAt { get; init; }
 
     /// <summary>Latest pump battery level in percent, when available.</summary>
+    [ReplayFact("pump_battery_percent", decimals: 0)]
     public decimal? PumpBatteryPercent { get; init; }
 
     /// <summary>Currently active temp basal projection, or null when no temp is active.</summary>
     public TempBasalSnapshot? ActiveTempBasal { get; init; }
 
+    /// <summary>
+    /// Currently-active temp basal rate in U/hr, projected from <see cref="ActiveTempBasal"/>.
+    /// Lives as a separate property purely so it can carry a <see cref="ReplayFactAttribute"/>;
+    /// evaluators read <see cref="ActiveTempBasal"/> directly.
+    /// </summary>
+    [ReplayFact("temp_basal_rate", decimals: 2)]
+    public decimal? TempBasalRate => ActiveTempBasal?.Rate;
+
     /// <summary>Latest uploader (phone) battery level in percent, when available.</summary>
+    [ReplayFact("uploader_battery_percent", decimals: 0)]
     public decimal? UploaderBatteryPercent { get; init; }
 
     /// <summary>Currently active override projection, or null when no override is active.</summary>
@@ -110,6 +130,7 @@ public record SensorContext
     public PumpSuspensionSnapshot? ActivePumpSuspension { get; init; }
 
     /// <summary>Latest non-null APS sensitivity ratio (autosens), when available.</summary>
+    [ReplayFact("sensitivity_ratio", decimals: 2)]
     public decimal? SensitivityRatio { get; init; }
 
     /// <summary>
@@ -150,9 +171,11 @@ public record SensorContext
     public GlucoseBucket? GlucoseBucket { get; init; }
 
     /// <summary>Timestamp of the latest carb-bearing treatment, or null when none observed.</summary>
+    [ReplayFact("time_since_last_carb_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastCarbAt { get; init; }
 
     /// <summary>Timestamp of the latest insulin-bearing treatment, or null when none observed.</summary>
+    [ReplayFact("time_since_last_bolus_minutes", decimals: 0, conversion: ReplayFactConversion.MinutesSinceNow)]
     public DateTime? LastBolusAt { get; init; }
 
     /// <summary>

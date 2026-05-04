@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Runtime.Serialization;
+using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.Core.Contracts.Alerts;
@@ -12,20 +14,23 @@ namespace Nocturne.Core.Contracts.Alerts;
 /// Replay is approximate by design. The live engine consumes IOB, COB, predictions, treatments,
 /// pump events, and active-alert snapshots — most of which are not reconstructable retroactively
 /// without large historical joins. Replay covers the common cases (threshold, sustained, trend,
-/// time-of-day, staleness, alert_state-on-already-fired-rules) and surfaces the omissions in
-/// <see cref="AlertReplayResult.Limitations"/> so callers can show a banner to the user.
+/// time-of-day, staleness, alert_state-on-already-fired-rules); the FE owns the user-facing
+/// limitations banner copy.
 /// </remarks>
 public interface IAlertReplayService
 {
     /// <summary>
-    /// Replay enabled rules over a window. When <paramref name="localDate"/> is null, the
-    /// window is the rolling last 24 hours from "now" in the requested timezone (or UTC if
-    /// none provided). When set, the window is that calendar day, midnight-to-midnight in
-    /// the same zone.
+    /// Replay enabled rules over a window. When <paramref name="fromUtc"/>/<paramref name="toUtc"/>
+    /// are both set, the window is exactly that absolute UTC range. Otherwise, when
+    /// <paramref name="localDate"/> is null, the window is the rolling last 24 hours from
+    /// "now"; when set, the window is that calendar day midnight-to-midnight in
+    /// <paramref name="timezone"/> (UTC if none provided).
     /// </summary>
     Task<AlertReplayResult> ReplayAsync(
         DateOnly? localDate,
         string? timezone,
+        DateTime? fromUtc,
+        DateTime? toUtc,
         CancellationToken ct);
 
     /// <summary>
@@ -39,6 +44,8 @@ public interface IAlertReplayService
     Task<AlertReplayResult> ReplayDryRunAsync(
         DateOnly? localDate,
         string? timezone,
+        DateTime? fromUtc,
+        DateTime? toUtc,
         ReplayRuleOverride ruleOverride,
         CancellationToken ct);
 }
@@ -59,16 +66,38 @@ public record ReplayRuleOverride(
     string? AutoResolveParams);
 
 /// <summary>
-/// A single point at which a rule transitioned from "not firing" to "firing" during replay.
-/// Continuous-fire periods produce one event at the leading edge — re-fires after a clear
-/// produce a second event. The replay does not attempt to model excursion close (hysteresis
-/// is dropped from the new rule shape).
+/// Discriminator for the per-rule timeline events surfaced by replay. Defaults to
+/// <see cref="Fired"/> so existing callers reading this enum from a value-less event keep
+/// their semantics. <see cref="AutoResolved"/> mirrors the live engine's
+/// <c>resolution_reason="auto_resolve"</c> path; <see cref="SuppressedByDnd"/> mirrors the
+/// "instance created, dispatch skipped" outcome from <c>HandleExcursionOpened</c>.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AlertReplayEventKind>))]
+public enum AlertReplayEventKind
+{
+    [EnumMember(Value = "fired"), JsonStringEnumMemberName("fired")]
+    Fired = 0,
+
+    [EnumMember(Value = "auto_resolved"), JsonStringEnumMemberName("auto_resolved")]
+    AutoResolved = 1,
+
+    [EnumMember(Value = "suppressed_by_dnd"), JsonStringEnumMemberName("suppressed_by_dnd")]
+    SuppressedByDnd = 2,
+}
+
+/// <summary>
+/// A single point on a rule's replay timeline. <see cref="Kind"/> distinguishes the leading
+/// edge of firing, an auto-resolve close, and a fire that the live engine would have
+/// suppressed under DND. Continuous-fire periods still produce one <see cref="Kind.Fired"/>
+/// (or <see cref="Kind.SuppressedByDnd"/>) at the leading edge — re-fires after either a
+/// natural clear or an auto-resolve produce a second event.
 /// </summary>
 public record AlertReplayEvent(
     DateTime At,
     Guid RuleId,
     string RuleName,
-    AlertRuleSeverity Severity);
+    AlertRuleSeverity Severity,
+    AlertReplayEventKind Kind = AlertReplayEventKind.Fired);
 
 /// <summary>
 /// Result of <see cref="IAlertReplayService.ReplayAsync"/>. Window timestamps are UTC; the
@@ -77,8 +106,7 @@ public record AlertReplayEvent(
 public record AlertReplayResult(
     DateTime WindowStart,
     DateTime WindowEnd,
-    IReadOnlyList<AlertReplayEvent> Events,
-    string Limitations)
+    IReadOnlyList<AlertReplayEvent> Events)
 {
     /// <summary>
     /// Per-rule, per-leaf truth transition log captured during replay. Keyed by rule id;
@@ -89,4 +117,16 @@ public record AlertReplayResult(
     /// </summary>
     public IReadOnlyDictionary<Guid, IReadOnlyList<LeafTransitionLog>> LeafTransitionsByRule { get; init; }
         = ImmutableDictionary<Guid, IReadOnlyList<LeafTransitionLog>>.Empty;
+
+    /// <summary>
+    /// Per-tick numeric fact snapshots captured from <see cref="SensorContext"/> alongside
+    /// rule evaluation. Keyed by snake_case fact name (see <see cref="ReplayFactKeys"/>);
+    /// values are in the fact's natural unit so the FE can render them directly next to the
+    /// matching condition leaf at the playhead (e.g. "Site age &lt; 3d · 1.2d"). Compressed
+    /// the same way as the leaf log: only points where the rounded display value changed
+    /// are emitted, with a baseline at first observation. Empty by default for backward
+    /// compatibility.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<FactSnapshotPoint>> FactTimelines { get; init; }
+        = ImmutableDictionary<string, IReadOnlyList<FactSnapshotPoint>>.Empty;
 }

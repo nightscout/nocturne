@@ -110,26 +110,27 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
             if (needs.NeedsIob)
             {
-                var iobUnits = await ComputeIobAsync(treatments, ct);
+                var iobUnits = await ComputeIobAsync(treatments, now, ct);
                 enriched = enriched with { IobUnits = iobUnits };
             }
 
             if (needs.NeedsCob)
             {
-                var cobGrams = await ComputeCobAsync(treatments, ct);
+                var cobGrams = await ComputeCobAsync(treatments, now, ct);
                 enriched = enriched with { CobGrams = cobGrams };
             }
         }
 
         if (needs.NeedsPredicted)
         {
-            // Predictions are forward-from-now from the prediction service's perspective —
-            // there is no documented "as of past tick" mode. During replay we surface an empty
-            // list (matching the no-service / no-readings paths) so a `predicted` rule fails
-            // closed rather than silently leaking the live curve into a historical window.
-            var predictions = isReplay
-                ? Array.Empty<PredictedGlucosePoint>()
-                : await FetchPredictionsAsync(ct);
+            // Live: the prediction service anchors at its own UtcNow. Replay: we pin the
+            // forecast to the tick so a `predicted` rule sees the curve the user would have
+            // had at that moment (oref runs against treatments/glucose ≤ tick, profile
+            // resolved at tick, oref's `currentTimeMillis` set to tick).
+            var asOf = isReplay
+                ? new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
+                : (DateTimeOffset?)null;
+            var predictions = await FetchPredictionsAsync(asOf, ct);
             enriched = enriched with { Predictions = predictions };
         }
 
@@ -457,11 +458,21 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         return treatments.ToList();
     }
 
-    private async Task<decimal?> ComputeIobAsync(List<Treatment> treatments, CancellationToken ct)
+    private async Task<decimal?> ComputeIobAsync(List<Treatment> treatments, DateTime now, CancellationToken ct)
     {
         try
         {
-            var result = await _deps.Iob.CalculateTotalAsync(treatments, ct: ct);
+            // Anchor the IOB calculation at `now` (the live clock for orchestrator runs, the
+            // replay tick for replay). Without this, IIobService falls back to wall-clock UtcNow
+            // which silently makes every replay tick read IOB ≈ 0: the treatments slice is
+            // [tick-24h, tick] but the decay anchor sits at today, so every bolus is past DIA
+            // by the time it's measured. Same hazard for COB just below.
+            var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
+                .ToUnixTimeMilliseconds();
+            var result = await _deps.Iob.CalculateTotalAsync(treatments, time: nowMills, ct: ct);
+            _logger.LogDebug(
+                "IOB compute @ {Now}: treatments={TreatmentCount}, result.Iob={Iob}, source={Source}, basal={BasalIob}",
+                now, treatments.Count, result.Iob, result.Source ?? "(none)", result.BasalIob);
             return (decimal)result.Iob;
         }
         catch (Exception ex)
@@ -471,11 +482,16 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
     }
 
-    private async Task<decimal?> ComputeCobAsync(List<Treatment> treatments, CancellationToken ct)
+    private async Task<decimal?> ComputeCobAsync(List<Treatment> treatments, DateTime now, CancellationToken ct)
     {
         try
         {
-            var result = await _deps.Cob.CobTotalAsync(treatments, ct: ct);
+            var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
+                .ToUnixTimeMilliseconds();
+            var result = await _deps.Cob.CobTotalAsync(treatments, time: nowMills, ct: ct);
+            _logger.LogDebug(
+                "COB compute @ {Now}: treatments={TreatmentCount}, result.Cob={Cob}, source={Source}",
+                now, treatments.Count, result.Cob, result.Source ?? "(none)");
             return (decimal)result.Cob;
         }
         catch (Exception ex)
@@ -485,7 +501,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
     }
 
-    private async Task<IReadOnlyList<PredictedGlucosePoint>> FetchPredictionsAsync(CancellationToken ct)
+    private async Task<IReadOnlyList<PredictedGlucosePoint>> FetchPredictionsAsync(
+        DateTimeOffset? asOf, CancellationToken ct)
     {
         // Optional dependency — registered conditionally based on PredictionOptions.
         // GetService<> returns null when unavailable (PredictionSource.None or DI not wired).
@@ -496,7 +513,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         GlucosePredictionResponse response;
         try
         {
-            response = await predictionService.GetPredictionsAsync(cancellationToken: ct);
+            response = await predictionService.GetPredictionsAsync(asOf: asOf, cancellationToken: ct);
         }
         catch (InvalidOperationException ex)
         {

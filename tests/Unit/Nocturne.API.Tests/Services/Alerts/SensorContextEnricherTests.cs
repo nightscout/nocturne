@@ -52,7 +52,7 @@ public class SensorContextEnricherTests
         _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
         _iobService.Verify(s => s.CalculateTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<CancellationToken>()), Times.Never);
         _cobService.Verify(s => s.CobTotalAsync(It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Never);
         _pumpSnapshotRepository.Verify(s => s.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         _deviceEventRepository.Verify(s => s.GetLatestByEventTypeAsync(It.IsAny<DeviceEventType>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _alertRepository.Verify(s => s.GetActiveAlertSnapshotsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -68,7 +68,7 @@ public class SensorContextEnricherTests
 
         enriched.TrendBucket.Should().Be(TrendBucket.RisingFast);
         _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
-        _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -101,6 +101,54 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
+    public async Task IobAndCob_anchor_at_replay_tick_not_wall_clock()
+    {
+        // Regression: ComputeIobAsync / ComputeCobAsync used to call CalculateTotalAsync
+        // and CobTotalAsync without the `time:` argument, falling back to wall-clock UtcNow
+        // inside the calculator. In replay this silently anchored the decay model at today
+        // while feeding it treatments from the tick's 24h window — every bolus had decayed
+        // past DIA by the time it was measured, so `iob <= 1u` (and similar) read true at
+        // every tick. The fix threads the tick into the calculator via `time:`.
+        var enricher = BuildEnricher();
+        _treatmentService.Setup(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Treatment>());
+
+        long? capturedIobTime = null;
+        long? capturedCobTime = null;
+        _iobService.Setup(s => s.CalculateTotalAsync(
+                It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(),
+                It.IsAny<List<TempBasal>?>(), It.IsAny<CancellationToken>()))
+            .Callback<List<Treatment>, long?, string?, List<TempBasal>?, CancellationToken>(
+                (_, time, _, _, _) => capturedIobTime = time)
+            .ReturnsAsync(new IobResult { Iob = 0 });
+        _cobService.Setup(s => s.CobTotalAsync(
+                It.IsAny<List<Treatment>>(), It.IsAny<long?>(), It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<List<Treatment>, long?, string?, CancellationToken>(
+                (_, time, _, _) => capturedCobTime = time)
+            .ReturnsAsync(new CobResult { Cob = 0 });
+
+        var json = """
+        {
+          "operator": "and",
+          "conditions": [
+            { "type": "iob", "iob": { "operator": "<=", "value": 1 } },
+            { "type": "cob", "cob": { "operator": "<=", "value": 10 } }
+          ]
+        }
+        """;
+        var rule = MakeRule(AlertConditionType.Composite, json);
+        var tick = new DateTime(2026, 3, 22, 10, 0, 0, DateTimeKind.Utc);
+        var expectedMills = new DateTimeOffset(tick).ToUnixTimeMilliseconds();
+
+        await enricher.EnrichAsOfAsync(
+            BaseContext(), new[] { rule }, _tenantId, tick, CancellationToken.None);
+
+        capturedIobTime.Should().Be(expectedMills);
+        capturedCobTime.Should().Be(expectedMills);
+    }
+
+    [Fact]
     public async Task Predictions_returns_empty_when_service_unregistered()
     {
         var enricher = BuildEnricher(includePredictionService: false);
@@ -115,7 +163,7 @@ public class SensorContextEnricherTests
     public async Task Predictions_swallows_invalid_operation_and_returns_empty()
     {
         var enricher = BuildEnricher();
-        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("no readings available"));
         var rule = MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30}""");
 
@@ -128,7 +176,7 @@ public class SensorContextEnricherTests
     public async Task Predictions_maps_curve_to_offset_minutes_using_response_interval()
     {
         var enricher = BuildEnricher();
-        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GlucosePredictionResponse
             {
                 IntervalMinutes = 5,
@@ -142,6 +190,35 @@ public class SensorContextEnricherTests
         enriched.Predictions[0].OffsetMinutes.Should().Be(5);
         enriched.Predictions[0].Mgdl.Should().Be(110m);
         enriched.Predictions[2].OffsetMinutes.Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Predictions_threads_asOf_when_enriching_replay_tick()
+    {
+        // Replay path: the tick instant must reach the prediction service so it can re-run
+        // the pipeline anchored at that historical moment. EnrichAsync (live) leaves asOf
+        // null; EnrichAsOfAsync passes the tick as a non-null UTC DateTimeOffset.
+        var enricher = BuildEnricher();
+        DateTimeOffset? capturedAsOf = null;
+        _predictionService.Setup(p => p.GetPredictionsAsync(
+                It.IsAny<string?>(),
+                It.IsAny<DateTimeOffset?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string?, DateTimeOffset?, CancellationToken>((_, asOf, _) => capturedAsOf = asOf)
+            .ReturnsAsync(new GlucosePredictionResponse
+            {
+                IntervalMinutes = 5,
+                Predictions = new PredictionCurves { Default = new List<double> { 100 } },
+            });
+        var rule = MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30}""");
+        var tick = new DateTime(2026, 3, 22, 10, 0, 0, DateTimeKind.Utc);
+
+        var enriched = await enricher.EnrichAsOfAsync(
+            BaseContext(), new[] { rule }, _tenantId, tick, CancellationToken.None);
+
+        enriched.Predictions.Should().HaveCount(1);
+        capturedAsOf.Should().NotBeNull();
+        capturedAsOf!.Value.UtcDateTime.Should().Be(tick);
     }
 
     [Fact]

@@ -32,7 +32,8 @@ public class AlertReplayController : ControllerBase
     public async Task<ActionResult<AlertReplayResult>> Replay(
         [FromBody] AlertReplayRequest request, CancellationToken ct)
     {
-        var result = await _replayService.ReplayAsync(request.Date, request.Timezone, ct);
+        var result = await _replayService.ReplayAsync(
+            request.Date, request.Timezone, request.From, request.To, ct);
         return Ok(result);
     }
 
@@ -58,25 +59,35 @@ public class AlertReplayController : ControllerBase
             AutoResolveParams: request.Rule.AutoResolveParams);
 
         var result = await _replayService.ReplayDryRunAsync(
-            request.Date, request.Timezone, ruleOverride, ct);
+            request.Date, request.Timezone, request.From, request.To, ruleOverride, ct);
         return Ok(result);
     }
 }
 
 /// <summary>
-/// Request body for the alerts replay endpoint.
+/// Request body for the alerts replay endpoint. <paramref name="From"/> and
+/// <paramref name="To"/> are absolute UTC instants and take precedence over
+/// <paramref name="Date"/> + <paramref name="Timezone"/> when set, allowing replay of an
+/// arbitrary window (not just a calendar day).
 /// </summary>
-public record AlertReplayRequest(DateOnly? Date, string? Timezone);
+public record AlertReplayRequest(
+    DateOnly? Date,
+    string? Timezone,
+    DateTime? From = null,
+    DateTime? To = null);
 
 /// <summary>
 /// Request body for the dry-run replay endpoint. <see cref="ReplayRuleDefinition.Id"/> is
 /// optional: when present and matching an existing rule it replaces it for the simulation;
-/// otherwise the rule is appended for the call.
+/// otherwise the rule is appended for the call. <paramref name="From"/>/<paramref name="To"/>
+/// behave the same as on <see cref="AlertReplayRequest"/>.
 /// </summary>
 public record AlertReplayDryRunRequest(
     DateOnly? Date,
     string? Timezone,
-    ReplayRuleDefinition Rule);
+    ReplayRuleDefinition Rule,
+    DateTime? From = null,
+    DateTime? To = null);
 
 /// <summary>
 /// In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save

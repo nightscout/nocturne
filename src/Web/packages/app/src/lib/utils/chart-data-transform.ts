@@ -44,24 +44,27 @@ export function transformChartData(data: DashboardChartData) {
 		maxIob: data.maxIob ?? 5.0,
 		maxCob: data.maxCob ?? 100.0,
 
+		// `||` rather than `??` so a server-side 0 (which we treat as "missing":
+		// no profile yet for that historical instant) falls back to the safe
+		// default rather than rendering threshold lines pinned at the axis.
 		glucoseData: (data.glucoseData ?? []).map((p) => ({
 			time: new Date(p.time ?? 0),
 			sgv: p.sgv ?? 0,
 			direction: p.direction,
 			dataSource: p.dataSource,
 			color: getGlucoseColor(p.sgv ?? 0, {
-				low: data.thresholds?.low ?? 55,
-				high: data.thresholds?.high ?? 180,
-				veryLow: data.thresholds?.veryLow ?? 54,
-				veryHigh: data.thresholds?.veryHigh ?? 250,
+				low: data.thresholds?.low || 55,
+				high: data.thresholds?.high || 180,
+				veryLow: data.thresholds?.veryLow || 54,
+				veryHigh: data.thresholds?.veryHigh || 250,
 			}),
 		})),
 		thresholds: {
-			low: data.thresholds?.low ?? 55,
-			high: data.thresholds?.high ?? 180,
-			veryLow: data.thresholds?.veryLow ?? 54,
-			veryHigh: data.thresholds?.veryHigh ?? 250,
-			glucoseYMax: data.thresholds?.glucoseYMax ?? 300,
+			low: data.thresholds?.low || 55,
+			high: data.thresholds?.high || 180,
+			veryLow: data.thresholds?.veryLow || 54,
+			veryHigh: data.thresholds?.veryHigh || 250,
+			glucoseYMax: data.thresholds?.glucoseYMax || 300,
 		},
 
 		bolusMarkers: (data.bolusMarkers ?? []).map((m) => ({

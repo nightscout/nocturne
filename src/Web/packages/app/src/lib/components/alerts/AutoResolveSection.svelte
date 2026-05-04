@@ -4,7 +4,11 @@
   import { Button } from "$lib/components/ui/button";
   import { Wand2 } from "lucide-svelte";
   import RuleBuilder from "./RuleBuilder.svelte";
-  import { defaultPayload, ensureCompositeRoot, type ConditionNode } from "./types";
+  import {
+    defaultPayload,
+    ensureCompositeRoot,
+    type ConditionNode,
+  } from "./types";
   import { suggestAutoResolve } from "./suggestAutoResolve";
 
   interface AvailableRule {
@@ -14,8 +18,10 @@
 
   interface Props {
     enabled: boolean;
-    /** The auto-resolve tree. The inline rule builder edits at the group
-     *  level, so this is always a composite when present. */
+    /**
+     * The auto-resolve tree. The inline rule builder edits at the group level,
+     * so this is always a composite when present.
+     */
     condition: ConditionNode | null;
     /** The firing tree, used by Suggest to derive a starting inverse. */
     firingCondition: ConditionNode | null;

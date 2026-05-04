@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.CoachMarks;
 using Nocturne.Core.Models.CoachMarks;
 
@@ -40,6 +41,7 @@ public class CoachMarkController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<CoachMarkState>>> GetAll(
         CancellationToken cancellationToken)
     {
+        if (HttpContext.GetSubjectId() is null) return Ok(Array.Empty<CoachMarkState>());
         var states = await _coachMarkService.GetAllAsync(cancellationToken);
         return Ok(states);
     }
@@ -57,6 +59,7 @@ public class CoachMarkController : ControllerBase
         [FromBody] UpdateCoachMarkRequest request,
         CancellationToken cancellationToken)
     {
+        if (HttpContext.GetSubjectId() is null) return Unauthorized();
         var state = await _coachMarkService.UpsertAsync(key, request.Status, cancellationToken);
         return Ok(state);
     }
@@ -68,6 +71,7 @@ public class CoachMarkController : ControllerBase
     [RemoteCommand(Invalidates = ["GetAll"])]
     public async Task<ActionResult> DeleteAll(CancellationToken cancellationToken)
     {
+        if (HttpContext.GetSubjectId() is null) return Unauthorized();
         await _coachMarkService.DeleteAllAsync(cancellationToken);
         return NoContent();
     }

@@ -39,4 +39,18 @@ public sealed record EntryQuery
     /// instead of the default descending order.
     /// </summary>
     public bool ReverseResults { get; init; } = false;
+
+    /// <summary>
+    /// Optional explicit lower bound (inclusive) on entry timestamp, in Unix milliseconds.
+    /// When set, takes priority over any <c>$gte</c> filter parsed from <see cref="Find"/>.
+    /// Used by point-in-time evaluators (e.g. alert replay) that need a stable upper/lower
+    /// window without round-tripping through a Nightscout-style find string.
+    /// </summary>
+    public long? FromMills { get; init; }
+
+    /// <summary>
+    /// Optional explicit upper bound (inclusive) on entry timestamp, in Unix milliseconds.
+    /// When set, takes priority over any <c>$lte</c> filter parsed from <see cref="Find"/>.
+    /// </summary>
+    public long? ToMills { get; init; }
 }

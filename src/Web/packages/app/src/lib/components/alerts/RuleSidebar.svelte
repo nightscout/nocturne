@@ -35,6 +35,7 @@
     composeRuleTruth,
     type LeafTransitionLog,
   } from "./leafEval";
+  import { FactSnapshotLog, leafFactBinding } from "./factSnapshot";
   import { rowLeafNode, rowLeafKind } from "./ruleTree";
   import { FACT_GROUP_COLOURS, getFact, type LucideIconName } from "./factCatalog";
   import { summarizeCondition } from "./summarizeCondition";
@@ -46,6 +47,10 @@
     treeByRule: Map<string, ConditionNode>;
     leafIdsByRule: Map<string, Map<string, number>>;
     leafLog: LeafTransitionLog;
+    /** Per-tick numeric fact snapshots used to annotate comparison leaves with the
+     * underlying value at the playhead (e.g. "Site age &lt; 3d · 1.2d"). Optional —
+     * the sidebar renders without annotations when not provided. */
+    factLog?: FactSnapshotLog;
     currentTimeMs: number;
     disabledRuleIds: Set<string>;
     availableRules: { id: string; name: string }[];
@@ -57,10 +62,23 @@
     treeByRule,
     leafIdsByRule,
     leafLog,
+    factLog,
     currentTimeMs,
     disabledRuleIds = $bindable(),
     availableRules,
   }: Props = $props();
+
+  /** Looks up the comparison-leaf's current value at the playhead and renders it
+   * via the leaf's formatter. Returns null when no fact key matches the leaf
+   * type, the fact wasn't observed in this replay, or no factLog was provided. */
+  function leafCurrentValue(node: ConditionNode): string | null {
+    if (!factLog) return null;
+    const binding = leafFactBinding(node);
+    if (!binding) return null;
+    const v = factLog.valueAt(binding.factKey, currentTimeMs);
+    if (v === undefined) return null;
+    return binding.format(v);
+  }
 
   const STORAGE_KEY = "nocturne.alertSim.disabledRules";
 
@@ -161,27 +179,22 @@
     out: LeafEntry[],
     ids: Map<string, number>,
   ): void {
-    switch (node.type) {
-      case "composite":
-        if (node.composite?.conditions) {
-          for (const child of node.composite.conditions) walkLeaves(child, out, ids);
-        }
-        return;
-      case "not":
-        if (node.not?.child) walkLeaves(node.not.child, out, ids);
-        return;
-      case "sustained":
-        if (node.sustained?.child) walkLeaves(node.sustained.child, out, ids);
-        return;
-      default: {
-        if (!node._uid) return;
-        const leafId = ids.get(node._uid);
-        if (leafId === undefined) return;
-        const leafNode = rowLeafNode(node);
-        out.push({ leafId, node: leafNode, wrapper: node });
-        return;
+    // Composite groups: descend into each child, treating it as a row whose
+    // top-level node (possibly NOT/SUSTAINED) is the wrapper for display.
+    if (node.type === "composite") {
+      if (node.composite?.conditions) {
+        for (const child of node.composite.conditions) walkLeaves(child, out, ids);
       }
+      return;
     }
+    // Row node — unwrap NOT/SUSTAINED to find the underlying leaf for the leaf
+    // id lookup, but keep `node` as the wrapper so the row can show "not"/sustained
+    // chrome and invert pip truth correctly.
+    const leafNode = rowLeafNode(node);
+    if (!leafNode._uid) return;
+    const leafId = ids.get(leafNode._uid);
+    if (leafId === undefined) return;
+    out.push({ leafId, node: leafNode, wrapper: node });
   }
 
   // Compose-truth helper bound to the current state. Used by both the rule
@@ -204,9 +217,14 @@
     }
   }
 
-  function leafTruth(rule: AlertRuleResponse, leafId: number): boolean {
+  function leafTruth(
+    rule: AlertRuleResponse,
+    leafId: number,
+    wrapper: ConditionNode,
+  ): boolean {
     if (!rule.id) return false;
-    return leafLog.valueAt(rule.id, leafId, currentTimeMs) ?? false;
+    const raw = leafLog.valueAt(rule.id, leafId, currentTimeMs) ?? false;
+    return wrapper.type === "not" ? !raw : raw;
   }
 
   function toggleDisabled(id: string, enabled: boolean): void {
@@ -289,11 +307,12 @@
         {:else}
           <ul class="space-y-1">
             {#each leaves as entry (entry.leafId)}
-              {@const lt = leafTruth(rule, entry.leafId)}
+              {@const lt = leafTruth(rule, entry.leafId, entry.wrapper)}
               {@const isNot = entry.wrapper.type === "not"}
               {@const isSustained =
                 entry.wrapper.type === "sustained" ||
                 (isNot && entry.wrapper.not?.child.type === "sustained")}
+              {@const currentValue = leafCurrentValue(entry.node)}
               <li
                 data-testid="rule-leaf"
                 data-leaf-id={entry.leafId}
@@ -317,6 +336,12 @@
                 {/if}
                 <span class="flex-1 min-w-0 truncate">
                   {summarizeCondition(entry.wrapper, { resolveAlertName: nameLookup })}
+                  {#if currentValue}
+                    <span
+                      class="ml-1 text-muted-foreground tabular-nums"
+                      data-testid="rule-leaf-current-value"
+                    >· {currentValue}</span>
+                  {/if}
                 </span>
               </li>
             {/each}

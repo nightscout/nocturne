@@ -32495,6 +32495,15 @@
                 "$ref": "#/components/schemas/LeafTransitionLog"
               }
             }
+          },
+          "factTimelines": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/FactSnapshotPoint"
+              }
+            }
           }
         }
       },
@@ -32515,6 +32524,9 @@
           },
           "severity": {
             "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AlertReplayEventKind"
           }
         }
       },
@@ -32530,6 +32542,20 @@
           "critical",
           "warning",
           "info"
+        ]
+      },
+      "AlertReplayEventKind": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Fired",
+          "AutoResolved",
+          "SuppressedByDnd"
+        ],
+        "enum": [
+          "fired",
+          "auto_resolved",
+          "suppressed_by_dnd"
         ]
       },
       "LeafTransitionLog": {
@@ -32561,9 +32587,23 @@
           }
         }
       },
+      "FactSnapshotPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "atMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
       "AlertReplayRequest": {
         "type": "object",
-        "description": "Request body for the alerts replay endpoint.",
+        "description": "Request body for the alerts replay endpoint. From and\nTo are absolute UTC instants and take precedence over\nDate + Timezone when set, allowing replay of an\narbitrary window (not just a calendar day).",
         "additionalProperties": false,
         "properties": {
           "date": {
@@ -32574,12 +32614,22 @@
           "timezone": {
             "type": "string",
             "nullable": true
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
       "AlertReplayDryRunRequest": {
         "type": "object",
-        "description": "Request body for the dry-run replay endpoint. Id is\noptional: when present and matching an existing rule it replaces it for the simulation;\notherwise the rule is appended for the call.",
+        "description": "Request body for the dry-run replay endpoint. Id is\noptional: when present and matching an existing rule it replaces it for the simulation;\notherwise the rule is appended for the call. From/To\nbehave the same as on AlertReplayRequest.",
         "additionalProperties": false,
         "properties": {
           "date": {
@@ -32593,6 +32643,16 @@
           },
           "rule": {
             "$ref": "#/components/schemas/ReplayRuleDefinition"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         }
       },

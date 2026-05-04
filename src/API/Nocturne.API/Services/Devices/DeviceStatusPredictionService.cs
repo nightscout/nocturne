@@ -29,11 +29,15 @@ public class DeviceStatusPredictionService : IPredictionService
 
     public async Task<GlucosePredictionResponse> GetPredictionsAsync(
         string? profileId = null,
+        DateTimeOffset? asOf = null,
         CancellationToken cancellationToken = default)
     {
+        // For replay we want the snapshot active at-or-before the anchor — the AID system
+        // already wrote forward predictions historically, so picking the most recent snapshot
+        // before `asOf` gives us the forecast the user actually had at that tick.
         var snapshots = await _apsSnapshots.GetAsync(
             from: null,
-            to: null,
+            to: asOf?.UtcDateTime,
             device: null,
             source: null,
             limit: 1,

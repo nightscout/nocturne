@@ -92,7 +92,7 @@ public class AlertReplayServiceTests
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(Guid.Empty);
 
-        var result = await _sut.ReplayAsync(null, null, CancellationToken.None);
+        var result = await _sut.ReplayAsync(null, null, null, null, CancellationToken.None);
 
         result.Events.Should().BeEmpty();
     }
@@ -104,12 +104,11 @@ public class AlertReplayServiceTests
             .ReturnsAsync(Array.Empty<AlertRuleSnapshot>());
 
         var result = await _sut.ReplayAsync(
-            new DateOnly(2026, 4, 28), "UTC", CancellationToken.None);
+            new DateOnly(2026, 4, 28), "UTC", null, null, CancellationToken.None);
 
         result.Events.Should().BeEmpty();
         result.WindowStart.Should().Be(new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc));
         result.WindowEnd.Should().Be(new DateTime(2026, 4, 29, 0, 0, 0, DateTimeKind.Utc));
-        result.Limitations.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -135,7 +134,7 @@ public class AlertReplayServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         result.Events.Should().HaveCount(2);
         result.Events[0].RuleId.Should().Be(ruleId);
@@ -162,7 +161,7 @@ public class AlertReplayServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         result.Events.Should().HaveCount(1);
         result.Events[0].At.Should().Be(dayStart.AddHours(2));
@@ -194,7 +193,7 @@ public class AlertReplayServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(3), 60) });
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         // Both should fire. A first (its event was added first within the tick), then B.
         result.Events.Should().HaveCount(2);
@@ -203,12 +202,59 @@ public class AlertReplayServiceTests
     }
 
     [Fact]
+    public async Task SameTickOpenAndAutoResolve_EmitsFiredThenAutoResolved()
+    {
+        // Mirror of AlertOrchestrator.EvaluateRuleAsync: HandleExcursionOpened runs first,
+        // then TryAutoResolveAsync runs unconditionally on the same reading. A rule whose
+        // body opens at tick T and whose auto-resolve predicate is already true at T should
+        // produce both events at T (live stamps resolution_reason="auto_resolve" on the
+        // near-zero-duration excursion). Replay must mirror this — gating auto-resolve on
+        // the previous tick's wasFiring would silently drop the resolve.
+        var ruleId = Guid.NewGuid();
+        // Open condition: glucose < 80. Auto-resolve: glucose > 70. A reading at 75 satisfies
+        // both simultaneously.
+        var rule = new AlertRuleSnapshot(
+            ruleId, _tenantId, "open-and-resolve",
+            AlertConditionType.Threshold,
+            """{"direction":"below","value":80}""",
+            AlertRuleSeverity.Warning, "{}", 0,
+            AutoResolveEnabled: true,
+            AutoResolveParams: """{"type":"threshold","threshold":{"direction":"above","value":70}}""");
+
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+        // First reading at 03:00 satisfies both predicates (open + immediate resolve);
+        // second reading at 03:05 is well above both so subsequent ticks stay quiet and the
+        // assertion locks the same-tick pair in isolation.
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                Reading(dayStart.AddHours(3), 75),
+                Reading(dayStart.AddHours(3).AddMinutes(5), 110),
+            });
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        result.Events.Should().HaveCount(2);
+        result.Events[0].RuleId.Should().Be(ruleId);
+        result.Events[0].Kind.Should().Be(AlertReplayEventKind.Fired);
+        result.Events[1].RuleId.Should().Be(ruleId);
+        result.Events[1].Kind.Should().Be(AlertReplayEventKind.AutoResolved);
+        result.Events[0].At.Should().Be(result.Events[1].At, "fire and auto-resolve happen on the same tick");
+    }
+
+    [Fact]
     public async Task RollingWindow_When_Date_IsNull()
     {
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertRuleSnapshot>());
 
-        var result = await _sut.ReplayAsync(null, null, CancellationToken.None);
+        var result = await _sut.ReplayAsync(null, null, null, null, CancellationToken.None);
 
         (result.WindowEnd - result.WindowStart).Should().BeCloseTo(TimeSpan.FromHours(24), TimeSpan.FromSeconds(5));
     }
@@ -243,7 +289,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
                 asOf is not null && asOf.Value >= lastCycle ? lastCycle : null);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         result.Events.Should().NotBeEmpty();
         result.Events[0].RuleId.Should().Be(ruleId);
@@ -291,11 +337,73 @@ public class AlertReplayServiceTests
                     }
                     : null);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         result.Events.Should().HaveCount(1);
         result.Events[0].RuleId.Should().Be(ruleId);
         // First tick at-or-after spanStart is exactly 03:00 since 5-min ticks land on 0/5/10/...
         result.Events[0].At.Should().Be(spanStart);
+    }
+
+    /// <summary>
+    /// Replay must emit a <c>latest_glucose</c> fact timeline so the rule sidebar can
+    /// annotate threshold leaves with the current value at the playhead. Asserts the
+    /// glucose value flows through change-detection (rounded to integer mg/dL) and the
+    /// emitted points match the readings.
+    /// </summary>
+    [Fact]
+    public async Task FactTimelines_LatestGlucose_EmitsOnReadingChange()
+    {
+        var rule = ThresholdRule(Guid.NewGuid(), "below", 70m);
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+
+        // Three distinct values at 04:00/04:30/05:00 — expect ≥ 3 emitted points
+        // (the snapshot also seeds a baseline at first observation if non-null).
+        var readings = new[]
+        {
+            Reading(dayStart.AddHours(4), 65),
+            Reading(dayStart.AddHours(4).AddMinutes(30), 95),
+            Reading(dayStart.AddHours(5), 60),
+        };
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(readings);
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        result.FactTimelines.Should().ContainKey("latest_glucose");
+        var glucosePoints = result.FactTimelines["latest_glucose"];
+        glucosePoints.Select(p => p.Value).Should().ContainInOrder(65m, 95m, 60m);
+    }
+
+    /// <summary>
+    /// Drift guard: every <see cref="AlertConditionType"/> evaluable at runtime must resolve to
+    /// an evaluator in the replay container. Replay used to hand-maintain its own evaluator
+    /// list and silently dropped any new condition kind (Sustained around a missing kind cleared
+    /// the timer every tick, so no event ever fired). Sourcing the registry from the live DI
+    /// extension closes that gap; this test fails closed if a future evaluator is added to live
+    /// DI but not exposed to replay.
+    /// </summary>
+    [Fact]
+    public void BuildReplayServices_ResolvesEveryRuntimeConditionType()
+    {
+        using var sp = AlertReplayService.BuildReplayServices(
+            new InMemoryConditionTimerStore(), TimeProvider.System);
+        var registry = sp.GetRequiredService<Nocturne.API.Services.Alerts.Evaluators.ConditionEvaluatorRegistry>();
+
+        // SignalLoss is not condition-evaluator-driven — AlertSweepService handles it directly.
+        var skipped = new[] { AlertConditionType.SignalLoss };
+
+        foreach (var type in Enum.GetValues<AlertConditionType>())
+        {
+            if (skipped.Contains(type)) continue;
+            registry.GetEvaluator(type).Should().NotBeNull(
+                "replay must support every runtime condition type, but {0} has no evaluator", type);
+        }
     }
 }

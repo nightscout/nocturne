@@ -728,7 +728,6 @@ msgid "<0/> Log Out"
 msgstr "<0/> Log Out"
 
 #: src/lib/components/actogram/ActogramRow.svelte
-#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
@@ -1269,6 +1268,8 @@ msgid "Duration"
 msgstr "Duration"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
+#: src/routes/(authenticated)/alerts/+page.svelte
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Acknowledged"
@@ -1287,12 +1288,14 @@ msgid "Page {0} of {1} ({2} total)"
 msgstr "Page {0} of {1} ({2} total)"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/setup/+page.svelte
 msgid "Previous"
 msgstr "Previous"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Next"
 msgstr "Next"
@@ -1321,8 +1324,10 @@ msgstr "Composite Alert"
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AudioSection.svelte
 #: src/lib/components/alerts/FiringToast.svelte
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
@@ -1409,6 +1414,7 @@ msgstr "Default Schedule"
 msgid "Default"
 msgstr "Default"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1416,6 +1422,7 @@ msgstr "Default"
 msgid "Sun"
 msgstr "Sun"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1423,6 +1430,7 @@ msgstr "Sun"
 msgid "Mon"
 msgstr "Mon"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1430,6 +1438,7 @@ msgstr "Mon"
 msgid "Tue"
 msgstr "Tue"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1437,6 +1446,7 @@ msgstr "Tue"
 msgid "Wed"
 msgstr "Wed"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1444,6 +1454,7 @@ msgstr "Wed"
 msgid "Thu"
 msgstr "Thu"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1451,6 +1462,7 @@ msgstr "Thu"
 msgid "Fri"
 msgstr "Fri"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/SchedulesTab.svelte
 #: src/lib/components/settings/alarm-profile/DayOfWeekPicker.svelte
 #: src/routes/(authenticated)/calendar/+page.svelte
@@ -1589,6 +1601,8 @@ msgstr "Custom Sounds"
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
@@ -2452,6 +2466,7 @@ msgstr "Today"
 msgid "TIR"
 msgstr "TIR"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
@@ -2521,6 +2536,7 @@ msgstr "Avg TDD"
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "No data"
 msgstr "No data"
 
@@ -2873,12 +2889,15 @@ msgstr "Add custom CSS properties (e.g., text-shadow, letter-spacing)"
 
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
+#: src/lib/components/alerts/RuleSidebar.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 msgid "On"
 msgstr "On"
 
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/DndQuickToggle.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleSidebar.svelte
 #: src/lib/components/command-palette/CommandPalette.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 msgid "Off"
@@ -4247,6 +4266,7 @@ msgstr "Current insulin types and regimen"
 
 #: src/lib/components/dashboard/OnboardingProgress.svelte
 #: src/lib/components/layout/AppSidebar.svelte
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "Alerts"
@@ -4392,6 +4412,8 @@ msgstr "Recent Entries"
 msgid "No recent entries"
 msgstr "No recent entries"
 
+#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 msgid "Last 24 hours"
 msgstr "Last 24 hours"
@@ -5056,6 +5078,7 @@ msgstr "InsulinChange"
 msgid "PumpBatteryChange"
 msgstr "PumpBatteryChange"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
@@ -5065,6 +5088,7 @@ msgstr "PumpBatteryChange"
 msgid "Automatic"
 msgstr "Automatic"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
@@ -5072,19 +5096,25 @@ msgstr "Automatic"
 msgid "Manual"
 msgstr "Manual"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Boost"
 msgstr "Boost"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 msgid "Sleep"
 msgstr "Sleep"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Exercise"
 msgstr "Exercise"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
@@ -5092,6 +5122,7 @@ msgstr "Exercise"
 msgid "Suspended"
 msgstr "Suspended"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 msgid "Limited"
 msgstr "Limited"
@@ -5959,6 +5990,9 @@ msgstr "Peak"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderRow.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 #: src/lib/components/settings/alarm-profile/AlarmSnoozeTab.svelte
@@ -6798,6 +6832,7 @@ msgstr "Std Dev"
 #: src/lib/components/reports/DailySummaryTable.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Time in Range"
@@ -9230,6 +9265,7 @@ msgstr "Rows per page"
 #. placeholder {0}: page
 #. placeholder {1}: history.totalPages
 #: src/lib/components/treatments/DataTablePagination.svelte
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Page {0} of {1}"
 msgstr "Page {0} of {1}"
@@ -10513,7 +10549,9 @@ msgid "Report"
 msgstr "Report"
 
 #. placeholder {0}: params.days
+#. placeholder {0}: span
 #: src/routes/(authenticated)/reports/+layout.svelte
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
 msgid "Last {0} days"
 msgstr "Last {0} days"
 
@@ -11498,6 +11536,7 @@ msgstr "Percent"
 msgid "Pump Mode"
 msgstr "Pump Mode"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 msgid "Override"
@@ -11600,7 +11639,6 @@ msgstr "Blood Glucose <0/>"
 msgid "Trackers"
 msgstr "Trackers"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
 msgid "Last 24h"
 msgstr "Last 24h"
@@ -14566,7 +14604,7 @@ msgstr "Steps"
 msgid "Error Loading Week Comparison"
 msgstr "Error Loading Week Comparison"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/PlaybackStrip.svelte
 #: src/routes/(authenticated)/reports/week-to-week/+page.svelte
 msgid "Reset"
 msgstr "Reset"
@@ -16139,7 +16177,6 @@ msgid "<0/> Create Role"
 msgstr "<0/> Create Role"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
-#: src/lib/components/alerts/ReplayPanel.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
 #: src/lib/components/settings/notifications/webhooks/WebhookChannelRow.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
@@ -18666,15 +18703,19 @@ msgstr "Acknowledge"
 msgid "Mute the rule"
 msgstr "Mute the rule"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Failed to load alerts"
 msgstr "Failed to load alerts"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Alerts · Nocturne"
 msgstr "Alerts · Nocturne"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Rules that decide when, how, and where you're notified."
 msgstr "Rules that decide when, how, and where you're notified."
@@ -18683,37 +18724,46 @@ msgstr "Rules that decide when, how, and where you're notified."
 msgid "<0/> Do Not Disturb"
 msgstr "<0/> Do Not Disturb"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "<0/> New rule"
 msgstr "<0/> New rule"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Rules enabled"
 msgstr "Rules enabled"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Active now"
 msgstr "Active now"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Fired this week"
 msgstr "Fired this week"
 
 #. placeholder {0}: activeAlerts.length
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "<0/> Active alerts ({0})"
 msgstr "<0/> Active alerts ({0})"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "<0/> Acknowledge all"
 msgstr "<0/> Acknowledge all"
 
 #. placeholder {0}: a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : "—"
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Since {0}"
 msgstr "Since {0}"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Alert rules"
 msgstr "Alert rules"
@@ -18721,10 +18771,12 @@ msgstr "Alert rules"
 #~ msgid "<0/> Simulate last 24 h"
 #~ msgstr "<0/> Simulate last 24 h"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "No alert rules yet"
 msgstr "No alert rules yet"
 
+#: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/+page.svelte
 msgid "Add a rule so Nocturne can notify you when glucose goes out of range."
 msgstr "Add a rule so Nocturne can notify you when glucose goes out of range."
@@ -18766,27 +18818,24 @@ msgid "<0/> Simulate alert rules"
 msgstr "<0/> Simulate alert rules"
 
 #: src/lib/components/alerts/ReplayDialog.svelte
+#: src/routes/(authenticated)/alerts/simulator/+page.svelte
 msgid "Replay your enabled rules against historical glucose. Nothing is delivered."
 msgstr "Replay your enabled rules against historical glucose. Nothing is delivered."
 
-#: src/lib/components/alerts/ReplayPanel.svelte
-msgid "Pick a date…"
-msgstr "Pick a date…"
+#~ msgid "Pick a date…"
+#~ msgstr "Pick a date…"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
-msgid "Custom date"
-msgstr "Custom date"
+#~ msgid "Custom date"
+#~ msgstr "Custom date"
 
 #~ msgid "TZ"
 #~ msgstr "TZ"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
-msgid "<0/> Run"
-msgstr "<0/> Run"
+#~ msgid "<0/> Run"
+#~ msgstr "<0/> Run"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
-msgid "No glucose data in this window."
-msgstr "No glucose data in this window."
+#~ msgid "No glucose data in this window."
+#~ msgstr "No glucose data in this window."
 
 #: src/lib/components/alerts/OnboardingCard.svelte
 msgid "<0/> Get alerts working"
@@ -18913,6 +18962,8 @@ msgid "Do Not Disturb · Alerts · Nocturne"
 msgstr "Do Not Disturb · Alerts · Nocturne"
 
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
+#: src/routes/(authenticated)/alerts/history/+page.svelte
+#: src/routes/(authenticated)/alerts/simulator/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
@@ -18951,14 +19002,17 @@ msgstr "Use a recurring quiet-hours window"
 msgid "Falls back to UTC if the value can't be resolved at evaluation time."
 msgstr "Falls back to UTC if the value can't be resolved at evaluation time."
 
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Failed to load history"
 msgstr "Failed to load history"
 
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Alert history · Nocturne"
 msgstr "Alert history · Nocturne"
 
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "<0/> Alert history"
 msgstr "<0/> Alert history"
@@ -18967,14 +19021,17 @@ msgstr "<0/> Alert history"
 #~ msgstr "Every fire from this tenant — both real and test."
 
 #. placeholder {0}: history.totalCount
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "({0} total)"
 msgstr "({0} total)"
 
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Recent fires <0/>"
 msgstr "Recent fires <0/>"
 
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "No alert history yet."
 msgstr "No alert history yet."
@@ -19025,12 +19082,10 @@ msgstr "Why this alert exists, what it should trigger"
 msgid "Allow through Do Not Disturb"
 msgstr "Allow through Do Not Disturb"
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Critical-severity rules implicitly bypass DND regardless of this flag."
 msgstr "Critical-severity rules implicitly bypass DND regardless of this flag."
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Define when this alert fires. Mix facts with AND/OR; nest with brackets."
 msgstr "Define when this alert fires. Mix facts with AND/OR; nest with brackets."
@@ -19045,7 +19100,6 @@ msgstr "Where to deliver the alert. All channels fire in parallel."
 msgid "Smart snooze"
 msgstr "Smart snooze"
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "When the user snoozes, extend the snooze automatically while these conditions hold."
 msgstr "When the user snoozes, extend the snooze automatically while these conditions hold."
@@ -19275,9 +19329,13 @@ msgstr "no data for ≥"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 msgid "is"
 msgstr "is"
 
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 msgid "for ≥"
@@ -19292,11 +19350,11 @@ msgstr "{0} not linked — won't deliver until connected."
 msgid "Not linked"
 msgstr "Not linked"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/PlaybackStrip.svelte
 msgid "Pause"
 msgstr "Pause"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/PlaybackStrip.svelte
 msgid "Play"
 msgstr "Play"
 
@@ -19306,9 +19364,8 @@ msgstr "Play"
 #~ msgid "{0} of {1} alerts fired"
 #~ msgstr "{0} of {1} alerts fired"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
-msgid "Edit rule"
-msgstr "Edit rule"
+#~ msgid "Edit rule"
+#~ msgstr "Edit rule"
 
 #: src/lib/components/alerts/SidebarDndToggle.svelte
 msgid "Scheduled DND active"
@@ -19326,6 +19383,7 @@ msgstr "Rules"
 msgid "Simulator"
 msgstr "Simulator"
 
+#: src/routes/(authenticated)/alerts/history/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/history/+page.svelte
 msgid "Every real fire from this tenant. Test fires aren't shown."
 msgstr "Every real fire from this tenant. Test fires aren't shown."
@@ -19335,7 +19393,6 @@ msgstr "Every real fire from this tenant. Test fires aren't shown."
 msgid "Test alert"
 msgstr "Test alert"
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Fire a real notification, or replay the rule against historical glucose."
 msgstr "Fire a real notification, or replay the rule against historical glucose."
@@ -19350,7 +19407,6 @@ msgstr "<0/> Replay against history"
 msgid "<0/> Historic firings"
 msgstr "<0/> Historic firings"
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Real fires for this rule. Click any to replay the day in the simulator."
 msgstr "Real fires for this rule. Click any to replay the day in the simulator."
@@ -19365,7 +19421,6 @@ msgstr "No firings yet."
 msgid "ack"
 msgstr "ack"
 
-#: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/alerts/[id]/+page.svelte
 msgid "Replay this alert (and any siblings) against historical glucose. Nothing is delivered."
 msgstr "Replay this alert (and any siblings) against historical glucose. Nothing is delivered."
@@ -19391,3 +19446,240 @@ msgstr "Remove condition (shift+click shortcut)"
 #: src/lib/components/alerts/RuleBuilderRow.svelte
 msgid "Drag to reorder"
 msgstr "Drag to reorder"
+
+#: src/lib/components/alerts/ArmedStatusStrip.svelte
+msgid "Turn off"
+msgstr "Turn off"
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "No events yet — playhead at start of window."
+msgstr "No events yet — playhead at start of window."
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Ease off"
+msgstr "Ease off"
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Pump connectivity"
+msgstr "Pump connectivity"
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Illness"
+msgstr "Illness"
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Travel"
+msgstr "Travel"
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Data exclusion"
+msgstr "Data exclusion"
+
+#: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+msgid "Temporary target"
+msgstr "Temporary target"
+
+#: src/lib/components/alerts/PlaybackStrip.svelte
+msgid "Playback speed"
+msgstr "Playback speed"
+
+#. placeholder {0}: speed
+#: src/lib/components/alerts/PlaybackStrip.svelte
+msgid "{0}x"
+msgstr "{0}x"
+
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "(editing)"
+msgstr "(editing)"
+
+#. placeholder {0}: rule.name
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "Enable {0}"
+msgstr "Enable {0}"
+
+#. placeholder {0}: rule.name
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "Disable {0}"
+msgstr "Disable {0}"
+
+#: src/lib/components/alerts/RuleSidebar.svelte
+msgid "No leaves to evaluate."
+msgstr "No leaves to evaluate."
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "Resolved"
+msgstr "Resolved"
+
+#: src/lib/components/alerts/GlucoseCalendarPicker.svelte
+msgid "Previous month"
+msgstr "Previous month"
+
+#: src/lib/components/alerts/GlucoseCalendarPicker.svelte
+msgid "loading…"
+msgstr "loading…"
+
+#: src/lib/components/alerts/GlucoseCalendarPicker.svelte
+msgid "Next month"
+msgstr "Next month"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Last Month"
+msgstr "Last Month"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "This Month"
+msgstr "This Month"
+
+#. placeholder {0}: span
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Prior {0} days"
+msgstr "Prior {0} days"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Last 7 vs Prior 7 days"
+msgstr "Last 7 vs Prior 7 days"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Last 14 vs Prior 14 days"
+msgstr "Last 14 vs Prior 14 days"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Last 30 vs Prior 30 days"
+msgstr "Last 30 vs Prior 30 days"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "This Month vs Last Month"
+msgstr "This Month vs Last Month"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Variability (CV)"
+msgstr "Variability (CV)"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Glycemic Risk Index"
+msgstr "Glycemic Risk Index"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Mean Glucose"
+msgstr "Mean Glucose"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hyper Duration"
+msgstr "Hyper Duration"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Hyper Events"
+msgstr "Hyper Events"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Preset"
+msgstr "Preset"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "<0/> Swap"
+msgstr "<0/> Swap"
+
+#. placeholder {0}: daysBetween(p.from, p.to)
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "{0}d"
+msgstr "{0}d"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "vs"
+msgstr "vs"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "← worse"
+msgstr "← worse"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "no change"
+msgstr "no change"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "better →"
+msgstr "better →"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Time in Range — stacked comparison"
+msgstr "Time in Range — stacked comparison"
+
+#: src/routes/(authenticated)/reports/comparison/+page.svelte
+msgid "Vertical stacked bars showing the full TIR breakdown for each period."
+msgstr "Vertical stacked bars showing the full TIR breakdown for each period."
+
+#: src/routes/(authenticated)/alerts/simulator/+page.svelte
+msgid "Alert simulator · Nocturne"
+msgstr "Alert simulator · Nocturne"
+
+#: src/routes/(authenticated)/alerts/simulator/+page.svelte
+msgid "<0/> Simulator"
+msgstr "<0/> Simulator"
+
+#: src/routes/(authenticated)/alerts/simulator/+page.svelte
+msgid "Replay window"
+msgstr "Replay window"
+
+#: src/routes/(authenticated)/alerts/simulator/+page.svelte
+msgid "Pick a window — rules are evaluated tick-by-tick over the data you actually had."
+msgstr "Pick a window — rules are evaluated tick-by-tick over the data you actually had."
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "From <0/>"
+msgstr "From <0/>"
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "To <0/>"
+msgstr "To <0/>"
+
+#: src/lib/components/alerts/ReplayPanel.svelte
+msgid "User snooze actions cannot be replayed."
+msgstr "User snooze actions cannot be replayed."
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid ""
+"Critical-severity rules implicitly bypass DND regardless of\n"
+"this flag."
+msgstr ""
+"Critical-severity rules implicitly bypass DND regardless of\n"
+"this flag."
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid ""
+"Define when this alert fires. Mix facts with AND/OR; nest with\n"
+"brackets."
+msgstr ""
+"Define when this alert fires. Mix facts with AND/OR; nest with\n"
+"brackets."
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid ""
+"When the user snoozes, extend the snooze automatically while these\n"
+"conditions hold."
+msgstr ""
+"When the user snoozes, extend the snooze automatically while these\n"
+"conditions hold."
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid ""
+"Fire a real notification, or replay the rule against historical\n"
+"glucose."
+msgstr ""
+"Fire a real notification, or replay the rule against historical\n"
+"glucose."
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid ""
+"Real fires for this rule. Click any to replay the day in the\n"
+"simulator."
+msgstr ""
+"Real fires for this rule. Click any to replay the day in the\n"
+"simulator."
+
+#: src/routes/(authenticated)/alerts/[id]/+page.svelte
+msgid ""
+"Replay this alert (and any siblings) against historical glucose. Nothing\n"
+"is delivered."
+msgstr ""
+"Replay this alert (and any siblings) against historical glucose. Nothing\n"
+"is delivered."

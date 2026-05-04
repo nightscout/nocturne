@@ -294,6 +294,13 @@ public class EntryReadService : IEntryStore
             to = from.Value.AddDays(1);
         }
 
+        // Explicit FromMills/ToMills win outright — typed callers (alert replay) use these
+        // instead of round-tripping through Find or DateString.
+        if (query.FromMills.HasValue)
+            from = DateTimeOffset.FromUnixTimeMilliseconds(query.FromMills.Value).UtcDateTime;
+        if (query.ToMills.HasValue)
+            to = DateTimeOffset.FromUnixTimeMilliseconds(query.ToMills.Value).UtcDateTime;
+
         return (from, to);
     }
 

@@ -108,6 +108,12 @@
       height: number;
       padding: { top: number; right: number; bottom: number; left: number };
     }]>;
+    /**
+     * Optional extra tooltip rows. Receives the hovered time so callers can
+     * show data the chart itself doesn't know about (e.g. alert events from
+     * the replay simulator) inline with the built-in tooltip items.
+     */
+    tooltipExtras?: import("svelte").Snippet<[{ time: Date }]>;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -137,6 +143,7 @@
     streamedHistoricalData,
     externalPredictionData,
     annotations,
+    tooltipExtras,
   }: ComponentProps = $props();
 
   // Shared so the annotations snippet payload reports the same padding the
@@ -493,14 +500,17 @@
     }))
   );
 
-  // Thresholds from server (already unit-converted by remote function)
-  const lowThreshold = $derived(serverChartData?.thresholds?.low ?? 55);
-  const highThreshold = $derived(serverChartData?.thresholds?.high ?? 180);
+  // Thresholds from server (already unit-converted by remote function). `||`
+  // rather than `??` so a server-side 0 (no profile yet at the requested
+  // instant) falls back to the default rather than collapsing the lines onto
+  // the X axis.
+  const lowThreshold = $derived(serverChartData?.thresholds?.low || 55);
+  const highThreshold = $derived(serverChartData?.thresholds?.high || 180);
   const veryHighThreshold = $derived(
-    serverChartData?.thresholds?.veryHigh ?? 250
+    serverChartData?.thresholds?.veryHigh || 250
   );
-  const veryLowThreshold = $derived(serverChartData?.thresholds?.veryLow ?? 40);
-  const glucoseYMax = $derived(serverChartData?.thresholds?.glucoseYMax ?? 300);
+  const veryLowThreshold = $derived(serverChartData?.thresholds?.veryLow || 40);
+  const glucoseYMax = $derived(serverChartData?.thresholds?.glucoseYMax || 300);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -1330,6 +1340,7 @@
         {showActivitySpans}
         {showAlarms}
         {staleBasalData}
+        {tooltipExtras}
       />
     {/snippet}
   </Chart>
@@ -1337,7 +1348,7 @@
 
 {#if compact}
   <!-- Compact mode: no card wrapper, just the chart -->
-  <div class="h-full w-full @container">
+  <div class="{heightClass ?? 'h-full'} w-full @container">
     <div class="h-full">
       {@render chartBody()}
     </div>

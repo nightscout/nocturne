@@ -12,7 +12,10 @@
   } from "$api/generated/alertRules.generated.remote";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
-  import type { AlertRuleResponse, HistoryExcursionResponse } from "$api-clients";
+  import type {
+    AlertRuleResponse,
+    HistoryExcursionResponse,
+  } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -30,7 +33,15 @@
   import * as Select from "$lib/components/ui/select";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { ArrowLeft, Save, Trash2, Zap, Loader2, History as HistoryIcon, PlayCircle } from "lucide-svelte";
+  import {
+    ArrowLeft,
+    Save,
+    Trash2,
+    Zap,
+    Loader2,
+    History as HistoryIcon,
+    PlayCircle,
+  } from "lucide-svelte";
 
   import RuleBuilder from "$lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
@@ -73,7 +84,9 @@
 
   // Smart-snooze controls — driven by the snooze sub-tree on clientConfig.
   let smartSnoozeOn = $derived(state.clientConfig.snooze.smartSnooze);
-  let smartSnoozeMinutes = $derived(state.clientConfig.snooze.smartSnoozeExtendMinutes);
+  let smartSnoozeMinutes = $derived(
+    state.clientConfig.snooze.smartSnoozeExtendMinutes
+  );
 
   onMount(async () => {
     try {
@@ -81,7 +94,9 @@
       // sibling list used by the alert_state condition picker.
       const [siblings, rule] = await Promise.all([
         getRules(),
-        isNew ? Promise.resolve<AlertRuleResponse | null>(null) : getRule(ruleId),
+        isNew
+          ? Promise.resolve<AlertRuleResponse | null>(null)
+          : getRule(ruleId),
       ]);
       availableRules = (siblings ?? [])
         .filter((r) => r.id !== ruleId)
@@ -141,7 +156,9 @@
         // shape doesn't grow a redundant composite for plain single-leaf
         // resolves.
         autoResolveParams: state.autoResolveCondition
-          ? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
+          ? stripEditorFields(
+              flattenSingleChildRoot(state.autoResolveCondition)
+            )
           : undefined,
         // Snooze conditions are wrapped in single-child AND groups during edit
         // (the inline rule builder requires a composite root). Flatten + strip
@@ -151,7 +168,7 @@
           snooze: {
             ...state.clientConfig.snooze,
             conditions: state.clientConfig.snooze.conditions.map((c) =>
-              stripEditorFields(flattenSingleChildRoot(c)),
+              stripEditorFields(flattenSingleChildRoot(c))
             ),
           },
         },
@@ -252,8 +269,7 @@
       id: isNew ? undefined : ruleId,
       name: state.name,
       conditionType: api?.conditionType as AlertConditionType,
-      conditionParams:
-        params == null ? undefined : JSON.stringify(params),
+      conditionParams: params == null ? undefined : JSON.stringify(params),
       severity: state.severity,
       allowThroughDnd: state.allowThroughDnd,
       autoResolveEnabled: state.autoResolveEnabled,
@@ -326,7 +342,9 @@
   </div>
 
   {#if error}
-    <div class="mb-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+    <div
+      class="mb-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+    >
       {error}
     </div>
   {/if}
@@ -350,10 +368,14 @@
           <CardHeader class="flex flex-row items-start justify-between gap-4">
             <div class="space-y-1.5">
               <CardTitle>Identity</CardTitle>
-              <CardDescription>What should this alert be called?</CardDescription>
+              <CardDescription>
+                What should this alert be called?
+              </CardDescription>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <Label class="cursor-pointer text-sm" for="rule-enabled">Enabled</Label>
+              <Label class="cursor-pointer text-sm" for="rule-enabled">
+                Enabled
+              </Label>
               <Switch
                 id="rule-enabled"
                 checked={state.isEnabled}
@@ -418,7 +440,8 @@
                   Allow through Do Not Disturb
                 </Label>
                 <p class="text-xs text-muted-foreground">
-                  Critical-severity rules implicitly bypass DND regardless of this flag.
+                  Critical-severity rules implicitly bypass DND regardless of
+                  this flag.
                 </p>
               </div>
             </div>
@@ -430,7 +453,8 @@
           <CardHeader>
             <CardTitle>Condition</CardTitle>
             <CardDescription>
-              Define when this alert fires. Mix facts with AND/OR; nest with brackets.
+              Define when this alert fires. Mix facts with AND/OR; nest with
+              brackets.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -473,12 +497,15 @@
           <CardHeader>
             <CardTitle>Smart snooze</CardTitle>
             <CardDescription>
-              When the user snoozes, extend the snooze automatically while these conditions hold.
+              When the user snoozes, extend the snooze automatically while these
+              conditions hold.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="flex items-center justify-between gap-2">
-              <Label class="cursor-pointer" for="smart-snooze">Enable smart snooze</Label>
+              <Label class="cursor-pointer" for="smart-snooze">
+                Enable smart snooze
+              </Label>
               <Switch
                 id="smart-snooze"
                 checked={smartSnoozeOn}
@@ -496,7 +523,8 @@
                   value={smartSnoozeMinutes}
                   oninput={(e) => {
                     const n = Number(e.currentTarget.value);
-                    if (Number.isFinite(n)) state.clientConfig.snooze.smartSnoozeExtendMinutes = n;
+                    if (Number.isFinite(n))
+                      state.clientConfig.snooze.smartSnoozeExtendMinutes = n;
                   }}
                 />
               </div>
@@ -521,7 +549,8 @@
         <CardHeader>
           <CardTitle class="text-base">Test alert</CardTitle>
           <CardDescription class="text-xs">
-            Fire a real notification, or replay the rule against historical glucose.
+            Fire a real notification, or replay the rule against historical
+            glucose.
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-2">
@@ -561,16 +590,21 @@
               <HistoryIcon class="h-4 w-4" /> Historic firings
             </CardTitle>
             <CardDescription class="text-xs">
-              Real fires for this rule. Click any to replay the day in the simulator.
+              Real fires for this rule. Click any to replay the day in the
+              simulator.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-1.5">
             {#if historyLoading}
-              <div class="flex items-center justify-center py-4 text-muted-foreground">
+              <div
+                class="flex items-center justify-center py-4 text-muted-foreground"
+              >
                 <Loader2 class="h-4 w-4 animate-spin" />
               </div>
             {:else if history.length === 0}
-              <div class="rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground">
+              <div
+                class="rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground"
+              >
                 No firings yet.
               </div>
             {:else}
@@ -581,12 +615,17 @@
                     class="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted"
                     onclick={() => openReplay(h.startedAt)}
                   >
-                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
+                    <span
+                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                      aria-hidden="true"
+                    ></span>
                     <span class="flex-1 min-w-0 truncate tabular-nums">
                       {formatHistoryRow(h.startedAt)}
                     </span>
                     {#if h.acknowledgedAt}
-                      <span class="text-[10px] text-muted-foreground shrink-0">ack</span>
+                      <span class="text-[10px] text-muted-foreground shrink-0">
+                        ack
+                      </span>
                     {/if}
                   </button>
                 {/each}
@@ -600,17 +639,18 @@
 </div>
 
 <Dialog.Root bind:open={replayOpen}>
-  <Dialog.Content class="max-w-3xl">
+  <Dialog.Content class="flex max-w-6xl w-6xl flex-col sm:max-w-[95vw]">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <PlayCircle class="h-4 w-4" /> Replay
       </Dialog.Title>
       <Dialog.Description>
-        Replay this alert (and any siblings) against historical glucose. Nothing is delivered.
+        Replay this alert (and any siblings) against historical glucose. Nothing
+        is delivered.
       </Dialog.Description>
     </Dialog.Header>
 
-    <div class="py-2">
+    <div class="flex-1 min-h-0 overflow-hidden py-2">
       <ReplayPanel
         initialCustomDate={replayInitialDate}
         rule={buildReplayRule}

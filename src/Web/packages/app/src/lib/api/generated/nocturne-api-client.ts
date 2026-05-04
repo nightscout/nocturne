@@ -27689,6 +27689,7 @@ export interface AlertReplayResult {
     events?: AlertReplayEvent[];
     limitations?: string;
     leafTransitionsByRule?: { [key: string]: LeafTransitionLog[]; };
+    factTimelines?: { [key: string]: FactSnapshotPoint[]; };
 }
 
 export interface AlertReplayEvent {
@@ -27696,12 +27697,19 @@ export interface AlertReplayEvent {
     ruleId?: string;
     ruleName?: string;
     severity?: AlertRuleSeverity;
+    kind?: AlertReplayEventKind;
 }
 
 export enum AlertRuleSeverity {
     Critical = "critical",
     Warning = "warning",
     Info = "info",
+}
+
+export enum AlertReplayEventKind {
+    Fired = "fired",
+    AutoResolved = "auto_resolved",
+    SuppressedByDnd = "suppressed_by_dnd",
 }
 
 export interface LeafTransitionLog {
@@ -27714,17 +27722,26 @@ export interface LeafTransitionPoint {
     value?: boolean;
 }
 
-/** Request body for the alerts replay endpoint. */
+export interface FactSnapshotPoint {
+    atMs?: number;
+    value?: number;
+}
+
+/** Request body for the alerts replay endpoint. From and To are absolute UTC instants and take precedence over Date + Timezone when set, allowing replay of an arbitrary window (not just a calendar day). */
 export interface AlertReplayRequest {
     date?: Date | undefined;
     timezone?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
 }
 
-/** Request body for the dry-run replay endpoint. Id is optional: when present and matching an existing rule it replaces it for the simulation; otherwise the rule is appended for the call. */
+/** Request body for the dry-run replay endpoint. Id is optional: when present and matching an existing rule it replaces it for the simulation; otherwise the rule is appended for the call. From/To behave the same as on AlertReplayRequest. */
 export interface AlertReplayDryRunRequest {
     date?: Date | undefined;
     timezone?: string | undefined;
     rule?: ReplayRuleDefinition;
+    from?: Date | undefined;
+    to?: Date | undefined;
 }
 
 /** In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save shape — the controller doesn't deserialise the condition tree itself, just the ConditionParams JSON blob the rule body would have stored. */

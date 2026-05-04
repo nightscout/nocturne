@@ -131,7 +131,7 @@ public class AlertReplayServiceLeafLogTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         result.LeafTransitionsByRule.Should().ContainKey(ruleId);
         var logs = result.LeafTransitionsByRule[ruleId];
@@ -173,7 +173,7 @@ public class AlertReplayServiceLeafLogTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         var leaf0 = result.LeafTransitionsByRule[ruleId][0];
         leaf0.Points.Should().HaveCount(1);
@@ -212,7 +212,7 @@ public class AlertReplayServiceLeafLogTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings);
 
-        var result = await _sut.ReplayAsync(date, "UTC", CancellationToken.None);
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
 
         var logs = result.LeafTransitionsByRule[ruleId];
         logs.Should().HaveCount(2);

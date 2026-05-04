@@ -51,9 +51,11 @@ public interface ISensorContextEnricher
     /// <item>APS / pump / uploader / temp-basal / state-span fetches use their as-of overloads
     /// (filtering to records with timestamp ≤ <paramref name="asOf"/>).</item>
     /// <item>IOB/COB treatments are sliced to those ending at-or-before <paramref name="asOf"/>.</item>
-    /// <item>Predictions are returned as an empty list — the prediction service is intrinsically
-    /// forward-looking from "now" and does not support historical replay. Rules that consult
-    /// <c>predicted</c> will fail closed during replay.</item>
+    /// <item>Predictions are produced by re-running the prediction pipeline with
+    /// <paramref name="asOf"/> threaded through every input (glucose readings ≤ asOf,
+    /// 24h treatment window ending at asOf, profile resolved at asOf, oref's
+    /// <c>currentTimeMillis</c> set to asOf). The forecast is the curve the user would have
+    /// had at that tick.</item>
     /// <item>The active-alerts snapshot is taken from <see cref="SensorContext.ActiveAlerts"/>
     /// on <paramref name="baseContext"/>; the enricher does not call the alert repository.
     /// The replay walker computes its own running set across the replay window.</item>
