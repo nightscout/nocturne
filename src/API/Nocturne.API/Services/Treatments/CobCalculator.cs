@@ -57,9 +57,10 @@ public class CobCalculator(
                     );
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 logger.LogWarning(
+                    ex,
                     "For the COB plugin to function your treatment profile must have both sens and carbratio fields. Using defaults."
                 );
             }
@@ -232,9 +233,10 @@ public class CobCalculator(
                 return new CarbCobContribution();
             }
         }
-        catch
+        catch (Exception ex)
         {
             logger.LogWarning(
+                ex,
                 "For the COB plugin to function your treatment profile must have both sens and carbratio fields"
             );
             return new CarbCobContribution();
@@ -402,8 +404,9 @@ public class CobCalculator(
             var value = therapySettingsResolver.GetCarbAbsorptionRateAsync(time, null).GetAwaiter().GetResult();
             return value > 0 ? value : DEFAULT_CARB_ABSORPTION_RATE;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to resolve carb absorption rate at {Time}; using default.", time);
             return DEFAULT_CARB_ABSORPTION_RATE;
         }
     }
@@ -415,8 +418,9 @@ public class CobCalculator(
             var value = sensitivityResolver.GetSensitivityAsync(time, null).GetAwaiter().GetResult();
             return value > 0 ? value : DEFAULT_SENSITIVITY;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to resolve sensitivity at {Time}; using default.", time);
             return DEFAULT_SENSITIVITY;
         }
     }
@@ -428,8 +432,9 @@ public class CobCalculator(
             var value = carbRatioResolver.GetCarbRatioAsync(time, null).GetAwaiter().GetResult();
             return value > 0 ? value : DEFAULT_CARB_RATIO;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to resolve carb ratio at {Time}; using default.", time);
             return DEFAULT_CARB_RATIO;
         }
     }

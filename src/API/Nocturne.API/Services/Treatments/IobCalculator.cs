@@ -170,20 +170,16 @@ public class IobCalculator(
         var totalActivity = 0.0;
         Bolus? lastBolus = null;
 
-        foreach (var bolus in boluses)
+        foreach (var bolus in boluses.Where(b => b.Mills <= currentTime && b.Insulin > 0))
         {
-            if (bolus.Mills <= currentTime && bolus.Insulin > 0)
+            var contribution = CalcBolus(bolus, currentTime);
+
+            totalIob += contribution.IobContrib;
+            totalActivity += contribution.ActivityContrib;
+
+            if (lastBolus == null || bolus.Mills > lastBolus.Mills)
             {
-                var contribution = CalcBolus(bolus, currentTime);
-
-                totalIob += contribution.IobContrib;
-                totalActivity += contribution.ActivityContrib;
-
-                // Track most recent bolus
-                if (lastBolus == null || bolus.Mills > lastBolus.Mills)
-                {
-                    lastBolus = bolus;
-                }
+                lastBolus = bolus;
             }
         }
 
@@ -266,14 +262,11 @@ public class IobCalculator(
         var totalBasalIob = 0.0;
         var totalActivity = 0.0;
 
-        foreach (var tempBasal in tempBasals)
+        foreach (var tempBasal in tempBasals.Where(tb => tb.StartMills <= currentTime))
         {
-            if (tempBasal.StartMills <= currentTime)
-            {
-                var contribution = CalcTempBasal(tempBasal, currentTime);
-                totalBasalIob += contribution.IobContrib;
-                totalActivity += contribution.ActivityContrib;
-            }
+            var contribution = CalcTempBasal(tempBasal, currentTime);
+            totalBasalIob += contribution.IobContrib;
+            totalActivity += contribution.ActivityContrib;
         }
 
         return new IobResult
