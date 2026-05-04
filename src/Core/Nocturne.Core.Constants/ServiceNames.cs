@@ -96,6 +96,12 @@ public static class ServiceNames
     public const string HomeAssistantConnector = "home-assistant-connector";
 
     /// <summary>
+    /// Aspire resource name for the Eversense Now connector service.
+    /// </summary>
+    /// <seealso cref="DataSources.EversenseConnector"/>
+    public const string EversenseConnector = "eversense-connector";
+
+    /// <summary>
     /// Aspire resource name for the NocturneRemote connector service.
     /// </summary>
     public const string NocturneRemoteConnector = "nocturne-remote-connector";

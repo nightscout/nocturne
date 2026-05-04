@@ -87,6 +87,10 @@
   --gri-zone-d: rgb(255, 152, 0);     /* Orange */
   --gri-zone-e: rgb(244, 67, 54);     /* Red - worst glycemia */
 
+  /* Health Overlays */
+  --heart-rate: rgb(220, 80, 80);
+  --steps: rgb(160, 100, 200);
+
   /* Sidebar - Trio iOS Style */
   --sidebar: oklch(0.97 0.006 264);
   --sidebar-foreground: oklch(0.2 0.02 264);

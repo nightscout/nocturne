@@ -19,7 +19,7 @@ import type {
 	AlertLevel,
 	StatusPillsConfig
 } from '$lib/types/status-pills';
-import type { Bolus, CarbIntake, DeviceEvent } from '$lib/api';
+import type { Bolus, CarbIntake, DeviceEvent, ApsSnapshot } from '$lib/api';
 import { DeviceEventType } from '$lib/api';
 
 /**
@@ -148,10 +148,12 @@ export interface ProcessedPillsData {
 }
 
 /**
- * Process device status and v4 records into pill data
+ * Process device status and v4 records into pill data.
+ * APS snapshots (V4) are preferred over legacy device status records when available.
  */
 export function processPillsData(
 	deviceStatuses: DeviceStatus[],
+	apsSnapshots: ApsSnapshot[],
 	boluses: Bolus[],
 	carbIntakes: CarbIntake[],
 	deviceEvents: DeviceEvent[],
@@ -162,14 +164,194 @@ export function processPillsData(
 	const units = config.units ?? 'mmol/L';
 
 	return {
-		iob: processIOB(deviceStatuses, boluses, now, config),
-		cob: processCOB(deviceStatuses, carbIntakes, now, config),
+		iob: processIOBFromSnapshot(apsSnapshots, boluses, now, config) ?? processIOB(deviceStatuses, boluses, now, config),
+		cob: processCOBFromSnapshot(apsSnapshots, carbIntakes, now, config) ?? processCOB(deviceStatuses, carbIntakes, now, config),
 		cage: processCAGE(deviceEvents, now, config),
 		sage: processSAGE(deviceEvents, now, config),
-		basal: processBasal(deviceStatuses, profile, now, units, config),
-		loop: processLoop(deviceStatuses, now, units, config)
+		basal: processBasalFromSnapshot(apsSnapshots, profile, now, config) ?? processBasal(deviceStatuses, profile, now, units, config),
+		loop: processLoopFromSnapshot(apsSnapshots, now, config) ?? processLoop(deviceStatuses, now, units, config)
 	};
 }
+
+// ── V4 APS Snapshot processors ────────────────────────────────────────────────
+// These are preferred over the legacy DeviceStatus-based processors below when
+// recent APS snapshots are available.
+
+function aidAlgorithmLabel(snapshot: ApsSnapshot): string {
+	switch (snapshot.aidAlgorithm) {
+		case 'Trio': return 'Trio';
+		case 'Loop': return 'Loop';
+		case 'AndroidAps': return 'AAPS';
+		case 'IAPS': return 'iAPS';
+		case 'OpenAps': return 'OpenAPS';
+		default: return 'APS';
+	}
+}
+
+function recentSnapshots(snapshots: ApsSnapshot[], now: number, windowMs: number): ApsSnapshot[] {
+	return snapshots
+		.filter((s) => {
+			const mills = s.mills ?? 0;
+			return mills > 0 && mills >= now - windowMs && mills <= now + MINUTES(5);
+		})
+		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0));
+}
+
+function processIOBFromSnapshot(
+	snapshots: ApsSnapshot[],
+	boluses: Bolus[],
+	now: number,
+	config: Partial<PillsProcessorConfig>
+): IOBPillData | null {
+	const recencyMs = MINUTES(config.iob?.recencyThreshold ?? 30);
+	const latest = recentSnapshots(snapshots, now, recencyMs)[0];
+	if (!latest || latest.iob === undefined || latest.iob === null) return null;
+
+	const lastBolus = boluses
+		.filter((b) => b.insulin && b.insulin > 0 && (b.mills ?? 0) <= now && (b.mills ?? 0) > now - HOURS(24))
+		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
+
+	return {
+		iob: latest.iob,
+		basalIob: latest.basalIob ?? undefined,
+		source: aidAlgorithmLabel(latest),
+		device: latest.device ?? undefined,
+		display: `${latest.iob.toFixed(2)}U`,
+		label: 'IOB',
+		info: [],
+		level: 'none',
+		lastUpdated: latest.mills ?? now,
+		lastBolus: lastBolus ? { mills: lastBolus.mills ?? 0, insulin: lastBolus.insulin ?? 0 } : undefined
+	};
+}
+
+function processCOBFromSnapshot(
+	snapshots: ApsSnapshot[],
+	carbIntakes: CarbIntake[],
+	now: number,
+	config: Partial<PillsProcessorConfig>
+): COBPillData | null {
+	const recencyMs = MINUTES(config.cob?.recencyThreshold ?? 30);
+	const latest = recentSnapshots(snapshots, now, recencyMs).find(
+		(s) => s.cob !== undefined && s.cob !== null
+	);
+	if (!latest || latest.cob === undefined || latest.cob === null) return null;
+
+	const lastCarbs = carbIntakes
+		.filter((c) => c.carbs && c.carbs > 0 && (c.mills ?? 0) <= now && (c.mills ?? 0) > now - HOURS(24))
+		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0))[0];
+
+	return {
+		cob: latest.cob,
+		source: aidAlgorithmLabel(latest),
+		display: `${Math.round(latest.cob * 10) / 10}g`,
+		label: 'COB',
+		info: [],
+		level: 'none',
+		lastUpdated: latest.mills ?? now,
+		lastCarbs: lastCarbs
+			? { mills: lastCarbs.mills ?? 0, carbs: lastCarbs.carbs ?? 0, food: undefined }
+			: undefined
+	};
+}
+
+function processBasalFromSnapshot(
+	snapshots: ApsSnapshot[],
+	profile: Profile | null,
+	now: number,
+	_config: Partial<PillsProcessorConfig>
+): BasalPillData | null {
+	// Only return a value if we have a temp basal that's still running.
+	// The ?? fallback handles the profile-scheduled case via the legacy processBasal.
+	const { rate: scheduledBasal, profileName } = getScheduledBasalRate(profile, now);
+	const recencyMs = MINUTES(30);
+	const enacted = recentSnapshots(snapshots, now, recencyMs).find((s) => {
+		if (!s.enacted || s.enactedRate === undefined || s.enactedRate === null) return false;
+		const duration = s.enactedDuration ?? 0;
+		if (duration <= 0) return false;
+		return (s.mills ?? 0) + duration * 60_000 > now;
+	});
+
+	if (!enacted) return null;
+
+	const startTime = enacted.mills ?? now;
+	const duration = enacted.enactedDuration ?? 0;
+	const remaining = duration - (now - startTime) / 60_000;
+
+	const enactedRate = enacted.enactedRate ?? 0;
+	return {
+		totalBasal: enactedRate,
+		scheduledBasal,
+		isTempBasal: true,
+		isComboActive: false,
+		tempBasal: { rate: enactedRate, duration, remaining: Math.max(0, remaining), startTime },
+		activeProfile: profileName ?? undefined,
+		display: `${enactedRate.toFixed(3)}U`,
+		label: 'BASAL',
+		info: [],
+		level: 'none',
+		lastUpdated: startTime
+	};
+}
+
+function processLoopFromSnapshot(
+	snapshots: ApsSnapshot[],
+	now: number,
+	config: Partial<PillsProcessorConfig>
+): LoopPillData | null {
+	const warnMs = MINUTES(config.loop?.warnThreshold ?? 30);
+	const urgentMs = MINUTES(config.loop?.urgentThreshold ?? 60);
+
+	const latest = recentSnapshots(snapshots, now, HOURS(6))[0];
+	if (!latest) return null;
+
+	const latestMills = latest.mills ?? now;
+	const age = now - latestMills;
+
+	let status: LoopPillData['status'] = 'looping';
+	let symbol = '↻';
+	let level: AlertLevel = 'none';
+
+	if (age >= urgentMs) {
+		status = 'warning'; symbol = '⚠'; level = 'urgent';
+	} else if (age >= warnMs) {
+		status = 'warning'; symbol = '⚠'; level = 'warn';
+	}
+
+	// Recent enacted action overrides the staleness state
+	if (latest.enacted && age < MINUTES(15)) {
+		status = 'enacted'; symbol = '⌁';
+	}
+
+	const minsAgo = Math.round(age / 60_000);
+	const display = minsAgo < 1 ? 'now' : `${minsAgo}m`;
+
+	return {
+		status,
+		symbol,
+		display,
+		label: 'Loop',
+		info: [],
+		level,
+		lastLoopTime: latestMills,
+		lastOkTime: latestMills,
+		loopName: aidAlgorithmLabel(latest),
+		iob: latest.iob ?? undefined,
+		cob: latest.cob ?? undefined,
+		eventualBG: latest.eventualBg ?? undefined,
+		lastEnacted: latest.enacted && latest.enactedRate !== undefined
+			? {
+				time: latestMills,
+				type: latest.enactedBolusVolume ? 'bolus' : (latest.enactedRate === 0 ? 'cancel' : 'temp_basal'),
+				rate: latest.enactedRate ?? undefined,
+				duration: latest.enactedDuration ?? undefined,
+				bolusVolume: latest.enactedBolusVolume ?? undefined
+			}
+			: undefined
+	};
+}
+
+// ── Legacy DeviceStatus processors ────────────────────────────────────────────
 
 /**
  * Process IOB data from device status and boluses

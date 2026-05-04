@@ -6,8 +6,10 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Nocturne.API.Configuration;
 
 /// <summary>
-/// Builds the OpenAPI info.description from the diagram manifest, embedding
-/// SVG image references so Scalar displays architectural diagrams at the top.
+/// Builds the OpenAPI info.description from the diagram manifest, inlining
+/// each diagram's mermaid source as a fenced code block. A lazy-loading
+/// renderer registered via Scalar's <c>AddHeadContent</c> upgrades the
+/// blocks into rendered diagrams when they scroll into view.
 /// </summary>
 public sealed class DiagramDescriptionDocumentTransformer : IOpenApiDocumentTransformer
 {
@@ -29,7 +31,8 @@ public sealed class DiagramDescriptionDocumentTransformer : IOpenApiDocumentTran
 
     private static string BuildDescription(IWebHostEnvironment env)
     {
-        var manifestPath = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams", "diagrams.yaml");
+        var diagramsDir = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams");
+        var manifestPath = Path.Combine(diagramsDir, "diagrams.yaml");
 
         if (!File.Exists(manifestPath))
         {
@@ -51,16 +54,18 @@ public sealed class DiagramDescriptionDocumentTransformer : IOpenApiDocumentTran
 
         foreach (var diagram in manifest.Diagrams)
         {
+            var mermaid = MermaidSourceLoader.TryRead(diagramsDir, diagram.Source);
+            if (mermaid is null) continue;
+
             sb.AppendLine($"### {diagram.Title}");
             if (!string.IsNullOrWhiteSpace(diagram.Description))
             {
                 sb.AppendLine(diagram.Description);
             }
             sb.AppendLine();
-
-            var svgName = Path.GetFileNameWithoutExtension(diagram.Source) + ".svg";
-            var svgPath = $"/diagrams/{svgName}";
-            sb.AppendLine($"[![{diagram.Title}]({svgPath})]({svgPath})");
+            sb.AppendLine("```mermaid");
+            sb.AppendLine(mermaid);
+            sb.AppendLine("```");
             sb.AppendLine();
         }
 

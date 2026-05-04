@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
@@ -9,18 +8,17 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// <summary>
 /// Handles user actions (accept/reject/dismiss) on <c>meal_matching.suggested_match</c>
 /// in-app notifications produced by <see cref="MealMatchingService"/>. Accept is deferred to
-/// <c>MealMatchingController</c>; reject and dismiss are handled here by archiving the notification.
+/// <c>MealMatchingController</c>; reject and dismiss are handled here by signalling archive.
 /// </summary>
 /// <seealso cref="INotificationActionHandler"/>
 public class MealMatchActionHandler(
-    IServiceProvider serviceProvider,
     IConnectorFoodEntryRepository foodEntryRepository,
     ILogger<MealMatchActionHandler> logger
 ) : INotificationActionHandler
 {
     public string NotificationType => "meal_matching.suggested_match";
 
-    public async Task<bool> HandleAsync(
+    public async Task<NotificationActionResult> HandleAsync(
         Guid notificationId,
         string actionId,
         string userId,
@@ -31,38 +29,28 @@ public class MealMatchActionHandler(
         switch (actionId.ToLowerInvariant())
         {
             case "accept":
-                // Accept action is handled via MealMatchingController
-                // Just archive the notification here
-                var notificationService = serviceProvider.GetRequiredService<IInAppNotificationService>();
-                return await notificationService.ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Completed,
-                    cancellationToken);
+                // Accept action is handled via MealMatchingController; archive here.
+                return NotificationActionResult.Completed;
 
             case "dismiss":
                 if (sourceId != null && Guid.TryParse(sourceId, out var foodEntryId))
                 {
-                    // Mark the food entry as standalone
                     await foodEntryRepository.UpdateStatusAsync(
                         foodEntryId,
                         ConnectorFoodEntryStatus.Standalone,
                         cancellationToken);
                 }
-                var dismissNotificationService = serviceProvider.GetRequiredService<IInAppNotificationService>();
-                return await dismissNotificationService.ArchiveNotificationAsync(
-                    notificationId,
-                    NotificationArchiveReason.Dismissed,
-                    cancellationToken);
+                return NotificationActionResult.Dismissed;
 
             case "review":
-                // Review opens a dialog client-side, just return true
-                return true;
+                // Review opens a dialog client-side, no archive
+                return NotificationActionResult.HandledNoArchive;
 
             default:
                 logger.LogWarning(
                     "Unknown action {ActionId} for meal match notification {NotificationId}",
                     actionId, notificationId);
-                return false;
+                return NotificationActionResult.NotHandled;
         }
     }
 }

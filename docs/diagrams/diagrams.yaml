@@ -76,6 +76,11 @@ diagrams:
     module: alerts-trackers
     tags: [Monitoring, Devices]
 
+  - source: alert-evaluation-pipeline.mmd
+    title: Alert Evaluation Pipeline
+    description: How an incoming glucose reading flows through rule filtering, sensor-context enrichment, the condition evaluator registry, the excursion tracker state machine, auto-resolve, the shared resolution handler, the periodic sweep, and step-0 delivery — including the in-app ack/dismiss user-action path.
+    tags: [Monitoring]
+
   - source: er-system-connectors.mmd
     title: "ER: System & Connectors"
     description: Settings, system events, data connectors, migration tracking, and chat.
@@ -90,6 +95,31 @@ diagrams:
   - source: profile-decomposition.mmd
     title: V1 Profile Decomposition
     description: How the monolithic Nightscout v1 profile is decomposed into granular v4 domain models, and why each separation exists.
+
+  - source: device-insulin-relationships.mmd
+    title: Device & Insulin Relationships
+    description: How static catalogs, patient-curated PatientDevice/PatientInsulin records, auto-discovered Devices, and time-series records (Bolus, TempBasal, PumpSnapshot, SensorGlucose, ApsSnapshot, etc.) fit together.
+    tags: [Devices, Metadata, Health]
+
+  - source: bolus-anatomy.mmd
+    title: Anatomy of a Bolus
+    description: Why a single Bolus row carries up to four optional FKs plus an embedded snapshot. Walks through Recommendation (BolusCalculation), Pharmacokinetic Snapshot (TreatmentInsulinContext), Algorithm Trigger (ApsSnapshot), Physical Delivery (Device), and Legacy Sibling Link (CarbIntake via CorrelationId).
+    tags: [Treatments]
+
+  - source: devicestatus-decomposition.mmd
+    title: V1 DeviceStatus Decomposition
+    description: How the legacy DeviceStatus blob (with nested openaps/loop/pump/uploader status objects) is decomposed into ApsSnapshot, PumpSnapshot, and UploaderSnapshot rows sharing a CorrelationId, and why each is separate.
+    tags: [Devices]
+
+  - source: meal-event-view.mmd
+    title: Meal Event View
+    description: How CarbIntake, Bolus, and TreatmentFood rows joined by CorrelationId are projected into a query-time MealEvent DTO. MealEvent is not a stored entity; the view always reflects current row state.
+    tags: [Treatments]
+
+  - source: glucose-source-taxonomy.mmd
+    title: Glucose Source Taxonomy
+    description: Why SensorGlucose, MeterGlucose, BGCheck, and Calibration are four separate tables. Different source-of-truth units, fidelity, provenance, retention, and device linkage.
+    tags: [Glucose]
 
   - source: er-diagram.mmd
     title: Full Entity Model

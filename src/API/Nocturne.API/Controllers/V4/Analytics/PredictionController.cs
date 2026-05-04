@@ -67,7 +67,7 @@ public class PredictionController : ControllerBase
 
         try
         {
-            var result = await _predictionService.GetPredictionsAsync(profileId, cancellationToken);
+            var result = await _predictionService.GetPredictionsAsync(profileId, asOf: null, cancellationToken);
             return Ok(result);
         }
         catch (InvalidOperationException ex)

@@ -186,4 +186,41 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
             .Where(e => e.LegacyId == legacyId)
             .ExecuteDeleteAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.ApsSnapshots.AsNoTracking();
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        return await query
+            .OrderByDescending(e => e.Timestamp)
+            .Select(e => (DateTime?)e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestEnactedTimestampAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.ApsSnapshots.AsNoTracking().Where(e => e.Enacted);
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        return await query
+            .OrderByDescending(e => e.Timestamp)
+            .Select(e => (DateTime?)e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Non-finite (Infinity/NaN) values from corrupt connector payloads are coerced to null rather than throwing.
+    /// </remarks>
+    public async Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.ApsSnapshots.AsNoTracking().Where(e => e.SensitivityRatio != null);
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        var value = await query
+            .OrderByDescending(e => e.Timestamp)
+            .Select(e => e.SensitivityRatio)
+            .FirstOrDefaultAsync(ct);
+        return value is double v && double.IsFinite(v) ? (decimal)v : null;
+    }
 }

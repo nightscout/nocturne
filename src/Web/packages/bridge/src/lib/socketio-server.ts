@@ -20,10 +20,17 @@ class SocketIOServer {
   private clients: Map<string, ClientInfo> = new Map();
   private config: SocketIOConfig;
   private baseDomain?: string;
+  private tenantSlugs: string[];
 
-  constructor(httpServer: HttpServer, config: SocketIOConfig = {}, baseDomain?: string) {
+  constructor(
+    httpServer: HttpServer,
+    config: SocketIOConfig = {},
+    baseDomain?: string,
+    tenantSlugs: string[] = [],
+  ) {
     this.httpServer = httpServer;
     this.baseDomain = baseDomain;
+    this.tenantSlugs = tenantSlugs;
     this.config = {
       cors: config.cors || {
         origin: '*',
@@ -123,7 +130,10 @@ class SocketIOServer {
 
   /** Extract tenant slug from the Socket.IO handshake headers.
    *  Checks X-Forwarded-Host first (set by YARP's X-Forwarded transform),
-   *  then falls back to Host (preserved by RequestHeaderOriginalHost). */
+   *  then falls back to Host (preserved by RequestHeaderOriginalHost).
+   *  Apex-domain connections fall back to the sole tenant when exactly one
+   *  exists, mirroring the API's TenantResolutionMiddleware behavior so
+   *  self-hosted single-tenant deployments work without a subdomain. */
   private extractTenantSlug(socket: Socket): string | null {
     if (!this.baseDomain) return null;
 
@@ -133,11 +143,18 @@ class SocketIOServer {
     if (!candidate) return null;
 
     const hostname = candidate.split(':')[0];
-    const suffix = `.${this.baseDomain.split(':')[0]}`;
-    if (!hostname.endsWith(suffix)) return null;
+    const baseDomainHost = this.baseDomain.split(':')[0];
 
-    const slug = hostname.slice(0, -suffix.length);
-    return slug || null;
+    if (hostname.endsWith(`.${baseDomainHost}`)) {
+      const slug = hostname.slice(0, -(baseDomainHost.length + 1));
+      return slug || null;
+    }
+
+    if (hostname === baseDomainHost && this.tenantSlugs.length === 1) {
+      return this.tenantSlugs[0];
+    }
+
+    return null;
   }
 
   /** Return the Socket.IO emit target: tenant room if scoped, or all clients. */

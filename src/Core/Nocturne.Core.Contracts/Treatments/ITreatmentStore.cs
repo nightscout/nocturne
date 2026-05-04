@@ -29,6 +29,16 @@ public interface ITreatmentStore
     Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns treatments whose <see cref="Treatment.Mills"/> falls within
+    /// <c>[fromMills, toMills]</c>, for the current tenant. Stable window read used by
+    /// replay/point-in-time evaluation; not bounded by an arbitrary "newest N" page size.
+    /// </summary>
+    /// <param name="fromMills">Inclusive lower bound of the time window (Unix ms).</param>
+    /// <param name="toMills">Inclusive upper bound of the time window (Unix ms).</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<Treatment>> GetByRangeAsync(long fromMills, long toMills, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns treatments modified after the given timestamp, for incremental sync (v3 API).
     /// </summary>
     /// <param name="lastModifiedMills">The Unix-millisecond cutoff; only treatments modified after this are returned.</param>

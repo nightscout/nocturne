@@ -30,10 +30,11 @@ public class AlertDeliveryEntity : ITenantScoped
     public Guid AlertInstanceId { get; set; }
 
     /// <summary>
-    /// Identifier of the escalation step this delivery belongs to
+    /// Identifier of the rule channel that produced this delivery, when known.
+    /// Null on rows from the legacy schedule/escalation-step path.
     /// </summary>
-    [Column("escalation_step_id")]
-    public Guid EscalationStepId { get; set; }
+    [Column("alert_rule_channel_id")]
+    public Guid? AlertRuleChannelId { get; set; }
 
     /// <summary>
     /// Type of channel used for delivery (e.g., "email", "sms", "push")
@@ -100,6 +101,14 @@ public class AlertDeliveryEntity : ITenantScoped
     [Column("last_error")]
     public string? LastError { get; set; }
 
+    /// <summary>
+    /// True when this delivery was produced by a test-fire endpoint. Mirrors
+    /// <see cref="AlertInstanceEntity.IsTest"/> on the parent instance — denormalised so
+    /// History queries don't need to join the instance table.
+    /// </summary>
+    [Column("is_test")]
+    public bool IsTest { get; set; }
+
     // Navigation
 
     /// <summary>
@@ -108,7 +117,7 @@ public class AlertDeliveryEntity : ITenantScoped
     public AlertInstanceEntity? AlertInstance { get; set; }
 
     /// <summary>
-    /// Navigation property to the associated escalation step
+    /// Navigation property to the associated rule channel, when set.
     /// </summary>
-    public AlertEscalationStepEntity? EscalationStep { get; set; }
+    public AlertRuleChannelEntity? AlertRuleChannel { get; set; }
 }

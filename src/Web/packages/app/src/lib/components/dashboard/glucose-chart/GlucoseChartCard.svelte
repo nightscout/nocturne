@@ -58,6 +58,7 @@
   import TrackerExpirationMarker from "./markers/TrackerExpirationMarker.svelte";
   import { mergeChartData } from "$lib/utils/chart-data-merge";
   import type { TransformedChartData } from "$lib/utils/chart-data-transform";
+  import { getGlucoseColor } from "$lib/utils/chart-colors";
   import { SWIM_LANE_HEIGHT, getSwimLanePositions } from "./chart-layout";
 
   interface ComponentProps {
@@ -96,6 +97,24 @@
     /** External prediction data (e.g. historical predictions from APS snapshots).
      *  When provided, bypasses the internal live prediction fetch. */
     externalPredictionData?: PredictionData | null;
+    /**
+     * Optional overlay rendered inside the chart's Svg layer with access to the
+     * chart's scales. Lets callers (e.g. the alert replay simulator) draw event
+     * markers, playheads, etc. without forking the chart.
+     */
+    annotations?: import("svelte").Snippet<[{
+      xScale: import("d3-scale").ScaleTime<number, number>;
+      yScale: import("d3-scale").ScaleLinear<number, number>;
+      width: number;
+      height: number;
+      padding: { top: number; right: number; bottom: number; left: number };
+    }]>;
+    /**
+     * Optional extra tooltip rows. Receives the hovered time so callers can
+     * show data the chart itself doesn't know about (e.g. alert events from
+     * the replay simulator) inline with the built-in tooltip items.
+     */
+    tooltipExtras?: import("svelte").Snippet<[{ time: Date }]>;
   }
 
   const realtimeStore = getRealtimeStore();
@@ -124,7 +143,13 @@
     initialChartData,
     streamedHistoricalData,
     externalPredictionData,
+    annotations,
+    tooltipExtras,
   }: ComponentProps = $props();
+
+  // Shared so the annotations snippet payload reports the same padding the
+  // Layerchart `<Chart>` uses internally — preventing the two from drifting.
+  const CHART_PADDING = { left: 48, bottom: 30, top: 8, right: 48 } as const;
 
   // Selection mode is enabled when onSelectionChange callback is provided
   const isSelectionMode = $derived(!!onSelectionChange);
@@ -455,7 +480,42 @@
   });
 
   // ===== DATA FROM SERVER =====
-  const glucoseData = $derived(serverChartData?.glucoseData ?? []);
+  // Merge realtime entries arriving via SignalR into the server-fetched chart
+  // data. Without this, the chart line freezes at whatever was loaded on mount
+  // even though the BG card and Recent Entries update live.
+  const glucoseData = $derived.by(() => {
+    const base = serverChartData?.glucoseData ?? [];
+    if (!serverChartData) return base;
+
+    const thresholds = serverChartData.thresholds;
+    const fromMs = fullDataRange.from.getTime();
+    const toMs = fullDataRange.to.getTime();
+    const existingTimes = new Set(base.map((p) => p.time.getTime()));
+
+    const realtimePoints = realtimeStore.entries
+      .filter(
+        (e) =>
+          e.type === "sgv" &&
+          e.mills != null &&
+          e.sgv != null &&
+          e.mills >= fromMs &&
+          e.mills <= toMs &&
+          !existingTimes.has(e.mills)
+      )
+      .map((e) => ({
+        time: new Date(e.mills!),
+        sgv: e.sgv!,
+        direction: e.direction,
+        dataSource: e.data_source,
+        color: getGlucoseColor(e.sgv!, thresholds),
+      }));
+
+    if (realtimePoints.length === 0) return base;
+
+    return [...base, ...realtimePoints].sort(
+      (a, b) => a.time.getTime() - b.time.getTime()
+    );
+  });
   const bolusMarkers = $derived(serverChartData?.bolusMarkers ?? []);
   const carbMarkers = $derived(serverChartData?.carbMarkers ?? []);
   const deviceEventMarkers = $derived(
@@ -476,14 +536,17 @@
     }))
   );
 
-  // Thresholds from server (already unit-converted by remote function)
-  const lowThreshold = $derived(serverChartData?.thresholds?.low ?? 55);
-  const highThreshold = $derived(serverChartData?.thresholds?.high ?? 180);
+  // Thresholds from server (already unit-converted by remote function). `||`
+  // rather than `??` so a server-side 0 (no profile yet at the requested
+  // instant) falls back to the default rather than collapsing the lines onto
+  // the X axis.
+  const lowThreshold = $derived(serverChartData?.thresholds?.low || 55);
+  const highThreshold = $derived(serverChartData?.thresholds?.high || 180);
   const veryHighThreshold = $derived(
-    serverChartData?.thresholds?.veryHigh ?? 250
+    serverChartData?.thresholds?.veryHigh || 250
   );
-  const veryLowThreshold = $derived(serverChartData?.thresholds?.veryLow ?? 40);
-  const glucoseYMax = $derived(serverChartData?.thresholds?.glucoseYMax ?? 300);
+  const veryLowThreshold = $derived(serverChartData?.thresholds?.veryLow || 40);
+  const glucoseYMax = $derived(serverChartData?.thresholds?.glucoseYMax || 300);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -1036,7 +1099,7 @@
     xScale={scaleTime()}
     xDomain={[chartXDomain.from, chartXDomain.to]}
     yDomain={[0, glucoseYMax]}
-    padding={{ left: 48, bottom: 30, top: 8, right: 48 }}
+    padding={CHART_PADDING}
     tooltip={{ mode: "quadtree-x" }}
   >
     {#snippet children({ context })}
@@ -1234,6 +1297,14 @@
             {/each}
           {/if}
 
+          {@render annotations?.({
+            xScale: context.xScale,
+            yScale: context.yScale,
+            width: context.width,
+            height: context.height,
+            padding: CHART_PADDING,
+          })}
+
           <!-- Basal highlight -->
           {#if showBasal}
             <Highlight
@@ -1305,6 +1376,7 @@
         {showActivitySpans}
         {showAlarms}
         {staleBasalData}
+        {tooltipExtras}
       />
     {/snippet}
   </Chart>
@@ -1312,7 +1384,7 @@
 
 {#if compact}
   <!-- Compact mode: no card wrapper, just the chart -->
-  <div class="h-full w-full @container">
+  <div class="{heightClass ?? 'h-full'} w-full @container">
     <div class="h-full">
       {@render chartBody()}
     </div>

@@ -61,20 +61,14 @@
   let showRevokeDialog = $state(false);
   let revokeTarget = $state<DirectGrantDto | null>(null);
 
-  // Sync external createOpen prop with internal dialog state
+  // Consume external createOpen signal (one-shot: open, prefill, then reset)
   $effect(() => {
-    if (createOpen && !showCreateDialog) {
+    if (createOpen) {
       newTokenLabel = prefillLabel;
       newTokenScopes = [...prefillScopes];
       createdToken = null;
       copiedToken = false;
       showCreateDialog = true;
-    }
-  });
-
-  // Keep createOpen in sync when dialog closes internally
-  $effect(() => {
-    if (!showCreateDialog) {
       createOpen = false;
     }
   });

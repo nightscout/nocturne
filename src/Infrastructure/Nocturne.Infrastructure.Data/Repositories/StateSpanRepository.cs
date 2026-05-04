@@ -402,6 +402,25 @@ public class StateSpanRepository : IStateSpanRepository
         );
     }
 
+    /// <inheritdoc />
+    public async Task<StateSpan?> GetActiveAtAsync(
+        StateSpanCategory category,
+        string? state,
+        DateTime at,
+        CancellationToken cancellationToken = default)
+    {
+        var categoryString = category.ToString();
+        var entity = await _context.StateSpans
+            .AsNoTracking()
+            .Where(s => s.Category == categoryString
+                        && (state == null || s.State == state)
+                        && s.StartTimestamp <= at
+                        && (s.EndTimestamp == null || s.EndTimestamp > at))
+            .OrderByDescending(s => s.StartTimestamp)
+            .FirstOrDefaultAsync(cancellationToken);
+        return entity is null ? null : StateSpanMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Get state spans for multiple categories in a single query (batch fetch)
     /// </summary>

@@ -1,15 +1,12 @@
 import type { Handle } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
-import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
-import * as main from '../../../locales/main.loader.server.svelte.js'
-import * as js from '../../../locales/js.loader.server.js'
-import { locales } from '../../../locales/data.js'
+// WUCHALE-DISABLED: wuchale temporarily disabled
+// import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
+// import * as main from '../../../locales/main.loader.server.svelte.js'
+// import * as js from '../../../locales/js.loader.server.js'
+// import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
-
-// load at server startup
-loadLocales(main.key, main.loadIDs, main.loadCatalog, locales)
-loadLocales(js.key, js.loadIDs, js.loadCatalog, locales)
 
 /** Cookie name for language preference - must match app store */
 const LANGUAGE_COOKIE_NAME = 'nocturne-language';
@@ -83,6 +80,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (building) {
 		return resolve(event);
 	}
-	const locale = resolveLocale(event);
-	return await runWithLocale(locale, () => resolve(event));
+	// WUCHALE-DISABLED: wuchale temporarily disabled — resolveLocale kept so re-enabling is a one-line revert.
+	resolveLocale(event);
+	return resolve(event);
 };

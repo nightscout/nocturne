@@ -6,6 +6,7 @@ using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -30,6 +31,8 @@ public class DataFetchStageTests
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
+    private readonly Mock<IHeartRateService> _mockHeartRateService = new();
+    private readonly Mock<IStepCountService> _mockStepCountService = new();
     private readonly DataFetchStage _stage;
 
     public DataFetchStageTests()
@@ -50,7 +53,9 @@ public class DataFetchStageTests
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
-            NullLogger<DataFetchStage>.Instance
+            NullLogger<DataFetchStage>.Instance,
+            _mockHeartRateService.Object,
+            _mockStepCountService.Object
         );
     }
 
@@ -148,6 +153,16 @@ public class DataFetchStageTests
         _mockTrackerRepo
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
+
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<HeartRate>());
+
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<StepCount>());
 
     }
 

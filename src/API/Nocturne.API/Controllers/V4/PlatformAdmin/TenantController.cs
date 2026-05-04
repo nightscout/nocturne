@@ -305,6 +305,13 @@ public class TenantController : ControllerBase
     private async Task<bool> IsCallerTenantOwnerAsync(Guid tenantId, CancellationToken ct)
     {
         var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+
+        // Instance-key / platform-admin callers bypass ownership checks —
+        // they already passed [Authorize(Roles = "platform_admin")] and have
+        // full admin permissions.
+        if (authContext is { IsPlatformAdmin: true, AuthType: AuthType.InstanceKey })
+            return true;
+
         if (authContext?.SubjectId is not { } subjectId)
             return false;
 

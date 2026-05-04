@@ -33,6 +33,7 @@ public static class TempBasalMapper
             ScheduledRate = model.ScheduledRate,
             Origin = model.Origin.ToString(),
             DeviceId = model.DeviceId,
+            PatientDeviceId = model.PatientDeviceId,
             PumpRecordId = model.PumpRecordId,
             ApsSnapshotId = model.ApsSnapshotId,
             AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
@@ -67,6 +68,7 @@ public static class TempBasalMapper
                 ? origin
                 : TempBasalOrigin.Inferred,
             DeviceId = entity.DeviceId,
+            PatientDeviceId = entity.PatientDeviceId,
             PumpRecordId = entity.PumpRecordId,
             ApsSnapshotId = entity.ApsSnapshotId,
             AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
@@ -95,6 +97,7 @@ public static class TempBasalMapper
         entity.ScheduledRate = model.ScheduledRate;
         entity.Origin = model.Origin.ToString();
         entity.DeviceId = model.DeviceId;
+        entity.PatientDeviceId = model.PatientDeviceId;
         entity.PumpRecordId = model.PumpRecordId;
         entity.ApsSnapshotId = model.ApsSnapshotId;
         entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }

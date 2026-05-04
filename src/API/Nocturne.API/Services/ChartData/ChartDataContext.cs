@@ -69,6 +69,8 @@ public sealed record ChartDataContext
     public IReadOnlyList<SystemEvent> SystemEvents { get; init; } = [];
     public IReadOnlyList<TrackerDefinitionEntity> TrackerDefinitions { get; init; } = [];
     public IReadOnlyList<TrackerInstanceEntity> TrackerInstances { get; init; } = [];
+    public IReadOnlyList<HeartRate> HeartRateList { get; init; } = [];
+    public IReadOnlyList<StepCount> StepCountList { get; init; } = [];
 
     // === Computed series (set by computation stages) ===
 
@@ -98,4 +100,9 @@ public sealed record ChartDataContext
     public List<ChartStateSpanDto> ActivitySpans { get; init; } = [];
     public List<ChartStateSpanDto> TempBasalSpans { get; init; } = [];
     public List<BasalDeliverySpanDto> BasalDeliverySpans { get; init; } = [];
+
+    // === Health series (set by DtoMappingStage) ===
+
+    public List<HeartRatePointDto> HeartRateSeries { get; init; } = [];
+    public List<StepBubbleDto> StepSeries { get; init; } = [];
 }

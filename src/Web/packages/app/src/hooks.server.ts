@@ -12,10 +12,11 @@ import {
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
-import * as main from '../../../locales/main.loader.server.svelte.js'
-import * as js from '../../../locales/js.loader.server.js'
-import { locales } from '../../../locales/data.js'
+// WUCHALE-DISABLED: wuchale temporarily disabled
+// import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
+// import * as main from '../../../locales/main.loader.server.svelte.js'
+// import * as js from '../../../locales/js.loader.server.js'
+// import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
 import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
@@ -62,9 +63,7 @@ function isPublicRoute(pathname: string): boolean {
   );
 }
 
-// load at server startup
-loadLocales(main.key, main.loadIDs, main.loadCatalog, locales)
-loadLocales(js.key, js.loadIDs, js.loadCatalog, locales)
+// WUCHALE-DISABLED: wuchale temporarily disabled — locale catalogs not loaded at startup
 
 // Turn off SSL validation during development for self-signed certs
 if (dev) {
@@ -499,9 +498,13 @@ function resolveLocale(event: Parameters<Handle>[0]["event"]): string {
   return "en";
 }
 
+// WUCHALE-DISABLED: wuchale temporarily disabled — resolveLocale still runs (so cookie-driven
+// locale selection logic stays exercised and helpers stay referenced) but
+// no runWithLocale wrapping happens. Re-enabling wuchale only requires
+// restoring the runWithLocale call below.
 export const locale: Handle = async ({ event, resolve }) => {
-  const locale = resolveLocale(event);
-  return await runWithLocale(locale, () => resolve(event));
+  resolveLocale(event);
+  return resolve(event);
 }
 
 // Chain the auth handler, site security handler, proxy handler, and API client handler

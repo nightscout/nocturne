@@ -11,9 +11,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Tests.Infrastructure;
@@ -148,6 +150,9 @@ public class AuthenticationTestFactory : WebApplicationFactory<Nocturne.API.Prog
             // Mock authorization service
             var mockAuthorizationService = new Mock<IAuthorizationService>();
             services.AddSingleton(mockAuthorizationService.Object);
+
+            // Register audit config cache (required by global ReadAccessAuditFilter)
+            services.AddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
             // Replace with in-memory cache
             services.AddMemoryCache();

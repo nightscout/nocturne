@@ -65,6 +65,22 @@ public interface ITreatmentService
     );
 
     /// <summary>
+    /// Returns treatments whose <see cref="Treatment.Mills"/> falls within
+    /// <c>[fromMills, toMills]</c>, for the current tenant. Useful for replay or other
+    /// point-in-time evaluation needing a stable window that is independent of how many
+    /// newer treatments exist for the tenant.
+    /// </summary>
+    /// <param name="fromMills">Inclusive lower bound of the time window (Unix ms).</param>
+    /// <param name="toMills">Inclusive upper bound of the time window (Unix ms).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Treatments within the range, newest-first.</returns>
+    Task<IReadOnlyList<Treatment>> GetTreatmentsByRangeAsync(
+        long fromMills,
+        long toMills,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Get treatments modified since a given timestamp, including StateSpan-derived temp basals.
     /// Used by the v3 incremental sync endpoint.
     /// </summary>

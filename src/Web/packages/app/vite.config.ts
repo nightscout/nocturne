@@ -5,7 +5,8 @@ import lingo from 'vite-plugin-lingo';
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 import { setupBridge } from "@nocturne/bridge";
-import { wuchale } from '@wuchale/vite-plugin'
+// WUCHALE-DISABLED: wuchale temporarily disabled — see also hooks.server.ts and +layout.ts
+// import { wuchale } from '@wuchale/vite-plugin'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -21,7 +22,7 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
-      wuchale(),
+      // wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {
         name: "websocket-bridge",

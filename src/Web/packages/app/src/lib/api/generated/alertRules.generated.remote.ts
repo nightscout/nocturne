@@ -5,10 +5,10 @@
 import { getRequestEvent, query, command } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { CreateAlertRuleRequestSchema, UpdateAlertRuleRequestSchema } from '$lib/api/generated/schemas';
-import { type CreateAlertRuleRequest, type UpdateAlertRuleRequest } from '$api';
+import { CreateAlertRuleRequestSchema, UpdateAlertRuleRequestSchema, TestFireDryRunRequestSchema } from '$lib/api/generated/schemas';
+import { type CreateAlertRuleRequest, type UpdateAlertRuleRequest, type TestFireDryRunRequest } from '$api';
 
-/** List all alert rules for the current tenant with schedules and escalation steps. */
+/** List all alert rules for the current tenant with their flat channel list. */
 export const getRules = query(async () => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -18,11 +18,14 @@ export const getRules = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.getRules:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get rules');
   }
 });
 
-/** Create an alert rule with nested schedules, escalation steps, and channels. */
+/** Create an alert rule with a flat channel list. */
 export const createRule = command(CreateAlertRuleRequestSchema, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -36,11 +39,14 @@ export const createRule = command(CreateAlertRuleRequestSchema, async (request) 
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.createRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create rule');
   }
 });
 
-/** Get a single alert rule with full schedule/escalation tree. */
+/** Get a single alert rule with its flat channel list. */
 export const getRule = query(z.string(), async (id) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -50,6 +56,9 @@ export const getRule = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.getRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get rule');
   }
 });
@@ -69,11 +78,14 @@ export const updateRule = command(z.object({ id: z.string(), request: UpdateAler
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.updateRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update rule');
   }
 });
 
-/** Delete an alert rule (cascades to schedules, steps, channels). */
+/** Delete an alert rule (cascades to its channels). */
 export const deleteRule = command(z.string(), async (id) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -87,6 +99,9 @@ export const deleteRule = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.deleteRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete rule');
   }
 });
@@ -106,6 +121,48 @@ export const toggleRule = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.toggleRule:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to toggle rule');
+  }
+});
+
+/** Fire a saved rule through its real channel list as a test. Writes a
+is_test=true instance + delivery rows so the user can verify their channels
+without polluting the active-alerts surface. */
+export const testFire = command(z.string(), async (id) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    await apiClient.alertRules.testFire(id);
+    return { success: true };
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in alertRules.testFire:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, 'Failed to test fire');
+  }
+});
+
+/** Test-fire variant for the editor on an unsaved rule. Same provider chain, no
+rule lookup — channels and metadata come straight from the request body. */
+export const testFireDryRun = command(TestFireDryRunRequestSchema, async (request) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    await apiClient.alertRules.testFireDryRun(request as TestFireDryRunRequest);
+    return { success: true };
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in alertRules.testFireDryRun:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, 'Failed to test fire dry run');
   }
 });

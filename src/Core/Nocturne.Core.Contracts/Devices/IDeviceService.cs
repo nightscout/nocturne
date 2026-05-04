@@ -19,4 +19,14 @@ public interface IDeviceService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The canonical device <see cref="Guid"/>, or <c>null</c> if resolution failed.</returns>
     Task<Guid?> ResolveAsync(DeviceCategory category, string? type, string? serial, long mills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resolve a <see cref="PatientDevice"/> by matching the given <paramref name="deviceId"/>
+    /// to patient device records whose date range contains the timestamp.
+    /// </summary>
+    /// <param name="deviceId">The resolved device ID, or <c>null</c> to short-circuit.</param>
+    /// <param name="mills">Timestamp in Unix milliseconds.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The matching patient device <see cref="Guid"/>, or <c>null</c> if no match.</returns>
+    Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default);
 }

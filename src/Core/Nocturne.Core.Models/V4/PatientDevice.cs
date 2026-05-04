@@ -4,10 +4,26 @@ namespace Nocturne.Core.Models.V4;
 /// A diabetes management device associated with a patient, including its usage period and AID algorithm.
 /// </summary>
 /// <remarks>
+/// <para>
 /// <see cref="PatientDevice"/> records the patient's ownership or use of a specific physical device
 /// (pump, CGM, meter, pen) during a date range. When the device is an AID-capable pump,
-/// <see cref="AidAlgorithm"/> identifies the control algorithm in use. <see cref="DeviceId"/> links
-/// to the auto-discovered <see cref="Device"/> record from upload data, when available.
+/// <see cref="AidAlgorithm"/> identifies the control algorithm in use. <see cref="CatalogId"/>
+/// links to a known model in <see cref="DeviceCatalog"/>; <see cref="DeviceId"/> links to the
+/// auto-discovered <see cref="Device"/> record from upload data, when available.
+/// </para>
+/// <para>
+/// <b><see cref="PatientDevice"/> vs. <see cref="Device"/>:</b> <see cref="PatientDevice"/> is
+/// <i>declaration</i> -- patient-curated metadata that can exist before any data arrives
+/// (e.g., "I'll start using an Omnipod 5 on May 1") and carries fields the wire format never
+/// supplies: usage window, AID algorithm, manufacturer/model, free-text notes.
+/// <see cref="Device"/> is <i>observation</i> -- a row upserted by the ingest pipeline for every
+/// <c>(category, type, serial)</c> triple seen in uploads, regardless of who owns it. Time-series
+/// records (<see cref="Bolus"/>, <see cref="TempBasal"/>, <see cref="PumpSnapshot"/>, etc.) FK to
+/// <see cref="Device"/>, not <see cref="PatientDevice"/>. The split lets a patient have multiple
+/// sequential <see cref="PatientDevice"/> rows over years (one per pump they've used) without
+/// losing the per-upload <see cref="Device"/> trail, and lets ingestion proceed before the
+/// patient has curated anything.
+/// </para>
 /// </remarks>
 /// <seealso cref="Device"/>
 /// <seealso cref="DeviceCategory"/>

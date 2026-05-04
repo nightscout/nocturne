@@ -17,11 +17,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class RateOfChangeEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.RateOfChange;
@@ -29,19 +24,20 @@ public class RateOfChangeEvaluator : IConditionEvaluator
     /// <inheritdoc/>
     /// <param name="conditionParamsJson">JSON representation of a <see cref="RateOfChangeCondition"/>.</param>
     /// <param name="context">Current sensor reading context containing <see cref="SensorContext.TrendRate"/>.</param>
+    /// <param name="ct">Cancellation token (unused; this evaluator performs no I/O).</param>
     /// <returns>
     /// <see langword="true"/> when the current trend rate satisfies the configured direction and magnitude.
     /// </returns>
-    public bool Evaluate(string conditionParamsJson, SensorContext context)
+    public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
         if (context.TrendRate is null)
-            return false;
+            return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<RateOfChangeCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<RateOfChangeCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
-            return false;
+            return Task.FromResult(false);
 
-        return condition.Direction.ToLowerInvariant() switch
+        var result = condition.Direction.ToLowerInvariant() switch
         {
             // A "falling" rate of 3.0 means trigger when the actual rate <= -3.0
             "falling" => context.TrendRate.Value <= -condition.Rate,
@@ -49,5 +45,6 @@ public class RateOfChangeEvaluator : IConditionEvaluator
             "rising" => context.TrendRate.Value >= condition.Rate,
             _ => false
         };
+        return Task.FromResult(result);
     }
 }

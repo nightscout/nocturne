@@ -1,0 +1,110 @@
+flowchart TD
+    Reading["New glucose reading<br/>(V4 entries POST)<br/><i>Looping conditions read pump/APS/override/<br/>temp-basal state at this tick — DeviceStatus<br/>uploads are not their own trigger.</i>"] --> Orchestrator
+
+    subgraph perreading ["Per-reading pipeline (AlertOrchestrator.EvaluateAsync)"]
+        direction TB
+        Orchestrator["<b>AlertOrchestrator</b><br/>Loads enabled rules for tenant"]
+        Filter["<b>RuleReferenceResolver</b><br/>FilterEvaluable: drops chained rules<br/>whose alert_state parent is disabled"]
+        Enricher["<b>ISensorContextEnricher</b><br/>Lazy: walks rule trees, fetches only<br/>IOB/COB/predictions/active-alerts/<br/>looping (loop staleness, pump/uploader/<br/>temp-basal/override/sensitivity) actually<br/>consulted this pass.<br/>HasEver* flags suppress cold-start firing.<br/>Pump-suspension projection nulled when<br/>latest pump snapshot is itself stale.<br/>EnrichAsOfAsync threads asOf for replay."]
+        Loop["For each surviving rule"]
+        Eval["<b>ConditionEvaluatorRegistry</b><br/>EvaluateNodeAsync(node, context)<br/>Single dispatch entrypoint shared by<br/>composite/not/sustained recursion"]
+        Tracker["<b>IExcursionTracker</b><br/>ProcessEvaluationAsync(ruleId, met)<br/>State machine: idle → confirming →<br/>active → hysteresis → idle"]
+        Branch{"Transition?"}
+
+        Orchestrator --> Filter --> Enricher --> Loop --> Eval --> Tracker --> Branch
+    end
+
+    Branch -->|Opened| HOpen
+    Branch -->|Continues| HCont
+    Branch -->|"Closed (hysteresis)"| Resolution
+    Branch -->|None| AutoCheck
+
+    subgraph open ["Excursion opened"]
+        direction TB
+        HOpen["Create instance<br/>Dispatch step 0 to channels"]
+        InfoCheck{"Severity == Info?"}
+        AutoAckOnTrigger["AcknowledgeExcursionAsync<br/>'system:auto-ack-on-trigger'<br/>(broadcast suppressed)"]
+        OpenDone["Done"]
+
+        HOpen --> InfoCheck
+        InfoCheck -->|yes| AutoAckOnTrigger --> OpenDone
+        InfoCheck -->|no| OpenDone
+    end
+
+    subgraph cont ["Excursion continues"]
+        HCont["EscalationAdvancer<br/>Advances any due-escalation<br/>instances tied to this excursion"]
+    end
+
+    subgraph autoresolve ["Auto-resolve (per-reading)"]
+        direction TB
+        AutoCheck{"AutoResolveEnabled<br/>+ active excursion?"}
+        AutoEval["<b>registry.EvaluateNodeAsync</b><br/>(AutoResolveParams, context)<br/>CurrentPath = 'auto_resolve'<br/>so sustained timers don't collide"]
+        ForceClose["<b>tracker.ForceCloseAsync</b><br/>(ruleId, AutoResolve)"]
+
+        AutoCheck -->|yes, eval params| AutoEval
+        AutoEval -->|true| ForceClose
+        AutoCheck -->|no, or no excursion| NoOp["Done"]
+        AutoEval -->|false| NoOp
+    end
+
+    ForceClose --> Resolution
+
+    subgraph resolution ["Excursion close (shared pathway)"]
+        direction TB
+        Resolution["<b>IExcursionResolutionHandler</b><br/>HandleClosedAsync(transition, tenantId)<br/><i>single seam used by per-reading,<br/>auto-resolve, and sweep</i>"]
+        Stamp["repository.ResolveInstancesForExcursionAsync<br/>stamps resolution_reason from CloseReason<br/>(hysteresis | auto | manual | rule-disabled)"]
+        Expire["repository.ExpirePendingDeliveriesAsync"]
+        BroadcastResolved["broadcastService<br/>BroadcastAlertEventAsync('alert_resolved')"]
+        ArchiveInApp["For each InApp recipient:<br/>notificationService.ArchiveBySourceAsync<br/>(ConditionMet)"]
+
+        Resolution --> Stamp --> Expire --> BroadcastResolved --> ArchiveInApp
+    end
+
+    subgraph sweep ["AlertSweepService (30 s background tick)"]
+        direction LR
+        SAdvance["AdvanceEscalationsAsync<br/>(escalating + due)"]
+        SHyst["CloseHysteresisWindowsAsync<br/>tracker.ForceCloseAsync<br/>(Hysteresis)"]
+        SSignalLoss["EvaluateSignalLossAsync<br/>(legacy signal-loss rules — superseded<br/>by Staleness/LoopStale conditions)"]
+        SSnooze["CheckSnoozedInstancesAsync<br/>conditions tree (composite{and,...})<br/>or trend-favorable heuristic"]
+        SAutoResolve["EvaluateAutoResolveAsync<br/>catches time-of-day / IOB /<br/>conditions that don't depend on<br/>the latest reading"]
+    end
+
+    SHyst -.-> Resolution
+    SAutoResolve -.-> ForceClose
+
+    subgraph delivery ["Step 0 dispatch (and escalation advance)"]
+        direction TB
+        Dispatch["<b>AlertDeliveryService</b><br/>DispatchAsync(instanceId, stepOrder, payload)<br/>Quiet hours, severity-bypass,<br/>per-channel delivery records"]
+        Channels["WebPushProvider<br/>InAppProvider<br/>WebhookProvider<br/>ChatBotProvider"]
+        BroadcastDispatch["broadcastService<br/>BroadcastAlertEventAsync('alert_dispatch')"]
+
+        Dispatch --> Channels
+        Dispatch --> BroadcastDispatch
+    end
+
+    HOpen -.-> Dispatch
+    HCont -.-> Dispatch
+
+    subgraph useract ["User actions (in-app)"]
+        direction TB
+        InAppUser["User taps Acknowledge / Dismiss<br/>on the in-app notification bell"]
+        ActionHandler["<b>AlertActionHandler</b><br/>(NotificationType = 'alert.firing')"]
+        AckPath["<b>AcknowledgeExcursionAsync</b><br/>(tenantId, excursionId, 'user:&lt;id&gt;',<br/>broadcast=true)<br/>Archives the notification (Completed)"]
+        DismissPath["Archive notification only<br/>(Dismissed). Next escalation step<br/>creates a fresh notification."]
+
+        InAppUser --> ActionHandler
+        ActionHandler -->|ack| AckPath
+        ActionHandler -->|dismiss| DismissPath
+    end
+
+    classDef pipelineNode fill:#1a1a2e,stroke:#6366f1,color:#c0c0c0
+    classDef branchNode fill:#1a1a2e,stroke:#f59e0b,color:#c0c0c0
+    classDef sharedNode fill:#1a1a2e,stroke:#10b981,color:#c0c0c0
+    classDef sweepNode fill:#1a1a2e,stroke:#8b5cf6,color:#c0c0c0
+    classDef userNode fill:#1a1a2e,stroke:#ef4444,color:#c0c0c0
+
+    class Reading,Orchestrator,Filter,Enricher,Loop,Eval,Tracker pipelineNode
+    class Branch,InfoCheck,AutoCheck branchNode
+    class HOpen,HCont,Resolution,Stamp,Expire,BroadcastResolved,ArchiveInApp,ForceClose,AutoEval,AutoAckOnTrigger,Dispatch,Channels,BroadcastDispatch sharedNode
+    class SAdvance,SHyst,SSignalLoss,SSnooze,SAutoResolve sweepNode
+    class InAppUser,ActionHandler,AckPath,DismissPath userNode

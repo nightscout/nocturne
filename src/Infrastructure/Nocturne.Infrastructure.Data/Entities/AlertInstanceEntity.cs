@@ -4,8 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// A schedule-bound instance of an alert within an excursion.
-/// Tracks which escalation step is active and when to escalate next.
+/// A live instance of an alert within an excursion. Now flat — schedule/escalation-step
+/// linkage was removed when the alerts redesign collapsed multi-step delivery into a
+/// per-rule channel list.
 /// </summary>
 [Table("alert_instances")]
 public class AlertInstanceEntity : ITenantScoped
@@ -29,19 +30,9 @@ public class AlertInstanceEntity : ITenantScoped
     public Guid AlertExcursionId { get; set; }
 
     /// <summary>
-    /// Identifier of the alert schedule associated with this instance
-    /// </summary>
-    [Column("alert_schedule_id")]
-    public Guid AlertScheduleId { get; set; }
-
-    /// <summary>
-    /// The current escalation step order being processed
-    /// </summary>
-    [Column("current_step_order")]
-    public int CurrentStepOrder { get; set; }
-
-    /// <summary>
-    /// Instance lifecycle status: "triggered" | "escalating" | "acknowledged" | "resolved"
+    /// Instance lifecycle status: "triggered" | "acknowledged" | "resolved".
+    /// (The legacy <c>"escalating"</c> status is gone — escalation is now expressed
+    /// as separate alert rules referencing each other via the <c>alert_state</c> condition.)
     /// </summary>
     [Column("status")]
     [MaxLength(16)]
@@ -60,10 +51,13 @@ public class AlertInstanceEntity : ITenantScoped
     public DateTime? ResolvedAt { get; set; }
 
     /// <summary>
-    /// When the engine should next attempt escalation to the following step.
+    /// Why the instance was resolved. Mirrors
+    /// <see cref="Nocturne.Core.Models.Alerts.ExcursionCloseReason"/>.
+    /// Null on rows resolved before the column existed.
     /// </summary>
-    [Column("next_escalation_at")]
-    public DateTime? NextEscalationAt { get; set; }
+    [Column("resolution_reason")]
+    [MaxLength(32)]
+    public string? ResolutionReason { get; set; }
 
     /// <summary>
     /// Time until which the alert is snoozed
@@ -77,15 +71,29 @@ public class AlertInstanceEntity : ITenantScoped
     [Column("snooze_count")]
     public int SnoozeCount { get; set; }
 
+    /// <summary>
+    /// Why delivery for this instance was suppressed at fire time, if applicable.
+    /// One of: <c>dnd</c> (tenant Do Not Disturb mode active and the rule was not allowed
+    /// through). Null when delivery proceeded normally. Used by Replay/History so the user
+    /// can see what they would have been notified of had DND been off.
+    /// </summary>
+    [Column("suppression_reason")]
+    [MaxLength(32)]
+    public string? SuppressionReason { get; set; }
+
+    /// <summary>
+    /// True when the instance was created by a test-fire endpoint rather than a real
+    /// excursion transition. Test instances are excluded from active-alerts queries and
+    /// the FE renders them distinctly in History so users can verify their channels work
+    /// without polluting their real alert log.
+    /// </summary>
+    [Column("is_test")]
+    public bool IsTest { get; set; }
+
     // Navigation
 
     /// <summary>
     /// Navigation property to the associated alert excursion
     /// </summary>
     public AlertExcursionEntity? AlertExcursion { get; set; }
-
-    /// <summary>
-    /// Navigation property to the associated alert schedule
-    /// </summary>
-    public AlertScheduleEntity? AlertSchedule { get; set; }
 }

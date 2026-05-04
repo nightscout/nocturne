@@ -97,8 +97,8 @@ static void GenerateEnvExample(
     // Known defaults for non-secret values
     var defaults = new Dictionary<string, string>
     {
-        ["NOCTURNE_API_IMAGE"] = "ghcr.io/nightscout/nocturne/api:latest",
-        ["NOCTURNE_WEB_IMAGE"] = "ghcr.io/nightscout/nocturne/web:latest",
+        ["NOCTURNE_API_IMAGE"] = "ghcr.io/nightscout/nocturne/nocturne-api:latest",
+        ["NOCTURNE_WEB_IMAGE"] = "ghcr.io/nightscout/nocturne/nocturne-web:latest",
         ["NOCTURNE_API_PORT"] = "8080",
         ["POSTGRES_USERNAME"] = "nocturne",
         ["POSTGRES_INIT_DIR"] = "./init",
@@ -115,6 +115,12 @@ static void GenerateEnvExample(
         "INSTANCE_KEY",
     };
 
+    // Required config (not secrets, but must be set)
+    var requiredConfig = new HashSet<string>
+    {
+        "PUBLIC_BASE_DOMAIN",
+    };
+
     // Optional vars
     var optional = new HashSet<string>
     {
@@ -122,7 +128,6 @@ static void GenerateEnvExample(
         "TELEGRAM_BOT_TOKEN",
         "SLACK_BOT_TOKEN",
         "WHATSAPP_ACCESS_TOKEN",
-        "PUBLIC_BASE_DOMAIN",
     };
 
     using var writer = new StreamWriter(outputPath);
@@ -137,6 +142,7 @@ static void GenerateEnvExample(
     {
         var seenVars = new HashSet<string>();
         var configVars = new List<(string name, string value)>();
+        var requiredConfigVars = new List<(string name, string value)>();
         var secretVars = new List<(string name, string value)>();
         var optionalVars = new List<(string name, string value)>();
 
@@ -155,6 +161,8 @@ static void GenerateEnvExample(
 
             if (secrets.Contains(renamedName))
                 secretVars.Add((renamedName, ""));
+            else if (requiredConfig.Contains(renamedName))
+                requiredConfigVars.Add((renamedName, ""));
             else if (optional.Contains(renamedName))
                 optionalVars.Add((renamedName, defaults.GetValueOrDefault(renamedName, "")));
             else
@@ -167,8 +175,10 @@ static void GenerateEnvExample(
             writer.WriteLine($"{name}={value}");
 
         writer.WriteLine();
-        writer.WriteLine("# -- Required secrets (set these before first run) --------------");
+        writer.WriteLine("# -- Required (set these before first run) ----------------------");
         writer.WriteLine();
+        foreach (var (name, _) in requiredConfigVars)
+            writer.WriteLine($"{name}=");
         foreach (var (name, _) in secretVars)
             writer.WriteLine($"{name}=");
 
@@ -181,19 +191,18 @@ static void GenerateEnvExample(
     else
     {
         // Fallback if aspire didn't generate .env
-        writer.WriteLine("NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne/api:latest");
-        writer.WriteLine("NOCTURNE_WEB_IMAGE=ghcr.io/nightscout/nocturne/web:latest");
+        writer.WriteLine("NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne/nocturne-api:latest");
+        writer.WriteLine("NOCTURNE_WEB_IMAGE=ghcr.io/nightscout/nocturne/nocturne-web:latest");
         writer.WriteLine("NOCTURNE_API_PORT=8080");
         writer.WriteLine("POSTGRES_USERNAME=nocturne");
         writer.WriteLine("POSTGRES_INIT_DIR=./init");
         writer.WriteLine();
+        writer.WriteLine("PUBLIC_BASE_DOMAIN=");
         writer.WriteLine("POSTGRES_PASSWORD=");
         writer.WriteLine("POSTGRES_MIGRATOR_PASSWORD=");
         writer.WriteLine("POSTGRES_APP_PASSWORD=");
         writer.WriteLine("POSTGRES_WEB_PASSWORD=");
         writer.WriteLine("INSTANCE_KEY=");
-        writer.WriteLine();
-        writer.WriteLine("# PUBLIC_BASE_DOMAIN=");
     }
 }
 

@@ -1,0 +1,71 @@
+---
+title: "Meal Event: Stored Rows vs. Query-Time Envelope"
+---
+flowchart LR
+    subgraph wire["What the user sees / submits"]
+        direction TB
+        meal["<b>'A meal'</b><br/> e.g. 'pizza dinner: 60g carbs, 6.5U bolus, 2 slices pepperoni'"]
+    end
+
+    meal --> store
+
+    subgraph store["What's stored (atomic rows in DB)"]
+        direction TB
+
+        subgraph correlated["Linked by shared CorrelationId"]
+            direction TB
+            CarbIntake["<b>CarbIntake</b><br/>(N rows)<br/><br/>carbs, carbTime absorptionTime correlationId, syncIdentifier"]
+
+            Bolus["<b>Bolus</b><br/>(N rows)<br/><br/>insulin, programmed, delivered kind, bolusType, automatic correlationId insulinContext (snapshot) bolusCalculationId? (FK)"]
+
+            TreatmentFood["<b>TreatmentFood</b><br/>(N rows)<br/><br/>foodId (FK), grams portionsConsumed correlationId (food attribution)"]
+        end
+
+        CorrelationId["<b>CorrelationId</b><br/>(Guid)<br/><br/>shared FK linking all rows that came from one user action / one legacy treatment"]
+    end
+
+    CarbIntake -. correlationId .-> CorrelationId
+    Bolus -. correlationId .-> CorrelationId
+    TreatmentFood -. correlationId .-> CorrelationId
+
+    store --> read
+
+    subgraph read["What the API returns (query-time projection)"]
+        direction TB
+
+        MealEvent["<b>MealEvent</b><br/>(DTO, NOT a stored entity)<br/><br/>correlationId timestamp (earliest of group) carbIntakes: CarbIntake[] boluses: Bolus[] foods: TreatmentFood[] totalCarbs, attributedCarbs unspecifiedCarbs totalInsulin isAttributed"]
+
+        orphan["<b>Orphan envelopes</b><br/> CarbIntake rows with null CorrelationId still get their own MealEvent (CorrelationId = Guid.Empty, boluses = [])<br/><br/>Ensures every carb intake is reachable through the same query path."]
+    end
+
+    subgraph reasons["Why this shape?"]
+        direction TB
+
+        r1["<b>Atomic rows, not nested blobs</b><br/>Each Bolus and CarbIntake has its own lifecycle: edit, delete, aggregate, query independently. Storing them inside a 'meal' row would force every analytic (IOB, COB, daily totals) to flatten the structure first."]
+
+        r2["<b>The wire format lies</b><br/>A legacy v1 'Meal Bolus' looks like one entity but is really an insulin event AND a carb event glued together. Atomic storage matches the real model; CorrelationId preserves the 'they happened together' fact."]
+
+        r3["<b>MealEvent is a view, not state</b><br/>Computed at query time by grouping rows on CorrelationId. No 'meal_event' table exists. This means meals can never drift out of sync with their constituent rows -- there's nothing to keep in sync."]
+
+        r4["<b>1 carb intake = 1 envelope</b><br/>Even orphan carbs (no bolus, null CorrelationId) get their own MealEvent with empty boluses array. Callers iterate one shape; uncorrelated data stays visible."]
+
+        r5["<b>Food attribution is optional</b><br/>TreatmentFood rows attribute portions of TotalCarbs to specific food items. UnspecifiedCarbs = TotalCarbs - AttributedCarbs surfaces the residual when attribution is partial."]
+    end
+
+    correlated -.- r1
+    CorrelationId -.- r2
+    MealEvent -.- r3
+    orphan -.- r4
+    TreatmentFood -.- r5
+
+    classDef wireNode fill:#fef3c7,stroke:#b45309,color:#7c2d12
+    classDef storeNode fill:#fff,stroke:#475569,color:#0f172a
+    classDef joiner fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d,stroke-width:2px
+    classDef projection fill:#ecfccb,stroke:#4d7c0f,color:#365314,stroke-width:2px
+    classDef why fill:#f3e8ff,stroke:#7e22ce,color:#581c87,font-style:italic
+
+    class meal wireNode
+    class CarbIntake,Bolus,TreatmentFood storeNode
+    class CorrelationId joiner
+    class MealEvent,orphan projection
+    class r1,r2,r3,r4,r5 why

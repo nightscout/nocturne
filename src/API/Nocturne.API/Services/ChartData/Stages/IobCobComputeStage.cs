@@ -6,6 +6,7 @@ using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -17,9 +18,11 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <remarks>
 /// <para>
 /// IOB and COB are computed at each interval step across the requested time window.
-/// To avoid O(n²) work on wide windows, treatments are pre-filtered before each iteration:
-/// only boluses within DIA hours of the current timestamp contribute to IOB, and only
-/// carb intakes within 6 hours contribute to COB. The DIA value is read from the loaded profile.
+/// Treatments are kept in time-sorted arrays and the active window is tracked with two-pointer
+/// indices that advance with each tick: only boluses within DIA hours of the current timestamp
+/// contribute to IOB, and only carb intakes within 6 hours contribute to COB. Total inner-loop
+/// work is therefore O(ticks + active-window) rather than O(ticks × treatments).
+/// The DIA value is read from the loaded profile.
 /// </para>
 /// <para>
 /// Results are cached in <see cref="Microsoft.Extensions.Caching.Memory.IMemoryCache"/> for
@@ -46,6 +49,7 @@ internal sealed class IobCobComputeStage(
     ICobCalculator cobCalculator,
     ITherapySettingsResolver therapySettingsResolver,
     IBasalRateResolver basalRateResolver,
+    ITherapyTimelineResolver therapyTimelineResolver,
     IMemoryCache cache,
     ITenantAccessor tenantAccessor,
     ILogger<IobCobComputeStage> logger
@@ -141,44 +145,78 @@ internal sealed class IobCobComputeStage(
         double maxIob = 0,
             maxCob = 0;
 
-        // Pre-compute DIA and COB absorption window for filtering
-        var hasData = await therapySettingsResolver.HasDataAsync(ct);
-        var dia = hasData ? await therapySettingsResolver.GetDIAAsync(endTime, ct: ct) : 3.0;
-        var diaMs = (long)(dia * 60 * 60 * 1000); // DIA in milliseconds
-        var cobAbsorptionMs = 6L * 60 * 60 * 1000; // 6 hours for COB absorption
+        // Build the request-scoped therapy timeline once. SnapshotAt(t) inside the loop
+        // resolves DIA / sensitivity / carb ratio / basal rate / carbsPerHour via in-memory
+        // schedule lookup with a sticky cursor — replacing nested async resolver awaits per tick.
+        // The window extends one millisecond past endTime so SnapshotAt(endTime) lands inside a segment.
+        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: ct);
 
-        // Pre-filter boluses with insulin for IOB calculations
-        var activeBoluses = boluses.Where(b => b.Insulin > 0).ToList();
+        // DIA at endTime drives the IOB / temp-basal eviction window. Matches legacy behavior.
+        var diaMs = (long)(timeline.SnapshotAt(endTime).Dia * 60 * 60 * 1000);
+        var cobAbsorptionMs = 6L * 60 * 60 * 1000;
 
-        // Pre-filter carb intakes with carbs for COB calculations
-        var activeCarbs = carbIntakes.Where(c => c.Carbs > 0).ToList();
+        // Sort once by Mills/StartMills so the active window can be tracked with two pointers
+        // as t advances. The hi index admits entries whose source time is <= t; the lo index
+        // evicts entries that have aged past their respective windows (DIA for IOB / temp basal,
+        // 6h for COB). Total work across the full tick loop is O(ticks + treatments) instead of
+        // O(ticks × treatments) — see remarks on the class.
+        var sortedBoluses = boluses
+            .Where(b => b.Insulin > 0)
+            .OrderBy(b => b.Mills)
+            .ToList();
+        var sortedCarbs = carbIntakes
+            .Where(c => c.Carbs > 0)
+            .OrderBy(c => c.Mills)
+            .ToList();
+        var sortedTempBasals = tempBasals?.OrderBy(tb => tb.StartMills).ToList();
+
+        int insulinHi = 0,
+            insulinLo = 0;
+        int carbHi = 0,
+            carbLo = 0;
+        int basalHi = 0,
+            basalLo = 0;
 
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            // Filter to only boluses that could still have active IOB at time t
-            // A bolus can only contribute IOB if it was given within DIA hours before t
-            var relevantBoluses = activeBoluses
-                .Where(b => b.Mills <= t && b.Mills >= t - diaMs)
-                .ToList();
+            ct.ThrowIfCancellationRequested();
 
-            var iobResult =
-                relevantBoluses.Count > 0
-                    ? iobCalculator.FromBoluses(relevantBoluses, t)
-                    : new IobResult { Iob = 0 };
-
-            // Calculate basal IOB from V4 TempBasal records
-            var basalIob = 0.0;
-            if (tempBasals?.Count > 0)
+            // Admit newly-elapsed entries (Mills/StartMills <= t)
+            while (insulinHi < sortedBoluses.Count && sortedBoluses[insulinHi].Mills <= t)
+                insulinHi++;
+            while (carbHi < sortedCarbs.Count && sortedCarbs[carbHi].Mills <= t)
+                carbHi++;
+            if (sortedTempBasals is not null)
             {
-                var relevantTempBasals = tempBasals
-                    .Where(tb => tb.StartMills <= t && tb.StartMills >= t - diaMs)
-                    .ToList();
+                while (basalHi < sortedTempBasals.Count && sortedTempBasals[basalHi].StartMills <= t)
+                    basalHi++;
+            }
 
-                if (relevantTempBasals.Count > 0)
-                {
-                    var basalResult = iobCalculator.FromTempBasals(relevantTempBasals, t);
-                    basalIob = basalResult.BasalIob ?? 0;
-                }
+            // Evict entries that have aged out of their window
+            while (insulinLo < insulinHi && sortedBoluses[insulinLo].Mills < t - diaMs)
+                insulinLo++;
+            while (carbLo < carbHi && sortedCarbs[carbLo].Mills < t - cobAbsorptionMs)
+                carbLo++;
+            if (sortedTempBasals is not null)
+            {
+                while (basalLo < basalHi && sortedTempBasals[basalLo].StartMills < t - diaMs)
+                    basalLo++;
+            }
+
+            var insulinCount = insulinHi - insulinLo;
+            var iobResult = insulinCount > 0
+                ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), t)
+                : new IobResult { Iob = 0 };
+
+            var basalIob = 0.0;
+            var basalCount = basalHi - basalLo;
+            if (sortedTempBasals is not null && basalCount > 0)
+            {
+                var basalResult = iobCalculator.FromTempBasals(
+                    sortedTempBasals.GetRange(basalLo, basalCount),
+                    t
+                );
+                basalIob = basalResult.BasalIob ?? 0;
             }
 
             var iob = iobResult.Iob + basalIob;
@@ -186,23 +224,17 @@ internal sealed class IobCobComputeStage(
             if (iob > maxIob)
                 maxIob = iob;
 
-            // Filter to only carb intakes that could still have active COB at time t
-            var relevantCarbs = activeCarbs
-                .Where(c => c.Mills <= t && c.Mills >= t - cobAbsorptionMs)
-                .ToList();
-
-            var relevantCobBoluses = activeBoluses
-                .Where(b => b.Mills <= t && b.Mills >= t - cobAbsorptionMs)
-                .ToList();
-
-            var relevantCobTempBasals = tempBasals?
-                .Where(tb => tb.StartMills <= t && tb.StartMills >= t - cobAbsorptionMs)
-                .ToList();
-
-            var cobResult =
-                relevantCarbs.Count > 0
-                    ? cobCalculator.FromCarbIntakes(relevantCarbs, relevantCobBoluses, relevantCobTempBasals, t)
-                    : new CobResult { Cob = 0 };
+            var carbCount = carbHi - carbLo;
+            var cobResult = carbCount > 0
+                ? cobCalculator.FromCarbIntakes(
+                    sortedCarbs.GetRange(carbLo, carbCount),
+                    sortedBoluses.GetRange(insulinLo, insulinCount),
+                    sortedTempBasals is not null && basalCount > 0
+                        ? sortedTempBasals.GetRange(basalLo, basalCount)
+                        : null,
+                    t
+                )
+                : new CobResult { Cob = 0 };
 
             var cob = cobResult.Cob;
             cobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = cob });

@@ -29,9 +29,11 @@ export * from './accessRequests.generated.remote';
 export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './alertCustomSounds.generated.remote';
 export { validateInvite, redeemInvite } from './alertInvites.generated.remote';
+export * from './alertReplays.generated.remote';
 export * from './alertRules.generated.remote';
 export * from './alerts.generated.remote';
 export * from './notifications.generated.remote';
+export { get } from './tenantAlertSettings.generated.remote';
 export * from './trackers.generated.remote';
 export * from './chatIdentities.generated.remote';
 // './connectedApps.generated.remote' - all exports collide, import directly
@@ -57,6 +59,7 @@ export * from './batteries.generated.remote';
 // './uploaderSnapshots.generated.remote' - all exports collide, import directly
 export * from './configurations.generated.remote';
 export * from './audits.generated.remote';
+export * from './actograms.generated.remote';
 export * from './chartDatas.generated.remote';
 export * from './dataOverviews.generated.remote';
 export { getPredictions } from './predictions.generated.remote';

@@ -77,7 +77,6 @@ sdk/swift/out/
 sdk/python/out/
 
 # Auto-generated diagram artifacts
-src/API/Nocturne.API/wwwroot/diagrams/*.svg
 docs/diagrams/project-dependencies.mmd
 docs/diagrams/er-*.mmd
 

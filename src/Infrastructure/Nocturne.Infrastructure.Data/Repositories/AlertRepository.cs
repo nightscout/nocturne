@@ -40,57 +40,28 @@ public class AlertRepository : IAlertRepository
             .OrderBy(r => r.SortOrder)
             .Select(r => new AlertRuleSnapshot(
                 r.Id, r.TenantId, r.Name, r.ConditionType,
-                r.ConditionParams, r.HysteresisMinutes, r.ConfirmationReadings,
-                r.Severity, r.ClientConfiguration, r.SortOrder))
+                r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
+                r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd))
             .ToListAsync(ct);
     }
 
-    /// <summary>
-    /// Gets the alert schedules associated with a specific rule.
-    /// </summary>
-    /// <param name="ruleId">The unique identifier of the alert rule.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of alert schedule snapshots.</returns>
-    public virtual async Task<IReadOnlyList<AlertScheduleSnapshot>> GetSchedulesForRuleAsync(
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(
         Guid ruleId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        return await context.AlertSchedules
+        return await context.AlertRuleChannels
             .AsNoTracking()
-            .Where(s => s.AlertRuleId == ruleId)
-            .Select(s => new AlertScheduleSnapshot(
-                s.Id, s.AlertRuleId, s.Name, s.IsDefault,
-                s.DaysOfWeek, s.StartTime, s.EndTime, s.Timezone))
+            .Where(c => c.AlertRuleId == ruleId)
+            .OrderBy(c => c.SortOrder)
+            .Select(c => new AlertRuleChannelSnapshot(
+                c.Id, c.AlertRuleId, c.ChannelType,
+                c.Destination, c.DestinationLabel, c.SortOrder))
             .ToListAsync(ct);
     }
 
-    /// <summary>
-    /// Gets the escalation steps for a specific alert schedule.
-    /// </summary>
-    /// <param name="scheduleId">The unique identifier of the alert schedule.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of escalation step snapshots.</returns>
-    public virtual async Task<IReadOnlyList<AlertEscalationStepSnapshot>> GetEscalationStepsAsync(
-        Guid scheduleId, CancellationToken ct)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
-        return await context.AlertEscalationSteps
-            .AsNoTracking()
-            .Where(e => e.AlertScheduleId == scheduleId)
-            .OrderBy(e => e.StepOrder)
-            .Select(e => new AlertEscalationStepSnapshot(
-                e.Id, e.AlertScheduleId, e.StepOrder, e.DelaySeconds))
-            .ToListAsync(ct);
-    }
-
-    /// <summary>
-    /// Creates a new alert instance record.
-    /// </summary>
-    /// <param name="request">The request containing alert instance details.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A snapshot of the created alert instance.</returns>
+    /// <inheritdoc/>
     public virtual async Task<AlertInstanceSnapshot> CreateInstanceAsync(
         CreateAlertInstanceRequest request, CancellationToken ct)
     {
@@ -101,52 +72,20 @@ public class AlertRepository : IAlertRepository
             Id = Guid.CreateVersion7(),
             TenantId = request.TenantId,
             AlertExcursionId = request.ExcursionId,
-            AlertScheduleId = request.ScheduleId,
-            CurrentStepOrder = request.InitialStepOrder,
             Status = request.Status,
             TriggeredAt = request.TriggeredAt,
-            NextEscalationAt = request.NextEscalationAt,
         };
 
         context.AlertInstances.Add(entity);
         await context.SaveChangesAsync(ct);
 
         return new AlertInstanceSnapshot(
-            entity.Id, entity.TenantId, entity.AlertExcursionId, entity.AlertScheduleId,
-            entity.CurrentStepOrder, entity.Status, entity.TriggeredAt,
-            entity.NextEscalationAt, entity.SnoozedUntil, entity.SnoozeCount);
+            entity.Id, entity.TenantId, entity.AlertExcursionId,
+            entity.Status, entity.TriggeredAt,
+            entity.SnoozedUntil, entity.SnoozeCount);
     }
 
-    /// <summary>
-    /// Gets alert instances that are currently escalating and due for processing.
-    /// </summary>
-    /// <param name="asOf">The reference timestamp for determining if an escalation is due.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of alert instances due for escalation.</returns>
-    public virtual async Task<IReadOnlyList<AlertInstanceSnapshot>> GetEscalatingInstancesDueAsync(
-        DateTime asOf, CancellationToken ct)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
-        return await context.AlertInstances
-            .AsNoTracking()
-            .Where(i => i.Status == "escalating"
-                        && i.NextEscalationAt != null
-                        && i.NextEscalationAt <= asOf
-                        && i.SnoozedUntil == null)
-            .Select(i => new AlertInstanceSnapshot(
-                i.Id, i.TenantId, i.AlertExcursionId, i.AlertScheduleId,
-                i.CurrentStepOrder, i.Status, i.TriggeredAt,
-                i.NextEscalationAt, i.SnoozedUntil, i.SnoozeCount))
-            .ToListAsync(ct);
-    }
-
-    /// <summary>
-    /// Gets all alert instances associated with a specific alert excursion.
-    /// </summary>
-    /// <param name="excursionId">The unique identifier of the alert excursion.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of alert instance snapshots.</returns>
+    /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(
         Guid excursionId, CancellationToken ct)
     {
@@ -156,20 +95,15 @@ public class AlertRepository : IAlertRepository
             .AsNoTracking()
             .Where(i => i.AlertExcursionId == excursionId)
             .Select(i => new AlertInstanceSnapshot(
-                i.Id, i.TenantId, i.AlertExcursionId, i.AlertScheduleId,
-                i.CurrentStepOrder, i.Status, i.TriggeredAt,
-                i.NextEscalationAt, i.SnoozedUntil, i.SnoozeCount))
+                i.Id, i.TenantId, i.AlertExcursionId,
+                i.Status, i.TriggeredAt,
+                i.SnoozedUntil, i.SnoozeCount))
             .ToListAsync(ct);
     }
 
-    /// <summary>
-    /// Marks all active alert instances for a specific excursion as resolved.
-    /// </summary>
-    /// <param name="excursionId">The unique identifier of the alert excursion.</param>
-    /// <param name="resolvedAt">The timestamp when resolution occurred.</param>
-    /// <param name="ct">The cancellation token.</param>
+    /// <inheritdoc/>
     public virtual async Task ResolveInstancesForExcursionAsync(
-        Guid excursionId, DateTime resolvedAt, CancellationToken ct)
+        Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
@@ -178,7 +112,8 @@ public class AlertRepository : IAlertRepository
                         && i.Status != "resolved")
             .ExecuteUpdateAsync(s => s
                 .SetProperty(i => i.Status, "resolved")
-                .SetProperty(i => i.ResolvedAt, resolvedAt), ct);
+                .SetProperty(i => i.ResolvedAt, resolvedAt)
+                .SetProperty(i => i.ResolutionReason, resolutionReason), ct);
     }
 
     /// <summary>
@@ -196,15 +131,8 @@ public class AlertRepository : IAlertRepository
 
         if (entity == null) return;
 
-        if (request.CurrentStepOrder.HasValue)
-            entity.CurrentStepOrder = request.CurrentStepOrder.Value;
-
         if (request.Status is not null)
             entity.Status = request.Status;
-
-        if (request.NextEscalationAt.HasValue)
-            entity.NextEscalationAt = request.NextEscalationAt == DateTime.MinValue
-                ? null : request.NextEscalationAt.Value;
 
         if (request.SnoozedUntil.HasValue)
             entity.SnoozedUntil = request.SnoozedUntil == DateTime.MinValue
@@ -262,58 +190,63 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
+        // Cross-tenant scan — sweep evaluates every tenant in a single tick, then sets
+        // tenant context per-excursion before invoking the tracker.
         return await context.AlertExcursions
             .AsNoTracking()
+            .IgnoreQueryFilters()
             .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
-            .Join(context.AlertRules,
-                e => e.AlertRuleId,
-                r => r.Id,
-                (e, r) => new HysteresisExcursionSnapshot(
-                    e.Id, e.AlertRuleId, e.HysteresisStartedAt, r.HysteresisMinutes))
+            .Select(e => new HysteresisExcursionSnapshot(
+                e.Id, e.TenantId, e.AlertRuleId, e.HysteresisStartedAt))
             .ToListAsync(ct);
     }
 
-    /// <summary>
-    /// Closes an alert excursion that has completed its hysteresis period.
-    /// </summary>
-    /// <param name="excursionId">The unique identifier of the alert excursion.</param>
-    /// <param name="alertRuleId">The unique identifier of the associated alert rule.</param>
-    /// <param name="endedAt">The timestamp when the excursion ended.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public virtual async Task CloseHysteresisExcursionAsync(
-        Guid excursionId, Guid alertRuleId, DateTime endedAt, CancellationToken ct)
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(
+        Guid excursionId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        // Close the excursion
-        var excursion = await context.AlertExcursions
-            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        // Cross-tenant safe: the excursionId is unique and the InApp destination is just the
+        // userId. IgnoreQueryFilters mirrors the pattern in GetAutoResolveExcursionsAsync.
+        return await context.AlertDeliveries
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(d => d.ChannelType == ChannelType.InApp)
+            .Join(context.AlertInstances.AsNoTracking().IgnoreQueryFilters(),
+                d => d.AlertInstanceId, i => i.Id, (d, i) => new { d, i })
+            .Where(x => x.i.AlertExcursionId == excursionId
+                        && !string.IsNullOrEmpty(x.d.Destination))
+            .Select(x => x.d.Destination)
+            .Distinct()
+            .ToListAsync(ct);
+    }
 
-        if (excursion != null)
-        {
-            excursion.EndedAt = endedAt;
-        }
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(
+        CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        // Resolve any remaining instances for this excursion
-        await context.AlertInstances
-            .Where(i => i.AlertExcursionId == excursionId && i.Status != "resolved")
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(i => i.Status, "resolved")
-                .SetProperty(i => i.ResolvedAt, endedAt), ct);
-
-        // Reset tracker state for the rule to idle
-        var tracker = await context.AlertTrackerState
-            .FirstOrDefaultAsync(t => t.AlertRuleId == alertRuleId, ct);
-
-        if (tracker != null)
-        {
-            tracker.State = "idle";
-            tracker.ConfirmationCount = 0;
-            tracker.ActiveExcursionId = null;
-            tracker.UpdatedAt = endedAt;
-        }
-
-        await context.SaveChangesAsync(ct);
+        // Cross-tenant scan: bypass the global tenant filter since the sweep evaluates
+        // every tenant's auto-resolvable excursions in a single tick.
+        return await context.AlertExcursions
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(e => e.EndedAt == null)
+            .Join(context.AlertRules.AsNoTracking().IgnoreQueryFilters(),
+                e => e.AlertRuleId, r => r.Id, (e, r) => new { e, r })
+            .Where(x => x.r.IsEnabled
+                        && x.r.AutoResolveEnabled
+                        && x.r.AutoResolveParams != null)
+            .Select(x => new AutoResolveExcursionSnapshot(
+                x.e.Id,
+                x.e.TenantId,
+                new AlertRuleSnapshot(
+                    x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
+                    x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
+                    x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd)))
+            .ToListAsync(ct);
     }
 
     /// <summary>
@@ -334,6 +267,55 @@ public class AlertRepository : IAlertRepository
                 t.Id, t.SubjectName ?? string.Empty, t.Slug, t.DisplayName,
                 t.IsActive, t.LastReadingAt))
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task MarkInstanceSuppressedAsync(
+        Guid tenantId, Guid instanceId, string reason, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Tenant filter is defence-in-depth: RLS already scopes the query, but the
+        // factory-built context can land with TenantId=Guid.Empty in some paths
+        // (see project_alert_repo_tenant_filter_bug in MEMORY) and the explicit
+        // predicate keeps this method honest if that ever happens here.
+        var instance = await context.AlertInstances
+            .FirstOrDefaultAsync(i => i.Id == instanceId && i.TenantId == tenantId, ct);
+        if (instance is null) return;
+
+        // Idempotency: if a suppression reason is already stamped, leave it alone — a
+        // second source (e.g. a future quiet-hours bypass code path) shouldn't clobber
+        // the original. First writer wins.
+        if (instance.SuppressionReason is not null) return;
+
+        instance.SuppressionReason = reason;
+        // Suppression closes the active dispatch path. Keep the row around with
+        // status="triggered" so Acknowledge / Resolve still work normally.
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // RLS scopes the query to the active tenant; the explicit predicate is defence-in-depth
+        // for tests / paths that bypass the tenant accessor middleware.
+        var row = await context.TenantAlertSettings
+            .AsNoTracking()
+            .Where(s => s.TenantId == tenantId)
+            .Select(s => new TenantAlertSettingsSnapshot(
+                s.DndManualActive,
+                s.DndManualUntil,
+                s.DndManualStartedAt,
+                s.DndScheduleEnabled,
+                s.DndScheduleStart,
+                s.DndScheduleEnd,
+                s.Timezone))
+            .FirstOrDefaultAsync(ct);
+
+        return row ?? TenantAlertSettingsSnapshot.Empty;
     }
 
     /// <summary>
@@ -397,10 +379,41 @@ public class AlertRepository : IAlertRepository
                 r => r.Id,
                 (x, r) => new SnoozedInstanceSnapshot(
                     x.Instance.Id, x.Instance.TenantId, x.Instance.AlertExcursionId,
-                    x.Instance.AlertScheduleId, x.Instance.CurrentStepOrder,
                     x.Instance.Status, x.Instance.SnoozeCount,
                     r.Id, r.ConditionType, r.ConditionParams, r.ClientConfiguration))
             .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Returns a snapshot of every active excursion for the tenant, keyed by alert rule id.
+    /// Materialises the projection in memory rather than via EF's expression tree so the
+    /// <see cref="ActiveAlertSnapshot"/> record constructor can be used directly.
+    /// </summary>
+    /// <param name="tenantId">The unique identifier of the tenant.</param>
+    /// <param name="ct">The cancellation token.</param>
+    public virtual async Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var rows = await context.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.TenantId == tenantId && e.EndedAt == null)
+            .Select(e => new { e.AlertRuleId, e.StartedAt, e.AcknowledgedAt })
+            .ToListAsync(ct);
+
+        var dict = new Dictionary<Guid, ActiveAlertSnapshot>(rows.Count);
+        foreach (var row in rows)
+        {
+            // If the same rule has multiple active excursions, keep the earliest — matches the
+            // semantics of "the alert is firing" rather than "the latest excursion fires".
+            if (!dict.TryGetValue(row.AlertRuleId, out var existing) || row.StartedAt < existing.TriggeredAt)
+            {
+                dict[row.AlertRuleId] = new ActiveAlertSnapshot("firing", row.StartedAt, row.AcknowledgedAt);
+            }
+        }
+
+        return dict;
     }
 
     /// <summary>

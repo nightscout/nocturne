@@ -38,7 +38,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var context = new DefaultHttpContext();
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("nocturne.run");
-        context.Request.Path = "/api/v4/oidc/link/callback";
+        context.Request.Path = "/api/auth/oidc/link/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
         context.Request.Headers["X-Forwarded-Proto"] = "https";
 
@@ -46,7 +46,7 @@ public class OidcCallbackRedirectMiddlewareTests
 
         context.Response.StatusCode.Should().Be(302);
         context.Response.Headers.Location.ToString()
-            .Should().StartWith("https://ryceg.nocturne.run/api/v4/oidc/link/callback?")
+            .Should().StartWith("https://ryceg.nocturne.run/api/auth/oidc/link/callback?")
             .And.Contain("code=abc")
             .And.Contain($"state={state}");
     }
@@ -59,7 +59,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var context = new DefaultHttpContext();
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("nocturne.run");
-        context.Request.Path = "/api/v4/oidc/callback";
+        context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString($"?code=xyz&state={state}");
         context.Request.Headers["X-Forwarded-Proto"] = "https";
 
@@ -67,7 +67,7 @@ public class OidcCallbackRedirectMiddlewareTests
 
         context.Response.StatusCode.Should().Be(302);
         context.Response.Headers.Location.ToString()
-            .Should().StartWith("https://alice.nocturne.run/api/v4/oidc/callback?");
+            .Should().StartWith("https://alice.nocturne.run/api/auth/oidc/callback?");
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var state = EncodeState(new { TenantSlug = "ryceg" });
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("ryceg.nocturne.run");
-        context.Request.Path = "/api/v4/oidc/link/callback";
+        context.Request.Path = "/api/auth/oidc/link/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
 
         await middleware.InvokeAsync(context);
@@ -108,7 +108,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var state = EncodeState(new { Intent = "login" });
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("nocturne.run");
-        context.Request.Path = "/api/v4/oidc/callback";
+        context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
 
         await middleware.InvokeAsync(context);
@@ -127,7 +127,7 @@ public class OidcCallbackRedirectMiddlewareTests
             Options.Create(config));
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("nocturne.run");
-        context.Request.Path = "/api/v4/oidc/callback";
+        context.Request.Path = "/api/auth/oidc/callback";
 
         await middleware.InvokeAsync(context);
 
@@ -141,7 +141,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var middleware = CreateMiddleware(_ => { called = true; return Task.CompletedTask; });
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("nocturne.run");
-        context.Request.Path = "/api/v4/oidc/callback";
+        context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString("?code=abc");
 
         await middleware.InvokeAsync(context);
@@ -158,7 +158,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("nocturne-api");
         context.Request.Headers["X-Forwarded-Host"] = "ryceg.nocturne.run";
-        context.Request.Path = "/api/v4/oidc/link/callback";
+        context.Request.Path = "/api/auth/oidc/link/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
 
         await middleware.InvokeAsync(context);
@@ -174,7 +174,7 @@ public class OidcCallbackRedirectMiddlewareTests
         var state = EncodeState(new { TenantSlug = "evil.attacker.com" });
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("nocturne.run");
-        context.Request.Path = "/api/v4/oidc/callback";
+        context.Request.Path = "/api/auth/oidc/callback";
         context.Request.QueryString = new QueryString($"?code=abc&state={state}");
 
         await middleware.InvokeAsync(context);

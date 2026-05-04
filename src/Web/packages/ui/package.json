@@ -24,7 +24,7 @@
     "layerchart": "2.0.0-next.43",
     "clsx": "^2.1.1",
     "svelte": "^5.50.0",
-    "svelte-check": "^4.3.6",
+    "svelte-check-native": "^0.2.0",
     "tailwind-merge": "^3.4.0",
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.1.7",
@@ -32,6 +32,6 @@
     "typescript": "^5.8.3"
   },
   "scripts": {
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check-native --tsconfig ./tsconfig.json"
   }
 }

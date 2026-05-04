@@ -31,7 +31,7 @@
       icon: Bell,
       title: "Alerts",
       subtitle: "Set up alerts",
-      coachUrl: "/settings/alerts?coach=setup-alerts",
+      coachUrl: "/alerts?coach=setup-alerts",
     },
     ...(path === "migration"
       ? [

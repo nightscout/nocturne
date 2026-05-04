@@ -62,7 +62,7 @@ public partial class OidcCallbackRedirectMiddleware
     /// <returns>A task that completes when the middleware has finished processing.</returns>
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!IsOidcCallbackPath(context.Request.Path))
+        if (!IsOidcCallbackPath(context.Request.Path) || string.IsNullOrEmpty(_config.BaseDomain))
         {
             await _next(context);
             return;

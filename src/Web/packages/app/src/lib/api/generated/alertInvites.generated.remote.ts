@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { CreateAlertInviteRequestSchema } from '$lib/api/generated/schemas';
 import { type CreateAlertInviteRequest } from '$api';
 
-/** Generate an invite link for a follower to join an escalation step. */
+/** Generate an invite link for a follower to attach to a rule channel. */
 export const createInvite = command(CreateAlertInviteRequestSchema, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -19,6 +19,9 @@ export const createInvite = command(CreateAlertInviteRequestSchema, async (reque
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.createInvite:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create invite');
   }
 });
@@ -33,6 +36,9 @@ export const validateInvite = query(z.string(), async (token) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.validateInvite:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to validate invite');
   }
 });
@@ -48,6 +54,9 @@ export const redeemInvite = command(z.string(), async (token) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.redeemInvite:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to redeem invite');
   }
 });
@@ -63,6 +72,9 @@ export const revokeInvite = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.revokeInvite:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to revoke invite');
   }
 });

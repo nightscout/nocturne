@@ -53,9 +53,11 @@ public class PredictionService : IPredictionService
     /// <inheritdoc />
     public async Task<GlucosePredictionResponse> GetPredictionsAsync(
         string? profileId = null,
+        DateTimeOffset? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = asOf ?? DateTimeOffset.UtcNow;
+        var nowMills = now.ToUnixTimeMilliseconds();
 
         // Check if oref library is available
         var orefAvailable = OrefService.IsAvailable();
@@ -68,9 +70,11 @@ public class PredictionService : IPredictionService
             return await GetFallbackPredictionsAsync(now, cancellationToken);
         }
 
-        // Fetch recent glucose readings (last 10 entries for delta calculation)
+        // Fetch recent glucose readings (last 10 entries at-or-before the anchor for delta
+        // calculation). ToMills bounds the query at the anchor so an as-of replay sees only
+        // readings the user would have had at that moment.
         var glucoseEntries = await _store.QueryAsync(
-            new EntryQuery { Type = "sgv", Count = 10 },
+            new EntryQuery { Type = "sgv", Count = 10, ToMills = nowMills },
             cancellationToken);
 
         if (!glucoseEntries.Any())
@@ -105,10 +109,13 @@ public class PredictionService : IPredictionService
             return await GetFallbackPredictionsAsync(now, cancellationToken);
         }
 
-        // Fetch recent treatments (last 100 for IOB calculation)
-        var treatments = await _treatments.GetTreatmentsAsync(
-            count: 100,
-            skip: 0,
+        // Fetch treatments in the 24h window ending at the anchor. 24h matches what
+        // SensorContextEnricher uses; oref discards entries beyond the insulin/carb tails
+        // internally, so the wider window is safe and keeps the as-of and live paths
+        // identically scoped.
+        var treatments = await _treatments.GetTreatmentsByRangeAsync(
+            fromMills: now.AddHours(-24).ToUnixTimeMilliseconds(),
+            toMills: nowMills,
             cancellationToken);
 
         // Convert to oref treatments
@@ -125,13 +132,13 @@ public class PredictionService : IPredictionService
             .ToList();
 
         // Get or create default profile
-        var profile = await GetProfileAsync(profileId, cancellationToken);
+        var profile = await GetProfileAsync(profileId, nowMills, cancellationToken);
 
         // Calculate IOB
         var iobData = OrefService.CalculateIob(profile, orefTreatments, now);
         if (iobData == null)
         {
-            iobData = new OrefModels.IobData { Iob = 0, Activity = 0, Time = now.ToUnixTimeMilliseconds() };
+            iobData = new OrefModels.IobData { Iob = 0, Activity = 0, Time = nowMills };
         }
 
         // Calculate COB
@@ -141,12 +148,14 @@ public class PredictionService : IPredictionService
         // Current temp basal (simplified - no active temp)
         var currentTemp = new OrefModels.CurrentTemp { Rate = profile.CurrentBasal, Duration = 0 };
 
-        // Get predictions
+        // Get predictions — `now` anchors oref's determine-basal time reference so an
+        // as-of replay produces the forecast the user would have seen at that tick.
         var predictions = OrefService.GetPredictions(
             profile,
             glucoseStatus,
             iobData,
             currentTemp,
+            currentTime: now,
             autosensRatio: 1.0,
             cob: cob);
 
@@ -181,16 +190,17 @@ public class PredictionService : IPredictionService
     }
 
     /// <summary>
-    /// Build an oref profile from V4 resolvers.
+    /// Build an oref profile from V4 resolvers, anchored at <paramref name="nowMills"/> so
+    /// schedule-driven settings (basal, sensitivity, carb ratio, target) reflect the
+    /// active segment at that instant rather than at wall-clock now.
     /// </summary>
-    private async Task<OrefModels.OrefProfile> GetProfileAsync(string? profileId, CancellationToken cancellationToken)
+    private async Task<OrefModels.OrefProfile> GetProfileAsync(
+        string? profileId, long nowMills, CancellationToken cancellationToken)
     {
         // Resolve insulin pharmacokinetics from active bolus insulin
         var bolusInsulin = await ResolveBolusInsulinAsync();
         var peak = bolusInsulin?.Peak;
         var curve = bolusInsulin?.Curve;
-
-        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         try
         {

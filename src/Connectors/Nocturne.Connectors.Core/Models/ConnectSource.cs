@@ -16,5 +16,6 @@ public enum ConnectSource
     MyFitnessPal,
     Nightscout,
     HomeAssistant,
+    Eversense,
     NocturneRemote,
 }

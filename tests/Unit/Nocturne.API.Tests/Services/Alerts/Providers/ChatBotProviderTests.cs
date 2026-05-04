@@ -28,6 +28,7 @@ public class ChatBotProviderTests
         TenantId = Guid.NewGuid(),
         SubjectName = "Test",
         ActiveExcursionCount = 1,
+        Severity = AlertRuleSeverity.Critical,
     };
 
     private static ChatBotProvider CreateProvider(

@@ -1,0 +1,60 @@
+---
+title: "V1 DeviceStatus Decomposition"
+---
+flowchart LR
+    subgraph legacy["V1 Monolithic DeviceStatus"]
+        direction TB
+        device["device, mills, utcOffset"]
+
+        subgraph blob["Nested status objects (single document)"]
+            direction TB
+            openaps["openaps (suggested, enacted, iob, cob, predBGs, version)"]
+            loop["loop (iob, cob, predicted, recommendedBolus, enacted)"]
+            pump["pump (reservoir, battery, status, iob, manufacturer, model, clock)"]
+            uploader["uploader (battery, voltage, name, type, temperature)"]
+            xdrip["xdripjs, radioAdapter, cgm, meter, override, insulinPen, mmtune, ..."]
+        end
+    end
+
+    openaps --> ApsSnapshot
+    loop --> ApsSnapshot
+    pump --> PumpSnapshot
+    uploader --> UploaderSnapshot
+    xdrip -. extras .-> ApsSnapshot
+    xdrip -. extras .-> PumpSnapshot
+    xdrip -. extras .-> UploaderSnapshot
+
+    subgraph v4["V4 Decomposed Snapshots (share CorrelationId)"]
+        direction TB
+
+        ApsSnapshot["<b>ApsSnapshot</b><br/> aidAlgorithm iob, basalIob, bolusIob, cob currentBg, eventualBg, targetBg recommendedBolus, sensitivityRatio enacted, enactedRate, enactedDuration enactedBolusVolume predictedDefault/Iob/Zt/Cob/UamJson predictedStartTimestamp suggestedJson, enactedJson, loopJson"]
+
+        PumpSnapshot["<b>PumpSnapshot</b><br/> manufacturer, model reservoir, reservoirDisplay batteryPercent, batteryVoltage bolusing, suspended, pumpStatus clock, iob, bolusIob deviceId (FK)"]
+
+        UploaderSnapshot["<b>UploaderSnapshot</b><br/> name, type battery, batteryVoltage isCharging, temperature deviceId (FK)"]
+    end
+
+    subgraph reasons["Why Decompose?"]
+        direction TB
+
+        r1["<b>Different update cadences</b><br/>An APS algorithm runs every 5 minutes. Pump reservoir level only changes after a bolus. Phone battery shifts on its own schedule. Bundling them forces three writes when only one concern moved."]
+
+        r2["<b>Different consumers</b><br/>The 'is my Loop running?' monitor only cares about ApsSnapshot. The 'reservoir low' alert only cares about PumpSnapshot. Decomposition lets each subscriber query just what it needs."]
+
+        r3["<b>Different identity scopes</b><br/>Pump and uploader belong to physical hardware (FK to Device). An APS algorithm decision is tied to software, not hardware -- the same pump can run different algorithms over time."]
+
+        r4["<b>Different retention needs</b><br/>APS snapshots are the audit trail for algorithm decisions and need long retention. Pump/uploader battery telemetry can be downsampled aggressively once the live state is captured."]
+
+        r5["<b>Schema clarity</b><br/>The legacy blob mixes 8+ vendor-specific shapes (openaps, loop, xdripjs, mmtune, etc.). Typed V4 records normalize OpenAPS/AAPS/Loop into a single ApsSnapshot with raw blobs preserved for round-trip."]
+
+        r6["<b>Decomposition idempotency</b><br/>One legacy DeviceStatus produces up to 3 V4 records sharing one CorrelationId. Re-running decomposition updates the same three rows rather than duplicating data."]
+    end
+
+    ApsSnapshot -.- r1
+    PumpSnapshot -.- r1
+    UploaderSnapshot -.- r1
+    v4 -.- r2
+    PumpSnapshot -.- r3
+    ApsSnapshot -.- r4
+    v4 -.- r5
+    v4 -.- r6

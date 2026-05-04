@@ -24,7 +24,8 @@ RUN pnpm install --frozen-lockfile
 COPY src/Web/packages/app/src/lib/api/generated/ packages/app/src/lib/api/generated/
 
 RUN pnpm --filter @nocturne/bridge build 2>/dev/null || true
-RUN pnpm --filter @nocturne/app run build:sveltekit
+RUN pnpm --filter @nocturne/bot build 2>/dev/null || true
+RUN NODE_OPTIONS="--max-old-space-size=7168" pnpm --filter @nocturne/app run build:sveltekit
 
 # -- Production --
 FROM node:24-alpine AS runtime

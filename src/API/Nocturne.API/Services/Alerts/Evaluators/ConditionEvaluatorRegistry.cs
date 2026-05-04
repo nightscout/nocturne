@@ -5,8 +5,11 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Services.Alerts.Evaluators;
 
 /// <summary>
-/// Resolves an <see cref="AlertConditionType"/> to the corresponding <see cref="IConditionEvaluator"/>.
-/// Registered as singleton; constructor takes all registered evaluators via DI.
+/// Resolves an <see cref="AlertConditionType"/> to the corresponding <see cref="IConditionEvaluator"/>,
+/// and provides the single node-dispatch entrypoint shared by recursive evaluators
+/// (composite/not/sustained), the orchestrator's auto-resolve path, and smart-snooze evaluation.
+/// Registered as scoped because evaluators that touch <see cref="IConditionTimerStore"/> are
+/// DbContext-backed; the constructor takes all registered evaluators via DI.
 /// </summary>
 public class ConditionEvaluatorRegistry
 {
@@ -39,20 +42,34 @@ public class ConditionEvaluatorRegistry
     /// </summary>
     public IConditionEvaluator? GetEvaluator(string conditionTypeString)
     {
+        var byWire = AlertConditionTypeNames.FromWireString(conditionTypeString);
+        if (byWire is not null)
+            return GetEvaluator(byWire.Value);
+
         if (Enum.TryParse<AlertConditionType>(conditionTypeString, ignoreCase: true, out var parsed))
             return GetEvaluator(parsed);
 
-        // Try matching by EnumMember value (e.g. "rate_of_change")
-        foreach (var (type, evaluator) in _evaluators)
-        {
-            var memberInfo = typeof(AlertConditionType).GetMember(type.ToString()).FirstOrDefault();
-            var attr = memberInfo?.GetCustomAttributes(typeof(System.Runtime.Serialization.EnumMemberAttribute), false)
-                .Cast<System.Runtime.Serialization.EnumMemberAttribute>()
-                .FirstOrDefault();
-            if (attr?.Value?.Equals(conditionTypeString, StringComparison.OrdinalIgnoreCase) == true)
-                return evaluator;
-        }
-
         return null;
+    }
+
+    /// <summary>
+    /// Single node-dispatch entrypoint: looks up the evaluator for <paramref name="node"/>'s
+    /// <see cref="ConditionNode.Type"/>, serialises its kind-specific payload, and delegates.
+    /// Used by recursive evaluators (composite/not/sustained), auto-resolve in the orchestrator,
+    /// and smart-snooze condition evaluation. Returns <see langword="false"/> when the kind is
+    /// unregistered — matches the silent-fail mode the recursive evaluators have always used so
+    /// a malformed rule never throws at runtime.
+    /// </summary>
+    /// <param name="node">The condition node to evaluate. <see cref="ConditionNode.Type"/> selects the evaluator.</param>
+    /// <param name="context">Sensor context. Path threading is the caller's responsibility.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<bool> EvaluateNodeAsync(ConditionNode node, SensorContext context, CancellationToken ct)
+    {
+        var evaluator = GetEvaluator(node.Type);
+        if (evaluator is null)
+            return false;
+
+        var paramsJson = ConditionNodePayloads.SerializeChildPayload(node, EvaluatorJson.Options);
+        return await evaluator.EvaluateAsync(paramsJson, context, ct);
     }
 }

@@ -249,9 +249,10 @@ public class StateSpanMapperTests
     }
 
     [Fact]
-    public void MapTempBasals_MixedEventTypes_ProcessesAllBasalEvents()
+    public void MapTempBasals_MixedEventTypes_SkipsBasalWhenBasalRatePresent()
     {
-        // Arrange
+        // Arrange — when BasalRate events exist, Basal (amount) events are
+        // redundant delivery confirmations and should be skipped.
         var time1 = DateTime.UtcNow.AddHours(-3);
         var time2 = DateTime.UtcNow.AddHours(-2);
         var time3 = DateTime.UtcNow.AddHours(-1);
@@ -266,11 +267,10 @@ public class StateSpanMapperTests
         // Act
         var tempBasals = MyLifeStateSpanMapper.MapTempBasals(events, false, 0).ToList();
 
-        // Assert
-        tempBasals.Should().HaveCount(3);
+        // Assert — Basal event skipped because BasalRate events are present
+        tempBasals.Should().HaveCount(2);
         tempBasals[0].Origin.Should().Be(TempBasalOrigin.Scheduled);
         tempBasals[1].Origin.Should().Be(TempBasalOrigin.Manual);
-        tempBasals[2].Origin.Should().Be(TempBasalOrigin.Scheduled);
     }
 
     [Fact]

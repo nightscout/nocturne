@@ -115,6 +115,16 @@ public class StateSpanService : IStateSpanService
         return await _repository.UpdateStateSpanAsync(id, stateSpan, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<StateSpan?> GetActiveAtAsync(
+        StateSpanCategory category,
+        string? state,
+        DateTime at,
+        CancellationToken cancellationToken = default)
+    {
+        return await _repository.GetActiveAtAsync(category, state, at, cancellationToken);
+    }
+
     #region Activity Compatibility Methods
 
     /// <inheritdoc />

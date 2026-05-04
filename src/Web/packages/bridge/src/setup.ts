@@ -78,16 +78,9 @@ export async function setupBridge(
       logger.info(`SignalR ConfigHub URL: ${config.signalr.configHubUrl}`);
     }
 
-    const socketIOServer = new SocketIOServer(
-      httpServer,
-      config.socketio,
-      config.baseDomain,
-    );
-
-    await socketIOServer.start();
-    logger.info('Socket.IO server started');
-
-    // Multi-tenant mode: discover tenants, create per-tenant SignalR connections
+    // Discover tenants before starting the socket.io server so apex-domain
+    // connections can auto-resolve to the sole tenant during the handshake.
+    let tenantSlugs: string[] = [];
     if (config.baseDomain) {
       logger.info(`Multi-tenant mode enabled (baseDomain: ${config.baseDomain})`);
 
@@ -98,8 +91,20 @@ export async function setupBridge(
 
       // Extract the API base URL from the hub URL (strip /hubs/data)
       const apiBaseUrl = config.signalr.hubUrl.replace(/\/hubs\/\w+$/, '');
-      const tenantSlugs = await discoverTenants(apiBaseUrl, instanceKeyHash);
+      tenantSlugs = await discoverTenants(apiBaseUrl, instanceKeyHash);
+    }
 
+    const socketIOServer = new SocketIOServer(
+      httpServer,
+      config.socketio,
+      config.baseDomain,
+      tenantSlugs,
+    );
+
+    await socketIOServer.start();
+    logger.info('Socket.IO server started');
+
+    if (config.baseDomain) {
       const clients: SignalRClient[] = [];
 
       for (const slug of tenantSlugs) {

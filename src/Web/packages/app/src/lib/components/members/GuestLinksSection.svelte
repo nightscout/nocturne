@@ -98,6 +98,26 @@
     });
   }
 
+  function formatRelativeExpiry(date: Date | undefined | null): string {
+    if (!date) return "";
+    const d = date instanceof Date ? date : new Date(date);
+    const now = Date.now();
+    const diffMs = d.getTime() - now;
+    const absDiffMs = Math.abs(diffMs);
+
+    const minutes = Math.round(absDiffMs / 60_000);
+    const hours = Math.round(absDiffMs / 3_600_000);
+    const days = Math.round(absDiffMs / 86_400_000);
+
+    let relative: string;
+    if (minutes < 1) relative = "less than a minute";
+    else if (minutes < 60) relative = `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    else if (hours < 48) relative = `${hours} hour${hours !== 1 ? "s" : ""}`;
+    else relative = `${days} day${days !== 1 ? "s" : ""}`;
+
+    return diffMs > 0 ? `Expires in ${relative}` : `Expired ${relative} ago`;
+  }
+
   function canRevoke(link: GuestLinkInfo): boolean {
     return (
       link.status === GuestLinkStatus.Pending ||
@@ -113,8 +133,20 @@
       const result = await createGuestLink({ label: label.trim() });
       createdCode = result.code ?? null;
       createdUrl = result.fullUrl ?? null;
-      if (createdUrl && !createdUrl.startsWith("http")) {
-        createdUrl = `${window.location.origin}${createdUrl}`;
+      if (createdUrl) {
+        // The backend may report http behind a reverse proxy; use the browser's origin
+        try {
+          const backendUrl = new URL(createdUrl);
+          const originUrl = new URL(window.location.origin);
+          backendUrl.protocol = originUrl.protocol;
+          backendUrl.host = originUrl.host;
+          createdUrl = backendUrl.toString();
+        } catch {
+          // Fallback: treat as relative path
+          if (!createdUrl.startsWith("http")) {
+            createdUrl = `${window.location.origin}${createdUrl}`;
+          }
+        }
       }
       await guestLinksQuery?.refresh();
     } catch {
@@ -350,9 +382,9 @@
                   class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-1"
                 >
                   <span>Created {formatDate(link.createdAt)}</span>
-                  <span>Expires {formatDate(link.expiresAt)}</span>
-                  {#if link.status === GuestLinkStatus.Active && link.activatedIp}
-                    <span>Activated from {maskIp(link.activatedIp)}</span>
+                  <span>{formatRelativeExpiry(link.expiresAt)}</span>
+                  {#if (link.status === GuestLinkStatus.Active || link.status === GuestLinkStatus.Revoked) && link.activatedAt}
+                    <span>Accessed {formatDate(link.activatedAt)}{link.activatedIp ? ` from ${maskIp(link.activatedIp)}` : ""}</span>
                   {/if}
                 </div>
               </div>

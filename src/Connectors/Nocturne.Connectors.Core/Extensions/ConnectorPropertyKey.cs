@@ -70,5 +70,8 @@ public enum ConnectorPropertyKey
     // Home Assistant-specific
     AccessToken,
     WebhookEnabled,
-    WebhookSecret
+    WebhookSecret,
+
+    // Eversense-specific
+    PatientUsername
 }

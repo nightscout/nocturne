@@ -26,23 +26,20 @@ export const getWebhookSettings = query(async () => {
   }
 });
 
-export const saveWebhookSettings = form(
-  "unchecked",
-  async (raw) => {
-    const settings = WebhookSettingsSchema.parse(raw);
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
+export const saveWebhookSettings = form("unchecked", async (raw) => {
+  const settings = WebhookSettingsSchema.parse(raw);
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
 
-    try {
-      return await apiClient.webhookSettings.saveWebhookSettings(
-        settings as WebhookNotificationSettings
-      );
-    } catch (err) {
-      console.error("Failed to save webhook settings:", err);
-      throw error(500, "Failed to save webhook settings");
-    }
+  try {
+    return await apiClient.webhookSettings.saveWebhookSettings(
+      settings as WebhookNotificationSettings
+    );
+  } catch (err) {
+    console.error("Failed to save webhook settings:", err);
+    throw error(500, "Failed to save webhook settings");
   }
-);
+});
 
 export const testWebhookSettings = command(
   WebhookTestSchema,
@@ -62,7 +59,9 @@ export const testWebhookSettings = command(
     }
 
     try {
-      return await client.testWebhookSettings(request as any) as WebhookTestResult;
+      return (await client.testWebhookSettings(
+        request as any
+      )) as WebhookTestResult;
     } catch (err) {
       console.error("Failed to test webhook settings:", err);
       throw error(500, "Failed to test webhook settings");

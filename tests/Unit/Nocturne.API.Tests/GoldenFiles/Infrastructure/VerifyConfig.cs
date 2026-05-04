@@ -11,16 +11,18 @@ public static class VerifyConfig
     [ModuleInitializer]
     public static void Initialize()
     {
-        // Scrub dynamic server timestamps that change between runs.
-        // These appear as JSON properties in Nightscout API responses.
+        // Disable diff tool launching — DiffEngine's WMI-based ProcessCleanup
+        // fails on some Windows environments, causing all Verify tests to throw
+        // TypeInitializationException.
+        Environment.SetEnvironmentVariable("DiffEngine_Disabled", "true");
+
+        // Scrub dynamic values that change between runs
+        VerifierSettings.ScrubMembers("serverTime", "serverTimeEpoch", "srvDate", "head", "uptimeMs");
+
+        // Scrub traceId from problem+json error responses (appears in raw JSON body strings)
         VerifierSettings.AddScrubber(builder =>
         {
             var text = builder.ToString();
-            // Scrub serverTime, serverTimeEpoch, and srvDate values
-            text = Regex.Replace(text, @"""serverTime""\s*:\s*""[^""]*""", @"""serverTime"": ""{scrubbed}""");
-            text = Regex.Replace(text, @"""serverTimeEpoch""\s*:\s*\d+", @"""serverTimeEpoch"": ""{scrubbed}""");
-            text = Regex.Replace(text, @"""srvDate""\s*:\s*\d+", @"""srvDate"": ""{scrubbed}""");
-            // Scrub traceId from problem+json error responses
             text = Regex.Replace(text, @"""traceId""\s*:\s*""[^""]*""", @"""traceId"": ""{scrubbed}""");
             builder.Clear();
             builder.Append(text);

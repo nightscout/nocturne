@@ -11,6 +11,7 @@
   } from "$lib/api/generated/nocturne-api-client";
   import NotificationItem from "./NotificationItem.svelte";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
+  import DndPanel from "$lib/components/alerts/DndPanel.svelte";
 
   // Get the realtime store for reactive notification data
   const realtimeStore = tryGetRealtimeStore();
@@ -137,6 +138,10 @@
             Manage
           </a>
         {/if}
+      </div>
+
+      <div class="border-b">
+        <DndPanel onNavigate={() => (isOpen = false)} />
       </div>
 
       {#if badgeCount === 0}

@@ -116,6 +116,12 @@ public class TempBasalEntity : ITenantScoped, IAuditable
     public Guid? DeviceId { get; set; }
 
     /// <summary>
+    /// Foreign key to the PatientDevice table.
+    /// </summary>
+    [Column("patient_device_id")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Pump-specific record identifier for deduplication
     /// </summary>
     [Column("pump_record_id")]

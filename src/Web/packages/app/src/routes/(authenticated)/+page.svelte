@@ -2,7 +2,6 @@
   import {
     CurrentBGDisplay,
     GlucoseChartCard,
-    OnboardingProgress,
     RecentEntriesCard,
     RecentTreatmentsCard,
     WidgetGrid,
@@ -46,32 +45,32 @@
     <CurrentBGDisplay />
   </div>
 
-  <OnboardingProgress />
+  <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
+    {#if isMainEnabled(WidgetId.Statistics)}
+      <div {@attach coachmark({
+        key: "quick-tour.widgets",
+        title: "Customizable widgets",
+        description: "Reorder or swap these in Settings \u2192 Appearance. You can choose from over a dozen stats.",
+      })}>
+        <WidgetGrid widgets={topWidgets} maxWidgets={3} />
+      </div>
+    {/if}
 
-  {#if isMainEnabled(WidgetId.Statistics)}
-    <div {@attach coachmark({
-      key: "quick-tour.widgets",
-      title: "Customizable widgets",
-      description: "Reorder or swap these in Settings \u2192 Appearance. You can choose from over a dozen stats.",
-    })}>
-      <WidgetGrid widgets={topWidgets} maxWidgets={3} />
-    </div>
-  {/if}
-
-  {#if isMainEnabled(WidgetId.GlucoseChart)}
-    <div {@attach coachmark({
-      key: "quick-tour.chart",
-      title: "Interactive chart",
-      description: "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
-    })}>
-    <GlucoseChartCard
-      showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
-      defaultFocusHours={focusHours}
-      initialChartData={data.initialChartData}
-      streamedHistoricalData={data.streamed?.historicalChartData}
-    />
-    </div>
-  {/if}
+    {#if isMainEnabled(WidgetId.GlucoseChart)}
+      <div {@attach coachmark({
+        key: "quick-tour.chart",
+        title: "Interactive chart",
+        description: "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
+      })}>
+      <GlucoseChartCard
+        showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
+        defaultFocusHours={focusHours}
+        initialChartData={data.initialChartData}
+        streamedHistoricalData={data.streamed?.historicalChartData}
+      />
+      </div>
+    {/if}
+  </div>
 
   {#if isMainEnabled(WidgetId.DailyStats)}
     <RecentEntriesCard />

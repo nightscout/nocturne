@@ -51,28 +51,35 @@
 
   const groups: PermissionGroup[] = [
     {
-      categories: [
-        { name: "Blood Glucose", levels: rw("entries") },
-        { name: "Treatments", levels: rw("treatments") },
-        { name: "Devices", levels: rw("devicestatus") },
-        { name: "Profile", levels: rw("profile") },
-        { name: "Notifications", levels: rw("notifications") },
-        { name: "Reports", levels: readOnly("reports") },
-        { name: "Identity", levels: readOnly("identity") },
-      ],
-    },
-    {
       header: "Health",
       categories: [
         { name: "Health", levels: rw("health") },
+        { name: "Blood Glucose", isSubItem: true, coveredBy: "health", levels: rw("entries") },
+        { name: "Treatments", isSubItem: true, coveredBy: "health", levels: rw("treatments") },
+        { name: "Devices", isSubItem: true, coveredBy: "health", levels: rw("devicestatus") },
+        { name: "Profile", isSubItem: true, coveredBy: "health", levels: rw("profile") },
+        { name: "Food", isSubItem: true, coveredBy: "health", levels: rw("food") },
+      ],
+    },
+    {
+      header: "Biometrics",
+      categories: [
         { name: "Heart Rate", isSubItem: true, coveredBy: "health", levels: rw("heartrate") },
         { name: "Step Count", isSubItem: true, coveredBy: "health", levels: rw("stepcount") },
       ],
     },
     {
-      header: "Other",
+      header: "Platform",
       categories: [
-        { name: "Sharing", isSubItem: true, levels: toggle("sharing.readwrite") },
+        { name: "Notifications", levels: rw("notifications") },
+        { name: "Reports", levels: readOnly("reports") },
+      ],
+    },
+    {
+      header: "Account",
+      categories: [
+        { name: "Identity", levels: readOnly("identity") },
+        { name: "Sharing", levels: toggle("sharing.readwrite") },
       ],
     },
   ];
@@ -114,17 +121,12 @@
   }
 
   /**
-   * Whether a category's current level is fully covered by its parent super-permission.
-   * Health "Read & Write" covers everything; Health "Read" covers sub-permission read but not write.
+   * Whether a category is fully covered by its parent super-permission.
+   * Only disables children when the parent is at its maximum level (Read & Write).
    */
   function isCoveredByParent(cat: PermissionCategory): boolean {
     if (!cat.coveredBy) return false;
-    const parentReadWrite = `${cat.coveredBy}.readwrite`;
-    if (selected.includes(parentReadWrite)) return true;
-    const parentRead = `${cat.coveredBy}.read`;
-    const currentLevel = getLevel(cat);
-    if (selected.includes(parentRead) && currentLevel !== "readwrite") return true;
-    return false;
+    return selected.includes(`${cat.coveredBy}.readwrite`);
   }
 
   /** Set a new level: remove all category atoms then add the new level's atoms. */
@@ -151,7 +153,7 @@
         <div class="flex items-center gap-2 min-w-0 flex-1">
           <span class="text-sm">{cat.name}</span>
           {#if covered}
-            <span class="text-xs text-muted-foreground">Covered by Health</span>
+            <span class="text-xs text-muted-foreground">Covered by {cat.coveredBy!.charAt(0).toUpperCase() + cat.coveredBy!.slice(1)}</span>
           {/if}
         </div>
         <Select.Root

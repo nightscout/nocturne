@@ -19,6 +19,7 @@ import type {
   BGCheck,
   Note,
   DeviceEvent,
+  ApsSnapshot,
 } from "$lib/api";
 
 /**
@@ -89,6 +90,10 @@ export class RealtimeStore {
   private handleVisibilityChange: (() => void) | null = null;
   private handleWindowFocus: (() => void) | null = null;
 
+  /** Background polling interval when tab is hidden */
+  private backgroundPollInterval: ReturnType<typeof setInterval> | null = null;
+  private static readonly BACKGROUND_POLL_MS = 30_000; // 30s — browsers throttle setInterval to ~60s in hidden tabs, so aim for ~1 poll per minute worst-case
+
   /** Reactive state using Svelte 5 runes - using $state.raw for arrays to avoid deep proxy issues */
   entries = $state.raw<Entry[]>([]);
   deviceStatuses = $state.raw<DeviceStatus[]>([]);
@@ -103,6 +108,7 @@ export class RealtimeStore {
   bgChecks = $state.raw<BGCheck[]>([]);
   notes = $state.raw<Note[]>([]);
   deviceEvents = $state.raw<DeviceEvent[]>([]);
+  apsSnapshots = $state.raw<ApsSnapshot[]>([]);
 
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
@@ -145,7 +151,7 @@ export class RealtimeStore {
 
   /** Delta calculation - prefer entry delta, fallback to computed */
   bgDelta = $derived.by(() => {
-    if (this.currentEntry?.delta !== undefined) {
+    if (this.currentEntry?.delta != null) {
       return this.currentEntry.delta;
     }
     return this.currentBG - this.previousBG;
@@ -185,6 +191,7 @@ export class RealtimeStore {
     // Use hardcoded mg/dL - components handle display formatting themselves
     return processPillsData(
       this.deviceStatuses,
+      this.apsSnapshots,
       this.boluses,
       this.carbIntakes,
       this.deviceEvents,
@@ -255,8 +262,14 @@ export class RealtimeStore {
         if (document.visibilityState === 'visible') {
           // Snap now immediately so time-since displays don't lag
           this.now = Date.now();
-          console.log('[RealtimeStore] Page became visible, checking for backfill...');
-          this.performBackfillIfNeeded();
+          this.stopBackgroundPolling();
+          console.log('[RealtimeStore] Page became visible, backfilling missed data...');
+          // Always backfill on return — timers are unreliable in hidden tabs
+          // so we can't trust lastDataReceived to be meaningful
+          this.performBackfillIfNeeded(true);
+        } else {
+          console.log('[RealtimeStore] Page hidden, starting background polling...');
+          this.startBackgroundPolling();
         }
       };
       document.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -292,6 +305,7 @@ export class RealtimeStore {
         historicalBgChecks,
         historicalNotes,
         historicalDeviceEvents,
+        historicalApsSnapshots,
       ] = await Promise.all([
         apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []) as unknown as Entry[]).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
@@ -304,6 +318,7 @@ export class RealtimeStore {
         apiClient.bGCheck.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load bgChecks:", e); return []; }),
         apiClient.note.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load notes:", e); return []; }),
         apiClient.deviceEvent.getAll(oneDayAgo, now, 500).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load deviceEvents:", e); return []; }),
+        apiClient.apsSnapshot.getAll(oneDayAgo, now, 50).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load apsSnapshots:", e); return []; }),
       ]);
 
       // Defer all state updates to a microtask to completely break out of the
@@ -362,6 +377,12 @@ export class RealtimeStore {
         if (historicalDeviceEvents && historicalDeviceEvents.length > 0) {
           this.deviceEvents = historicalDeviceEvents.sort(
             (a: DeviceEvent, b: DeviceEvent) => (b.mills || 0) - (a.mills || 0)
+          );
+        }
+
+        if (historicalApsSnapshots && historicalApsSnapshots.length > 0) {
+          this.apsSnapshots = historicalApsSnapshots.sort(
+            (a: ApsSnapshot, b: ApsSnapshot) => (b.mills || 0) - (a.mills || 0)
           );
         }
 
@@ -505,6 +526,10 @@ export class RealtimeStore {
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
           .slice(0, 100);
       }
+
+      // The backend decomposes devicestatus into an ApsSnapshot asynchronously.
+      // Wait briefly then fetch the latest snapshot so pills update in real time.
+      setTimeout(() => this.refreshLatestApsSnapshot(), 3000);
     }
   }
 
@@ -766,6 +791,7 @@ export class RealtimeStore {
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
     }
+    this.stopBackgroundPolling();
     if (typeof window !== 'undefined') {
       if (this.handleVisibilityChange) {
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
@@ -775,6 +801,49 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+  }
+
+  /**
+   * Start polling for data while the tab is hidden.
+   * Browsers throttle setInterval in background tabs (Chrome: ~60s minimum),
+   * so we set a 30s interval knowing it'll fire roughly once per minute.
+   * This ensures glucose values stay current even when the tab isn't focused.
+   */
+  private startBackgroundPolling(): void {
+    if (this.backgroundPollInterval) return;
+
+    this.backgroundPollInterval = setInterval(() => {
+      this.performBackfillIfNeeded(true);
+    }, RealtimeStore.BACKGROUND_POLL_MS);
+  }
+
+  /** Stop background polling (called when tab becomes visible again) */
+  private stopBackgroundPolling(): void {
+    if (this.backgroundPollInterval) {
+      clearInterval(this.backgroundPollInterval);
+      this.backgroundPollInterval = null;
+    }
+  }
+
+  /** Fetch the most recent APS snapshots and merge any new ones into the store. */
+  private async refreshLatestApsSnapshot(): Promise<void> {
+    try {
+      const apiClient = getApiClient();
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const result = await apiClient.apsSnapshot.getAll(fiveMinAgo, new Date(), 5);
+      const snapshots = result.data ?? [];
+      if (snapshots.length === 0) return;
+      const added = snapshots.filter(
+        (s: ApsSnapshot) => !this.apsSnapshots.some((existing) => existing.id === s.id)
+      );
+      if (added.length > 0) {
+        this.apsSnapshots = [...added, ...this.apsSnapshots]
+          .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+          .slice(0, 50);
+      }
+    } catch {
+      // Non-critical — pills will update on next backfill
+    }
   }
 
   /**
@@ -811,7 +880,7 @@ export class RealtimeStore {
       // Fetch all data types since last received using existing API methods
       const backfillFromDate = new Date(backfillFrom);
       const nowDate = new Date();
-      const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents] = await Promise.all([
+      const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []) as unknown as Entry[]).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
         apiClient.bolus.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
@@ -819,6 +888,7 @@ export class RealtimeStore {
         apiClient.bGCheck.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.note.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.deviceEvent.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
+        apiClient.apsSnapshot.getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
       ]);
 
       let backfilledCount = 0;
@@ -908,6 +978,17 @@ export class RealtimeStore {
             .sort((a, b) => (b.mills || 0) - (a.mills || 0))
             .slice(0, 500);
           backfilledCount += newDevEvents.length;
+        }
+      }
+
+      if (newApsSnapshots && newApsSnapshots.length > 0) {
+        const addedSnapshots = newApsSnapshots.filter(
+          (s: ApsSnapshot) => !this.apsSnapshots.some((existing) => existing.id === s.id)
+        );
+        if (addedSnapshots.length > 0) {
+          this.apsSnapshots = [...this.apsSnapshots, ...addedSnapshots]
+            .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+            .slice(0, 50);
         }
       }
 

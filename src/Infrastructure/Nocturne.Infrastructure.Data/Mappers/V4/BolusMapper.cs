@@ -42,6 +42,7 @@ public static class BolusMapper
                 : null,
             Unabsorbed = model.Unabsorbed,
             DeviceId = model.DeviceId,
+            PatientDeviceId = model.PatientDeviceId,
             PumpRecordId = model.PumpRecordId,
             BolusCalculationId = model.BolusCalculationId,
             ApsSnapshotId = model.ApsSnapshotId,
@@ -84,6 +85,7 @@ public static class BolusMapper
                 : null,
             Unabsorbed = entity.Unabsorbed,
             DeviceId = entity.DeviceId,
+            PatientDeviceId = entity.PatientDeviceId,
             PumpRecordId = entity.PumpRecordId,
             BolusCalculationId = entity.BolusCalculationId,
             ApsSnapshotId = entity.ApsSnapshotId,
@@ -122,6 +124,7 @@ public static class BolusMapper
             : null;
         entity.Unabsorbed = model.Unabsorbed;
         entity.DeviceId = model.DeviceId;
+        entity.PatientDeviceId = model.PatientDeviceId;
         entity.PumpRecordId = model.PumpRecordId;
         entity.BolusCalculationId = model.BolusCalculationId;
         entity.ApsSnapshotId = model.ApsSnapshotId;

@@ -5,6 +5,7 @@
   import type { ActiveExcursionResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { AlertTriangle, X, Check } from "lucide-svelte";
+  import { formatTimeSince } from "./alertTime";
 
   let alerts = $state<ActiveExcursionResponse[]>([]);
   let dismissedIds = $state<Set<string>>(new Set());
@@ -14,18 +15,6 @@
   const visibleAlerts = $derived(
     alerts.filter((a) => !dismissedIds.has(a.id ?? ""))
   );
-
-  function formatTimeSince(date: Date | string | undefined): string {
-    if (!date) return "Unknown";
-    const start = typeof date === "string" ? new Date(date) : date;
-    const diffMs = Date.now() - start.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "Just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
-    return `${Math.floor(diffHr / 24)}d ago`;
-  }
 
   function getConditionLabel(conditionType: string | undefined): string {
     switch (conditionType) {

@@ -34,31 +34,31 @@ flowchart LR
     subgraph v4["V4 Decomposed Models"]
         direction TB
 
-        TherapySettings["<b>TherapySettings</b><br/><br/>dia, carbsHr, delay, GI variants<br/>timezone, units, perGIValues<br/>loopSettings, enteredBy<br/>isDefault, startDate"]
+        TherapySettings["<b>TherapySettings</b><br/><br/>dia, carbsHr, delay, GI variants timezone, units, perGIValues loopSettings, enteredBy isDefault, startDate"]
 
-        BasalSchedule["<b>BasalSchedule</b><br/><br/>time-of-day insulin<br/>delivery rates (U/hr)"]
+        BasalSchedule["<b>BasalSchedule</b><br/><br/>time-of-day insulin delivery rates (U/hr)"]
 
-        CarbRatioSchedule["<b>CarbRatioSchedule</b><br/><br/>time-of-day insulin-to-carb<br/>ratios (g/U)"]
+        CarbRatioSchedule["<b>CarbRatioSchedule</b><br/><br/>time-of-day insulin-to-carb ratios (g/U)"]
 
-        SensitivitySchedule["<b>SensitivitySchedule</b><br/><br/>time-of-day insulin<br/>sensitivity factors"]
+        SensitivitySchedule["<b>SensitivitySchedule</b><br/><br/>time-of-day insulin sensitivity factors"]
 
-        TargetRangeSchedule["<b>TargetRangeSchedule</b><br/><br/>merged low + high into<br/>time-of-day target ranges"]
+        TargetRangeSchedule["<b>TargetRangeSchedule</b><br/><br/>merged low + high into time-of-day target ranges"]
     end
 
     subgraph reasons["Why Decompose?"]
         direction TB
 
-        r1["<b>Pharmacokinetics vs preferences</b><br/>DIA and carb absorption are drug<br/>properties; timezone and units are<br/>user display preferences. Bundling<br/>them forces a full profile push<br/>when only one concern changes."]
+        r1["<b>Pharmacokinetics vs preferences</b><br/><br/>DIA and carb absorption are drug properties; timezone and units are user display preferences. Bundling them forces a full profile push when only one concern changes."]
 
-        r2["<b>Independent schedule lifecycles</b><br/>Basal rates change when a pump is<br/>adjusted. Carb ratios change when<br/>diet shifts. ISF changes with<br/>activity patterns. Coupling them<br/>means every tweak overwrites the<br/>entire profile."]
+        r2["<b>Independent schedule lifecycles</b><br/><br/> Basal rates change when a pump is adjusted. Carb ratios change when diet shifts. ISF changes with activity patterns. Coupling them means every tweak overwrites the entire profile."]
 
-        r3["<b>Target ranges are clinical policy</b><br/>Target ranges are set by<br/>endocrinologists and change on<br/>clinic visits. They should not<br/>be bundled with self-adjusted<br/>basal rates or carb ratios."]
+        r3["<b>Target ranges are clinical policy</b><br/><br/> Target ranges are set by endocrinologists and change on clinic visits. They should not be bundled with self-adjusted basal rates or carb ratios."]
 
-        r4["<b>Audit granularity</b><br/>With a monolith, 'profile updated'<br/>tells you nothing. Decomposed<br/>records show exactly which<br/>parameter changed, when, and by<br/>which device or app."]
+        r4["<b>Audit granularity</b><br/><br/> With a monolith, 'profile updated' tells you nothing. Decomposed records show exactly which parameter changed, when, and by which device or app."]
 
-        r5["<b>Query efficiency</b><br/>A connector fetching basal rates<br/>for pump sync should not load<br/>carb ratios, sensitivity factors,<br/>and Loop device tokens."]
+        r5["<b>Query efficiency</b><br/><br/> A connector fetching basal rates for pump sync should not load carb ratios, sensitivity factors, and Loop device tokens."]
 
-        r6["<b>Loop settings are device config</b><br/>Device tokens, dosing strategies,<br/>and override presets are APS<br/>integration concerns, not therapy<br/>parameters. Mixing them means<br/>a Loop settings sync can<br/>overwrite clinical therapy data."]
+        r6["<b>Loop settings are device config</b><br/><br/> Device tokens, dosing strategies, and override presets are APS integration concerns, not therapy parameters. Mixing them means<br/>a Loop settings sync can<br/>overwrite clinical therapy data."]
     end
 
     TherapySettings -.- r1

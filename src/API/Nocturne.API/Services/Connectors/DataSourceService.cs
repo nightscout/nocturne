@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
@@ -519,51 +520,63 @@ public class DataSourceService : IDataSourceService
         var deviceId = metadata.DataSourceId;
         var counts = new Dictionary<string, long>();
 
-        // V4 tables mapped to SyncDataType keys
+        // Glucose
         var sensorGlucoseCount = await _context
             .SensorGlucose.Where(sg => sg.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (sensorGlucoseCount > 0) counts["Glucose"] = sensorGlucoseCount;
+        if (sensorGlucoseCount > 0) counts[nameof(SyncDataType.Glucose)] = sensorGlucoseCount;
 
         var meterGlucoseCount = await _context
             .MeterGlucose.Where(mg => mg.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (meterGlucoseCount > 0) counts["ManualBG"] = meterGlucoseCount;
+        if (meterGlucoseCount > 0) counts[nameof(SyncDataType.ManualBG)] = meterGlucoseCount;
 
+        var calibrationsCount = await _context
+            .Calibrations.Where(c => c.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
+        if (calibrationsCount > 0) counts[nameof(SyncDataType.Calibrations)] = calibrationsCount;
+
+        // Treatments
         var bolusCount = await _context
             .Boluses.Where(b => b.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (bolusCount > 0) counts["Boluses"] = bolusCount;
+        if (bolusCount > 0) counts[nameof(SyncDataType.Boluses)] = bolusCount;
 
         var carbIntakeCount = await _context
             .CarbIntakes.Where(c => c.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (carbIntakeCount > 0) counts["CarbIntake"] = carbIntakeCount;
+        if (carbIntakeCount > 0) counts[nameof(SyncDataType.CarbIntake)] = carbIntakeCount;
+
+        var bgChecksCount = await _context
+            .BGChecks.Where(b => b.DataSource == deviceId)
+            .LongCountAsync(cancellationToken);
+        if (bgChecksCount > 0) counts[nameof(SyncDataType.BGChecks)] = bgChecksCount;
 
         var bolusCalcCount = await _context
             .BolusCalculations.Where(bc => bc.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (bolusCalcCount > 0) counts["BolusCalculations"] = bolusCalcCount;
+        if (bolusCalcCount > 0) counts[nameof(SyncDataType.BolusCalculations)] = bolusCalcCount;
 
         var notesCount = await _context
             .Notes.Where(n => n.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (notesCount > 0) counts["Notes"] = notesCount;
+        if (notesCount > 0) counts[nameof(SyncDataType.Notes)] = notesCount;
 
         var deviceEventsCount = await _context
             .DeviceEvents.Where(de => de.DataSource == deviceId)
             .LongCountAsync(cancellationToken);
-        if (deviceEventsCount > 0) counts["DeviceEvents"] = deviceEventsCount;
+        if (deviceEventsCount > 0) counts[nameof(SyncDataType.DeviceEvents)] = deviceEventsCount;
 
         var stateSpansCount = await _context
             .StateSpans.Where(s => s.Source == deviceId)
             .LongCountAsync(cancellationToken);
-        if (stateSpansCount > 0) counts["StateSpans"] = stateSpansCount;
+        if (stateSpansCount > 0) counts[nameof(SyncDataType.StateSpans)] = stateSpansCount;
 
+        // Device status
         var deviceStatusCount = await _context
             .ApsSnapshots.Where(ds => ds.Device == deviceId)
             .LongCountAsync(cancellationToken);
-        if (deviceStatusCount > 0) counts["DeviceStatus"] = deviceStatusCount;
+        if (deviceStatusCount > 0) counts[nameof(SyncDataType.DeviceStatus)] = deviceStatusCount;
 
         return new ConnectorDataSummary
         {
@@ -637,17 +650,17 @@ public class DataSourceService : IDataSourceService
 
             // Build per-type deletion counts
             var deletedCounts = new Dictionary<string, long>();
-            var glucoseDeleted = (long)sensorGlucoseDeleted + calibrationsDeleted;
-            if (glucoseDeleted > 0) deletedCounts["Glucose"] = glucoseDeleted;
-            if (meterGlucoseDeleted > 0) deletedCounts["ManualBG"] = meterGlucoseDeleted;
-            if (bolusesDeleted > 0) deletedCounts["Boluses"] = bolusesDeleted;
-            if (carbIntakesDeleted > 0) deletedCounts["CarbIntake"] = carbIntakesDeleted;
-            if (bolusCalcsDeleted > 0) deletedCounts["BolusCalculations"] = bolusCalcsDeleted;
-            if (bgChecksDeleted > 0) deletedCounts["ManualBG"] = deletedCounts.GetValueOrDefault("ManualBG") + bgChecksDeleted;
-            if (notesDeleted > 0) deletedCounts["Notes"] = notesDeleted;
-            if (deviceEventsDeleted > 0) deletedCounts["DeviceEvents"] = deviceEventsDeleted;
-            if (deviceStatusDeleted > 0) deletedCounts["DeviceStatus"] = deviceStatusDeleted;
-            if (stateSpansDeleted > 0) deletedCounts["StateSpans"] = stateSpansDeleted;
+            if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
+            if (meterGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.ManualBG)] = meterGlucoseDeleted;
+            if (calibrationsDeleted > 0) deletedCounts[nameof(SyncDataType.Calibrations)] = calibrationsDeleted;
+            if (bolusesDeleted > 0) deletedCounts[nameof(SyncDataType.Boluses)] = bolusesDeleted;
+            if (carbIntakesDeleted > 0) deletedCounts[nameof(SyncDataType.CarbIntake)] = carbIntakesDeleted;
+            if (bgChecksDeleted > 0) deletedCounts[nameof(SyncDataType.BGChecks)] = bgChecksDeleted;
+            if (bolusCalcsDeleted > 0) deletedCounts[nameof(SyncDataType.BolusCalculations)] = bolusCalcsDeleted;
+            if (notesDeleted > 0) deletedCounts[nameof(SyncDataType.Notes)] = notesDeleted;
+            if (deviceEventsDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceEvents)] = deviceEventsDeleted;
+            if (deviceStatusDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceStatus)] = deviceStatusDeleted;
+            if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
 
             _logger.LogInformation(
                 "Deleted data for connector {ConnectorId} (device {DeviceId}): {DeletedCounts}",
@@ -769,17 +782,17 @@ public class DataSourceService : IDataSourceService
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();
-            var glucoseDeleted = (long)sensorGlucoseDeleted + calibrationsDeleted;
-            if (glucoseDeleted > 0) deletedCounts["Glucose"] = glucoseDeleted;
-            if (meterGlucoseDeleted > 0) deletedCounts["ManualBG"] = meterGlucoseDeleted;
-            if (bolusesDeleted > 0) deletedCounts["Boluses"] = bolusesDeleted;
-            if (carbIntakesDeleted > 0) deletedCounts["CarbIntake"] = carbIntakesDeleted;
-            if (bgChecksDeleted > 0) deletedCounts["ManualBG"] = deletedCounts.GetValueOrDefault("ManualBG") + bgChecksDeleted;
-            if (notesDeleted > 0) deletedCounts["Notes"] = notesDeleted;
-            if (deviceEventsDeleted > 0) deletedCounts["DeviceEvents"] = deviceEventsDeleted;
-            if (bolusCalcsDeleted > 0) deletedCounts["BolusCalculations"] = bolusCalcsDeleted;
-            if (deviceStatusDeleted > 0) deletedCounts["DeviceStatus"] = deviceStatusDeleted;
-            if (stateSpansDeleted > 0) deletedCounts["StateSpans"] = stateSpansDeleted;
+            if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
+            if (meterGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.ManualBG)] = meterGlucoseDeleted;
+            if (calibrationsDeleted > 0) deletedCounts[nameof(SyncDataType.Calibrations)] = calibrationsDeleted;
+            if (bolusesDeleted > 0) deletedCounts[nameof(SyncDataType.Boluses)] = bolusesDeleted;
+            if (carbIntakesDeleted > 0) deletedCounts[nameof(SyncDataType.CarbIntake)] = carbIntakesDeleted;
+            if (bgChecksDeleted > 0) deletedCounts[nameof(SyncDataType.BGChecks)] = bgChecksDeleted;
+            if (notesDeleted > 0) deletedCounts[nameof(SyncDataType.Notes)] = notesDeleted;
+            if (deviceEventsDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceEvents)] = deviceEventsDeleted;
+            if (bolusCalcsDeleted > 0) deletedCounts[nameof(SyncDataType.BolusCalculations)] = bolusCalcsDeleted;
+            if (deviceStatusDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceStatus)] = deviceStatusDeleted;
+            if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
 
             _logger.LogInformation(
                 "Deleted data for {DeviceId}: {DeletedCounts}",
@@ -841,9 +854,9 @@ public class DataSourceService : IDataSourceService
                 .ExecuteDeleteAsync(cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();
-            if (glucoseDeleted > 0) deletedCounts["Glucose"] = glucoseDeleted;
+            if (glucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = glucoseDeleted;
             if (treatmentsDeleted > 0) deletedCounts["Treatments"] = treatmentsDeleted;
-            if (deviceStatusDeleted > 0) deletedCounts["DeviceStatus"] = deviceStatusDeleted;
+            if (deviceStatusDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceStatus)] = deviceStatusDeleted;
 
             _logger.LogInformation(
                 "Deleted demo data: {DeletedCounts}",
@@ -975,15 +988,15 @@ public class DataSourceService : IDataSourceService
 
         var glucoseTotal = sgStats?.Total ?? 0;
         var glucose24h = sgStats?.Last24H ?? 0;
-        if (glucoseTotal > 0) { typeBreakdown["Glucose"] = glucoseTotal; typeBreakdown24h["Glucose"] = glucose24h; }
-        if (meterGlucoseTotal > 0) { typeBreakdown["ManualBG"] = meterGlucoseTotal; typeBreakdown24h["ManualBG"] = meterGlucose24h; }
-        if (bolusesTotal > 0) { typeBreakdown["Boluses"] = bolusesTotal; typeBreakdown24h["Boluses"] = boluses24h; }
-        if (carbIntakesTotal > 0) { typeBreakdown["CarbIntake"] = carbIntakesTotal; typeBreakdown24h["CarbIntake"] = carbIntakes24h; }
-        if (bolusCalcsTotal > 0) { typeBreakdown["BolusCalculations"] = bolusCalcsTotal; typeBreakdown24h["BolusCalculations"] = bolusCalcs24h; }
-        if (notesTotal > 0) { typeBreakdown["Notes"] = notesTotal; typeBreakdown24h["Notes"] = notes24h; }
-        if (deviceEventsTotal > 0) { typeBreakdown["DeviceEvents"] = deviceEventsTotal; typeBreakdown24h["DeviceEvents"] = deviceEvents24h; }
-        if ((stateSpanStats?.TotalStateSpans ?? 0) > 0) { typeBreakdown["StateSpans"] = stateSpanStats!.TotalStateSpans; typeBreakdown24h["StateSpans"] = stateSpanStats.StateSpansLast24Hours; }
-        if (deviceStatusTotal > 0) { typeBreakdown["DeviceStatus"] = deviceStatusTotal; typeBreakdown24h["DeviceStatus"] = deviceStatus24h; }
+        if (glucoseTotal > 0) { typeBreakdown[nameof(SyncDataType.Glucose)] = glucoseTotal; typeBreakdown24h[nameof(SyncDataType.Glucose)] = glucose24h; }
+        if (meterGlucoseTotal > 0) { typeBreakdown[nameof(SyncDataType.ManualBG)] = meterGlucoseTotal; typeBreakdown24h[nameof(SyncDataType.ManualBG)] = meterGlucose24h; }
+        if (bolusesTotal > 0) { typeBreakdown[nameof(SyncDataType.Boluses)] = bolusesTotal; typeBreakdown24h[nameof(SyncDataType.Boluses)] = boluses24h; }
+        if (carbIntakesTotal > 0) { typeBreakdown[nameof(SyncDataType.CarbIntake)] = carbIntakesTotal; typeBreakdown24h[nameof(SyncDataType.CarbIntake)] = carbIntakes24h; }
+        if (bolusCalcsTotal > 0) { typeBreakdown[nameof(SyncDataType.BolusCalculations)] = bolusCalcsTotal; typeBreakdown24h[nameof(SyncDataType.BolusCalculations)] = bolusCalcs24h; }
+        if (notesTotal > 0) { typeBreakdown[nameof(SyncDataType.Notes)] = notesTotal; typeBreakdown24h[nameof(SyncDataType.Notes)] = notes24h; }
+        if (deviceEventsTotal > 0) { typeBreakdown[nameof(SyncDataType.DeviceEvents)] = deviceEventsTotal; typeBreakdown24h[nameof(SyncDataType.DeviceEvents)] = deviceEvents24h; }
+        if ((stateSpanStats?.TotalStateSpans ?? 0) > 0) { typeBreakdown[nameof(SyncDataType.StateSpans)] = stateSpanStats!.TotalStateSpans; typeBreakdown24h[nameof(SyncDataType.StateSpans)] = stateSpanStats.StateSpansLast24Hours; }
+        if (deviceStatusTotal > 0) { typeBreakdown[nameof(SyncDataType.DeviceStatus)] = deviceStatusTotal; typeBreakdown24h[nameof(SyncDataType.DeviceStatus)] = deviceStatus24h; }
 
         var totalTreatments = bolusesTotal + carbIntakesTotal + bolusCalcsTotal + notesTotal + deviceEventsTotal;
         var treatments24h = boluses24h + carbIntakes24h + bolusCalcs24h + notes24h + deviceEvents24h;

@@ -140,6 +140,12 @@ public class PumpSnapshotEntity : ITenantScoped
     public Guid? DeviceId { get; set; }
 
     /// <summary>
+    /// Foreign key to the PatientDevice table.
+    /// </summary>
+    [Column("patient_device_id")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Pump-reported total IOB (when no APS algorithm is running)
     /// </summary>
     [Column("iob")]

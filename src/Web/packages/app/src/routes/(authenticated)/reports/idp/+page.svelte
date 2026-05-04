@@ -83,7 +83,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="container mx-auto px-4 py-6 space-y-8 max-w-7xl">
+<div class="@container container mx-auto px-4 py-6 space-y-8 max-w-7xl">
   <!-- Header -->
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-4">
@@ -123,7 +123,7 @@
   </div>
 
   <!-- Top Row: Insulin Summary + Glucose Metrics -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
     <!-- Insulin Summary Card -->
     <Card class="border-2">
       <CardHeader>
@@ -272,7 +272,7 @@
   {/if}
 
   <!-- Middle Row: AID Use (stub) + GRI -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
     <!-- AID Use Card (stubbed) -->
     <Card class="border-2">
       <CardHeader>
@@ -325,7 +325,7 @@
           Composite metric of hypo and hyperglycemia risk
         </CardDescription>
       </CardHeader>
-      <CardContent class="h-64">
+      <CardContent>
         {#if analysis?.gri}
           <GlycemicRiskIndexChart gri={analysis.gri} />
         {:else}
@@ -350,7 +350,7 @@
     </CardHeader>
     <CardContent class="space-y-6">
       <!-- AGP -->
-      <div class="h-80 md:h-96">
+      <div class="h-80 @2xl:h-96">
         <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
       </div>
 

@@ -78,7 +78,7 @@ public class GlucosePublisherTests
             .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Entry { Date = expectedDate });
 
-        var result = await _publisher.GetLatestEntryTimestampAsync("test-source");
+        var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
         result.Should().Be(expectedDate);
     }
@@ -91,7 +91,7 @@ public class GlucosePublisherTests
             .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Entry { Mills = mills });
 
-        var result = await _publisher.GetLatestEntryTimestampAsync("test-source");
+        var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
         result.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime);
     }

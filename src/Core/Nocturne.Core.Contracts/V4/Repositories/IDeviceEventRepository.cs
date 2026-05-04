@@ -111,12 +111,20 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
     );
 
     /// <summary>
-    /// Retrieve the most recent <see cref="DeviceEvent"/> of the specified <see cref="DeviceEventType"/>.
+    /// Retrieve the most recent <see cref="DeviceEvent"/> of the specified <see cref="DeviceEventType"/>,
+    /// optionally pinned to a historical instant.
     /// </summary>
     /// <param name="eventType">The <see cref="DeviceEventType"/> to search for (e.g., site change).</param>
+    /// <param name="asOf">When non-null, restricts to events with <c>Timestamp &lt;= asOf</c>; powers
+    /// replay's <c>site_age</c> / <c>sensor_age</c> reconstruction. <c>null</c> returns the
+    /// absolute latest.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
-    Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, CancellationToken ct = default);
+    Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>Convenience overload returning the absolute latest event of the given type.</summary>
+    Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, CancellationToken ct = default)
+        => GetLatestByEventTypeAsync(eventType, asOf: null, ct);
 
     /// <summary>
     /// Retrieve the most recent <see cref="DeviceEvent"/> matching any of the specified <see cref="DeviceEventType"/> values.

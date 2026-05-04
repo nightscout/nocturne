@@ -570,16 +570,17 @@ public class TenantIsolationTests
     }
 
     [Fact]
-    public async Task TenantResolutionMiddleware_ApexDomain_NonTenantlessPath_Returns404()
+    public async Task TenantResolutionMiddleware_ApexDomain_NonTenantlessPath_Returns503WhenNoTenants()
     {
-        // Multi-tenant mode: apex domain with a non-tenantless path should 404
+        // Apex domain with no tenants returns 503 setup_required
         var middleware = CreateMiddleware();
-        var context = CreateMiddlewareHttpContext("nocturnecgm.com");
+        var context = CreateMiddlewareHttpContext("nocturnecgm.com", registerDbFactory: true);
         context.Request.Path = "/api/v1/entries";
+        context.Response.Body = new MemoryStream();
 
         await middleware.InvokeAsync(context);
 
-        context.Response.StatusCode.Should().Be(404);
+        context.Response.StatusCode.Should().Be(503);
     }
 
     [Fact]
@@ -618,16 +619,17 @@ public class TenantIsolationTests
     }
 
     [Fact]
-    public async Task TenantResolutionMiddleware_ApexDomain_WithBaseDomainPort_Returns404()
+    public async Task TenantResolutionMiddleware_ApexDomain_WithBaseDomainPort_Returns503WhenNoTenants()
     {
-        // Apex domain (no subdomain) with BaseDomain set should 404 for non-tenantless paths
+        // Apex domain with BaseDomain set and no tenants returns 503 setup_required
         var middleware = CreateMiddleware(baseDomain: "localhost:1612");
-        var context = CreateMiddlewareHttpContext("localhost");
+        var context = CreateMiddlewareHttpContext("localhost", registerDbFactory: true);
         context.Request.Path = "/api/v1/entries";
+        context.Response.Body = new MemoryStream();
 
         await middleware.InvokeAsync(context);
 
-        context.Response.StatusCode.Should().Be(404);
+        context.Response.StatusCode.Should().Be(503);
     }
 
     [Fact]
@@ -740,13 +742,13 @@ public class TenantIsolationTests
                 cache.Set($"tenant:{slug}", ctx, TimeSpan.FromMinutes(5));
             }
 
-            // For single-tenant mode tests, if exactly one active tenant, pre-populate __single__ cache
+            // For single-tenant mode tests, if exactly one active tenant, pre-populate __sole__ cache
             var activeTenants = tenants.Where(t => t.active).ToArray();
             if (string.IsNullOrEmpty(baseDomain) && activeTenants.Length == 1)
             {
                 var (slug, id, _) = activeTenants[0];
                 var singleCtx = new TenantContext(id, slug, slug, true);
-                cache.Set("tenant:__single__", singleCtx, TimeSpan.FromMinutes(5));
+                cache.Set("tenant:__sole__", singleCtx, TimeSpan.FromMinutes(5));
             }
         }
 

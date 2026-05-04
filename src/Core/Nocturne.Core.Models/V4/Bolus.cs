@@ -143,6 +143,11 @@ public class Bolus : IV4Record
     public Guid? DeviceId { get; set; }
 
     /// <summary>
+    /// Foreign key to the <see cref="PatientDevice"/> table.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Per-record pump counter (AAPS internal identifier)
     /// </summary>
     public string? PumpRecordId { get; set; }

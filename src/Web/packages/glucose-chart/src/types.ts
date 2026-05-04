@@ -105,4 +105,6 @@ export interface TransformedChartData {
 		fillColor: string;
 		strokeColor: string;
 	}>;
+	heartRateSeries: Array<{ time: Date; bpm: number }>;
+	stepSeries: Array<{ time: Date; steps: number }>;
 }

@@ -215,6 +215,7 @@ builder.Services.AddOpenApi("nocturne", options =>
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
 builder.Services.AddOpenApi("nightscout", options =>
@@ -236,6 +237,7 @@ builder.Services.AddOpenApi("nightscout", options =>
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
 // ── Service registration (grouped by concern) ──────────────────────────
@@ -398,6 +400,7 @@ app.MapScalarApiReference(options =>
     options.WithOpenApiRoutePattern("/openapi/{documentName}.json");
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
+    options.AddHeadContent(MermaidLazyLoader.HeadContent);
 });
 
 // Add root endpoint to serve a basic info page

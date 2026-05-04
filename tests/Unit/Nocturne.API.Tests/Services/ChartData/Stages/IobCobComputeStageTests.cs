@@ -19,6 +19,7 @@ public class IobCobComputeStageTests
     private readonly Mock<ICobCalculator> _mockCobCalculator = new();
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettings = new();
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver = new();
+    private readonly Mock<ITherapyTimelineResolver> _mockTherapyTimelineResolver = new();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IobCobComputeStage _stage;
 
@@ -29,11 +30,27 @@ public class IobCobComputeStageTests
     {
         _mockTherapySettings.Setup(p => p.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
+        var defaultSnapshot = new TherapySnapshot(
+            dia: 3.0,
+            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
+            carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
+            timezone: null,
+            ccpPercentage: null,
+            ccpTimeshiftMs: 0,
+            sensitivityEntries: null,
+            carbRatioEntries: null,
+            basalEntries: null);
+        _mockTherapyTimelineResolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline(new[] { new TherapySegment(from, to, defaultSnapshot) }));
+
         _stage = new IobCobComputeStage(
             _mockIobCalculator.Object,
             _mockCobCalculator.Object,
             _mockTherapySettings.Object,
             _mockBasalRateResolver.Object,
+            _mockTherapyTimelineResolver.Object,
             _cache,
             MockTenantAccessor.Create().Object,
             NullLogger<IobCobComputeStage>.Instance

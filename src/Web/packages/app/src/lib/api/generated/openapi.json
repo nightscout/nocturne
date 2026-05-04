@@ -6,6 +6,28 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/Metadata/alert-condition-types": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Get the alert condition tree shape. Exists solely so NSwag generates TypeScript\ninterfaces for ConditionNode and every condition payload record\n— they're stored as opaque JSON on the rule entity and not otherwise reachable\nthrough a controller signature.",
+        "operationId": "Metadata_GetAlertConditionTypes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertConditionTypesMetadata"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/Metadata/auth-error-codes": {
       "get": {
         "tags": [
@@ -9458,7 +9480,7 @@
         "tags": [
           "Alert Invites"
         ],
-        "summary": "Generate an invite link for a follower to join an escalation step.",
+        "summary": "Generate an invite link for a follower to attach to a rule channel.",
         "operationId": "AlertInvites_CreateInvite",
         "requestBody": {
           "x-name": "request",
@@ -9643,12 +9665,80 @@
         "x-remote-type": "command"
       }
     },
+    "/api/v4/alerts/replay": {
+      "post": {
+        "tags": [
+          "Alert Replay"
+        ],
+        "summary": "Replay enabled rules over a window. date=null replays the rolling last 24 hours;\notherwise replays that calendar day in timezone (UTC if omitted).",
+        "operationId": "AlertReplay_Replay",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertReplayRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertReplayResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/alerts/replay/dry-run": {
+      "post": {
+        "tags": [
+          "Alert Replay"
+        ],
+        "summary": "Dry-run replay variant for the rule editor. Layers a user-provided rule definition\nonto the saved rule set for one call (never persisted), so authors can answer\n\"would my new/edited rule have woken me last night?\" before saving.",
+        "operationId": "AlertReplay_ReplayDryRun",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertReplayDryRunRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertReplayResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/alert-rules": {
       "get": {
         "tags": [
           "Alert Rules"
         ],
-        "summary": "List all alert rules for the current tenant with schedules and escalation steps.",
+        "summary": "List all alert rules for the current tenant with their flat channel list.",
         "operationId": "AlertRules_GetRules",
         "responses": {
           "200": {
@@ -9671,7 +9761,7 @@
         "tags": [
           "Alert Rules"
         ],
-        "summary": "Create an alert rule with nested schedules, escalation steps, and channels.",
+        "summary": "Create an alert rule with a flat channel list.",
         "operationId": "AlertRules_CreateRule",
         "requestBody": {
           "x-name": "request",
@@ -9718,7 +9808,7 @@
         "tags": [
           "Alert Rules"
         ],
-        "summary": "Get a single alert rule with full schedule/escalation tree.",
+        "summary": "Get a single alert rule with its flat channel list.",
         "operationId": "AlertRules_GetRule",
         "parameters": [
           {
@@ -9828,7 +9918,7 @@
         "tags": [
           "Alert Rules"
         ],
-        "summary": "Delete an alert rule (cascades to schedules, steps, channels).",
+        "summary": "Delete an alert rule (cascades to its channels).",
         "operationId": "AlertRules_DeleteRule",
         "parameters": [
           {
@@ -9852,6 +9942,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferencingRulesResponse"
                 }
               }
             }
@@ -9911,6 +10011,70 @@
         ]
       }
     },
+    "/api/v4/alert-rules/{id}/test-fire": {
+      "post": {
+        "tags": [
+          "Alert Rules"
+        ],
+        "summary": "Fire a saved rule through its real channel list as a test. Writes a\nis_test=true instance + delivery rows so the user can verify their channels\nwithout polluting the active-alerts surface.",
+        "operationId": "AlertRules_TestFire",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/alert-rules/test-fire-dry-run": {
+      "post": {
+        "tags": [
+          "Alert Rules"
+        ],
+        "summary": "Test-fire variant for the editor on an unsaved rule. Same provider chain, no\nrule lookup — channels and metadata come straight from the request body.",
+        "operationId": "AlertRules_TestFireDryRun",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestFireDryRunRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/alerts/active": {
       "get": {
         "tags": [
@@ -9941,7 +10105,7 @@
         "tags": [
           "Alerts"
         ],
-        "summary": "Get paginated history of resolved excursions.",
+        "summary": "Get paginated history of resolved excursions. Test fires are excluded\nby default; pass includeTest = true to include them.",
         "operationId": "Alerts_GetAlertHistory",
         "parameters": [
           {
@@ -9963,6 +10127,25 @@
               "default": 20
             },
             "x-position": 2
+          },
+          {
+            "name": "alertRuleId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "guid",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "includeTest",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 4
           }
         ],
         "responses": {
@@ -10394,6 +10577,73 @@
         "x-remote-type": "command",
         "x-remote-invalidates": [
           "GetNotifications"
+        ]
+      }
+    },
+    "/api/v4/tenant-alert-settings": {
+      "get": {
+        "tags": [
+          "Tenant Alert Settings"
+        ],
+        "summary": "Get the current tenant's alert settings, creating a default row if one does not exist.",
+        "operationId": "TenantAlertSettings_Get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAlertSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Tenant Alert Settings"
+        ],
+        "summary": "Replace the current tenant's alert settings. Upserts on first call.",
+        "operationId": "TenantAlertSettings_Update",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantAlertSettingsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAlertSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "Get"
         ]
       }
     },
@@ -17287,6 +17537,63 @@
         ]
       }
     },
+    "/api/v4/Actogram": {
+      "get": {
+        "tags": [
+          "Actogram"
+        ],
+        "summary": "Get actogram report data for a time window.",
+        "operationId": "Actogram_GetActogram",
+        "parameters": [
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Start of the window as Unix milliseconds (inclusive).",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "End of the window as Unix milliseconds (exclusive).\n            Must be greater than startTime.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActogramReportData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": ""
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/v4/Analytics/status": {
       "get": {
         "tags": [
@@ -22454,6 +22761,837 @@
   },
   "components": {
     "schemas": {
+      "AlertConditionTypesMetadata": {
+        "type": "object",
+        "description": "Forces NSwag to emit TypeScript interfaces for ConditionNode and\nevery condition payload record — they're stored as opaque JSON on the rule entity\nand otherwise never appear in a controller signature.",
+        "additionalProperties": false,
+        "properties": {
+          "sample": {
+            "description": "A sample ConditionNode; pulls every sub-record into the OpenAPI schema.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConditionNode"
+              }
+            ]
+          },
+          "tempBasalMetrics": {
+            "type": "array",
+            "description": "All TempBasalMetric values.",
+            "items": {
+              "$ref": "#/components/schemas/TempBasalMetric"
+            }
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "ConditionNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "threshold": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThresholdCondition"
+              }
+            ]
+          },
+          "rate_of_change": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RateOfChangeCondition"
+              }
+            ]
+          },
+          "signal_loss": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SignalLossCondition"
+              }
+            ]
+          },
+          "composite": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompositeCondition"
+              }
+            ]
+          },
+          "not": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotCondition"
+              }
+            ]
+          },
+          "sustained": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SustainedCondition"
+              }
+            ]
+          },
+          "staleness": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StalenessCondition"
+              }
+            ]
+          },
+          "predicted": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PredictedCondition"
+              }
+            ]
+          },
+          "trend": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrendCondition"
+              }
+            ]
+          },
+          "time_of_day": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeOfDayCondition"
+              }
+            ]
+          },
+          "iob": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IobCondition"
+              }
+            ]
+          },
+          "cob": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CobCondition"
+              }
+            ]
+          },
+          "reservoir": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReservoirCondition"
+              }
+            ]
+          },
+          "site_age": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SiteAgeCondition"
+              }
+            ]
+          },
+          "sensor_age": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SensorAgeCondition"
+              }
+            ]
+          },
+          "alert_state": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AlertStateCondition"
+              }
+            ]
+          },
+          "loop_stale": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoopStaleCondition"
+              }
+            ]
+          },
+          "loop_enaction_stale": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoopEnactionStaleCondition"
+              }
+            ]
+          },
+          "pump_suspended": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpSuspendedCondition"
+              }
+            ]
+          },
+          "pump_battery": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpBatteryCondition"
+              }
+            ]
+          },
+          "temp_basal": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TempBasalCondition"
+              }
+            ]
+          },
+          "uploader_battery": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UploaderBatteryCondition"
+              }
+            ]
+          },
+          "override_active": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OverrideActiveCondition"
+              }
+            ]
+          },
+          "sensitivity_ratio": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SensitivityRatioCondition"
+              }
+            ]
+          },
+          "do_not_disturb": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DoNotDisturbCondition"
+              }
+            ]
+          },
+          "glucose_bucket": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GlucoseBucketCondition"
+              }
+            ]
+          },
+          "time_since_last_carb": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeSinceLastCarbCondition"
+              }
+            ]
+          },
+          "time_since_last_bolus": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeSinceLastBolusCondition"
+              }
+            ]
+          },
+          "day_of_week": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DayOfWeekCondition"
+              }
+            ]
+          },
+          "pump_state": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpStateCondition"
+              }
+            ]
+          },
+          "state_span_active": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StateSpanActiveCondition"
+              }
+            ]
+          }
+        }
+      },
+      "ThresholdCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "RateOfChangeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "rate": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "SignalLossCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeout_minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CompositeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConditionNode"
+            }
+          }
+        }
+      },
+      "NotCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "child": {
+            "$ref": "#/components/schemas/ConditionNode"
+          }
+        }
+      },
+      "SustainedCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "child": {
+            "$ref": "#/components/schemas/ConditionNode"
+          }
+        }
+      },
+      "StalenessCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PredictedCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "within_minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TrendCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bucket": {
+            "type": "string"
+          }
+        }
+      },
+      "TimeOfDayCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "IobCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "CobCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "ReservoirCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "SiteAgeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "SensorAgeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "AlertStateCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "alert_id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "LoopStaleCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "LoopEnactionStaleCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PumpSuspendedCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "PumpBatteryCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "TempBasalCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "metric": {
+            "$ref": "#/components/schemas/TempBasalMetric"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "TempBasalMetric": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Rate",
+          "PercentOfScheduled"
+        ],
+        "enum": [
+          "rate",
+          "percent_of_scheduled"
+        ]
+      },
+      "UploaderBatteryCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "OverrideActiveCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "SensitivityRatioCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "DoNotDisturbCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "GlucoseBucketCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucoseBucket"
+            }
+          }
+        }
+      },
+      "GlucoseBucket": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "VeryLow",
+          "Low",
+          "TightRange",
+          "InRange",
+          "High",
+          "VeryHigh"
+        ],
+        "enum": [
+          "very_low",
+          "low",
+          "tight_range",
+          "in_range",
+          "high",
+          "very_high"
+        ]
+      },
+      "TimeSinceLastCarbCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/AlertComparisonOperator"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AlertComparisonOperator": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Gt",
+          "Gte",
+          "Lt",
+          "Lte",
+          "Eq"
+        ],
+        "enum": [
+          ">",
+          ">=",
+          "<",
+          "<=",
+          "=="
+        ]
+      },
+      "TimeSinceLastBolusCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/AlertComparisonOperator"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DayOfWeekCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          }
+        }
+      },
+      "DayOfWeek": {
+        "type": "integer",
+        "description": "",
+        "x-enumNames": [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday"
+        ],
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "PumpStateCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/PumpModeState"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "PumpModeState": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Automatic",
+          "Limited",
+          "Manual",
+          "Boost",
+          "EaseOff",
+          "Sleep",
+          "Exercise",
+          "Suspended",
+          "Off"
+        ],
+        "enum": [
+          "Automatic",
+          "Limited",
+          "Manual",
+          "Boost",
+          "EaseOff",
+          "Sleep",
+          "Exercise",
+          "Suspended",
+          "Off"
+        ]
+      },
+      "StateSpanActiveCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StateSpanCategory"
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "for_minutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        }
+      },
+      "StateSpanCategory": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel",
+          "DataExclusion",
+          "TemporaryTarget"
+        ],
+        "enum": [
+          "PumpMode",
+          "PumpConnectivity",
+          "Override",
+          "Profile",
+          "Sleep",
+          "Exercise",
+          "Illness",
+          "Travel",
+          "DataExclusion",
+          "TemporaryTarget"
+        ]
+      },
       "AuthErrorCodesMetadata": {
         "type": "object",
         "description": "Metadata about authentication error codes for NSwag generation",
@@ -25812,34 +26950,6 @@
           }
         }
       },
-      "StateSpanCategory": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile",
-          "Sleep",
-          "Exercise",
-          "Illness",
-          "Travel",
-          "DataExclusion",
-          "TemporaryTarget"
-        ],
-        "enum": [
-          "PumpMode",
-          "PumpConnectivity",
-          "Override",
-          "Profile",
-          "Sleep",
-          "Exercise",
-          "Illness",
-          "Travel",
-          "DataExclusion",
-          "TemporaryTarget"
-        ]
-      },
       "AcceptSuggestionRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -28311,6 +29421,22 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "veryLow": {
+            "type": "integer",
+            "nullable": true
+          },
+          "tightLow": {
+            "type": "integer",
+            "nullable": true
+          },
+          "tightHigh": {
+            "type": "integer",
+            "nullable": true
+          },
+          "veryHigh": {
+            "type": "integer",
+            "nullable": true
           }
         }
       },
@@ -30278,8 +31404,10 @@
         "x-enumNames": [
           "Glucose",
           "ManualBG",
+          "Calibrations",
           "Boluses",
           "CarbIntake",
+          "BGChecks",
           "BolusCalculations",
           "Notes",
           "DeviceEvents",
@@ -30292,8 +31420,10 @@
         "enum": [
           "Glucose",
           "ManualBG",
+          "Calibrations",
           "Boluses",
           "CarbIntake",
+          "BGChecks",
           "BolusCalculations",
           "Notes",
           "DeviceEvents",
@@ -30574,6 +31704,7 @@
         "description": "",
         "x-enumNames": [
           "WebPush",
+          "InApp",
           "Webhook",
           "DiscordDm",
           "DiscordChannel",
@@ -30587,6 +31718,7 @@
         ],
         "enum": [
           "web_push",
+          "in_app",
           "webhook",
           "discord_dm",
           "discord_channel",
@@ -31300,7 +32432,7 @@
           "token": {
             "type": "string"
           },
-          "escalationStepId": {
+          "alertRuleChannelId": {
             "type": "string",
             "format": "guid"
           },
@@ -31324,7 +32456,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "escalationStepId": {
+          "alertRuleChannelId": {
             "type": "string",
             "format": "guid"
           },
@@ -31333,6 +32465,300 @@
             "nullable": true
           }
         }
+      },
+      "AlertReplayResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "windowStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "windowEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertReplayEvent"
+            }
+          },
+          "limitations": {
+            "type": "string"
+          },
+          "leafTransitionsByRule": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/LeafTransitionLog"
+              }
+            }
+          },
+          "factTimelines": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/FactSnapshotPoint"
+              }
+            }
+          }
+        }
+      },
+      "AlertReplayEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "ruleName": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AlertReplayEventKind"
+          }
+        }
+      },
+      "AlertRuleSeverity": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Critical",
+          "Warning",
+          "Info"
+        ],
+        "enum": [
+          "critical",
+          "warning",
+          "info"
+        ]
+      },
+      "AlertReplayEventKind": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Fired",
+          "AutoResolved",
+          "SuppressedByDnd"
+        ],
+        "enum": [
+          "fired",
+          "auto_resolved",
+          "suppressed_by_dnd"
+        ]
+      },
+      "LeafTransitionLog": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "leafId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeafTransitionPoint"
+            }
+          }
+        }
+      },
+      "LeafTransitionPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "atMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "value": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FactSnapshotPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "atMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          }
+        }
+      },
+      "AlertReplayRequest": {
+        "type": "object",
+        "description": "Request body for the alerts replay endpoint. From and\nTo are absolute UTC instants and take precedence over\nDate + Timezone when set, allowing replay of an\narbitrary window (not just a calendar day).",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "nullable": true
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "AlertReplayDryRunRequest": {
+        "type": "object",
+        "description": "Request body for the dry-run replay endpoint. Id is\noptional: when present and matching an existing rule it replaces it for the simulation;\notherwise the rule is appended for the call. From/To\nbehave the same as on AlertReplayRequest.",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "nullable": true
+          },
+          "rule": {
+            "$ref": "#/components/schemas/ReplayRuleDefinition"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ReplayRuleDefinition": {
+        "type": "object",
+        "description": "In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save\nshape — the controller doesn't deserialise the condition tree itself, just the\nConditionParams JSON blob the rule body would have stored.",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "conditionType": {
+            "$ref": "#/components/schemas/AlertConditionType"
+          },
+          "conditionParams": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "allowThroughDnd": {
+            "type": "boolean"
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AlertConditionType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Threshold",
+          "RateOfChange",
+          "SignalLoss",
+          "Composite",
+          "Not",
+          "Sustained",
+          "Staleness",
+          "Predicted",
+          "Trend",
+          "TimeOfDay",
+          "Iob",
+          "Cob",
+          "Reservoir",
+          "SiteAge",
+          "SensorAge",
+          "AlertState",
+          "LoopStale",
+          "LoopEnactionStale",
+          "PumpSuspended",
+          "PumpBattery",
+          "TempBasal",
+          "UploaderBattery",
+          "OverrideActive",
+          "SensitivityRatio",
+          "DoNotDisturb",
+          "GlucoseBucket",
+          "TimeSinceLastCarb",
+          "TimeSinceLastBolus",
+          "DayOfWeek",
+          "PumpState",
+          "StateSpanActive"
+        ],
+        "enum": [
+          "threshold",
+          "rate_of_change",
+          "signal_loss",
+          "composite",
+          "not",
+          "sustained",
+          "staleness",
+          "predicted",
+          "trend",
+          "time_of_day",
+          "iob",
+          "cob",
+          "reservoir",
+          "site_age",
+          "sensor_age",
+          "alert_state",
+          "loop_stale",
+          "loop_enaction_stale",
+          "pump_suspended",
+          "pump_battery",
+          "temp_basal",
+          "uploader_battery",
+          "override_active",
+          "sensitivity_ratio",
+          "do_not_disturb",
+          "glucose_bucket",
+          "time_since_last_carb",
+          "time_since_last_bolus",
+          "day_of_week",
+          "pump_state",
+          "state_span_active"
+        ]
       },
       "AlertRuleResponse": {
         "type": "object",
@@ -31353,14 +32779,6 @@
             "$ref": "#/components/schemas/AlertConditionType"
           },
           "conditionParams": {},
-          "hysteresisMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "confirmationReadings": {
-            "type": "integer",
-            "format": "int32"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -31371,120 +32789,27 @@
           "severity": {
             "$ref": "#/components/schemas/AlertRuleSeverity"
           },
+          "allowThroughDnd": {
+            "type": "boolean",
+            "description": "When true, this rule still fires while the tenant is in Do Not Disturb mode.\n            Critical rules implicitly bypass DND regardless of this flag."
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
+          },
           "clientConfiguration": {},
-          "schedules": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlertScheduleResponse"
-            }
-          }
-        }
-      },
-      "AlertConditionType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Threshold",
-          "RateOfChange",
-          "SignalLoss",
-          "Composite"
-        ],
-        "enum": [
-          "threshold",
-          "rate_of_change",
-          "signal_loss",
-          "composite"
-        ]
-      },
-      "AlertRuleSeverity": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Normal",
-          "Critical"
-        ],
-        "enum": [
-          "normal",
-          "critical"
-        ]
-      },
-      "AlertScheduleResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "isDefault": {
-            "type": "boolean"
-          },
-          "daysOfWeek": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "startTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "endTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "timezone": {
-            "type": "string"
-          },
-          "quietHoursStart": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursEnd": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursOverrideCritical": {
-            "type": "boolean"
-          },
-          "escalationSteps": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlertEscalationStepResponse"
-            }
-          }
-        }
-      },
-      "AlertEscalationStepResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "stepOrder": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "delaySeconds": {
-            "type": "integer",
-            "format": "int32"
-          },
           "channels": {
             "type": "array",
+            "description": "Flat list of delivery channels. Dispatched in parallel when the rule fires.",
             "items": {
-              "$ref": "#/components/schemas/AlertStepChannelResponse"
+              "$ref": "#/components/schemas/AlertRuleChannelResponse"
             }
           }
         }
       },
-      "AlertStepChannelResponse": {
+      "AlertRuleChannelResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -31501,6 +32826,10 @@
           "destinationLabel": {
             "type": "string",
             "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -31521,14 +32850,6 @@
           "conditionParams": {
             "nullable": true
           },
-          "hysteresisMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "confirmationReadings": {
-            "type": "integer",
-            "format": "int32"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -31544,94 +32865,28 @@
               }
             ]
           },
+          "allowThroughDnd": {
+            "type": "boolean"
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
+          },
           "clientConfiguration": {
             "nullable": true
-          },
-          "schedules": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/CreateAlertScheduleRequest"
-            }
-          }
-        }
-      },
-      "CreateAlertScheduleRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string",
-            "nullable": true
-          },
-          "isDefault": {
-            "type": "boolean"
-          },
-          "daysOfWeek": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "startTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "endTime": {
-            "type": "string",
-            "nullable": true
-          },
-          "timezone": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursEnabled": {
-            "type": "boolean"
-          },
-          "quietHoursStart": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursEnd": {
-            "type": "string",
-            "nullable": true
-          },
-          "quietHoursOverrideCritical": {
-            "type": "boolean"
-          },
-          "escalationSteps": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/CreateAlertEscalationStepRequest"
-            }
-          }
-        }
-      },
-      "CreateAlertEscalationStepRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "stepOrder": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "delaySeconds": {
-            "type": "integer",
-            "format": "int32"
           },
           "channels": {
             "type": "array",
             "nullable": true,
             "items": {
-              "$ref": "#/components/schemas/CreateAlertStepChannelRequest"
+              "$ref": "#/components/schemas/CreateAlertRuleChannelRequest"
             }
           }
         }
       },
-      "CreateAlertStepChannelRequest": {
+      "CreateAlertRuleChannelRequest": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -31639,7 +32894,9 @@
             "$ref": "#/components/schemas/ChannelType"
           },
           "destination": {
-            "type": "string"
+            "type": "string",
+            "description": "Channel-specific address: webhook URL, chat handle, etc. Empty for in-app/web-push.",
+            "nullable": true
           },
           "destinationLabel": {
             "type": "string",
@@ -31664,14 +32921,6 @@
           "conditionParams": {
             "nullable": true
           },
-          "hysteresisMinutes": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "confirmationReadings": {
-            "type": "integer",
-            "format": "int32"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -31687,14 +32936,56 @@
               }
             ]
           },
+          "allowThroughDnd": {
+            "type": "boolean"
+          },
+          "autoResolveEnabled": {
+            "type": "boolean"
+          },
+          "autoResolveParams": {
+            "nullable": true
+          },
           "clientConfiguration": {
             "nullable": true
           },
-          "schedules": {
+          "channels": {
             "type": "array",
             "nullable": true,
             "items": {
-              "$ref": "#/components/schemas/CreateAlertScheduleRequest"
+              "$ref": "#/components/schemas/CreateAlertRuleChannelRequest"
+            }
+          }
+        }
+      },
+      "ReferencingRulesResponse": {
+        "type": "object",
+        "description": "409 response body returned by DELETE /api/v4/alert-rules/{id} when other rules\nreference the target via alert_state. The FE uses this to either link to those\nrules or offer a cascade-delete confirmation.",
+        "additionalProperties": false,
+        "properties": {
+          "referencingRuleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "guid"
+            }
+          }
+        }
+      },
+      "TestFireDryRunRequest": {
+        "type": "object",
+        "description": "Request body for the dry-run test fire endpoint. Mirrors the editor's in-memory rule\nshape — only the fields needed to render a notification.",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateAlertRuleChannelRequest"
             }
           }
         }
@@ -31751,24 +33042,16 @@
             "type": "string",
             "format": "guid"
           },
-          "scheduleId": {
-            "type": "string",
-            "format": "guid"
-          },
           "status": {
             "type": "string"
-          },
-          "currentStepOrder": {
-            "type": "integer",
-            "format": "int32"
           },
           "triggeredAt": {
             "type": "string",
             "format": "date-time"
           },
-          "nextEscalationAt": {
+          "suppressionReason": {
             "type": "string",
-            "format": "date-time",
+            "description": "One of \"dnd\" when delivery was suppressed at fire time, otherwise null.",
             "nullable": true
           }
         }
@@ -31835,6 +33118,10 @@
           "acknowledgedBy": {
             "type": "string",
             "nullable": true
+          },
+          "isTest": {
+            "type": "boolean",
+            "description": "True when every instance of this excursion was a test fire."
           }
         }
       },
@@ -32128,6 +33415,78 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          }
+        }
+      },
+      "TenantAlertSettingsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dndManualActive": {
+            "type": "boolean",
+            "description": "True when the user has manually toggled DND on."
+          },
+          "dndManualUntil": {
+            "type": "string",
+            "description": "UTC instant at which a manually-activated DND auto-expires. Null = indefinite.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dndManualStartedAt": {
+            "type": "string",
+            "description": "UTC instant at which DND was most recently activated. Anchors sustained\n            do_not_disturb conditions.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dndScheduleEnabled": {
+            "type": "boolean",
+            "description": "True when a recurring scheduled DND window is configured."
+          },
+          "dndScheduleStart": {
+            "type": "string",
+            "description": "Local-time start of the scheduled DND window (in Timezone).",
+            "format": "time",
+            "nullable": true
+          },
+          "dndScheduleEnd": {
+            "type": "string",
+            "description": "Local-time end of the scheduled DND window. Cross-midnight windows allowed.",
+            "format": "time",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone (e.g. Europe/London) for the scheduled window."
+          }
+        }
+      },
+      "UpdateTenantAlertSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dndManualActive": {
+            "type": "boolean"
+          },
+          "dndManualUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dndScheduleEnabled": {
+            "type": "boolean"
+          },
+          "dndScheduleStart": {
+            "type": "string",
+            "format": "time",
+            "nullable": true
+          },
+          "dndScheduleEnd": {
+            "type": "string",
+            "format": "time",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string"
           }
         }
       },
@@ -36648,6 +38007,132 @@
           }
         }
       },
+      "ActogramReportData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "glucose": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucosePointDto"
+            }
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/ChartThresholdsDto"
+          },
+          "heartRates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeartRatePointDto"
+            }
+          },
+          "stepCounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepBubbleDto"
+            }
+          },
+          "sleepSpans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActogramSleepSpan"
+            }
+          }
+        }
+      },
+      "GlucosePointDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sgv": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "ChartThresholdsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "low": {
+            "type": "number",
+            "format": "double"
+          },
+          "high": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryLow": {
+            "type": "number",
+            "format": "double"
+          },
+          "veryHigh": {
+            "type": "number",
+            "format": "double"
+          },
+          "glucoseYMax": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "HeartRatePointDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bpm": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "StepBubbleDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "steps": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ActogramSleepSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "startMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endMills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
       "PerformanceMetrics": {
         "type": "object",
         "additionalProperties": false,
@@ -36961,6 +38446,18 @@
             "items": {
               "$ref": "#/components/schemas/TrackerMarkerDto"
             }
+          },
+          "heartRateSeries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeartRatePointDto"
+            }
+          },
+          "stepSeries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepBubbleDto"
+            }
           }
         }
       },
@@ -37061,6 +38558,8 @@
           "TrackerAppointment",
           "TrackerReminder",
           "TrackerCustom",
+          "HeartRate",
+          "Steps",
           "Profile",
           "Override",
           "MutedForeground",
@@ -37101,59 +38600,13 @@
           "tracker-appointment",
           "tracker-reminder",
           "tracker-custom",
+          "heart-rate",
+          "steps",
           "chart-1",
           "chart-2",
           "muted-foreground",
           "primary"
         ]
-      },
-      "GlucosePointDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "time": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "sgv": {
-            "type": "number",
-            "format": "double"
-          },
-          "direction": {
-            "type": "string",
-            "nullable": true
-          },
-          "dataSource": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "ChartThresholdsDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "low": {
-            "type": "number",
-            "format": "double"
-          },
-          "high": {
-            "type": "number",
-            "format": "double"
-          },
-          "veryLow": {
-            "type": "number",
-            "format": "double"
-          },
-          "veryHigh": {
-            "type": "number",
-            "format": "double"
-          },
-          "glucoseYMax": {
-            "type": "number",
-            "format": "double"
-          }
-        }
       },
       "BolusMarkerDto": {
         "type": "object",
@@ -39449,28 +40902,6 @@
             "type": "string"
           }
         }
-      },
-      "DayOfWeek": {
-        "type": "integer",
-        "description": "",
-        "x-enumNames": [
-          "Sunday",
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday",
-          "Saturday"
-        ],
-        "enum": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ]
       },
       "DayMetrics": {
         "allOf": [

@@ -72,6 +72,17 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             context.EndTime
         );
 
+        var heartRateSeries = context.HeartRateList
+            .Select(hr => new HeartRatePointDto { Time = hr.Mills, Bpm = hr.Bpm })
+            .OrderBy(p => p.Time)
+            .ToList();
+
+        var stepSeries = context.StepCountList
+            .Where(sc => sc.Metric > 0)
+            .Select(sc => new StepBubbleDto { Time = sc.Mills, Steps = sc.Metric })
+            .OrderBy(p => p.Time)
+            .ToList();
+
         return context with
         {
             GlucoseData = glucoseData,
@@ -88,6 +99,8 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             TempBasalSpans = tempBasalSpans,
             SystemEventMarkers = systemEventMarkers,
             TrackerMarkers = trackerMarkers,
+            HeartRateSeries = heartRateSeries,
+            StepSeries = stepSeries,
         };
     }
 

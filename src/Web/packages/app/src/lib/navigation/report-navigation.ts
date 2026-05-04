@@ -3,6 +3,7 @@ type IconComponent = any;
 import {
   BarChart3,
   BatteryFull,
+  ArrowLeftRight,
   Calendar,
   CalendarDays,
   Clock,
@@ -119,6 +120,13 @@ export const reportCategories: ReportCategory[] = [
         description: "Monthly trends and comparisons",
         href: "/reports/month-to-month",
         icon: Calendar,
+        status: "available",
+      },
+      {
+        title: "Comparison",
+        description: "Diff two date ranges side-by-side",
+        href: "/reports/comparison",
+        icon: ArrowLeftRight,
         status: "available",
       },
       {

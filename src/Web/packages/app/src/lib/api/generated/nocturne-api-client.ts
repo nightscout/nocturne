@@ -18,6 +18,46 @@ export class MetadataClient {
     }
 
     /**
+     * Get the alert condition tree shape. Exists solely so NSwag generates TypeScript
+    interfaces for ConditionNode and every condition payload record
+    — they're stored as opaque JSON on the rule entity and not otherwise reachable
+    through a controller signature.
+     */
+    getAlertConditionTypes(signal?: AbortSignal): Promise<AlertConditionTypesMetadata> {
+        let url_ = this.baseUrl + "/api/Metadata/alert-condition-types";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetAlertConditionTypes(_response);
+        });
+    }
+
+    protected processGetAlertConditionTypes(response: Response): Promise<AlertConditionTypesMetadata> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AlertConditionTypesMetadata;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<AlertConditionTypesMetadata>(null as any);
+    }
+
+    /**
      * Get authentication error codes metadata
     This endpoint ensures NSwag generates TypeScript types for AuthErrorCode
      * @return Auth error codes metadata
@@ -10245,7 +10285,7 @@ export class AlertInvitesClient {
     }
 
     /**
-     * Generate an invite link for a follower to join an escalation step.
+     * Generate an invite link for a follower to attach to a rule channel.
      */
     createInvite(request: CreateAlertInviteRequest, signal?: AbortSignal): Promise<AlertInviteResponse> {
         let url_ = this.baseUrl + "/api/v4/alert-invites";
@@ -10442,6 +10482,102 @@ export class AlertInvitesClient {
     }
 }
 
+export class AlertReplayClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Replay enabled rules over a window. date=null replays the rolling last 24 hours;
+    otherwise replays that calendar day in timezone (UTC if omitted).
+     */
+    replay(request: AlertReplayRequest, signal?: AbortSignal): Promise<AlertReplayResult> {
+        let url_ = this.baseUrl + "/api/v4/alerts/replay";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processReplay(_response);
+        });
+    }
+
+    protected processReplay(response: Response): Promise<AlertReplayResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AlertReplayResult;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<AlertReplayResult>(null as any);
+    }
+
+    /**
+     * Dry-run replay variant for the rule editor. Layers a user-provided rule definition
+    onto the saved rule set for one call (never persisted), so authors can answer
+    "would my new/edited rule have woken me last night?" before saving.
+     */
+    replayDryRun(request: AlertReplayDryRunRequest, signal?: AbortSignal): Promise<AlertReplayResult> {
+        let url_ = this.baseUrl + "/api/v4/alerts/replay/dry-run";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processReplayDryRun(_response);
+        });
+    }
+
+    protected processReplayDryRun(response: Response): Promise<AlertReplayResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AlertReplayResult;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<AlertReplayResult>(null as any);
+    }
+}
+
 export class AlertRulesClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -10453,7 +10589,7 @@ export class AlertRulesClient {
     }
 
     /**
-     * List all alert rules for the current tenant with schedules and escalation steps.
+     * List all alert rules for the current tenant with their flat channel list.
      */
     getRules(signal?: AbortSignal): Promise<AlertRuleResponse[]> {
         let url_ = this.baseUrl + "/api/v4/alert-rules";
@@ -10490,7 +10626,7 @@ export class AlertRulesClient {
     }
 
     /**
-     * Create an alert rule with nested schedules, escalation steps, and channels.
+     * Create an alert rule with a flat channel list.
      */
     createRule(request: CreateAlertRuleRequest, signal?: AbortSignal): Promise<AlertRuleResponse> {
         let url_ = this.baseUrl + "/api/v4/alert-rules";
@@ -10537,7 +10673,7 @@ export class AlertRulesClient {
     }
 
     /**
-     * Get a single alert rule with full schedule/escalation tree.
+     * Get a single alert rule with its flat channel list.
      */
     getRule(id: string, signal?: AbortSignal): Promise<AlertRuleResponse> {
         let url_ = this.baseUrl + "/api/v4/alert-rules/{id}";
@@ -10639,7 +10775,7 @@ export class AlertRulesClient {
     }
 
     /**
-     * Delete an alert rule (cascades to schedules, steps, channels).
+     * Delete an alert rule (cascades to its channels).
      */
     deleteRule(id: string, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/alert-rules/{id}";
@@ -10672,6 +10808,12 @@ export class AlertRulesClient {
             let result404: any = null;
             result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
             return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status === 409) {
+            return response.text().then((_responseText) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ReferencingRulesResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result409);
             });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
@@ -10726,6 +10868,90 @@ export class AlertRulesClient {
         }
         return Promise.resolve<AlertRuleResponse>(null as any);
     }
+
+    /**
+     * Fire a saved rule through its real channel list as a test. Writes a
+    is_test=true instance + delivery rows so the user can verify their channels
+    without polluting the active-alerts surface.
+     */
+    testFire(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/alert-rules/{id}/test-fire";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTestFire(_response);
+        });
+    }
+
+    protected processTestFire(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 202) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
+     * Test-fire variant for the editor on an unsaved rule. Same provider chain, no
+    rule lookup — channels and metadata come straight from the request body.
+     */
+    testFireDryRun(request: TestFireDryRunRequest, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/alert-rules/test-fire-dry-run";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processTestFireDryRun(_response);
+        });
+    }
+
+    protected processTestFireDryRun(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 202) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
 }
 
 export class AlertsClient {
@@ -10776,11 +11002,14 @@ export class AlertsClient {
     }
 
     /**
-     * Get paginated history of resolved excursions.
+     * Get paginated history of resolved excursions. Test fires are excluded
+    by default; pass includeTest = true to include them.
      * @param page (optional) 
      * @param pageSize (optional) 
+     * @param alertRuleId (optional) 
+     * @param includeTest (optional) 
      */
-    getAlertHistory(page?: number | undefined, pageSize?: number | undefined, signal?: AbortSignal): Promise<AlertHistoryResponse> {
+    getAlertHistory(page?: number | undefined, pageSize?: number | undefined, alertRuleId?: string | null | undefined, includeTest?: boolean | undefined, signal?: AbortSignal): Promise<AlertHistoryResponse> {
         let url_ = this.baseUrl + "/api/v4/alerts/history?";
         if (page === null)
             throw new globalThis.Error("The parameter 'page' cannot be null.");
@@ -10790,6 +11019,12 @@ export class AlertsClient {
             throw new globalThis.Error("The parameter 'pageSize' cannot be null.");
         else if (pageSize !== undefined)
             url_ += "pageSize=" + encodeURIComponent("" + pageSize) + "&";
+        if (alertRuleId !== undefined && alertRuleId !== null)
+            url_ += "alertRuleId=" + encodeURIComponent("" + alertRuleId) + "&";
+        if (includeTest === null)
+            throw new globalThis.Error("The parameter 'includeTest' cannot be null.");
+        else if (includeTest !== undefined)
+            url_ += "includeTest=" + encodeURIComponent("" + includeTest) + "&";
         url_ = url_.replace(/[?&]$/, "");
 
         let options_: RequestInit = {
@@ -11238,6 +11473,101 @@ export class NotificationsClient {
             });
         }
         return Promise.resolve<void>(null as any);
+    }
+}
+
+export class TenantAlertSettingsClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get the current tenant's alert settings, creating a default row if one does not exist.
+     */
+    get(signal?: AbortSignal): Promise<TenantAlertSettingsResponse> {
+        let url_ = this.baseUrl + "/api/v4/tenant-alert-settings";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGet(_response);
+        });
+    }
+
+    protected processGet(response: Response): Promise<TenantAlertSettingsResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TenantAlertSettingsResponse;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TenantAlertSettingsResponse>(null as any);
+    }
+
+    /**
+     * Replace the current tenant's alert settings. Upserts on first call.
+     */
+    update(request: UpdateTenantAlertSettingsRequest, signal?: AbortSignal): Promise<TenantAlertSettingsResponse> {
+        let url_ = this.baseUrl + "/api/v4/tenant-alert-settings";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpdate(_response);
+        });
+    }
+
+    protected processUpdate(response: Response): Promise<TenantAlertSettingsResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TenantAlertSettingsResponse;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TenantAlertSettingsResponse>(null as any);
     }
 }
 
@@ -18483,6 +18813,75 @@ export class AuditClient {
     }
 }
 
+export class ActogramClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get actogram report data for a time window.
+     * @param startTime (optional) Start of the window as Unix milliseconds (inclusive).
+     * @param endTime (optional) End of the window as Unix milliseconds (exclusive).
+                Must be greater than startTime.
+     */
+    getActogram(startTime?: number | undefined, endTime?: number | undefined, signal?: AbortSignal): Promise<ActogramReportData> {
+        let url_ = this.baseUrl + "/api/v4/Actogram?";
+        if (startTime === null)
+            throw new globalThis.Error("The parameter 'startTime' cannot be null.");
+        else if (startTime !== undefined)
+            url_ += "startTime=" + encodeURIComponent("" + startTime) + "&";
+        if (endTime === null)
+            throw new globalThis.Error("The parameter 'endTime' cannot be null.");
+        else if (endTime !== undefined)
+            url_ += "endTime=" + encodeURIComponent("" + endTime) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetActogram(_response);
+        });
+    }
+
+    protected processGetActogram(response: Response): Promise<ActogramReportData> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ActogramReportData;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            return throwException("A server side error occurred.", status, _responseText, _headers);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ActogramReportData>(null as any);
+    }
+}
+
 export class AnalyticsClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -24212,6 +24611,264 @@ export class TotpClient {
     }
 }
 
+/** Forces NSwag to emit TypeScript interfaces for ConditionNode and every condition payload record — they're stored as opaque JSON on the rule entity and otherwise never appear in a controller signature. */
+export interface AlertConditionTypesMetadata {
+    /** A sample ConditionNode; pulls every sub-record into the OpenAPI schema. */
+    sample?: ConditionNode | undefined;
+    /** All TempBasalMetric values. */
+    tempBasalMetrics?: TempBasalMetric[];
+    description?: string;
+}
+
+export interface ConditionNode {
+    type?: string;
+    threshold?: ThresholdCondition | undefined;
+    rate_of_change?: RateOfChangeCondition | undefined;
+    signal_loss?: SignalLossCondition | undefined;
+    composite?: CompositeCondition | undefined;
+    not?: NotCondition | undefined;
+    sustained?: SustainedCondition | undefined;
+    staleness?: StalenessCondition | undefined;
+    predicted?: PredictedCondition | undefined;
+    trend?: TrendCondition | undefined;
+    time_of_day?: TimeOfDayCondition | undefined;
+    iob?: IobCondition | undefined;
+    cob?: CobCondition | undefined;
+    reservoir?: ReservoirCondition | undefined;
+    site_age?: SiteAgeCondition | undefined;
+    sensor_age?: SensorAgeCondition | undefined;
+    alert_state?: AlertStateCondition | undefined;
+    loop_stale?: LoopStaleCondition | undefined;
+    loop_enaction_stale?: LoopEnactionStaleCondition | undefined;
+    pump_suspended?: PumpSuspendedCondition | undefined;
+    pump_battery?: PumpBatteryCondition | undefined;
+    temp_basal?: TempBasalCondition | undefined;
+    uploader_battery?: UploaderBatteryCondition | undefined;
+    override_active?: OverrideActiveCondition | undefined;
+    sensitivity_ratio?: SensitivityRatioCondition | undefined;
+    do_not_disturb?: DoNotDisturbCondition | undefined;
+    glucose_bucket?: GlucoseBucketCondition | undefined;
+    time_since_last_carb?: TimeSinceLastCarbCondition | undefined;
+    time_since_last_bolus?: TimeSinceLastBolusCondition | undefined;
+    day_of_week?: DayOfWeekCondition | undefined;
+    pump_state?: PumpStateCondition | undefined;
+    state_span_active?: StateSpanActiveCondition | undefined;
+}
+
+export interface ThresholdCondition {
+    direction?: string;
+    value?: number;
+}
+
+export interface RateOfChangeCondition {
+    direction?: string;
+    rate?: number;
+}
+
+export interface SignalLossCondition {
+    timeout_minutes?: number;
+}
+
+export interface CompositeCondition {
+    operator?: string;
+    conditions?: ConditionNode[];
+}
+
+export interface NotCondition {
+    child?: ConditionNode;
+}
+
+export interface SustainedCondition {
+    minutes?: number;
+    child?: ConditionNode;
+}
+
+export interface StalenessCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface PredictedCondition {
+    operator?: string;
+    value?: number;
+    within_minutes?: number;
+}
+
+export interface TrendCondition {
+    bucket?: string;
+}
+
+export interface TimeOfDayCondition {
+    from?: string;
+    to?: string;
+    timezone?: string | undefined;
+}
+
+export interface IobCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface CobCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface ReservoirCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface SiteAgeCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface SensorAgeCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface AlertStateCondition {
+    alert_id?: string;
+    state?: string;
+    for_minutes?: number | undefined;
+}
+
+export interface LoopStaleCondition {
+    operator?: string;
+    minutes?: number;
+}
+
+export interface LoopEnactionStaleCondition {
+    operator?: string;
+    minutes?: number;
+}
+
+export interface PumpSuspendedCondition {
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export interface PumpBatteryCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface TempBasalCondition {
+    metric?: TempBasalMetric;
+    operator?: string;
+    value?: number;
+}
+
+export enum TempBasalMetric {
+    Rate = "rate",
+    PercentOfScheduled = "percent_of_scheduled",
+}
+
+export interface UploaderBatteryCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface OverrideActiveCondition {
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export interface SensitivityRatioCondition {
+    operator?: string;
+    value?: number;
+}
+
+export interface DoNotDisturbCondition {
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export interface GlucoseBucketCondition {
+    buckets?: GlucoseBucket[];
+}
+
+export enum GlucoseBucket {
+    VeryLow = "very_low",
+    Low = "low",
+    TightRange = "tight_range",
+    InRange = "in_range",
+    High = "high",
+    VeryHigh = "very_high",
+}
+
+export interface TimeSinceLastCarbCondition {
+    operator?: AlertComparisonOperator;
+    minutes?: number;
+}
+
+export enum AlertComparisonOperator {
+    Gt = ">",
+    Gte = ">=",
+    Lt = "<",
+    Lte = "<=",
+    Eq = "==",
+}
+
+export interface TimeSinceLastBolusCondition {
+    operator?: AlertComparisonOperator;
+    minutes?: number;
+}
+
+export interface DayOfWeekCondition {
+    days?: DayOfWeek[];
+}
+
+export enum DayOfWeek {
+    Sunday = 0,
+    Monday = 1,
+    Tuesday = 2,
+    Wednesday = 3,
+    Thursday = 4,
+    Friday = 5,
+    Saturday = 6,
+}
+
+export interface PumpStateCondition {
+    mode?: PumpModeState;
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export enum PumpModeState {
+    Automatic = "Automatic",
+    Limited = "Limited",
+    Manual = "Manual",
+    Boost = "Boost",
+    EaseOff = "EaseOff",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Suspended = "Suspended",
+    Off = "Off",
+}
+
+export interface StateSpanActiveCondition {
+    category?: StateSpanCategory;
+    state?: string | undefined;
+    is_active?: boolean;
+    for_minutes?: number | undefined;
+}
+
+export enum StateSpanCategory {
+    PumpMode = "PumpMode",
+    PumpConnectivity = "PumpConnectivity",
+    Override = "Override",
+    Profile = "Profile",
+    Sleep = "Sleep",
+    Exercise = "Exercise",
+    Illness = "Illness",
+    Travel = "Travel",
+    DataExclusion = "DataExclusion",
+    TemporaryTarget = "TemporaryTarget",
+}
+
 /** Metadata about authentication error codes for NSwag generation */
 export interface AuthErrorCodesMetadata {
     /** Array of all available authentication error codes */
@@ -25253,19 +25910,6 @@ export interface StateSpan {
     sources?: string[] | undefined;
 }
 
-export enum StateSpanCategory {
-    PumpMode = "PumpMode",
-    PumpConnectivity = "PumpConnectivity",
-    Override = "Override",
-    Profile = "Profile",
-    Sleep = "Sleep",
-    Exercise = "Exercise",
-    Illness = "Illness",
-    Travel = "Travel",
-    DataExclusion = "DataExclusion",
-    TemporaryTarget = "TemporaryTarget",
-}
-
 export interface AcceptSuggestionRequest {
     startMills?: number;
     endMills?: number;
@@ -26016,6 +26660,10 @@ export interface TargetRangeEntry {
     low?: number;
     high?: number;
     timeAsSeconds?: number | undefined;
+    veryLow?: number | undefined;
+    tightLow?: number | undefined;
+    tightHigh?: number | undefined;
+    veryHigh?: number | undefined;
 }
 
 export interface ScheduleChangeInfo {
@@ -26684,8 +27332,10 @@ export interface SyncResult {
 export enum SyncDataType {
     Glucose = "Glucose",
     ManualBG = "ManualBG",
+    Calibrations = "Calibrations",
     Boluses = "Boluses",
     CarbIntake = "CarbIntake",
+    BGChecks = "BGChecks",
     BolusCalculations = "BolusCalculations",
     Notes = "Notes",
     DeviceEvents = "DeviceEvents",
@@ -26787,6 +27437,7 @@ export interface ChannelStatusEntry {
 
 export enum ChannelType {
     WebPush = "web_push",
+    InApp = "in_app",
     Webhook = "webhook",
     DiscordDm = "discord_dm",
     DiscordChannel = "discord_channel",
@@ -27020,7 +27671,7 @@ export interface AlertCustomSoundResponse {
 export interface AlertInviteResponse {
     id?: string;
     token?: string;
-    escalationStepId?: string;
+    alertRuleChannelId?: string;
     permissionScope?: string;
     isUsed?: boolean;
     expiresAt?: Date;
@@ -27028,8 +27679,115 @@ export interface AlertInviteResponse {
 }
 
 export interface CreateAlertInviteRequest {
-    escalationStepId?: string;
+    alertRuleChannelId?: string;
     permissionScope?: string | undefined;
+}
+
+export interface AlertReplayResult {
+    windowStart?: Date;
+    windowEnd?: Date;
+    events?: AlertReplayEvent[];
+    limitations?: string;
+    leafTransitionsByRule?: { [key: string]: LeafTransitionLog[]; };
+    factTimelines?: { [key: string]: FactSnapshotPoint[]; };
+}
+
+export interface AlertReplayEvent {
+    at?: Date;
+    ruleId?: string;
+    ruleName?: string;
+    severity?: AlertRuleSeverity;
+    kind?: AlertReplayEventKind;
+}
+
+export enum AlertRuleSeverity {
+    Critical = "critical",
+    Warning = "warning",
+    Info = "info",
+}
+
+export enum AlertReplayEventKind {
+    Fired = "fired",
+    AutoResolved = "auto_resolved",
+    SuppressedByDnd = "suppressed_by_dnd",
+}
+
+export interface LeafTransitionLog {
+    leafId?: number;
+    points?: LeafTransitionPoint[];
+}
+
+export interface LeafTransitionPoint {
+    atMs?: number;
+    value?: boolean;
+}
+
+export interface FactSnapshotPoint {
+    atMs?: number;
+    value?: number;
+}
+
+/** Request body for the alerts replay endpoint. From and To are absolute UTC instants and take precedence over Date + Timezone when set, allowing replay of an arbitrary window (not just a calendar day). */
+export interface AlertReplayRequest {
+    date?: Date | undefined;
+    timezone?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
+}
+
+/** Request body for the dry-run replay endpoint. Id is optional: when present and matching an existing rule it replaces it for the simulation; otherwise the rule is appended for the call. From/To behave the same as on AlertReplayRequest. */
+export interface AlertReplayDryRunRequest {
+    date?: Date | undefined;
+    timezone?: string | undefined;
+    rule?: ReplayRuleDefinition;
+    from?: Date | undefined;
+    to?: Date | undefined;
+}
+
+/** In-memory rule definition used by the dry-run endpoint. Mirrors the editor's pre-save shape — the controller doesn't deserialise the condition tree itself, just the ConditionParams JSON blob the rule body would have stored. */
+export interface ReplayRuleDefinition {
+    id?: string | undefined;
+    name?: string;
+    conditionType?: AlertConditionType;
+    conditionParams?: string;
+    severity?: AlertRuleSeverity;
+    allowThroughDnd?: boolean;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: string | undefined;
+}
+
+export enum AlertConditionType {
+    Threshold = "threshold",
+    RateOfChange = "rate_of_change",
+    SignalLoss = "signal_loss",
+    Composite = "composite",
+    Not = "not",
+    Sustained = "sustained",
+    Staleness = "staleness",
+    Predicted = "predicted",
+    Trend = "trend",
+    TimeOfDay = "time_of_day",
+    Iob = "iob",
+    Cob = "cob",
+    Reservoir = "reservoir",
+    SiteAge = "site_age",
+    SensorAge = "sensor_age",
+    AlertState = "alert_state",
+    LoopStale = "loop_stale",
+    LoopEnactionStale = "loop_enaction_stale",
+    PumpSuspended = "pump_suspended",
+    PumpBattery = "pump_battery",
+    TempBasal = "temp_basal",
+    UploaderBattery = "uploader_battery",
+    OverrideActive = "override_active",
+    SensitivityRatio = "sensitivity_ratio",
+    DoNotDisturb = "do_not_disturb",
+    GlucoseBucket = "glucose_bucket",
+    TimeSinceLastCarb = "time_since_last_carb",
+    TimeSinceLastBolus = "time_since_last_bolus",
+    DayOfWeek = "day_of_week",
+    PumpState = "pump_state",
+    StateSpanActive = "state_span_active",
 }
 
 export interface AlertRuleResponse {
@@ -27038,53 +27796,25 @@ export interface AlertRuleResponse {
     description?: string | undefined;
     conditionType?: AlertConditionType;
     conditionParams?: any;
-    hysteresisMinutes?: number;
-    confirmationReadings?: number;
     isEnabled?: boolean;
     sortOrder?: number;
     severity?: AlertRuleSeverity;
+    /** When true, this rule still fires while the tenant is in Do Not Disturb mode.
+            Critical rules implicitly bypass DND regardless of this flag. */
+    allowThroughDnd?: boolean;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: any | undefined;
     clientConfiguration?: any;
-    schedules?: AlertScheduleResponse[];
+    /** Flat list of delivery channels. Dispatched in parallel when the rule fires. */
+    channels?: AlertRuleChannelResponse[];
 }
 
-export enum AlertConditionType {
-    Threshold = "threshold",
-    RateOfChange = "rate_of_change",
-    SignalLoss = "signal_loss",
-    Composite = "composite",
-}
-
-export enum AlertRuleSeverity {
-    Normal = "normal",
-    Critical = "critical",
-}
-
-export interface AlertScheduleResponse {
-    id?: string;
-    name?: string;
-    isDefault?: boolean;
-    daysOfWeek?: number[] | undefined;
-    startTime?: string | undefined;
-    endTime?: string | undefined;
-    timezone?: string;
-    quietHoursStart?: string | undefined;
-    quietHoursEnd?: string | undefined;
-    quietHoursOverrideCritical?: boolean;
-    escalationSteps?: AlertEscalationStepResponse[];
-}
-
-export interface AlertEscalationStepResponse {
-    id?: string;
-    stepOrder?: number;
-    delaySeconds?: number;
-    channels?: AlertStepChannelResponse[];
-}
-
-export interface AlertStepChannelResponse {
+export interface AlertRuleChannelResponse {
     id?: string;
     channelType?: ChannelType;
     destination?: string;
     destinationLabel?: string | undefined;
+    sortOrder?: number;
 }
 
 export interface CreateAlertRuleRequest {
@@ -27092,38 +27822,20 @@ export interface CreateAlertRuleRequest {
     description?: string | undefined;
     conditionType?: AlertConditionType;
     conditionParams?: any | undefined;
-    hysteresisMinutes?: number;
-    confirmationReadings?: number;
     isEnabled?: boolean;
     sortOrder?: number;
     severity?: AlertRuleSeverity | undefined;
+    allowThroughDnd?: boolean;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: any | undefined;
     clientConfiguration?: any | undefined;
-    schedules?: CreateAlertScheduleRequest[] | undefined;
+    channels?: CreateAlertRuleChannelRequest[] | undefined;
 }
 
-export interface CreateAlertScheduleRequest {
-    name?: string | undefined;
-    isDefault?: boolean;
-    daysOfWeek?: number[] | undefined;
-    startTime?: string | undefined;
-    endTime?: string | undefined;
-    timezone?: string | undefined;
-    quietHoursEnabled?: boolean;
-    quietHoursStart?: string | undefined;
-    quietHoursEnd?: string | undefined;
-    quietHoursOverrideCritical?: boolean;
-    escalationSteps?: CreateAlertEscalationStepRequest[] | undefined;
-}
-
-export interface CreateAlertEscalationStepRequest {
-    stepOrder?: number;
-    delaySeconds?: number;
-    channels?: CreateAlertStepChannelRequest[] | undefined;
-}
-
-export interface CreateAlertStepChannelRequest {
+export interface CreateAlertRuleChannelRequest {
     channelType?: ChannelType;
-    destination?: string;
+    /** Channel-specific address: webhook URL, chat handle, etc. Empty for in-app/web-push. */
+    destination?: string | undefined;
     destinationLabel?: string | undefined;
 }
 
@@ -27132,13 +27844,26 @@ export interface UpdateAlertRuleRequest {
     description?: string | undefined;
     conditionType?: AlertConditionType;
     conditionParams?: any | undefined;
-    hysteresisMinutes?: number;
-    confirmationReadings?: number;
     isEnabled?: boolean;
     sortOrder?: number;
     severity?: AlertRuleSeverity | undefined;
+    allowThroughDnd?: boolean;
+    autoResolveEnabled?: boolean;
+    autoResolveParams?: any | undefined;
     clientConfiguration?: any | undefined;
-    schedules?: CreateAlertScheduleRequest[] | undefined;
+    channels?: CreateAlertRuleChannelRequest[] | undefined;
+}
+
+/** 409 response body returned by DELETE /api/v4/alert-rules/{id} when other rules reference the target via alert_state. The FE uses this to either link to those rules or offer a cascade-delete confirmation. */
+export interface ReferencingRulesResponse {
+    referencingRuleIds?: string[];
+}
+
+/** Request body for the dry-run test fire endpoint. Mirrors the editor's in-memory rule shape — only the fields needed to render a notification. */
+export interface TestFireDryRunRequest {
+    name?: string;
+    severity?: AlertRuleSeverity;
+    channels?: CreateAlertRuleChannelRequest[];
 }
 
 export interface ActiveExcursionResponse {
@@ -27155,11 +27880,10 @@ export interface ActiveExcursionResponse {
 
 export interface ActiveInstanceResponse {
     id?: string;
-    scheduleId?: string;
     status?: string;
-    currentStepOrder?: number;
     triggeredAt?: Date;
-    nextEscalationAt?: Date | undefined;
+    /** One of "dnd" when delivery was suppressed at fire time, otherwise null. */
+    suppressionReason?: string | undefined;
 }
 
 export interface AlertHistoryResponse {
@@ -27179,6 +27903,8 @@ export interface HistoryExcursionResponse {
     endedAt?: Date;
     acknowledgedAt?: Date | undefined;
     acknowledgedBy?: string | undefined;
+    /** True when every instance of this excursion was a test fire. */
+    isTest?: boolean;
 }
 
 export interface AcknowledgeRequest {
@@ -27268,6 +27994,33 @@ export interface GlucoseCondition {
     aboveMgDl?: number | undefined;
     belowMgDl?: number | undefined;
     sustainedMinutes?: number | undefined;
+}
+
+export interface TenantAlertSettingsResponse {
+    /** True when the user has manually toggled DND on. */
+    dndManualActive?: boolean;
+    /** UTC instant at which a manually-activated DND auto-expires. Null = indefinite. */
+    dndManualUntil?: Date | undefined;
+    /** UTC instant at which DND was most recently activated. Anchors sustained
+            do_not_disturb conditions. */
+    dndManualStartedAt?: Date | undefined;
+    /** True when a recurring scheduled DND window is configured. */
+    dndScheduleEnabled?: boolean;
+    /** Local-time start of the scheduled DND window (in Timezone). */
+    dndScheduleStart?: string | undefined;
+    /** Local-time end of the scheduled DND window. Cross-midnight windows allowed. */
+    dndScheduleEnd?: string | undefined;
+    /** IANA timezone (e.g. Europe/London) for the scheduled window. */
+    timezone?: string;
+}
+
+export interface UpdateTenantAlertSettingsRequest {
+    dndManualActive?: boolean;
+    dndManualUntil?: Date | undefined;
+    dndScheduleEnabled?: boolean;
+    dndScheduleStart?: string | undefined;
+    dndScheduleEnd?: string | undefined;
+    timezone?: string;
 }
 
 /** DTO for tracker alerts returned to the frontend */
@@ -28673,6 +29426,45 @@ export interface AuditConfigDto {
     mutationAuditRetentionDays?: number | undefined;
 }
 
+export interface ActogramReportData {
+    glucose?: GlucosePointDto[];
+    thresholds?: ChartThresholdsDto;
+    heartRates?: HeartRatePointDto[];
+    stepCounts?: StepBubbleDto[];
+    sleepSpans?: ActogramSleepSpan[];
+}
+
+export interface GlucosePointDto {
+    time?: number;
+    sgv?: number;
+    direction?: string | undefined;
+    dataSource?: string | undefined;
+}
+
+export interface ChartThresholdsDto {
+    low?: number;
+    high?: number;
+    veryLow?: number;
+    veryHigh?: number;
+    glucoseYMax?: number;
+}
+
+export interface HeartRatePointDto {
+    time?: number;
+    bpm?: number;
+}
+
+export interface StepBubbleDto {
+    time?: number;
+    steps?: number;
+}
+
+export interface ActogramSleepSpan {
+    startMills?: number;
+    endMills?: number;
+    state?: string;
+}
+
 export interface PerformanceMetrics {
     averageResponseTime?: number;
     totalRequests?: number;
@@ -28752,6 +29544,8 @@ export interface DashboardChartData {
     basalDeliverySpans?: BasalDeliverySpanDto[];
     systemEventMarkers?: SystemEventMarkerDto[];
     trackerMarkers?: TrackerMarkerDto[];
+    heartRateSeries?: HeartRatePointDto[];
+    stepSeries?: StepBubbleDto[];
 }
 
 export interface TimeSeriesPoint {
@@ -28811,25 +29605,12 @@ export enum ChartColor {
     TrackerAppointment = "tracker-appointment",
     TrackerReminder = "tracker-reminder",
     TrackerCustom = "tracker-custom",
+    HeartRate = "heart-rate",
+    Steps = "steps",
     Profile = "chart-1",
     Override = "chart-2",
     MutedForeground = "muted-foreground",
     Primary = "primary",
-}
-
-export interface GlucosePointDto {
-    time?: number;
-    sgv?: number;
-    direction?: string | undefined;
-    dataSource?: string | undefined;
-}
-
-export interface ChartThresholdsDto {
-    low?: number;
-    high?: number;
-    veryLow?: number;
-    veryHigh?: number;
-    glucoseYMax?: number;
 }
 
 export interface BolusMarkerDto {
@@ -29566,16 +30347,6 @@ export interface DayOfWeekAnalysis {
     lowestTIRDay?: DayOfWeek | undefined;
     weekdayWeekendDifference?: boolean;
     patternDescription?: string;
-}
-
-export enum DayOfWeek {
-    Sunday = 0,
-    Monday = 1,
-    Tuesday = 2,
-    Wednesday = 3,
-    Thursday = 4,
-    Friday = 5,
-    Saturday = 6,
 }
 
 export interface DayMetrics extends PeriodMetrics {

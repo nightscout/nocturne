@@ -5,7 +5,7 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// A composable alert rule with condition tree, hysteresis, and confirmation settings.
+/// A composable alert rule with a condition tree and optional auto-resolve behaviour.
 /// Each rule owns schedules, which own escalation chains.
 /// </summary>
 [Table("alert_rules")]
@@ -51,23 +51,23 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public string ConditionParams { get; set; } = "{}";
 
     /// <summary>
-    /// Minutes the condition must remain cleared before transitioning back to idle.
+    /// When true, the rule clears itself once its condition no longer holds (subject to <see cref="AutoResolveParams"/>).
     /// </summary>
-    [Column("hysteresis_minutes")]
-    public int HysteresisMinutes { get; set; }
+    [Column("auto_resolve_enabled")]
+    public bool AutoResolveEnabled { get; set; }
 
     /// <summary>
-    /// Number of consecutive readings that must satisfy the condition before firing.
+    /// JSONB auto-resolve parameters (e.g. delay, mode). Null when unused.
     /// </summary>
-    [Column("confirmation_readings")]
-    public int ConfirmationReadings { get; set; } = 1;
+    [Column("auto_resolve_params", TypeName = "jsonb")]
+    public string? AutoResolveParams { get; set; }
 
     /// <summary>
     /// Alert severity. Critical alerts bypass quiet hours.
     /// </summary>
     [Column("severity")]
     [MaxLength(16)]
-    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Normal;
+    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
 
     /// <summary>
     /// Client-side presentation config (audio, visual, snooze). Stored as JSONB.
@@ -81,6 +81,14 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("is_enabled")]
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// When true, this rule still fires while the tenant is in Do Not Disturb mode (manual
+    /// or scheduled). Critical-severity rules implicitly bypass DND regardless of this flag —
+    /// the flag is only meaningful for non-critical rules the user wants to keep active.
+    /// </summary>
+    [Column("allow_through_dnd")]
+    public bool AllowThroughDnd { get; set; }
 
     /// <summary>
     /// Order in which the rule should be processed or displayed
@@ -105,9 +113,10 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     // Navigation
 
     /// <summary>
-    /// Collection of schedules associated with this alert rule
+    /// Flat list of delivery channels for this rule. When the rule fires, every channel in
+    /// this collection receives a delivery in parallel.
     /// </summary>
-    public ICollection<AlertScheduleEntity> Schedules { get; set; } = [];
+    public ICollection<AlertRuleChannelEntity> Channels { get; set; } = [];
 
     /// <summary>
     /// Current state tracker for this alert rule

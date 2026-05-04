@@ -551,6 +551,9 @@
           <Button
             variant="outline"
             onclick={() => {
+              apiTokenPrefillLabel = "";
+              apiTokenPrefillScopes = ["health.readwrite"];
+              apiTokenCreateOpen = true;
               document.getElementById("api-tokens-section")?.scrollIntoView({ behavior: "smooth" });
             }}
           >

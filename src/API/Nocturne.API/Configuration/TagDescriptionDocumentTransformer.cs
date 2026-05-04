@@ -283,7 +283,9 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
                     if (!string.IsNullOrWhiteSpace(diagram.Description))
                         sb.AppendLine($"_{diagram.Description}_");
                     sb.AppendLine();
-                    sb.AppendLine($"[![{diagram.Title}]({diagram.SvgPath})]({diagram.SvgPath})");
+                    sb.AppendLine("```mermaid");
+                    sb.AppendLine(diagram.MermaidSource);
+                    sb.AppendLine("```");
                     sb.AppendLine();
                 }
 
@@ -304,7 +306,8 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
 
     private static Dictionary<string, List<DiagramRef>> BuildTagDiagramMap(IWebHostEnvironment env)
     {
-        var manifestPath = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams", "diagrams.yaml");
+        var diagramsDir = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams");
+        var manifestPath = Path.Combine(diagramsDir, "diagrams.yaml");
         var map = new Dictionary<string, List<DiagramRef>>(StringComparer.Ordinal);
 
         if (!File.Exists(manifestPath))
@@ -322,8 +325,10 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             if (diagram.Tags is not { Count: > 0 })
                 continue;
 
-            var svgName = Path.GetFileNameWithoutExtension(diagram.Source) + ".svg";
-            var diagramRef = new DiagramRef(diagram.Title, diagram.Description, $"/diagrams/{svgName}");
+            var mermaid = MermaidSourceLoader.TryRead(diagramsDir, diagram.Source);
+            if (mermaid is null) continue;
+
+            var diagramRef = new DiagramRef(diagram.Title, diagram.Description, mermaid);
 
             foreach (var tag in diagram.Tags)
             {
@@ -339,7 +344,7 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         return map;
     }
 
-    private sealed record DiagramRef(string Title, string? Description, string SvgPath);
+    private sealed record DiagramRef(string Title, string? Description, string MermaidSource);
 
     private sealed class DiagramManifest
     {

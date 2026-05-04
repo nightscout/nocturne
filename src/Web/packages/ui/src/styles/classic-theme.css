@@ -91,6 +91,10 @@
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.15);
   --data-exclusion-sensor-error: rgba(255, 0, 0, 0.1);
 
+  /* Health Overlays */
+  --heart-rate: oklch(0.6 0.2 25);
+  --steps: oklch(0.6 0.15 300);
+
   /* Sidebar - Classic clinical light */
   --sidebar: oklch(0.97 0.002 250);
   --sidebar-foreground: oklch(0.15 0.01 250);

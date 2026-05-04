@@ -14,10 +14,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Chart, Svg, Spline, Rule } from "layerchart";
 
-  import {
-    getPredictions,
-    type PredictionData,
-  } from "$api/predictions.remote";
+  import { getPredictions, type PredictionData } from "$api/predictions.remote";
   import { getDirectionInfo } from "$lib/utils";
   const realtimeStore = tryGetRealtimeStore();
 

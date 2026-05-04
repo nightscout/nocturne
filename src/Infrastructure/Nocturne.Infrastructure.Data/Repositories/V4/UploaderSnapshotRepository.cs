@@ -165,4 +165,17 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
             .Where(e => e.LegacyId == legacyId)
             .ExecuteDeleteAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.UploaderSnapshots.AsNoTracking();
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        var entity = await query
+            .OrderBy(e => e.Battery == null)        // false (has battery) before true (null) — nulls last
+            .ThenBy(e => e.Battery)                 // lowest battery first
+            .ThenByDescending(e => e.Timestamp)     // tie-break: most recent
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
+    }
 }

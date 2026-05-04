@@ -129,6 +129,13 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Treatment>> GetTreatmentsByRangeAsync(
+        long fromMills, long toMills, CancellationToken cancellationToken = default)
+    {
+        return await _store.GetByRangeAsync(fromMills, toMills, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit = 500, CancellationToken cancellationToken = default)
     {

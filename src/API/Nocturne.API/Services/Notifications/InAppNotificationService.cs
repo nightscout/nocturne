@@ -241,7 +241,7 @@ public class InAppNotificationService : IInAppNotificationService
                 if (_actionHandlers.TryGetValue(notification.Type, out var handler))
                 {
                     var metadata = DeserializeMetadata(notification.MetadataJson);
-                    return await handler.HandleAsync(
+                    var result = await handler.HandleAsync(
                         notificationId,
                         actionId,
                         userId,
@@ -249,6 +249,13 @@ public class InAppNotificationService : IInAppNotificationService
                         metadata,
                         cancellationToken
                     );
+
+                    if (result.Archive is { } reason)
+                    {
+                        await ArchiveNotificationAsync(notificationId, reason, cancellationToken);
+                    }
+
+                    return result.Handled;
                 }
 
                 // No handler registered — default to archiving as completed

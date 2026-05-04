@@ -80,4 +80,29 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
+    /// or <c>null</c> if none exist. When <paramref name="asOf"/> is non-null, restricts to
+    /// snapshots with <c>Timestamp &lt;= asOf</c>.
+    /// </summary>
+    /// <param name="asOf">Optional inclusive upper bound on Timestamp.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> with <c>Enacted = true</c>
+    /// for the current tenant, or <c>null</c> if none exist.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestEnactedTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the most recent non-null <see cref="ApsSnapshot.SensitivityRatio"/> for the current
+    /// tenant, or <c>null</c> if no snapshot has recorded one.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
 }

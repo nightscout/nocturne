@@ -224,7 +224,7 @@ class Program
             .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
             .WithHttpEndpoint(name: "http")
             .PublishAsDockerComposeService((_, _) => { })
-            .WithRemoteImageName("ghcr.io/nightscout/nocturne/api")
+            .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
             .WithRemoteImageTag("latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
 
@@ -379,7 +379,7 @@ class Program
                 .WithHttpEndpoint(env: "PORT")
                 .WaitFor(api)
                 .PublishAsDockerComposeService((_, _) => { })
-                .WithRemoteImageName("ghcr.io/nightscout/nocturne/web")
+                .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-web")
                 .WithRemoteImageTag("latest");
 
             ConfigureWebEnvironment(dockerWeb);
@@ -475,8 +475,10 @@ class Program
         }
         else
         {
-            // Publish mode: HTTP on port 80. TLS via CertBot integration (TODO).
-            gateway.WithHostPort(80);
+            // Publish mode: HTTP on port 8080. Most deployments sit behind a
+            // reverse proxy (Caddy, nginx, Traefik) that owns port 80/443 for
+            // TLS termination. Default to 8080 to avoid conflicts.
+            gateway.WithHostPort(8080);
         }
 #pragma warning restore ASPIRECERTIFICATES001
 
@@ -488,6 +490,16 @@ class Program
             "REVERSEPROXY__CLUSTERS__cluster_nocturne-web__HTTPREQUEST__ACTIVITYTIMEOUT",
             "00:05:00");
 
+        // In dev mode, YARP is the TLS-terminating edge proxy — it must Set
+        // the X-Forwarded-* headers from its own connection info. In publish
+        // mode, YARP sits behind an external reverse proxy (Caddy, nginx,
+        // Traefik) that already sets these headers; using Set would overwrite
+        // them (e.g. replacing X-Forwarded-Proto: https with http). Off
+        // preserves the upstream headers so the API sees the correct scheme.
+        var xForwardedAction = builder.ExecutionContext.IsRunMode
+            ? ForwardedTransformActions.Set
+            : ForwardedTransformActions.Off;
+
         gateway
             .WaitFor(api)
             .WaitFor(web)
@@ -495,15 +507,19 @@ class Program
             {
                 // OIDC callback on apex → API (must come before /api/ → web catch-all)
                 yarp.AddRoute("/api/auth/oidc/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+
+                // OAuth endpoints → API (must bypass SvelteKit CSRF for external clients)
+                yarp.AddRoute("/api/oauth/{**catch-all}", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
                 // Bot webhooks, remote functions → web
                 yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
                 // Bot account linking
                 yarp.AddRoute("/auth/bot/{**catch-all}", webEndpoints.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
                 // API docs (Scalar UI)
                 // When the Scalar Aspire container is running (dev with OAuth PKCE),
@@ -512,31 +528,27 @@ class Program
                 {
                     yarp.AddRoute("/scalar/{**catch-all}", scalar.GetEndpoint("http"))
                         .WithTransformPathRemovePrefix("/scalar")
-                        .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
                     yarp.AddRoute("/scalar-proxy/{**catch-all}", scalar.GetEndpoint("http"))
-                        .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
                 }
                 else
                 {
                     yarp.AddRoute("/scalar", api.GetEndpoint("http"))
-                        .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
                     yarp.AddRoute("/scalar/{**catch-all}", api.GetEndpoint("http"))
-                        .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
                 }
                 yarp.AddRoute("/openapi/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
-
-                // Diagram SVGs (served from API static files)
-                yarp.AddRoute("/diagrams/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
                 // OAuth/OIDC discovery endpoints → API
                 yarp.AddRoute("/.well-known/{**catch-all}", api.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
                 // Fallback → web (includes Socket.IO websockets, HMR, all frontend routes)
                 yarp.AddRoute(webEndpoints.GetEndpoint("http"))
-                    .WithTransformXForwarded("X-Forwarded-", ForwardedTransformActions.Set);
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
             });
 
         // When a custom domain is configured, show the custom domain URL in the
@@ -552,13 +564,18 @@ class Program
             });
         }
 
-        // In run mode, derive PUBLIC_BASE_DOMAIN from the gateway's live HTTPS
-        // endpoint so OAuth redirect URIs resolve correctly with dynamic ports.
-        // In publish mode, PUBLIC_BASE_DOMAIN must be set via the public-base-domain
-        // parameter (user-secrets / env var) — the gateway only has an HTTP endpoint
-        // there (TLS via CertBot, TODO).
-        // Note: consumers expect a bare host:port (e.g. "localhost:1612"), not a
-        // full URL — they prepend the scheme themselves.
+        // Inject Multitenancy:BaseDomain into the API so it can derive the
+        // WebAuthn RP ID and build correct URLs. In run mode, derive from the
+        // gateway's live HTTPS endpoint. In publish mode, use the
+        // public-base-domain parameter (set via env var / user-secrets).
+        // Note: consumers expect a bare host:port (e.g. "localhost:1612"),
+        // not a full URL — they prepend the scheme themselves.
+        if (!builder.ExecutionContext.IsRunMode)
+        {
+            // Publish mode: inject from the user-supplied parameter
+            api.WithEnvironment("Multitenancy__BaseDomain", publicBaseDomain);
+        }
+
         if (builder.ExecutionContext.IsRunMode)
         {
             var gatewayEndpoint = gateway.GetEndpoint("https");
